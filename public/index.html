@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>&#25991;&#26723;&#30693;&#35782;&#24211;</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">MD</div>
+          <div>
+            <h1>&#25991;&#26723;&#30693;&#35782;&#24211;</h1>
+            <p id="docCount">&#27491;&#22312;&#25195;&#25551;</p>
+          </div>
+        </div>
+        <label class="search-box">
+          <span aria-hidden="true">S</span>
+          <input id="searchInput" placeholder="&#20840;&#23616;&#26816;&#32034;&#20851;&#38190;&#23383;" autocomplete="off" />
+        </label>
+        <div class="sidebar-actions">
+          <button id="newFolderBtn" title="new folder">+ &#25991;&#20214;&#22841;</button>
+          <button id="newDocBtn" title="new markdown">+ MD</button>
+        </div>
+        <div id="searchResults" class="search-results hidden"></div>
+        <nav id="tree" class="tree"></nav>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div class="doc-meta">
+            <span id="docPath">docs</span>
+            <strong id="docTitle">&#36873;&#25321;&#19968;&#31687; Markdown &#25991;&#26723;</strong>
+          </div>
+          <div class="toolbar" role="group" aria-label="document actions">
+            <button id="viewBtn" class="active" title="view">&#38405;&#35835;</button>
+            <button id="editBtn" title="edit">&#20462;&#25913;</button>
+            <button id="graphBtn" title="graph">&#22270;&#35889;</button>
+            <button id="deleteBtn" class="danger" title="delete">&#21024;&#38500;</button>
+            <button id="saveBtn" class="primary hidden" title="save">&#20445;&#23384;</button>
+          </div>
+        </header>
+
+        <section id="readerPanel" class="reader-panel">
+          <article id="markdownView" class="markdown-body empty-state">
+            <h2>&#25171;&#24320;&#24038;&#20391;&#30446;&#24405;&#20013;&#30340;&#25991;&#26723;</h2>
+            <p>&#25903;&#25345;&#25991;&#20214;&#22841;&#20998;&#31867;&#12289;&#20840;&#25991;&#25628;&#32034;&#12289;&#25991;&#26723;&#20999;&#25442;&#12289;&#32534;&#36753;&#20445;&#23384;&#21644;&#20851;&#32852;&#22270;&#35889;&#27983;&#35272;&#12290;</p>
+          </article>
+        </section>
+
+        <section id="editorPanel" class="editor-panel hidden">
+          <div id="editorToolbar" class="editor-toolbar" aria-label="editor tools">
+            <button data-format="bold" title="bold">B</button>
+            <button data-format="underline" title="underline">U</button>
+            <button data-format="strike" title="strike">S</button>
+            <button data-format="highlight" title="highlight">HL</button>
+            <button data-format="hr" title="divider">--</button>
+            <label title="text color">
+              <span>C</span>
+              <input id="textColor" type="color" value="#0f766e" />
+            </label>
+            <label title="background color">
+              <span>BG</span>
+              <input id="bgColor" type="color" value="#fff3a3" />
+            </label>
+            <select id="fontSize" title="font size">
+              <option value="14">14</option>
+              <option value="16" selected>16</option>
+              <option value="18">18</option>
+              <option value="22">22</option>
+              <option value="28">28</option>
+            </select>
+            <button data-format="color" title="apply color">&#39068;&#33394;</button>
+            <button data-format="bg" title="apply background">&#32972;&#26223;</button>
+            <button data-format="size" title="apply size">&#23383;&#21495;</button>
+          </div>
+          <textarea id="editor" spellcheck="false"></textarea>
+          <article id="preview" class="markdown-body"></article>
+        </section>
+
+        <section id="graphPanel" class="graph-panel hidden">
+          <div class="graph-tools">
+            <div>
+              <strong>&#30693;&#35782;&#26641;&#22270;&#35889;</strong>
+              <span>&#40664;&#35748;&#31361;&#20986;&#26174;&#31034;&#26126;&#30830;&#38142;&#25509;&#21644;&#26631;&#31614;&#20851;&#31995;</span>
+            </div>
+            <button id="fitGraphBtn" title="reset">&#37325;&#32622;</button>
+          </div>
+          <canvas id="graphCanvas"></canvas>
+        </section>
+      </main>
+    </div>
+    <div id="createModal" class="modal hidden" role="dialog" aria-modal="true">
+      <form id="createForm" class="modal-dialog">
+        <h2 id="createTitle">&#26032;&#24314;</h2>
+        <p id="createParent">docs</p>
+        <input id="createName" autocomplete="off" />
+        <div class="modal-actions">
+          <button type="button" id="cancelCreateBtn">&#21462;&#28040;</button>
+          <button type="submit" class="primary">&#30830;&#23450;</button>
+        </div>
+      </form>
+    </div>
+    <div id="deleteModal" class="modal hidden" role="dialog" aria-modal="true">
+      <div class="modal-dialog">
+        <h2>&#21024;&#38500;&#30830;&#35748;</h2>
+        <p id="deleteTarget">docs</p>
+        <div class="modal-actions">
+          <button type="button" id="cancelDeleteBtn">&#21462;&#28040;</button>
+          <button type="button" id="confirmDeleteBtn" class="primary danger-action">&#21024;&#38500;</button>
+        </div>
+      </div>
+    </div>
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
