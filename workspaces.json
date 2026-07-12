@@ -1,0 +1,32 @@
+{
+  "workspaces": [
+    {
+      "id": "default",
+      "name": "默认 docs",
+      "root": "E:\\codex\\mytemple\\docs",
+      "visible": true,
+      "mdOnly": true,
+      "builtin": true,
+      "lastUsed": 1783870875653
+    },
+    {
+      "id": "ws_6e5dcb0bd0",
+      "name": "html",
+      "root": "E:\\trae\\html",
+      "visible": true,
+      "mdOnly": true,
+      "builtin": false,
+      "lastUsed": 1783870988674
+    },
+    {
+      "id": "ws_9661c8622f",
+      "name": "toutiao",
+      "root": "C:\\Users\\kfzheng\\Desktop\\toutiao",
+      "visible": false,
+      "mdOnly": true,
+      "builtin": false,
+      "lastUsed": 1783866497906
+    }
+  ],
+  "defaultWorkspaceId": "ws_9661c8622f"
+}
