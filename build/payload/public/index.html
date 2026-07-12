@@ -24,9 +24,7 @@
         <div class="sidebar-actions">
           <button id="newFolderBtn" title="new folder">+ &#25991;&#20214;&#22841;</button>
           <button id="newDocBtn" title="new markdown">+ MD</button>
-          <button id="workspaceBtn" title="workspaces">&#9673; &#24037;&#20316;&#36335;&#24452;</button>
         </div>
-        <div id="workspaceSummary" class="workspace-summary"></div>
         <div id="searchResults" class="search-results hidden"></div>
         <nav id="tree" class="tree"></nav>
       </aside>
@@ -44,7 +42,7 @@
             <button id="editBtn" title="edit">&#20462;&#25913;</button>
             <button id="graphBtn" title="graph">&#22270;&#35889;</button>
             <button id="settingsBtn" title="settings">&#35774;&#32622;</button>
-            <button id="deleteBtn" class="danger" title="delete (Ctrl+D)">&#21024;&#38500;</button>
+            <button id="deleteBtn" class="danger" title="delete">&#21024;&#38500;</button>
             <button id="saveBtn" class="primary hidden" title="save">&#20445;&#23384;</button>
           </div>
         </header>
@@ -101,16 +99,12 @@
     </div>
     <div id="createModal" class="modal hidden" role="dialog" aria-modal="true">
       <form id="createForm" class="modal-dialog">
-        <h2 id="createTitle">新建</h2>
-        <p id="createSummary" class="muted"></p>
-        <div id="createWorkspaceRow" class="create-workspace-row hidden">
-          <span class="path-label">保存到</span>
-          <div id="createWorkspaceChoices" class="create-workspace-choices"></div>
-        </div>
-        <input id="createName" placeholder="输入名称" autocomplete="off" />
+        <h2 id="createTitle">&#26032;&#24314;</h2>
+        <p id="createParent">docs</p>
+        <input id="createName" autocomplete="off" />
         <div class="modal-actions">
-          <button type="button" id="cancelCreateBtn">取消</button>
-          <button type="submit" class="primary">确定</button>
+          <button type="button" id="cancelCreateBtn">&#21462;&#28040;</button>
+          <button type="submit" class="primary">&#30830;&#23450;</button>
         </div>
       </form>
     </div>
@@ -163,112 +157,14 @@
           </label>
         </section>
         <section class="settings-section">
-          <strong>默认工作路径</strong>
-          <p class="muted">创建新文档和文件夹时，若未选择具体文件夹，则保存到该路径下。</p>
-          <div id="defaultWorkspaceChoices" class="segmented workspace-options"></div>
-        </section>
-        <section class="settings-section">
-          <strong>Markdown 工具</strong>
-          <p class="muted">将非 .md 文件批量重命名为 .md。可选择目标工作路径与文件扩展名。</p>
-          <button type="button" id="normalizeMdBtn" class="primary">一键 MD 化</button>
+          <strong>Markdown &#24037;&#20855;</strong>
+          <p class="muted">&#23558; docs &#30446;&#24405;&#19979;&#38750; .md &#25991;&#20214;&#25209;&#37327;&#26356;&#25913;&#20026; .md&#65292;&#20914;&#31361;&#26102;&#33258;&#21160;&#36861;&#21152;&#32534;&#21495;&#12290;</p>
+          <button type="button" id="normalizeMdBtn" class="primary">&#19968;&#38190; MD &#21270;</button>
           <div class="progress hidden" id="normalizeProgress"><span></span></div>
           <p id="normalizeStatus" class="muted"></p>
         </section>
         <div class="modal-actions">
           <button type="button" id="closeSettingsBtn">&#20851;&#38381;</button>
-        </div>
-      </div>
-    </div>
-    <div id="workspaceModal" class="modal hidden" role="dialog" aria-modal="true">
-      <form id="workspaceForm" class="modal-dialog workspace-dialog">
-        <div class="modal-head">
-          <h2>工作路径</h2>
-          <p class="muted">添加任意硬盘下的 Markdown，同时显示两个路径后可在不同路径间拖拽/复制/粘贴文件。</p>
-        </div>
-        <section class="path-input-section">
-          <label class="path-input">
-            <span class="path-label">新增路径</span>
-            <div class="path-input-with-action">
-              <input id="workspacePath" placeholder="例如： C:\Users\name\Documents  或  D:\notes" autocomplete="off" />
-              <button type="button" id="browseFolderBtn" class="secondary" title="浏览本地文件夹">浏览</button>
-            </div>
-          </label>
-          <label class="path-input path-input-inline">
-            <span class="path-label">路径名称</span>
-            <input id="workspaceName" placeholder="自定义（可选，最多20字）" maxlength="20" autocomplete="off" spellcheck="false" />
-          </label>
-          <button type="submit" id="addWorkspaceBtn" class="primary full">+ 添加并显示</button>
-        </section>
-
-        <section class="file-browser" id="fileBrowser" hidden>
-          <div class="browser-toolbar">
-            <div id="browserFullPath" class="browser-full-path"></div>
-            <div class="breadcrumb-row">
-              <button type="button" id="browserUpBtn" class="secondary" title="上级目录">⬆ 上一级</button>
-              <div id="browserBreadcrumbs" class="breadcrumbs" aria-label="路径层级"></div>
-              <div id="browserSearchHint" class="browser-search-hint hidden">快速匹配：<span></span></div>
-            </div>
-            <div class="quick-jumps">
-              <div class="jump-group">
-                <span class="jump-label">常用</span>
-                <div id="browserFavorites" class="jump-buttons"></div>
-              </div>
-              <div class="jump-group" id="browserRootsGroup" style="display:none;">
-                <span class="jump-label">磁盘</span>
-                <div id="browserRoots" class="jump-buttons"></div>
-              </div>
-            </div>
-          </div>
-          <div class="browser-list-wrap">
-            <div class="browser-list-header">
-              <span>名称</span>
-              <span>完整路径</span>
-            </div>
-            <div id="browserGrid" class="browser-list-view" role="listbox" aria-label="文件夹列表"></div>
-            <div id="browserEmpty" class="browser-empty hidden">此目录无可访问的子文件夹</div>
-            <div id="browserFooter" class="browser-footer">
-              <span id="browserCurrent" class="current-path-label"></span>
-              <button type="button" id="browserSelectBtn" class="primary">选择此目录为工作路径</button>
-            </div>
-          </div>
-        </section>
-        <section class="workspace-section">
-          <div class="section-title">
-            <strong>&#24050;&#27880;&#20876;&#36335;&#24452;</strong>
-            <span class="muted">&#28857;&#20987;&#26174;&#31034;/&#38544;&#34255;&#65292;&#26368;&#22810;&#21516;&#26102; 2 &#20010;</span>
-          </div>
-          <div id="workspaceList" class="workspace-list"></div>
-        </section>
-        <div class="modal-actions">
-          <button type="button" id="cancelWorkspaceBtn">&#20851;&#38381;</button>
-        </div>
-      </form>
-    </div>
-    <div id="normalizeMdModal" class="modal hidden" role="dialog" aria-modal="true">
-      <div class="modal-dialog normalize-dialog">
-        <h2>一键 MD 化</h2>
-        <p class="muted">选择目标工作路径与需要转换的文件扩展名，点击确认后将符合条件的文件批量重命名为 .md。</p>
-        <div class="normalize-section">
-          <div class="section-title"><strong>工作路径</strong><span class="muted">选择一个或多个</span></div>
-          <div id="normalizeWorkspaceList" class="workspace-list compact"></div>
-        </div>
-        <div class="normalize-section">
-          <div class="section-title"><strong>文件扩展名</strong><span class="muted">勾选后仅转换所选扩展名</span></div>
-          <div id="normalizeExtensionChoices" class="extension-choices">
-            <label><input type="checkbox" value="*" checked /> <span>所有非 .md 文件</span></label>
-            <label><input type="checkbox" value="txt" /> <span>.txt</span></label>
-            <label><input type="checkbox" value="markdown" /> <span>.markdown</span></label>
-            <label><input type="checkbox" value="log" /> <span>.log</span></label>
-            <label><input type="checkbox" value="note" /> <span>.note</span></label>
-            <label><input type="checkbox" value="rtf" /> <span>.rtf</span></label>
-            <label><input type="checkbox" value="rst" /> <span>.rst</span></label>
-            <label><input type="checkbox" value="html" /> <span>.html</span></label>
-            <label><input type="checkbox" value="json" /> <span>.json</span></label>
-          </div>
-        </div>
-        <div class="modal-actions">
-          <button type="button" id="cancelNormalizeMdBtn">取消</button>
-          <button type="button" id="confirmNormalizeMdBtn" class="primary">确认转换</button>
         </div>
       </div>
     </div>
