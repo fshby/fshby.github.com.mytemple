@@ -1,5 +1,5 @@
 codex 因为codex自带模型成本和使用上受限，将模型替换为deepseek（不支持多模态）模型
-
+阿迪斯发
 安装步骤
 1、下载安装codex（免费）  ----https://openai.com/zh-Hans-CN/codex/
 2、安装 CC Switch （免费） ----https://ccswitch.io/zh/    windows安装CC-Switch-v3.16.4-Windows.msi

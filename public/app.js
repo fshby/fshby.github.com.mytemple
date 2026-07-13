@@ -26,7 +26,8 @@ const state = {
   searchSeq: 0,
   saveSeq: 0,
   createMode: "doc",
-  collapsedFolders: new Set(),
+  expandedFolders: new Set(),
+  expandedWorkspaceRoots: new Set(),
   graphDrag: null,
   undo: { stack: [], index: -1, applying: false },
   deleteTarget: "",
@@ -39,6 +40,7 @@ const state = {
   syncPreviewScroll: { frame: 0, ratio: 0 },
   lastSavedContent: "",
   toastTimer: 0,
+  recentDocs: [],
 };
 
 const els = {
@@ -126,6 +128,7 @@ const els = {
   confirmNormalizeMdBtn: document.querySelector("#confirmNormalizeMdBtn"),
   normalizeStatus: document.querySelector("#normalizeStatus"),
   toast: document.querySelector("#toast"),
+  recentDocs: document.querySelector("#recentDocs"),
 };
 
 const api = {
@@ -176,6 +179,82 @@ function applySettings(settings = loadSettings()) {
   els.globalFontFamily.value = settings.fontFamily;
   [...els.themeChoices.querySelectorAll("[data-theme]")].forEach((button) => {
     button.classList.toggle("active", button.dataset.theme === settings.theme);
+  });
+}
+
+function loadRecentDocs() {
+  try {
+    const saved = localStorage.getItem("recentDocs");
+    if (saved) {
+      state.recentDocs = JSON.parse(saved);
+    }
+  } catch (e) {
+    state.recentDocs = [];
+  }
+}
+
+function saveRecentDocs() {
+  try {
+    localStorage.setItem("recentDocs", JSON.stringify(state.recentDocs));
+  } catch (e) {
+    // ignore
+  }
+}
+
+function addRecentDoc(docPath) {
+  if (!docPath) return;
+  const existingIndex = state.recentDocs.findIndex((item) => item.path === docPath);
+  if (existingIndex >= 0) {
+    state.recentDocs.splice(existingIndex, 1);
+  }
+  const file = state.flatFiles.find((f) => f.path === docPath);
+  state.recentDocs.unshift({
+    path: docPath,
+    name: displayName(file) || docPath.split("/").pop(),
+    timestamp: Date.now(),
+  });
+  const maxRecent = 6;
+  if (state.recentDocs.length > maxRecent) {
+    state.recentDocs = state.recentDocs.slice(0, maxRecent);
+  }
+  saveRecentDocs();
+  renderRecentDocs();
+}
+
+function removeRecentDoc(docPath) {
+  state.recentDocs = state.recentDocs.filter((item) => item.path !== docPath);
+  saveRecentDocs();
+  renderRecentDocs();
+}
+
+function renderRecentDocs() {
+  if (!els.recentDocs) return;
+  if (state.recentDocs.length === 0) {
+    els.recentDocs.innerHTML = '<span class="recent-docs-empty">暂无最近打开文档</span>';
+    return;
+  }
+  els.recentDocs.innerHTML = state.recentDocs.map((doc, index) => `
+    <div class="recent-item ${state.currentPath === doc.path ? "active" : ""}" data-path="${escapeHtml(doc.path)}" title="${escapeHtml(doc.path)}">
+      <span class="recent-icon">${index === 0 ? "★" : "○"}</span>
+      <span class="recent-name">${escapeHtml(compactName(doc.name, 24))}</span>
+      <span class="recent-close" data-remove="${escapeHtml(doc.path)}">×</span>
+    </div>
+  `).join("");
+
+  els.recentDocs.querySelectorAll(".recent-item").forEach((item) => {
+    item.addEventListener("click", (e) => {
+      if (e.target.closest(".recent-close")) return;
+      const path = item.dataset.path;
+      if (path) openDoc(path);
+    });
+  });
+
+  els.recentDocs.querySelectorAll(".recent-close").forEach((closeBtn) => {
+    closeBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const path = closeBtn.dataset.remove;
+      if (path) removeRecentDoc(path);
+    });
   });
 }
 
@@ -488,7 +567,64 @@ function renderTree(nodes, container = els.tree) {
           renderTree(state.tree);
         }
       });
-      renderTree(node.children, children);
+
+      const folders = node.children.filter((c) => c.type === "folder");
+      const allFiles = [];
+      function collectFiles(nodes) {
+        for (const n of nodes) {
+          if (n.type === "file") allFiles.push(n);
+          if (n.children) collectFiles(n.children);
+        }
+      }
+      collectFiles(node.children);
+      const maxFiles = 10;
+      const isExpanded = state.expandedWorkspaceRoots.has(node.workspaceId);
+      const displayFiles = isExpanded ? allFiles : allFiles.slice(0, maxFiles);
+
+      folders.forEach((folder) => renderTree([folder], children));
+
+      for (const file of displayFiles) {
+        const button = document.createElement("button");
+        const isSelected = state.multiSelected.has(file.path) || state.currentPath === file.path;
+        button.className = `file-item ${state.currentPath === file.path ? "active" : ""} ${state.multiSelected.has(file.path) ? "multi-selected" : ""}`;
+        button.draggable = true;
+        button.title = file.path + "（按住 Ctrl 点击可多选）";
+        button.innerHTML = `<span class="file-icon">-</span><span>${escapeHtml(compactName(displayName(file)))}</span>`;
+        button.addEventListener("click", (event) => {
+          event.stopPropagation();
+          state.activeWorkspaceId = file.workspaceId;
+          if (event && (event.ctrlKey || event.metaKey || event.shiftKey)) {
+            if (state.multiSelected.has(file.path)) state.multiSelected.delete(file.path);
+            else state.multiSelected.add(file.path);
+            renderTree(state.tree);
+          } else {
+            state.multiSelected.clear();
+            state.multiSelected.add(file.path);
+            openDoc(file.path);
+          }
+        });
+        button.addEventListener("dragstart", (event) => startTreeDrag(event, { type: "file", path: file.path }));
+        button.addEventListener("dragend", endTreeDrag);
+        children.append(button);
+      }
+
+      if (allFiles.length > maxFiles) {
+        const moreBtn = document.createElement("button");
+        moreBtn.type = "button";
+        moreBtn.className = "more-files-btn";
+        moreBtn.textContent = isExpanded ? `收起 ${allFiles.length - maxFiles} 项` : `... 还有 ${allFiles.length - maxFiles} 项`;
+        const workspaceId = node.workspaceId;
+        moreBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (state.expandedWorkspaceRoots.has(workspaceId)) {
+            state.expandedWorkspaceRoots.delete(workspaceId);
+          } else {
+            state.expandedWorkspaceRoots.add(workspaceId);
+          }
+          renderTree(state.tree);
+        });
+        children.append(moreBtn);
+      }
 
       panel.append(head, children);
       container.append(panel);
@@ -496,9 +632,9 @@ function renderTree(nodes, container = els.tree) {
     }
 
     if (node.type === "folder") {
-      const collapsed = state.collapsedFolders.has(node.path);
+      const expanded = state.expandedFolders.has(node.path);
       const wrapper = document.createElement("div");
-      wrapper.className = `tree-folder ${collapsed ? "collapsed" : ""}`;
+      wrapper.className = `tree-folder ${expanded ? "" : "collapsed"}`;
       const title = document.createElement("button");
       const isSelected = state.multiSelected.has(node.path) || state.selectedFolder === node.path;
       title.className = `folder-title ${isSelected ? "selected" : ""} ${state.multiSelected.has(node.path) ? "multi-selected" : ""}`;
@@ -518,8 +654,8 @@ function renderTree(nodes, container = els.tree) {
         } else {
           state.multiSelected.clear();
           state.multiSelected.add(node.path);
-          if (state.collapsedFolders.has(node.path)) state.collapsedFolders.delete(node.path);
-          else state.collapsedFolders.add(node.path);
+          if (state.expandedFolders.has(node.path)) state.expandedFolders.delete(node.path);
+          else state.expandedFolders.add(node.path);
         }
         renderTree(state.tree);
       });
@@ -1029,6 +1165,7 @@ async function openDoc(docPath, options = {}) {
   if (options.searchTerm) {
     requestAnimationFrame(() => scrollReaderToElement(els.markdownView.querySelector(".search-hit"), "auto"));
   }
+  addRecentDoc(doc.path);
 }
 
 function debounce(fn, wait = 180) {
@@ -1130,7 +1267,14 @@ async function saveCurrentDoc({ refreshTree = false } = {}) {
   if (!refreshTree && content === state.lastSavedContent) return true;
   const seq = ++state.saveSeq;
   setSaveStatus("\u4fdd\u5b58\u4e2d", true);
-  await api.post("/api/save", { path: state.currentPath, content });
+  try {
+    await api.post("/api/save", { path: state.currentPath, content });
+  } catch (e) {
+    const errorMessage = e?.response?.data?.error || e?.message || "保存失败";
+    setSaveStatus("保存失败", false);
+    showToast(errorMessage);
+    return false;
+  }
   if (seq !== state.saveSeq) return true;
   state.currentContent = content;
   state.lastSavedContent = content;
@@ -2173,4 +2317,6 @@ async function bootstrap(refresh = false) {
 applySettings();
 restoreSidebarWidth();
 restoreSidebarCollapsed();
+loadRecentDocs();
+renderRecentDocs();
 bootstrap();

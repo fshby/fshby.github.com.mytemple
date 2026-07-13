@@ -1,32 +1,23 @@
 {
   "workspaces": [
     {
+      "id": "ws_8cd935b277",
+      "name": "hexo",
+      "root": "O:\\temple\\hexo",
+      "visible": true,
+      "mdOnly": false,
+      "builtin": false,
+      "lastUsed": 1783930515672
+    },
+    {
       "id": "default",
       "name": "默认 docs",
-      "root": "E:\\codex\\mytemple\\docs",
+      "root": "D:\\game\\mytemple\\docs",
       "visible": true,
       "mdOnly": true,
       "builtin": true,
-      "lastUsed": 1783870875653
-    },
-    {
-      "id": "ws_6e5dcb0bd0",
-      "name": "html",
-      "root": "E:\\trae\\html",
-      "visible": true,
-      "mdOnly": true,
-      "builtin": false,
-      "lastUsed": 1783870988674
-    },
-    {
-      "id": "ws_9661c8622f",
-      "name": "toutiao",
-      "root": "C:\\Users\\kfzheng\\Desktop\\toutiao",
-      "visible": false,
-      "mdOnly": true,
-      "builtin": false,
-      "lastUsed": 1783866497906
+      "lastUsed": 1783930440395
     }
   ],
-  "defaultWorkspaceId": "ws_9661c8622f"
+  "defaultWorkspaceId": "default"
 }
