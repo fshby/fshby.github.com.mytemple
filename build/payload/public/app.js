@@ -18,21 +18,29 @@ const state = {
   graphReady: false,
   selectedNode: "",
   selectedFolder: "",
+  multiSelected: new Set(),
   sidebarCollapsed: false,
   folderExplicit: false,
+  activeWorkspaceId: "",
   openSeq: 0,
   searchSeq: 0,
   saveSeq: 0,
   createMode: "doc",
-  collapsedFolders: new Set(),
+  expandedFolders: new Set(),
+  expandedWorkspaceRoots: new Set(),
   graphDrag: null,
   undo: { stack: [], index: -1, applying: false },
   deleteTarget: "",
   dragItem: null,
+  clipboardItem: null,
+  clipboardItems: [],
+  workspaces: [],
+  defaultWorkspaceId: "default",
   sidebarResize: null,
   syncPreviewScroll: { frame: 0, ratio: 0 },
   lastSavedContent: "",
   toastTimer: 0,
+  recentDocs: [],
 };
 
 const els = {
@@ -59,10 +67,20 @@ const els = {
   canvas: document.querySelector("#graphCanvas"),
   newFolderBtn: document.querySelector("#newFolderBtn"),
   newDocBtn: document.querySelector("#newDocBtn"),
+  workspaceBtn: document.querySelector("#workspaceBtn"),
+  workspaceSummary: document.querySelector("#workspaceSummary"),
+  workspaceModal: document.querySelector("#workspaceModal"),
+  workspaceForm: document.querySelector("#workspaceForm"),
+  workspacePath: document.querySelector("#workspacePath"),
+  workspaceName: document.querySelector("#workspaceName"),
+  workspaceList: document.querySelector("#workspaceList"),
+  cancelWorkspaceBtn: document.querySelector("#cancelWorkspaceBtn"),
   createModal: document.querySelector("#createModal"),
   createForm: document.querySelector("#createForm"),
   createTitle: document.querySelector("#createTitle"),
-  createParent: document.querySelector("#createParent"),
+  createSummary: document.querySelector("#createSummary"),
+  createWorkspaceRow: document.querySelector("#createWorkspaceRow"),
+  createWorkspaceChoices: document.querySelector("#createWorkspaceChoices"),
   createName: document.querySelector("#createName"),
   cancelCreateBtn: document.querySelector("#cancelCreateBtn"),
   deleteModal: document.querySelector("#deleteModal"),
@@ -86,10 +104,31 @@ const els = {
   docFontSize: document.querySelector("#docFontSize"),
   docFontSizeValue: document.querySelector("#docFontSizeValue"),
   globalFontFamily: document.querySelector("#globalFontFamily"),
+  defaultWorkspaceChoices: document.querySelector("#defaultWorkspaceChoices"),
+  browseFolderBtn: document.querySelector("#browseFolderBtn"),
+  fileBrowser: document.querySelector("#fileBrowser"),
+  browserFullPath: document.querySelector("#browserFullPath"),
+  browserFavorites: document.querySelector("#browserFavorites"),
+  browserRoots: document.querySelector("#browserRoots"),
+  browserRootsGroup: document.querySelector("#browserRootsGroup"),
+  browserSearchHint: document.querySelector("#browserSearchHint"),
+  browserBreadcrumbs: document.querySelector("#browserBreadcrumbs"),
+  browserUpBtn: document.querySelector("#browserUpBtn"),
+  browserGrid: document.querySelector("#browserGrid"),
+  browserEmpty: document.querySelector("#browserEmpty"),
+  browserCurrent: document.querySelector("#browserCurrent"),
+  browserSelectBtn: document.querySelector("#browserSelectBtn"),
   normalizeMdBtn: document.querySelector("#normalizeMdBtn"),
   normalizeProgress: document.querySelector("#normalizeProgress"),
   normalizeStatus: document.querySelector("#normalizeStatus"),
+  normalizeMdModal: document.querySelector("#normalizeMdModal"),
+  normalizeWorkspaceList: document.querySelector("#normalizeWorkspaceList"),
+  normalizeExtensionChoices: document.querySelector("#normalizeExtensionChoices"),
+  cancelNormalizeMdBtn: document.querySelector("#cancelNormalizeMdBtn"),
+  confirmNormalizeMdBtn: document.querySelector("#confirmNormalizeMdBtn"),
+  normalizeStatus: document.querySelector("#normalizeStatus"),
   toast: document.querySelector("#toast"),
+  recentDocs: document.querySelector("#recentDocs"),
 };
 
 const api = {
@@ -143,6 +182,82 @@ function applySettings(settings = loadSettings()) {
   });
 }
 
+function loadRecentDocs() {
+  try {
+    const saved = localStorage.getItem("recentDocs");
+    if (saved) {
+      state.recentDocs = JSON.parse(saved);
+    }
+  } catch (e) {
+    state.recentDocs = [];
+  }
+}
+
+function saveRecentDocs() {
+  try {
+    localStorage.setItem("recentDocs", JSON.stringify(state.recentDocs));
+  } catch (e) {
+    // ignore
+  }
+}
+
+function addRecentDoc(docPath) {
+  if (!docPath) return;
+  const existingIndex = state.recentDocs.findIndex((item) => item.path === docPath);
+  if (existingIndex >= 0) {
+    state.recentDocs.splice(existingIndex, 1);
+  }
+  const file = state.flatFiles.find((f) => f.path === docPath);
+  state.recentDocs.unshift({
+    path: docPath,
+    name: displayName(file) || docPath.split("/").pop(),
+    timestamp: Date.now(),
+  });
+  const maxRecent = 6;
+  if (state.recentDocs.length > maxRecent) {
+    state.recentDocs = state.recentDocs.slice(0, maxRecent);
+  }
+  saveRecentDocs();
+  renderRecentDocs();
+}
+
+function removeRecentDoc(docPath) {
+  state.recentDocs = state.recentDocs.filter((item) => item.path !== docPath);
+  saveRecentDocs();
+  renderRecentDocs();
+}
+
+function renderRecentDocs() {
+  if (!els.recentDocs) return;
+  if (state.recentDocs.length === 0) {
+    els.recentDocs.innerHTML = '<span class="recent-docs-empty">暂无最近打开文档</span>';
+    return;
+  }
+  els.recentDocs.innerHTML = state.recentDocs.map((doc, index) => `
+    <div class="recent-item ${state.currentPath === doc.path ? "active" : ""}" data-path="${escapeHtml(doc.path)}" title="${escapeHtml(doc.path)}">
+      <span class="recent-icon">${index === 0 ? "★" : "○"}</span>
+      <span class="recent-name">${escapeHtml(compactName(doc.name, 24))}</span>
+      <span class="recent-close" data-remove="${escapeHtml(doc.path)}">×</span>
+    </div>
+  `).join("");
+
+  els.recentDocs.querySelectorAll(".recent-item").forEach((item) => {
+    item.addEventListener("click", (e) => {
+      if (e.target.closest(".recent-close")) return;
+      const path = item.dataset.path;
+      if (path) openDoc(path);
+    });
+  });
+
+  els.recentDocs.querySelectorAll(".recent-close").forEach((closeBtn) => {
+    closeBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const path = closeBtn.dataset.remove;
+      if (path) removeRecentDoc(path);
+    });
+  });
+}
+
 function escapeHtml(value) {
   return String(value)
     .replaceAll("&", "&amp;")
@@ -155,9 +270,42 @@ function displayName(file) {
   return file.displayName || file.name || file.path.split("/").pop();
 }
 
+function splitPathRef(value = "") {
+  const text = String(value || "");
+  const index = text.indexOf(":");
+  if (index > 0) return { workspaceId: text.slice(0, index), relative: text.slice(index + 1) };
+  return { workspaceId: "default", relative: text };
+}
+
+function joinPathRef(workspaceId, relative = "") {
+  return `${workspaceId || "default"}:${String(relative || "").replace(/^\/+/, "")}`;
+}
+
+function parentPathRef(value = "") {
+  const ref = splitPathRef(value);
+  if (!ref.relative) return joinPathRef(ref.workspaceId);
+  const parent = ref.relative.includes("/") ? ref.relative.split("/").slice(0, -1).join("/") : "";
+  return joinPathRef(ref.workspaceId, parent);
+}
+
+function displayPath(value = "") {
+  const ref = splitPathRef(value);
+  const workspace = state.workspaces.find((item) => item.id === ref.workspaceId);
+  return `${workspace?.name || ref.workspaceId}${ref.relative ? `/${ref.relative}` : ""}`;
+}
+
 function compactName(value, limit = 20) {
   const name = String(value || "");
   return name.length > limit ? `${name.slice(0, limit)}...` : name;
+}
+
+function splitWorkspaceRef(path) {
+  const value = String(path || "");
+  const colon = value.indexOf(":");
+  if (colon > 0) {
+    return { id: value.slice(0, colon), relative: value.slice(colon + 1) };
+  }
+  return { id: value, relative: "" };
 }
 
 function plainText(value) {
@@ -353,21 +501,162 @@ function renderMarkdown(source, options = {}) {
 function renderTree(nodes, container = els.tree) {
   container.innerHTML = "";
   for (const node of nodes) {
+    if (node.type === "workspace") {
+      const workspace = state.workspaces.find((ws) => ws.id === node.workspaceId) || { name: node.name, id: node.workspaceId };
+      const panel = document.createElement("section");
+      panel.className = `tree-workspace workspace-${node.workspaceId} ${state.activeWorkspaceId === node.workspaceId ? "active-workspace" : ""}`;
+      panel.dataset.workspaceId = node.workspaceId;
+
+      const head = document.createElement("div");
+      head.className = "tree-workspace-head";
+      head.innerHTML = `
+        <span class="ws-dot" aria-hidden="true"></span>
+        <strong class="ws-name" title="${escapeHtml(node.root || node.name)}">${escapeHtml(compactName(workspace.name || node.name, 28))}</strong>
+        <span class="ws-meta">${escapeHtml(compactName(node.root || "", 36))}</span>
+      `;
+      head.addEventListener("click", () => {
+        state.activeWorkspaceId = node.workspaceId;
+        state.selectedFolder = node.path;
+        state.folderExplicit = false;
+        state.multiSelected.clear();
+        renderTree(state.tree);
+      });
+
+      const actions = document.createElement("div");
+      actions.className = "ws-actions";
+      const pasteBtn = document.createElement("button");
+      pasteBtn.type = "button";
+      pasteBtn.className = "ws-paste";
+      pasteBtn.title = "粘贴到该工作路径根目录（先按 Ctrl+C 复制，再点击此处）";
+      pasteBtn.textContent = "\u2199 \u7c98\u8d34";
+      pasteBtn.addEventListener("click", async () => {
+        if (!state.clipboardItems.length) return showToast("请先按 Ctrl+C 复制文件或文件夹");
+        try {
+          const copied = await api.post("/api/workspaces/paste", { source: state.clipboardItems, targetFolder: node.path });
+          state.graphReady = false;
+          await bootstrap(true);
+          if (copied.type === "file" && copied.path) openDoc(copied.path);
+          showToast(`已粘贴 ${state.clipboardItems.length} 项`);
+        } catch (error) {
+          showToast(error.message || "粘贴失败");
+        }
+      });
+      actions.append(pasteBtn);
+      head.append(actions);
+
+      const children = document.createElement("div");
+      children.className = "tree-workspace-body";
+      children.addEventListener("dragover", (event) => {
+        if (!state.dragItem || event.target.closest(".folder-title")) return;
+        event.preventDefault();
+        children.classList.add("drop-root");
+        event.dataTransfer.dropEffect = "move";
+      });
+      children.addEventListener("dragleave", () => children.classList.remove("drop-root"));
+      children.addEventListener("drop", async (event) => {
+        if (!state.dragItem || event.target.closest(".folder-title")) return;
+        event.preventDefault();
+        children.classList.remove("drop-root");
+        const moved = await api.post("/api/move", { source: state.dragItem.path, targetFolder: node.path });
+        state.graphReady = false;
+        await bootstrap(true);
+        if (moved.type === "file" && moved.path) openDoc(moved.path);
+        if (moved.type === "folder" && moved.path) {
+          state.selectedFolder = moved.path;
+          state.folderExplicit = true;
+          renderTree(state.tree);
+        }
+      });
+
+      const folders = node.children.filter((c) => c.type === "folder");
+      const allFiles = [];
+      function collectFiles(nodes) {
+        for (const n of nodes) {
+          if (n.type === "file") allFiles.push(n);
+          if (n.children) collectFiles(n.children);
+        }
+      }
+      collectFiles(node.children);
+      const maxFiles = 10;
+      const isExpanded = state.expandedWorkspaceRoots.has(node.workspaceId);
+      const displayFiles = isExpanded ? allFiles : allFiles.slice(0, maxFiles);
+
+      folders.forEach((folder) => renderTree([folder], children));
+
+      for (const file of displayFiles) {
+        const button = document.createElement("button");
+        const isSelected = state.multiSelected.has(file.path) || state.currentPath === file.path;
+        button.className = `file-item ${state.currentPath === file.path ? "active" : ""} ${state.multiSelected.has(file.path) ? "multi-selected" : ""}`;
+        button.draggable = true;
+        button.title = file.path + "（按住 Ctrl 点击可多选）";
+        button.innerHTML = `<span class="file-icon">-</span><span>${escapeHtml(compactName(displayName(file)))}</span>`;
+        button.addEventListener("click", (event) => {
+          event.stopPropagation();
+          state.activeWorkspaceId = file.workspaceId;
+          if (event && (event.ctrlKey || event.metaKey || event.shiftKey)) {
+            if (state.multiSelected.has(file.path)) state.multiSelected.delete(file.path);
+            else state.multiSelected.add(file.path);
+            renderTree(state.tree);
+          } else {
+            state.multiSelected.clear();
+            state.multiSelected.add(file.path);
+            openDoc(file.path);
+          }
+        });
+        button.addEventListener("dragstart", (event) => startTreeDrag(event, { type: "file", path: file.path }));
+        button.addEventListener("dragend", endTreeDrag);
+        children.append(button);
+      }
+
+      if (allFiles.length > maxFiles) {
+        const moreBtn = document.createElement("button");
+        moreBtn.type = "button";
+        moreBtn.className = "more-files-btn";
+        moreBtn.textContent = isExpanded ? `收起 ${allFiles.length - maxFiles} 项` : `... 还有 ${allFiles.length - maxFiles} 项`;
+        const workspaceId = node.workspaceId;
+        moreBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (state.expandedWorkspaceRoots.has(workspaceId)) {
+            state.expandedWorkspaceRoots.delete(workspaceId);
+          } else {
+            state.expandedWorkspaceRoots.add(workspaceId);
+          }
+          renderTree(state.tree);
+        });
+        children.append(moreBtn);
+      }
+
+      panel.append(head, children);
+      container.append(panel);
+      continue;
+    }
+
     if (node.type === "folder") {
-      const collapsed = state.collapsedFolders.has(node.path);
+      const expanded = state.expandedFolders.has(node.path);
       const wrapper = document.createElement("div");
-      wrapper.className = `tree-folder ${collapsed ? "collapsed" : ""}`;
+      wrapper.className = `tree-folder ${expanded ? "" : "collapsed"}`;
       const title = document.createElement("button");
-      title.className = `folder-title ${state.selectedFolder === node.path ? "selected" : ""}`;
+      const isSelected = state.multiSelected.has(node.path) || state.selectedFolder === node.path;
+      title.className = `folder-title ${isSelected ? "selected" : ""} ${state.multiSelected.has(node.path) ? "multi-selected" : ""}`;
       title.type = "button";
       title.draggable = true;
-      title.title = node.path;
+      title.title = node.path + "（按住 Ctrl 点击可多选）";
       title.innerHTML = `<span class="folder-icon">v</span><span>${escapeHtml(compactName(node.name))}</span>`;
-      title.addEventListener("click", () => {
+      title.addEventListener("click", (event) => {
+        event.stopPropagation();
+        state.activeWorkspaceId = node.workspaceId;
         state.selectedFolder = node.path;
         state.folderExplicit = true;
-        if (state.collapsedFolders.has(node.path)) state.collapsedFolders.delete(node.path);
-        else state.collapsedFolders.add(node.path);
+        // Ctrl 点击 = 多选添加/移除，不触发展开收起（双击展开）
+        if (event && (event.ctrlKey || event.metaKey || event.shiftKey)) {
+          if (state.multiSelected.has(node.path)) state.multiSelected.delete(node.path);
+          else state.multiSelected.add(node.path);
+        } else {
+          state.multiSelected.clear();
+          state.multiSelected.add(node.path);
+          if (state.expandedFolders.has(node.path)) state.expandedFolders.delete(node.path);
+          else state.expandedFolders.add(node.path);
+        }
         renderTree(state.tree);
       });
       title.addEventListener("dragstart", (event) => startTreeDrag(event, { type: "folder", path: node.path }));
@@ -385,15 +674,331 @@ function renderTree(nodes, container = els.tree) {
     }
 
     const button = document.createElement("button");
-    button.className = `file-item ${state.currentPath === node.path ? "active" : ""}`;
+    const isSelected = state.multiSelected.has(node.path) || state.currentPath === node.path;
+    button.className = `file-item ${state.currentPath === node.path ? "active" : ""} ${state.multiSelected.has(node.path) ? "multi-selected" : ""}`;
     button.draggable = true;
-    button.title = node.title && node.title !== displayName(node) ? node.title : node.path;
+    button.title = node.path + "（按住 Ctrl 点击可多选）";
     button.innerHTML = `<span class="file-icon">-</span><span>${escapeHtml(compactName(displayName(node)))}</span>`;
-    button.addEventListener("click", () => openDoc(node.path));
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      state.activeWorkspaceId = node.workspaceId;
+      if (event && (event.ctrlKey || event.metaKey || event.shiftKey)) {
+        // 多选添加/移除，不打开文档
+        if (state.multiSelected.has(node.path)) state.multiSelected.delete(node.path);
+        else state.multiSelected.add(node.path);
+        renderTree(state.tree);
+      } else {
+        state.multiSelected.clear();
+        state.multiSelected.add(node.path);
+        openDoc(node.path);
+      }
+    });
     button.addEventListener("dragstart", (event) => startTreeDrag(event, { type: "file", path: node.path }));
     button.addEventListener("dragend", endTreeDrag);
     container.append(button);
   }
+}
+
+function renderWorkspaceSummary() {
+  const visible = state.workspaces.filter((ws) => ws.visible).slice(0, 2);
+  const totalFiles = state.flatFiles.length;
+  els.workspaceSummary.innerHTML = visible.length
+    ? `<div class="ws-bar">${visible.map((ws, idx) => `<span class="ws-chip workspace-${ws.id}" title="${escapeHtml(ws.root || ws.name)}">${idx + 1}. ${escapeHtml(compactName(ws.name, 16))}</span>`).join("")}<span class="ws-total">\u2726 ${totalFiles || 0}</span></div>`
+    : `<p class="muted">尚未加载工作路径</p>`;
+}
+
+function renderWorkspaceList(workspaces) {
+  if (!workspaces || !workspaces.length) {
+    els.workspaceList.innerHTML = `<p class="muted">暂无已注册的工作路径</p>`;
+    return;
+  }
+  const sorted = [...workspaces].sort((a, b) => (b.lastUsed || 0) - (a.lastUsed || 0));
+  els.workspaceList.innerHTML = sorted.map((ws) => {
+    const visible = ws.visible ? "active" : "";
+    const mdOnlyChecked = ws.mdOnly !== false ? "checked" : "";
+    return `
+      <div class="workspace-item ${visible}" data-id="${escapeHtml(ws.id)}">
+        <span class="ws-dot" aria-hidden="true"></span>
+        <div class="workspace-meta">
+          <strong class="workspace-name" title="${escapeHtml(ws.name)}">${escapeHtml(compactName(ws.name, 24))}</strong>
+          <span class="workspace-path" title="${escapeHtml(ws.root)}">${escapeHtml(compactName(ws.root, 48))}</span>
+          <label class="ws-mdonly-toggle" title="是否仅显示 .md 文件">
+            <input type="checkbox" data-action="mdonly" data-id="${escapeHtml(ws.id)}" ${mdOnlyChecked}>
+            <span>仅显示 md</span>
+          </label>
+        </div>
+        <div class="workspace-actions">
+          <button type="button" class="ws-toggle" data-action="toggle" data-id="${escapeHtml(ws.id)}">${ws.visible ? "\u2713 \u663e\u793a\u4e2d" : "\u25cb \u663e\u793a"}</button>
+          <button type="button" class="ws-rename" data-action="rename" data-id="${escapeHtml(ws.id)}" title="重命名">&#9998;</button>
+          <button type="button" class="ws-remove danger" data-action="remove" data-id="${escapeHtml(ws.id)}" title="移除记录" ${ws.builtin ? 'disabled style="opacity:.3;cursor:not-allowed"' : ""}>&times;</button>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  els.workspaceList.querySelectorAll("[data-action]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const id = btn.dataset.id;
+      const action = btn.dataset.action;
+      try {
+        if (action === "toggle") {
+          const target = state.workspaces.find((ws) => ws.id === id);
+          await api.post("/api/workspaces/show", { id, visible: !target?.visible });
+          state.graphReady = false;
+          await bootstrap(true);
+          openWorkspaceModal();
+        } else if (action === "remove") {
+          const target = state.workspaces.find((ws) => ws.id === id);
+          if (!target || target.builtin) return;
+          const ok = confirm(`确认移除工作路径「${target.name}」？\n（仅移除记录，不会删除磁盘文件）`);
+          if (!ok) return;
+          await api.post("/api/workspaces/remove", { id });
+          state.graphReady = false;
+          await bootstrap(true);
+          openWorkspaceModal();
+        } else if (action === "rename") {
+          const target = state.workspaces.find((ws) => ws.id === id);
+          if (!target) return;
+          const newName = prompt("输入新的工作路径名称", target.name);
+          if (!newName || newName === target.name) return;
+          await api.post("/api/workspaces/rename", { id, name: newName });
+          await bootstrap(true);
+          openWorkspaceModal();
+        } else if (action === "mdonly") {
+          const target = state.workspaces.find((ws) => ws.id === id);
+          if (!target) return;
+          await api.post("/api/workspaces/set-md-only", { id, mdOnly: btn.checked !== false });
+          state.graphReady = false;
+          await bootstrap(true);
+          openWorkspaceModal();
+        }
+      } catch (error) {
+        showToast(error.message || "操作失败");
+      }
+    });
+  });
+}
+
+async function openWorkspaceModal() {
+  const data = await api.get("/api/workspaces");
+  state.workspaces = data.workspaces || [];
+  if (data.defaultWorkspaceId) state.defaultWorkspaceId = data.defaultWorkspaceId;
+  renderWorkspaceList(state.workspaces);
+  els.workspacePath.value = "";
+  if (els.workspaceName) els.workspaceName.value = "";
+  els.workspaceModal.classList.remove("hidden");
+  els.workspacePath.focus();
+}
+
+// === 内嵌文件浏览器 ===
+async function openFileBrowser(startPath) {
+  if (!els.fileBrowser) return;
+  els.fileBrowser.hidden = false;
+  // 加载侧边栏常用路径
+  if (!els.browserFavorites.dataset.loaded) {
+    try {
+      const data = await api.get("/api/browse-directory?action=roots");
+      renderQuickJumps(data.favorites || [], data.roots || []);
+      els.browserFavorites.dataset.loaded = "1";
+    } catch {}
+  }
+  const path = startPath || els.workspacePath.value || "";
+  await browseDirectory(path);
+}
+
+function closeFileBrowser() {
+  if (els.fileBrowser) els.fileBrowser.hidden = true;
+  clearQuickMatch();
+}
+
+// === 键盘首字母快速匹配 ===
+let quickMatchText = "";
+let quickMatchTimer = null;
+let quickMatchActive = false;
+let quickMatchLastIdx = 0;
+
+function clearQuickMatch() {
+  quickMatchText = "";
+  quickMatchLastIdx = 0;
+  if (quickMatchTimer) {
+    clearTimeout(quickMatchTimer);
+    quickMatchTimer = null;
+  }
+  if (els.browserSearchHint) {
+    els.browserSearchHint.classList.add("hidden");
+    const span = els.browserSearchHint.querySelector("span");
+    if (span) span.textContent = "";
+  }
+  document.querySelectorAll(".folder-row.quick-match").forEach((row) => {
+    row.classList.remove("quick-match");
+  });
+}
+
+function showQuickMatch(text) {
+  if (!els.browserSearchHint) return;
+  els.browserSearchHint.classList.remove("hidden");
+  const span = els.browserSearchHint.querySelector("span");
+  if (span) span.textContent = text;
+  if (quickMatchTimer) clearTimeout(quickMatchTimer);
+  quickMatchTimer = setTimeout(() => {
+    els.browserSearchHint.classList.add("hidden");
+    quickMatchText = "";
+  }, 2000);
+}
+
+function findAndHighlightFolder(text) {
+  if (!els.browserGrid || !text) return;
+  const rows = els.browserGrid.querySelectorAll(".folder-row");
+  if (!rows.length) return;
+  const query = text.toLowerCase();
+  // 先找完全以查询开头的文件夹；如果没有匹配，找包含查询的
+  let matchIdx = -1;
+  let fallbackIdx = -1;
+  for (let i = 0; i < rows.length; i++) {
+    const name = rows[i].querySelector(".folder-row-name")?.textContent || "";
+    const lname = name.toLowerCase();
+    if (lname.startsWith(query)) {
+      matchIdx = i;
+      break;
+    }
+    if (fallbackIdx === -1 && lname.indexOf(query) !== -1) {
+      fallbackIdx = i;
+    }
+  }
+  const idx = matchIdx !== -1 ? matchIdx : fallbackIdx;
+  if (idx === -1) return false;
+  document.querySelectorAll(".folder-row.quick-match").forEach((row) => {
+    row.classList.remove("quick-match");
+  });
+  const matched = rows[idx];
+  matched.classList.add("quick-match");
+  matched.scrollIntoView({ behavior: "smooth", block: "center" });
+  quickMatchLastIdx = idx;
+  return true;
+}
+
+function handleFileBrowserKeydown(e) {
+  if (!els.fileBrowser || els.fileBrowser.hidden) return;
+  // 跳过正在输入路径/名称的输入框
+  const ae = document.activeElement;
+  if (ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.tagName === "SELECT")) return;
+
+  if (e.key === "Escape") {
+    clearQuickMatch();
+    return;
+  }
+  if (e.key === "Backspace" && quickMatchText.length > 0) {
+    quickMatchText = quickMatchText.slice(0, -1);
+    showQuickMatch(quickMatchText);
+    if (quickMatchText) findAndHighlightFolder(quickMatchText);
+    e.preventDefault();
+    return;
+  }
+  // 单字母/数字/部分符号键
+  const key = e.key;
+  if (key.length === 1) {
+    // 如果距离上次输入超过 500ms，重置（从新字母开始）
+    if (!quickMatchTimer) quickMatchText = "";
+    quickMatchText += key;
+    showQuickMatch(quickMatchText);
+    findAndHighlightFolder(quickMatchText);
+    e.preventDefault();
+  }
+}
+
+function renderQuickJumps(favorites, roots) {
+  if (!els.browserFavorites) return;
+  els.browserFavorites.innerHTML = favorites
+    .map((f) => `<button type="button" class="jump-btn" data-path="${escapeHtml(f.value)}">&#128193; ${escapeHtml(f.label)}</button>`)
+    .join("");
+  els.browserFavorites.querySelectorAll(".jump-btn").forEach((btn) => {
+    btn.addEventListener("click", () => browseDirectory(btn.dataset.path));
+  });
+  if (roots && roots.length) {
+    if (els.browserRootsGroup) els.browserRootsGroup.style.display = "";
+    els.browserRoots.innerHTML = roots
+      .map((r) => `<button type="button" class="jump-btn jump-btn-drive" data-path="${escapeHtml(r.value)}">&#128186; ${escapeHtml(r.label)}</button>`)
+      .join("");
+    els.browserRoots.querySelectorAll(".jump-btn").forEach((btn) => {
+      btn.addEventListener("click", () => browseDirectory(btn.dataset.path));
+    });
+  }
+}
+
+async function browseDirectory(targetPath) {
+  if (!els.browserGrid) return;
+  try {
+    const data = await api.post("/api/browse-directory", { path: targetPath || "", action: "list" });
+    renderBrowserContent(data);
+  } catch (e) {
+    els.browserGrid.innerHTML = `<div class="browser-error">无法访问：${escapeHtml(e.message || "未知错误")}</div>`;
+  }
+}
+
+function renderBrowserContent(data) {
+  // 顶部：完整绝对路径（最显眼的位置）
+  if (els.browserFullPath) {
+    els.browserFullPath.textContent = data.current || "";
+    els.browserFullPath.title = data.current || "";
+  }
+  // 面包屑（路径层级
+  if (els.browserBreadcrumbs) {
+    const crumbs = data.breadcrumbs || [];
+    els.browserBreadcrumbs.innerHTML = crumbs
+      .map((c) => `<button type="button" class="crumb" data-path="${escapeHtml(c.path)}">${escapeHtml(c.name || c.path)}</button>`)
+      .join('<span class="crumb-sep">›</span>');
+    els.browserBreadcrumbs.querySelectorAll(".crumb").forEach((btn) => {
+      btn.addEventListener("click", () => browseDirectory(btn.dataset.path));
+    });
+  }
+  // 上一级按钮
+  if (els.browserUpBtn) {
+    if (data.parent) {
+      els.browserUpBtn.disabled = false;
+      els.browserUpBtn.onclick = () => browseDirectory(data.parent);
+    } else {
+      els.browserUpBtn.disabled = true;
+      els.browserUpBtn.onclick = null;
+    }
+  }
+  // 文件夹列表（列表视图）：每行显示文件夹名 + 完整绝对路径
+  const items = data.items || [];
+  if (items.length === 0) {
+    els.browserGrid.innerHTML = "";
+    els.browserEmpty.classList.remove("hidden");
+  } else {
+    els.browserEmpty.classList.add("hidden");
+    els.browserGrid.innerHTML = items
+      .map((it) => `
+        <button type="button" class="folder-row" data-path="${escapeHtml(it.path)}">
+          <span class="folder-row-icon">&#128193;</span>
+          <span class="folder-row-name" title="${escapeHtml(it.name)}">${escapeHtml(it.name)}</span>
+          <span class="folder-row-path" title="${escapeHtml(it.path)}">${escapeHtml(it.path)}</span>
+        </button>
+      `)
+      .join("");
+    els.browserGrid.querySelectorAll(".folder-row").forEach((row) => {
+      row.addEventListener("click", () => browseDirectory(row.dataset.path));
+    });
+  }
+  // 页脚：当前路径（再次显示 + 选择按钮
+  if (els.browserCurrent) els.browserCurrent.textContent = data.current || "";
+  if (els.browserSelectBtn) {
+    els.browserSelectBtn.onclick = () => {
+      els.workspacePath.value = data.current || "";
+      if (els.workspaceName && !els.workspaceName.value) {
+        const baseName = data.breadcrumbs && data.breadcrumbs.length > 0 ? data.breadcrumbs[data.breadcrumbs.length - 1].name : "";
+        if (baseName && baseName.length <= 20) els.workspaceName.value = baseName;
+      }
+      closeFileBrowser();
+      showToast("已选择路径，可点击「添加并显示」加入工作路径");
+    };
+  }
+}
+
+function closeWorkspaceModal() {
+  els.workspaceModal.classList.add("hidden");
+  closeFileBrowser();
 }
 
 function startTreeDrag(event, item) {
@@ -560,6 +1165,7 @@ async function openDoc(docPath, options = {}) {
   if (options.searchTerm) {
     requestAnimationFrame(() => scrollReaderToElement(els.markdownView.querySelector(".search-hit"), "auto"));
   }
+  addRecentDoc(doc.path);
 }
 
 function debounce(fn, wait = 180) {
@@ -661,7 +1267,14 @@ async function saveCurrentDoc({ refreshTree = false } = {}) {
   if (!refreshTree && content === state.lastSavedContent) return true;
   const seq = ++state.saveSeq;
   setSaveStatus("\u4fdd\u5b58\u4e2d", true);
-  await api.post("/api/save", { path: state.currentPath, content });
+  try {
+    await api.post("/api/save", { path: state.currentPath, content });
+  } catch (e) {
+    const errorMessage = e?.response?.data?.error || e?.message || "保存失败";
+    setSaveStatus("保存失败", false);
+    showToast(errorMessage);
+    return false;
+  }
   if (seq !== state.saveSeq) return true;
   state.currentContent = content;
   state.lastSavedContent = content;
@@ -728,15 +1341,48 @@ async function runSearch() {
 function currentParent() {
   if (state.selectedFolder) return state.selectedFolder;
   if (!state.currentPath || !state.currentPath.includes("/")) return "";
-  return state.currentPath.split("/").slice(0, -1).join("/");
+  const parts = state.currentPath.split("/");
+  return parts.slice(0, -1).join("/");
 }
 
 function openCreateModal(mode) {
   state.createMode = mode;
-  const parent = currentParent();
   els.createTitle.textContent = mode === "folder" ? text.newFolder : text.newDoc;
-  els.createParent.textContent = parent ? `docs/${parent}` : "docs";
   els.createName.value = "";
+
+  const visible = state.workspaces.filter((ws) => ws.visible).slice(0, 2);
+  const parent = currentParent();
+  const active = state.activeWorkspaceId && visible.find((ws) => ws.id === state.activeWorkspaceId);
+  const targetWorkspaceId = active
+    ? active.id
+    : (parent
+      ? (splitWorkspaceRef(parent).id || state.defaultWorkspaceId)
+      : state.defaultWorkspaceId);
+  const defaultName = visible.find((ws) => ws.id === targetWorkspaceId)?.name
+    || visible[0]?.name
+    || "默认 docs";
+
+  if (visible.length <= 1) {
+    els.createSummary.textContent = parent
+      ? `保存到 ${defaultName} / ${parent.replace(/^.*?:/, "") || "根目录"}`
+      : `保存到 ${defaultName} 根目录`;
+    els.createWorkspaceRow.classList.add("hidden");
+  } else {
+    els.createSummary.textContent = parent ? "在以下工作路径创建" : "选择创建位置";
+    els.createWorkspaceRow.classList.remove("hidden");
+    els.createWorkspaceChoices.innerHTML = visible
+      .map((ws) => `<button type="button" data-id="${escapeHtml(ws.id)}" class="${ws.id === targetWorkspaceId ? "active" : ""}">${escapeHtml(compactName(ws.name, 26))}</button>`)
+      .join("");
+    els.createWorkspaceChoices.dataset.selected = targetWorkspaceId;
+    els.createWorkspaceChoices.querySelectorAll("button").forEach((button) => {
+      button.addEventListener("click", () => {
+        els.createWorkspaceChoices.querySelectorAll("button").forEach((item) => item.classList.remove("active"));
+        button.classList.add("active");
+        els.createWorkspaceChoices.dataset.selected = button.dataset.id;
+      });
+    });
+  }
+
   els.createModal.classList.remove("hidden");
   els.createName.focus();
 }
@@ -749,18 +1395,49 @@ async function submitCreate(event) {
   event.preventDefault();
   const name = els.createName.value.trim();
   if (!name) return;
-  const parent = currentParent();
-  const endpoint = state.createMode === "folder" ? "/api/create-folder" : "/api/create-doc";
-  const created = await api.post(endpoint, { parent, name });
-  await bootstrap(true);
-  if (state.createMode === "doc" && created.path) await openDoc(created.path);
-  if (state.createMode === "folder" && created.path) {
-    state.selectedFolder = created.path;
-    state.folderExplicit = true;
-    state.collapsedFolders.delete(created.path);
-    renderTree(state.tree);
+
+  const visible = state.workspaces.filter((ws) => ws.visible).slice(0, 2);
+  let parent = currentParent();
+
+  // 如果没有选中文件夹，但有 activeWorkspaceId，则使用 activeWorkspaceId 作为根路径
+  if (!parent && state.activeWorkspaceId && visible.find((ws) => ws.id === state.activeWorkspaceId)) {
+    parent = `${state.activeWorkspaceId}:`;
   }
-  closeCreateModal();
+
+  // 如果仍然没有 parent，使用默认工作区或下拉选择的工作区
+  if (!parent) {
+    const selectedWorkspaceId = visible.length > 1 ? els.createWorkspaceChoices.dataset.selected : state.defaultWorkspaceId;
+    parent = `${selectedWorkspaceId || state.defaultWorkspaceId}:`;
+  }
+
+  try {
+    const endpoint = state.createMode === "folder" ? "/api/create-folder" : "/api/create-doc";
+    const created = await api.post(endpoint, { parent, name });
+    await bootstrap(true);
+    if (state.createMode === "doc" && created.path) await openDoc(created.path);
+    if (state.createMode === "folder" && created.path) {
+      state.selectedFolder = created.path;
+      state.folderExplicit = true;
+      state.collapsedFolders.delete(created.path);
+      renderTree(state.tree);
+    }
+    closeCreateModal();
+  } catch (error) {
+    let message = error.message || "创建失败";
+    try {
+      const parsed = JSON.parse(message);
+      message = parsed.error || message;
+    } catch (ignored) {}
+    // 中文友好提示
+    if (message.includes("already exists") || message.includes("already")) {
+      message = state.createMode === "folder" ? "同名文件夹已存在" : "同名文档已存在";
+    } else if (message.includes("Workspace not found")) {
+      message = "工作路径未找到，请先添加";
+    } else if (message.includes("EPERM") || message.includes("EACCES")) {
+      message = "没有写入权限，请检查工作路径的访问权限";
+    }
+    showToast(message);
+  }
 }
 
 function selectedDeletePath() {
@@ -783,24 +1460,40 @@ function closeDeleteModal() {
 async function confirmDeleteSelected() {
   const target = state.deleteTarget;
   if (!target) return;
-  await api.post("/api/delete", { path: target });
-  state.currentPath = "";
-  state.currentContent = "";
-  state.selectedNode = "";
-  if (state.selectedFolder === target || target.startsWith(`${state.selectedFolder}/`)) state.selectedFolder = "";
-  state.folderExplicit = false;
-  els.docPath.textContent = "docs";
-  els.docTitle.textContent = "\u9009\u62e9\u4e00\u7bc7 Markdown \u6587\u6863";
-  els.markdownView.classList.add("empty-state");
-  els.markdownView.innerHTML = "<h2>\u6253\u5f00\u5de6\u4fa7\u76ee\u5f55\u4e2d\u7684\u6587\u6863</h2><p>\u652f\u6301\u6587\u4ef6\u5939\u5206\u7c7b\u3001\u5168\u6587\u641c\u7d22\u3001\u6587\u6863\u5207\u6362\u3001\u7f16\u8f91\u4fdd\u5b58\u548c\u5173\u8054\u56fe\u8c31\u6d4f\u89c8\u3002</p>";
-  renderOutline("");
-  els.editor.value = "";
-  els.preview.innerHTML = "";
-  resetUndo("");
-  state.graphReady = false;
-  await bootstrap(true);
-  setMode("view");
-  closeDeleteModal();
+  const paths = target.includes("|") ? target.split("|") : [target];
+  try {
+    await api.post("/api/delete", { path: paths.length > 1 ? paths : paths[0] });
+    state.currentPath = "";
+    state.currentContent = "";
+    state.selectedNode = "";
+    paths.forEach((p) => {
+      if (state.selectedFolder === p || p.startsWith(`${state.selectedFolder}/`)) state.selectedFolder = "";
+      state.multiSelected.delete(p);
+    });
+    state.folderExplicit = false;
+    els.docPath.textContent = "docs";
+    els.docTitle.textContent = "\u9009\u62e9\u4e00\u7bc7 Markdown \u6587\u6863";
+    els.markdownView.classList.add("empty-state");
+    els.markdownView.innerHTML = "<h2>\u6253\u5f00\u5de6\u4fa7\u76ee\u5f55\u4e2d\u7684\u6587\u6863</h2><p>\u652f\u6301\u6587\u4ef6\u5939\u5206\u7c7b\u3001\u5168\u6587\u641c\u7d22\u3001\u6587\u6863\u5207\u6362\u3001\u7f16\u8f91\u4fdd\u5b58\u548c\u5173\u8054\u56fe\u8c31\u6d4f\u89c8\u3002</p>";
+    renderOutline("");
+    els.editor.value = "";
+    els.preview.innerHTML = "";
+    resetUndo("");
+    state.graphReady = false;
+    await bootstrap(true);
+    setMode("view");
+    closeDeleteModal();
+    showToast(`已删除 ${paths.length} 项`);
+  } catch (error) {
+    let message = error.message || "删除失败";
+    try {
+      const parsed = JSON.parse(message);
+      message = parsed.error || message;
+    } catch (ignored) {}
+    if (message.includes("not found") || message.includes("Target not found")) message = "目标文件不存在";
+    showToast(message);
+    closeDeleteModal();
+  }
 }
 
 function closeSearchWhenIdle(event) {
@@ -980,6 +1673,32 @@ function nextChineseNumber(value) {
   return `${tens === 1 ? "" : chineseDigits[tens]}\u5341${ones ? chineseDigits[ones] : ""}`;
 }
 
+function parseChineseNumber(value) {
+  const map = new Map([["\u4e00", 1], ["\u4e8c", 2], ["\u4e09", 3], ["\u56db", 4], ["\u4e94", 5], ["\u516d", 6], ["\u4e03", 7], ["\u516b", 8], ["\u4e5d", 9], ["\u5341", 10]]);
+  let number = map.get(value);
+  if (!number) {
+    const tenParts = value.split("\u5341");
+    if (tenParts.length === 2) {
+      const tens = tenParts[0] ? map.get(tenParts[0]) || 0 : 1;
+      const ones = tenParts[1] ? map.get(tenParts[1]) || 0 : 0;
+      number = tens * 10 + ones;
+    }
+  }
+  return number || 0;
+}
+
+function numberToChinese(num) {
+  if (num <= 0) return "";
+  if (num <= 10) return chineseDigits[num] || "\u5341";
+  if (num < 20) return `\u5341${chineseDigits[num - 10]}`;
+  if (num < 100) {
+    const tens = Math.floor(num / 10);
+    const ones = num % 10;
+    return `${chineseDigits[tens]}\u5341${ones ? chineseDigits[ones] : ""}`;
+  }
+  return String(num);
+}
+
 function expandSequenceOnEnter(event) {
   if (event.key !== "Enter" || event.shiftKey) return false;
   const start = els.editor.selectionStart ?? 0;
@@ -989,15 +1708,110 @@ function expandSequenceOnEnter(event) {
   const lineStart = value.lastIndexOf("\n", Math.max(0, start - 1)) + 1;
   const line = value.slice(lineStart, start);
   const arabic = line.match(/^(\s*)(?:##\s*)?(\d+)([.)、])(\s*)(.*)$/);
-  const chinese = line.match(/^(\s*)(##\s*)?([一二三四五六七八九十]{1,4})([.)、])(\s*)(.*)$/);
+  const chinese = line.match(/^(\s*)(##\s*)?([一二三四五六七八九十百千]{1,6})([.)、])(\s*)(.*)$/);
   let marker = "";
-  if (arabic) marker = `${arabic[1]}${Number(arabic[2]) + 1}${arabic[3]}${arabic[4] || " "}`;
-  if (!marker && chinese) {
+  let separator = "";
+  let indent = "";
+  let hasMd = false;
+  let numberType = null;
+  if (arabic) {
+    numberType = "arabic";
+    separator = arabic[3];
+    indent = arabic[1];
+    marker = `${indent}${Number(arabic[2]) + 1}${separator}${arabic[4] || " "}`;
+  } else if (chinese) {
+    numberType = "chinese";
+    separator = chinese[4];
+    indent = chinese[1];
+    hasMd = !!chinese[2];
     const next = nextChineseNumber(chinese[3]);
-    if (next) marker = `${chinese[1]}${next}${chinese[4]}${chinese[5] || " "}`;
+    if (next) marker = `${indent}${hasMd ? "## " : ""}${next}${separator}${chinese[5] || " "}`;
   }
   if (!marker) return false;
   event.preventDefault();
+
+  // 扫描整个文档，找出同类型、同级缩进、同分隔符的序号行，进行重新编号
+  let newValue = value;
+  let positionOffset = 0;
+  const lines = newValue.split("\n");
+  const headerLineIdx = lines.findIndex((l, idx) => {
+    const lineStartIdx = lines.slice(0, idx).reduce((acc, ll) => acc + ll.length + 1, 0);
+    return lineStartIdx === lineStart;
+  });
+
+  // 收集所有同级序号行
+  const patternType = numberType;
+  const rows = [];
+  for (let i = 0; i < lines.length; i++) {
+    let match;
+    if (patternType === "arabic") {
+      match = lines[i].match(/^(\s*)(?:##\s*)?(\d+)([.)、])(.*)$/);
+      if (match && match[1] === indent && match[3] === separator) {
+        rows.push({ lineIndex: i, lineStart: lines.slice(0, i).reduce((acc, ll) => acc + ll.length + 1, 0), number: Number(match[2]), prefix: match[1], sep: match[3], rest: match[4], original: lines[i], mdPrefix: lines[i].includes("##") ? "## " : "" });
+      }
+    } else if (patternType === "chinese") {
+      match = lines[i].match(/^(\s*)(##\s*)?([一二三四五六七八九十百千]{1,6})([.)、])(.*)$/);
+      if (match && match[1] === indent && match[4] === separator) {
+        const num = parseChineseNumber(match[3]);
+        if (num > 0) {
+          rows.push({ lineIndex: i, lineStart: lines.slice(0, i).reduce((acc, ll) => acc + ll.length + 1, 0), number: num, prefix: match[1], sep: match[4], rest: match[5], original: lines[i], mdPrefix: match[2] || "" });
+        }
+      }
+    }
+  }
+
+  // 检查是否需要重新编号（序号不是连续的 1,2,3...）
+  let needRenumber = false;
+  if (rows.length >= 1) {
+    for (let i = 0; i < rows.length; i++) {
+      if (rows[i].number !== i + 1) {
+        needRenumber = true;
+        break;
+      }
+    }
+  }
+
+  // 如果需要重新编号，从前往后替换这些行
+  let currentLineIdx = headerLineIdx;
+  if (needRenumber && rows.length > 0) {
+    // 从第一行开始，按照顺序重新编号，处理行号映射
+    const newLines = lines.slice();
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const newNum = i + 1;
+      const newNumStr = patternType === "arabic" ? String(newNum) : numberToChinese(newNum);
+      const restTrimmed = row.rest.replace(/^\s+/, "");
+      newLines[row.lineIndex] = `${row.prefix}${row.mdPrefix}${newNumStr}${row.sep}${restTrimmed.length ? (restTrimmed.startsWith(" ") ? restTrimmed : " " + restTrimmed) : " "}`.trimEnd();
+    }
+    newValue = newLines.join("\n");
+    // 计算光标位置的偏移
+    let originalPos = start;
+    let newPos = 0;
+    for (let i = 0; i <= Math.min(currentLineIdx, lines.length - 1); i++) {
+      if (i < currentLineIdx) newPos += (newLines[i].length) + 1;
+      else {
+        // 光标在当前行内
+        newPos += Math.min(start - lineStart, newLines[i].length);
+        break;
+      }
+    }
+    // 更稳健的方式：按行重建位置
+    let offset = 0;
+    for (let i = 0; i < currentLineIdx; i++) {
+      offset += newLines[i].length + 1;
+    }
+    offset += Math.min(start - lineStart, newLines[currentLineIdx].length);
+    els.editor.value = newValue;
+    els.editor.selectionStart = offset;
+    els.editor.selectionEnd = offset;
+    els.editor.dispatchEvent(new Event("input", { bubbles: true }));
+    // 插入下一个序号行
+    const afterMarker = patternType === "arabic" ? `${indent}${rows.length + 1}${separator} ` : `${indent}${hasMd ? "## " : ""}${numberToChinese(rows.length + 1)}${separator} `;
+    insertAtCursor(`\n${afterMarker}`);
+    return true;
+  }
+
+  // 处理原有的中文行补 ## 的逻辑
   if (chinese && !chinese[2]) {
     const fixedLine = `${chinese[1]}## ${chinese[3]}${chinese[4]}${chinese[5]}${chinese[6]}`;
     els.editor.value = `${value.slice(0, lineStart)}${fixedLine}${value.slice(start)}`;
@@ -1122,6 +1936,151 @@ els.searchInput.addEventListener("input", debounce(runSearch, 160));
 els.tree.addEventListener("dragover", allowRootDrop);
 els.tree.addEventListener("dragleave", clearRootDrop);
 els.tree.addEventListener("drop", dropOnRoot);
+
+function pickClipboardSource() {
+  // 多选优先
+  if (state.multiSelected.size > 0) return Array.from(state.multiSelected);
+  // 单选场景：selectedFolder 仅在显式点击文件夹时优先
+  if (state.folderExplicit && state.selectedFolder) return [state.selectedFolder];
+  if (state.currentPath) return [state.currentPath];
+  if (state.selectedFolder) return [state.selectedFolder];
+  return [];
+}
+
+function handleTreeMultiSelect(path, event) {
+  const withCtrl = event && (event.ctrlKey || event.metaKey || event.shiftKey);
+  if (withCtrl) {
+    if (state.multiSelected.has(path)) state.multiSelected.delete(path);
+    else state.multiSelected.add(path);
+  } else {
+    state.multiSelected.clear();
+    state.multiSelected.add(path);
+  }
+  renderTree(state.tree);
+}
+
+function keyboardCopy(event) {
+  if (event.target && (event.target.tagName === "INPUT" || event.target.tagName === "TEXTAREA" || event.target.isContentEditable)) return;
+  event.preventDefault();
+  const sources = pickClipboardSource();
+  if (!sources.length) return showToast("请先选中一个或多个文件/文件夹（按住 Ctrl 可多选）");
+  state.clipboardItems = sources;
+  showToast(`已复制 ${sources.length} 项：${sources.map((p) => path.basename(p)).join("、")}`);
+}
+
+function keyboardPaste(event) {
+  if (event.target && (event.target.tagName === "INPUT" || event.target.tagName === "TEXTAREA" || event.target.isContentEditable)) return;
+  if (!state.clipboardItems.length) return showToast("请先按 Ctrl+C 复制文件或文件夹");
+  event.preventDefault();
+  const targetFolder = state.selectedFolder || "";
+  api.post("/api/workspaces/paste", { source: state.clipboardItems, targetFolder })
+    .then((copied) => {
+      state.graphReady = false;
+      return bootstrap(true).then(() => copied);
+    })
+    .then((copied) => {
+      if (copied.type === "file" && copied.path) openDoc(copied.path);
+      showToast(`已粘贴 ${Array.isArray(state.clipboardItems) ? state.clipboardItems.length : 1} 项`);
+    })
+    .catch((error) => showToast(error.message || "粘贴失败"));
+}
+
+function keyboardDelete(event) {
+  if (event.target && (event.target.tagName === "INPUT" || event.target.tagName === "TEXTAREA" || event.target.isContentEditable)) return;
+  let targets;
+  if (state.multiSelected.size > 0) targets = Array.from(state.multiSelected);
+  else {
+    const single = state.folderExplicit ? state.selectedFolder : state.currentPath || state.selectedFolder;
+    if (!single) return showToast("请先选中一个文件或文件夹");
+    targets = [single];
+  }
+  event.preventDefault();
+  state.deleteTarget = targets.join("|");
+  els.deleteTarget.textContent = targets.join("\n");
+  els.deleteModal.classList.remove("hidden");
+}
+
+// 全局键盘快捷键
+document.addEventListener("keydown", (event) => {
+  if ((event.ctrlKey || event.metaKey) && event.key && event.key.toLowerCase() === "c") return keyboardCopy(event);
+  if ((event.ctrlKey || event.metaKey) && event.key && event.key.toLowerCase() === "v") return keyboardPaste(event);
+  if ((event.ctrlKey || event.metaKey) && event.key && event.key.toLowerCase() === "d") return keyboardDelete(event);
+  if (event.key === "Delete") return keyboardDelete(event);
+});
+
+if (els.workspaceBtn) {
+  els.workspaceBtn.addEventListener("click", openWorkspaceModal);
+}
+if (els.cancelWorkspaceBtn) {
+  els.cancelWorkspaceBtn.addEventListener("click", closeWorkspaceModal);
+}
+if (els.workspaceModal) {
+  els.workspaceModal.addEventListener("click", (event) => {
+    if (event.target === els.workspaceModal) closeWorkspaceModal();
+  });
+}
+if (els.workspaceForm) {
+  els.workspaceForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const path = (els.workspacePath?.value || "").trim();
+    const name = (els.workspaceName?.value || "").trim();
+    if (!path) return showToast("请先输入一个磁盘路径");
+    try {
+      const result = await api.post("/api/workspaces/add", { path, name });
+      state.graphReady = false;
+      await bootstrap(true);
+      openWorkspaceModal();
+      showToast("已加载工作路径");
+    } catch (error) {
+      showToast(error.message || "路径无效或不存在");
+    }
+  });
+}
+if (els.browseFolderBtn) {
+  els.browseFolderBtn.addEventListener("click", () => {
+    openFileBrowser(els.workspacePath.value || "");
+  });
+}
+document.addEventListener("keydown", handleFileBrowserKeydown);
+
+async function openNormalizeMdModal() {
+  const data = await api.get("/api/workspaces");
+  state.workspaces = data.workspaces || state.workspaces;
+  const visible = state.workspaces.filter((ws) => ws.visible).slice(0, 2);
+  if (!visible.length) return showToast("请先加载工作路径");
+  els.normalizeWorkspaceList.innerHTML = visible
+    .map((ws) => `<label><input type="checkbox" value="${escapeHtml(ws.id)}" checked /><span class="label-text">${escapeHtml(compactName(ws.name, 32))}<em>${escapeHtml(compactName(ws.root, 40))}</em></span></label>`)
+    .join("");
+  const boxes = els.normalizeExtensionChoices.querySelectorAll('input[type="checkbox"]');
+  boxes.forEach((box) => {
+    if (box.value === "*") box.checked = true;
+  });
+  els.normalizeMdModal.classList.remove("hidden");
+}
+
+function closeNormalizeMdModal() {
+  els.normalizeMdModal.classList.add("hidden");
+}
+
+async function runNormalizeMd() {
+  const workspaceIds = [...els.normalizeWorkspaceList.querySelectorAll('input[type="checkbox"]:checked')].map((box) => box.value);
+  const extensions = [...els.normalizeExtensionChoices.querySelectorAll('input[type="checkbox"]:checked')].map((box) => box.value);
+  if (!workspaceIds.length) return showToast("请至少选择一个工作路径");
+  if (!extensions.length) return showToast("请至少选择一种扩展名");
+  try {
+    els.normalizeMdBtn.disabled = true;
+    els.normalizeStatus.textContent = "正在转换...";
+    const result = await api.post("/api/normalize-md", { workspaceIds, extensions });
+    await bootstrap(true);
+    state.graphReady = false;
+    els.normalizeStatus.textContent = `已转换 ${result.changed || 0} 个文件`;
+    closeNormalizeMdModal();
+  } catch (error) {
+    els.normalizeStatus.textContent = error.message || "转换失败";
+  } finally {
+    els.normalizeMdBtn.disabled = false;
+  }
+}
 els.searchInput.addEventListener("focus", () => {
   if (els.searchInput.value.trim()) runSearch();
 });
@@ -1192,10 +2151,34 @@ els.sidebarResizer.addEventListener("pointerup", endSidebarResize);
 els.sidebarResizer.addEventListener("pointercancel", endSidebarResize);
 els.sidebarHideBtn.addEventListener("click", () => setSidebarCollapsed(true));
 els.sidebarShowBtn.addEventListener("click", () => setSidebarCollapsed(!state.sidebarCollapsed));
-els.settingsBtn.addEventListener("click", () => {
+els.settingsBtn.addEventListener("click", async () => {
   applySettings();
+  renderDefaultWorkspaceChoices();
   els.settingsModal.classList.remove("hidden");
 });
+
+function renderDefaultWorkspaceChoices() {
+  if (!els.defaultWorkspaceChoices) return;
+  els.defaultWorkspaceChoices.innerHTML = state.workspaces
+    .map((ws) => {
+      const active = ws.id === state.defaultWorkspaceId ? "active" : "";
+      return `<button type="button" data-id="${escapeHtml(ws.id)}" class="${active}">${escapeHtml(compactName(ws.name, 26))}</button>`;
+    })
+    .join("");
+  els.defaultWorkspaceChoices.querySelectorAll("button").forEach((button) => {
+    button.addEventListener("click", async () => {
+      try {
+        const result = await api.post("/api/workspaces/set-default", { id: button.dataset.id });
+        state.defaultWorkspaceId = result.defaultWorkspaceId || button.dataset.id;
+        renderDefaultWorkspaceChoices();
+        showToast("已设置默认工作路径");
+      } catch (error) {
+        showToast(error.message || "设置失败");
+      }
+    });
+  });
+}
+
 els.closeSettingsBtn.addEventListener("click", () => els.settingsModal.classList.add("hidden"));
 els.settingsModal.addEventListener("click", (event) => {
   if (event.target === els.settingsModal) els.settingsModal.classList.add("hidden");
@@ -1229,7 +2212,18 @@ els.globalFontFamily.addEventListener("change", () => {
   localStorage.setItem("docFontFamily", els.globalFontFamily.value);
   applySettings();
 });
-els.normalizeMdBtn.addEventListener("click", normalizeAllToMarkdown);
+els.normalizeMdBtn.addEventListener("click", openNormalizeMdModal);
+if (els.cancelNormalizeMdBtn) {
+  els.cancelNormalizeMdBtn.addEventListener("click", closeNormalizeMdModal);
+}
+if (els.confirmNormalizeMdBtn) {
+  els.confirmNormalizeMdBtn.addEventListener("click", runNormalizeMd);
+}
+if (els.normalizeMdModal) {
+  els.normalizeMdModal.addEventListener("click", (event) => {
+    if (event.target === els.normalizeMdModal) closeNormalizeMdModal();
+  });
+}
 els.editorToolbar.addEventListener("mousedown", (event) => {
   if (event.target.closest("[data-format]")) event.preventDefault();
 });
@@ -1313,11 +2307,16 @@ async function bootstrap(refresh = false) {
   const data = await api.get(`/api/tree${refresh ? "?refresh=1" : ""}`);
   state.tree = data.tree;
   state.flatFiles = flatten(state.tree, []);
-  els.docCount.textContent = `${data.count} ${text.docsUnit}`;
+  if (data.workspaces && data.workspaces.length) state.workspaces = data.workspaces;
+  if (data.defaultWorkspaceId) state.defaultWorkspaceId = data.defaultWorkspaceId;
+  els.docCount.textContent = `${data.count || 0} ${text.docsUnit} / ${state.workspaces.filter((ws) => ws.visible).length} 个工作路径`;
+  renderWorkspaceSummary();
   renderTree(state.tree);
 }
 
 applySettings();
 restoreSidebarWidth();
 restoreSidebarCollapsed();
+loadRecentDocs();
+renderRecentDocs();
 bootstrap();

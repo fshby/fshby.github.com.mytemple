@@ -15,7 +15,21 @@ const PORT = Number(process.env.PORT || 4173);
 
 let cache = { stamp: 0, files: [], tree: [], graph: { nodes: [], edges: [] }, workspaces: [] };
 const MAX_ASSET_BYTES = 5 * 1024 * 1024;
+const MAX_REQUEST_BODY = 10 * 1024 * 1024;
+
+let workspacesCache = null;
+let workspacesCacheStamp = 0;
 const DEFAULT_WORKSPACE_ID = "default";
+const LOG_LEVEL = process.env.MYTEMPLE_LOG_LEVEL || "warn";
+
+function log(level, message) {
+  const levels = { debug: 0, info: 1, warn: 2, error: 3 };
+  const currentLevel = levels[LOG_LEVEL.toLowerCase()] || 2;
+  const messageLevel = levels[level.toLowerCase()] || 2;
+  if (messageLevel >= currentLevel) {
+    console[level](message);
+  }
+}
 
 const mimeTypes = {
   ".html": "text/html; charset=utf-8",
@@ -55,14 +69,24 @@ function workspaceRef(id, relative = "") {
 function splitWorkspaceRef(input) {
   const decoded = decodeURIComponent(input || "").replace(/\\/g, "/");
   const colon = decoded.indexOf(":");
-  if (colon > 0 && /^[a-zA-Z0-9_-]+$/.test(decoded.slice(0, colon))) {
-    return { id: decoded.slice(0, colon), relative: decoded.slice(colon + 1) };
+  if (colon > 0) {
+    const prefix = decoded.slice(0, colon);
+    if (/^[a-zA-Z0-9_-]+$/.test(prefix) && !/^[A-Za-z]$/.test(prefix)) {
+      return { id: prefix, relative: decoded.slice(colon + 1) };
+    }
   }
   return { id: DEFAULT_WORKSPACE_ID, relative: decoded };
 }
 
 async function loadWorkspaces() {
   await mkdir(DATA_ROOT, { recursive: true });
+  try {
+    const stat = await stat(WORKSPACE_CONFIG);
+    if (workspacesCache && workspacesCacheStamp >= stat.mtimeMs) {
+      return workspacesCache;
+    }
+  } catch {}
+
   const defaults = [{
     id: DEFAULT_WORKSPACE_ID,
     name: "默认 docs",
@@ -101,11 +125,18 @@ async function loadWorkspaces() {
         if (kept > 2) item.visible = false;
       }
       await saveWorkspaces({ workspaces: all, defaultWorkspaceId: parsed.defaultWorkspaceId || DEFAULT_WORKSPACE_ID });
+      workspacesCacheStamp = Date.now();
+      workspacesCache = { workspaces: all, defaultWorkspaceId: String(parsed.defaultWorkspaceId || DEFAULT_WORKSPACE_ID) };
+      return workspacesCache;
     }
-    return { workspaces: all, defaultWorkspaceId: String(parsed.defaultWorkspaceId || DEFAULT_WORKSPACE_ID) };
+    workspacesCacheStamp = Date.now();
+    workspacesCache = { workspaces: all, defaultWorkspaceId: String(parsed.defaultWorkspaceId || DEFAULT_WORKSPACE_ID) };
+    return workspacesCache;
   } catch {
     await saveWorkspaces({ workspaces: defaults, defaultWorkspaceId: DEFAULT_WORKSPACE_ID });
-    return { workspaces: defaults, defaultWorkspaceId: DEFAULT_WORKSPACE_ID };
+    workspacesCacheStamp = Date.now();
+    workspacesCache = { workspaces: defaults, defaultWorkspaceId: DEFAULT_WORKSPACE_ID };
+    return workspacesCache;
   }
 }
 
@@ -113,6 +144,8 @@ async function saveWorkspaces(config) {
   await mkdir(DATA_ROOT, { recursive: true });
   const payload = Array.isArray(config) ? { workspaces: config, defaultWorkspaceId: DEFAULT_WORKSPACE_ID } : config;
   await writeFile(WORKSPACE_CONFIG, JSON.stringify(payload, null, 2), "utf8");
+  workspacesCache = null;
+  workspacesCacheStamp = 0;
 }
 
 async function normalizeDocPath(input) {
@@ -134,9 +167,9 @@ async function normalizeDocPath(input) {
 
 function normalizeSourcePath(input) {
   const decoded = decodeURIComponent(input || "").replace(/\\/g, "/");
-  const clean = path.posix.normalize(decoded).replace(/^(\.\.\/)+/, "");
+  const clean = path.posix.normalize(decoded).replace(/^(\.\.\/)+/, "").replace(/^\.$/, "");
   const absolute = path.resolve(SOURCE_ROOT, clean);
-  if (!absolute.startsWith(path.resolve(SOURCE_ROOT))) {
+  if (!isInside(SOURCE_ROOT, absolute)) {
     throw new Error("Invalid source path");
   }
   return { relative: clean, absolute };
@@ -168,15 +201,23 @@ async function getLatestMtime(dir) {
   } catch {
     return 0;
   }
-  const entries = await readdir(dir, { withFileTypes: true });
-  for (const entry of entries) {
-    const absolute = path.join(dir, entry.name);
-    const entryStat = await stat(absolute);
-    latest = Math.max(latest, entryStat.mtimeMs);
-    if (entry.isDirectory()) {
-      latest = Math.max(latest, await getLatestMtime(absolute));
+  try {
+    const entries = await readdir(dir, { withFileTypes: true });
+    const tasks = [];
+    for (const entry of entries) {
+      const absolute = path.join(dir, entry.name);
+      tasks.push((async () => {
+        try {
+          const entryStat = await stat(absolute);
+          latest = Math.max(latest, entryStat.mtimeMs);
+          if (entry.isDirectory()) {
+            latest = Math.max(latest, await getLatestMtime(absolute));
+          }
+        } catch {}
+      })());
     }
-  }
+    await Promise.all(tasks);
+  } catch {}
   return latest;
 }
 
@@ -195,36 +236,44 @@ async function walk(workspace, dir = workspace.root, prefix = "") {
     } else if (entry.isFile()) {
       const isMarkdown = entry.name.toLowerCase().endsWith(".md");
       if (mdOnly && !isMarkdown) continue;
-      if (isMarkdown) {
-        const { text: source, encoding } = await readMarkdownFile(absolute);
-        const stats = await stat(absolute);
-        items.push({
-          type: "file",
-          name: entry.name,
-          title: extractTitle(source, entry.name),
-          displayName: entry.name,
-          path: workspaceRef(workspace.id, relative),
-          relative,
-          workspaceId: workspace.id,
-          root: workspace.root,
-          encoding,
-          size: stats.size,
-          modified: stats.mtimeMs,
-        });
-      } else {
-        const stats = await stat(absolute);
-        items.push({
-          type: "file",
-          name: entry.name,
-          title: entry.name,
-          displayName: entry.name,
-          path: workspaceRef(workspace.id, relative),
-          relative,
-          workspaceId: workspace.id,
-          root: workspace.root,
-          size: stats.size,
-          modified: stats.mtimeMs,
-        });
+      try {
+        if (isMarkdown) {
+          const { text: source, encoding } = await readMarkdownFile(absolute);
+          const stats = await stat(absolute);
+          items.push({
+            type: "file",
+            name: entry.name,
+            title: extractTitle(source, entry.name),
+            displayName: entry.name,
+            path: workspaceRef(workspace.id, relative),
+            relative,
+            workspaceId: workspace.id,
+            root: workspace.root,
+            encoding,
+            size: stats.size,
+            modified: stats.mtimeMs,
+          });
+        } else {
+          const stats = await stat(absolute);
+          items.push({
+            type: "file",
+            name: entry.name,
+            title: entry.name,
+            displayName: entry.name,
+            path: workspaceRef(workspace.id, relative),
+            relative,
+            workspaceId: workspace.id,
+            root: workspace.root,
+            size: stats.size,
+            modified: stats.mtimeMs,
+          });
+        }
+      } catch (e) {
+        if (e.code === "EPERM" || e.code === "EACCES") {
+          log("warn", `跳过无法访问的文件: ${absolute}`);
+        } else {
+          throw e;
+        }
       }
     }
   }
@@ -282,7 +331,16 @@ function extractTitle(markdown, fallback) {
 }
 
 async function readMarkdownFile(absolute) {
-  const buffer = await readFile(absolute);
+  let buffer;
+  try {
+    buffer = await readFile(absolute);
+  } catch (e) {
+    if (e.code === "EPERM" || e.code === "EACCES") {
+      log("warn", `无法读取文件 (权限问题): ${absolute}`);
+      return { text: "", encoding: "utf-8" };
+    }
+    throw e;
+  }
   if (buffer.length >= 3 && buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf) {
     return { text: new TextDecoder("utf-8").decode(buffer.subarray(3)), encoding: "utf-8-bom" };
   }
@@ -371,28 +429,49 @@ function buildGraph(files) {
     }
   }
 
-  for (let i = 0; i < files.length; i += 1) {
-    for (let j = i + 1; j < files.length; j += 1) {
-      const a = files[i];
-      const b = files[j];
-      const sharedTags = a.tags.filter((tag) => b.tags.includes(tag));
-      const aTerms = new Set(a.terms.slice(0, 8).map((item) => item.term));
-      const sharedTerms = b.terms.slice(0, 8).filter((item) => aTerms.has(item.term));
-      if (sharedTags.length) addEdge(a, b, "tag", sharedTags.length * 2);
-      if (sharedTerms.length >= 2) addEdge(a, b, "semantic", sharedTerms.length);
+  const tagFileMap = new Map();
+  for (const file of files) {
+    for (const tag of file.tags) {
+      if (!tagFileMap.has(tag)) tagFileMap.set(tag, []);
+      tagFileMap.get(tag).push(file);
     }
   }
 
-  const termMap = new Map();
+  for (const [, tagFiles] of tagFileMap) {
+    for (let i = 0; i < tagFiles.length; i += 1) {
+      for (let j = i + 1; j < tagFiles.length; j += 1) {
+        addEdge(tagFiles[i], tagFiles[j], "tag", 2);
+      }
+    }
+  }
+
+  const termFileMap = new Map();
+  for (const file of files) {
+    for (const item of file.terms.slice(0, 8)) {
+      if (/^\d+$/.test(item.term) || item.term.length < 2) continue;
+      if (!termFileMap.has(item.term)) termFileMap.set(item.term, []);
+      termFileMap.get(item.term).push(file);
+    }
+  }
+
+  for (const [, termFiles] of termFileMap) {
+    for (let i = 0; i < termFiles.length; i += 1) {
+      for (let j = i + 1; j < termFiles.length; j += 1) {
+        addEdge(termFiles[i], termFiles[j], "semantic", 1);
+      }
+    }
+  }
+
+  const keywordTermMap = new Map();
   for (const file of files) {
     for (const item of file.terms.slice(0, 10)) {
       if (/^\d+$/.test(item.term) || item.term.length < 2) continue;
-      if (!termMap.has(item.term)) termMap.set(item.term, []);
-      termMap.get(item.term).push({ file, count: item.count });
+      if (!keywordTermMap.has(item.term)) keywordTermMap.set(item.term, []);
+      keywordTermMap.get(item.term).push({ file, count: item.count });
     }
   }
 
-  for (const [term, hits] of termMap) {
+  for (const [term, hits] of keywordTermMap) {
     if (hits.length < 2) continue;
     const keywordId = `keyword:${term}`;
     nodes.push({
@@ -440,16 +519,24 @@ async function refreshCache(force = false) {
   }
   for (const item of flattenTree(tree)) {
     const { absolute, workspace } = await normalizeDocPath(item.path);
-    const { text: content, encoding } = await readMarkdownFile(absolute);
-    files.push({
-      ...item,
-      encoding,
-      content,
-      plain: content.replace(/[#>*_`[\]()!-]/g, " "),
-      tags: extractTags(content),
-      terms: extractTerms(content),
-      workspaceName: workspace.name,
-    });
+    try {
+      const { text: content, encoding } = await readMarkdownFile(absolute);
+      files.push({
+        ...item,
+        encoding,
+        content,
+        plain: content.replace(/[#>*_`[\]()!-]/g, " "),
+        tags: extractTags(content),
+        terms: extractTerms(content),
+        workspaceName: workspace.name,
+      });
+    } catch (e) {
+      if (e.code === "EPERM" || e.code === "EACCES") {
+        log("warn", `跳过无法访问的文件: ${absolute}`);
+      } else {
+        throw e;
+      }
+    }
   }
   cache = { stamp: Date.now(), files, tree, graph: buildGraph(files), workspaces, defaultWorkspaceId };
   return cache;
@@ -548,7 +635,16 @@ async function addWorkspace(rootInput, nameInput = "") {
 
 async function readBody(req) {
   const chunks = [];
-  for await (const chunk of req) chunks.push(chunk);
+  let totalLength = 0;
+  for await (const chunk of req) {
+    totalLength += chunk.length;
+    if (totalLength > MAX_REQUEST_BODY) {
+      const error = new Error("Request body too large");
+      error.status = 413;
+      throw error;
+    }
+    chunks.push(chunk);
+  }
   return Buffer.concat(chunks).toString("utf8");
 }
 
@@ -764,7 +860,14 @@ async function handleApi(req, res, url) {
     const { ref, relative, absolute } = await normalizeDocPath(payload.path);
     if (!relative.toLowerCase().endsWith(".md")) return json(res, 400, { error: "Only .md files can be saved" });
     await mkdir(path.dirname(absolute), { recursive: true });
-    await writeFile(absolute, String(payload.content ?? ""), "utf8");
+    try {
+      await writeFile(absolute, String(payload.content ?? ""), "utf8");
+    } catch (e) {
+      if (e.code === "EPERM" || e.code === "EACCES") {
+        return json(res, 403, { error: `无法保存文件，权限不足: ${path.basename(absolute)}` });
+      }
+      throw e;
+    }
     await refreshCache(true);
     return json(res, 200, { ok: true, path: ref });
   }
@@ -983,13 +1086,25 @@ async function serveStatic(res, pathname) {
   }
 }
 
+const REQUEST_TIMEOUT = 30 * 1000;
+
 createServer(async (req, res) => {
+  const timeoutId = setTimeout(() => {
+    if (!res.writableEnded) {
+      json(res, 504, { error: "Request timeout" });
+    }
+  }, REQUEST_TIMEOUT);
+
   try {
     const url = new URL(req.url || "/", `http://${req.headers.host}`);
     if (url.pathname.startsWith("/api/")) return await handleApi(req, res, url);
     return await serveStatic(res, url.pathname);
   } catch (error) {
-    json(res, error.status || 500, { error: error.message || "Internal server error" });
+    if (!res.writableEnded) {
+      json(res, error.status || 500, { error: error.message || "Internal server error" });
+    }
+  } finally {
+    clearTimeout(timeoutId);
   }
 }).listen(PORT, () => {
   console.log(`Markdown knowledge app running at http://localhost:${PORT}`);
