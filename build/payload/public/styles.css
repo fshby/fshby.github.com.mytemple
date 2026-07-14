@@ -393,6 +393,33 @@ body.resizing-sidebar {
   flex: 1 1 auto;
 }
 
+.tree-workspace-head .ws-open-folder {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  opacity: 0.4;
+  transition: opacity 0.15s;
+  flex: 0 0 24px;
+}
+
+.tree-workspace-head:hover .ws-open-folder {
+  opacity: 0.8;
+}
+
+.tree-workspace-head .ws-open-folder:hover {
+  opacity: 1;
+  background: var(--hover-bg);
+  border-radius: 4px;
+}
+
+.tree-workspace-head .ws-open-folder::before {
+  content: "\1F4C2";
+  font-size: 14px;
+}
+
 .tree-workspace-head .ws-actions {
   display: flex;
   gap: 4px;
@@ -863,11 +890,19 @@ body.resizing-sidebar {
   display: block;
   max-width: 100%;
   max-height: 520px;
+  min-height: 60px;
+  min-width: 60px;
   object-fit: contain;
   margin: 16px 0;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--panel);
+}
+
+.markdown-body .auto-size-image {
+  max-height: 600px;
+  min-width: 80px;
+  min-height: 80px;
 }
 
 .markdown-body th, .markdown-body td {
