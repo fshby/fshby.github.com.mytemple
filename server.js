@@ -78,14 +78,16 @@ function splitWorkspaceRef(input) {
   return { id: DEFAULT_WORKSPACE_ID, relative: decoded };
 }
 
-async function loadWorkspaces() {
+async function loadWorkspaces(force = false) {
   await mkdir(DATA_ROOT, { recursive: true });
-  try {
-    const stat = await stat(WORKSPACE_CONFIG);
-    if (workspacesCache && workspacesCacheStamp >= stat.mtimeMs) {
-      return workspacesCache;
-    }
-  } catch {}
+  if (!force) {
+    try {
+      const stat = await stat(WORKSPACE_CONFIG);
+      if (workspacesCache && workspacesCacheStamp >= stat.mtimeMs) {
+        return workspacesCache;
+      }
+    } catch {}
+  }
 
   const defaults = [{
     id: DEFAULT_WORKSPACE_ID,
@@ -127,12 +129,15 @@ async function loadWorkspaces() {
       await saveWorkspaces({ workspaces: all, defaultWorkspaceId: parsed.defaultWorkspaceId || DEFAULT_WORKSPACE_ID });
       workspacesCacheStamp = Date.now();
       workspacesCache = { workspaces: all, defaultWorkspaceId: String(parsed.defaultWorkspaceId || DEFAULT_WORKSPACE_ID) };
+      log("info", `Loaded ${all.length} workspaces, ${all.filter((w) => w.visible).length} visible`);
       return workspacesCache;
     }
     workspacesCacheStamp = Date.now();
     workspacesCache = { workspaces: all, defaultWorkspaceId: String(parsed.defaultWorkspaceId || DEFAULT_WORKSPACE_ID) };
+    log("info", `Loaded ${all.length} workspaces, ${all.filter((w) => w.visible).length} visible`);
     return workspacesCache;
-  } catch {
+  } catch (e) {
+    log("warn", `Failed to load workspaces config: ${e.message}, using defaults`);
     await saveWorkspaces({ workspaces: defaults, defaultWorkspaceId: DEFAULT_WORKSPACE_ID });
     workspacesCacheStamp = Date.now();
     workspacesCache = { workspaces: defaults, defaultWorkspaceId: DEFAULT_WORKSPACE_ID };
@@ -151,11 +156,18 @@ async function saveWorkspaces(config) {
 async function normalizeDocPath(input) {
   const { workspaces } = await loadWorkspaces();
   const { id, relative: rawRelative } = splitWorkspaceRef(input);
-  const workspace = workspaces.find((item) => item.id === id);
-  if (!workspace) throw new Error("Workspace not found");
+  let workspace = workspaces.find((item) => item.id === id);
+  if (!workspace) {
+    log("warn", `Workspace not found for id: ${id}, reloading workspaces`);
+    const reloaded = await loadWorkspaces(true);
+    workspace = reloaded.workspaces.find((item) => item.id === id);
+    if (!workspace) {
+      throw new Error(`工作区不存在: ${id}`);
+    }
+  }
   const clean = path.posix.normalize(rawRelative || "").replace(/^(\.\.\/)+/, "").replace(/^\.$/, "");
   const absolute = path.resolve(workspace.root, clean);
-  if (!isInside(workspace.root, absolute)) throw new Error("Invalid document path");
+  if (!isInside(workspace.root, absolute)) throw new Error("无效的文档路径");
   return {
     workspace,
     workspaceId: workspace.id,
@@ -225,13 +237,22 @@ async function walk(workspace, dir = workspace.root, prefix = "") {
   const entries = await readdir(dir, { withFileTypes: true });
   const items = [];
   const mdOnly = workspace.mdOnly !== false;
+  const EMPTY_FOLDER_GRACE_PERIOD = 80 * 1000;
   for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name, "zh-Hans-CN"))) {
     const absolute = path.join(dir, entry.name);
     const relative = path.posix.join(prefix, entry.name);
     if (entry.isDirectory()) {
       const children = await walk(workspace, absolute, relative);
-      // mdOnly 模式下：如果文件夹既没有 .md 文件，也没有包含 md 文件的子文件夹，则不显示
-      if (mdOnly && children.length === 0) continue;
+      if (mdOnly && children.length === 0) {
+        try {
+          const stats = await stat(absolute);
+          if (Date.now() - stats.birthtimeMs < EMPTY_FOLDER_GRACE_PERIOD) {
+            items.push({ type: "folder", name: entry.name, path: workspaceRef(workspace.id, relative), workspaceId: workspace.id, root: workspace.root, children });
+            continue;
+          }
+        } catch {}
+        continue;
+      }
       items.push({ type: "folder", name: entry.name, path: workspaceRef(workspace.id, relative), workspaceId: workspace.id, root: workspace.root, children });
     } else if (entry.isFile()) {
       const isMarkdown = entry.name.toLowerCase().endsWith(".md");
@@ -857,18 +878,40 @@ async function handleApi(req, res, url) {
   }
   if (url.pathname === "/api/save" && req.method === "POST") {
     const payload = await readJson(req);
-    const { ref, relative, absolute } = await normalizeDocPath(payload.path);
-    if (!relative.toLowerCase().endsWith(".md")) return json(res, 400, { error: "Only .md files can be saved" });
-    await mkdir(path.dirname(absolute), { recursive: true });
+    const docPath = String(payload.path || "").trim();
+    if (!docPath) {
+      log("warn", "Save request missing path");
+      return json(res, 400, { error: "文档路径为空" });
+    }
+    let normalized;
     try {
+      normalized = await normalizeDocPath(docPath);
+    } catch (e) {
+      log("error", `Failed to normalize doc path: ${docPath}, error: ${e.message}`);
+      return json(res, 400, { error: `无效的文档路径: ${e.message}` });
+    }
+    const { ref, relative, absolute, workspace } = normalized;
+    if (!relative.toLowerCase().endsWith(".md")) {
+      log("warn", `Save request for non-md file: ${relative}`);
+      return json(res, 400, { error: "只能保存 .md 文件" });
+    }
+    try {
+      await mkdir(path.dirname(absolute), { recursive: true });
       await writeFile(absolute, String(payload.content ?? ""), "utf8");
+      log("info", `Saved document: ${absolute}`);
     } catch (e) {
       if (e.code === "EPERM" || e.code === "EACCES") {
+        log("error", `Permission denied when saving: ${absolute}`);
         return json(res, 403, { error: `无法保存文件，权限不足: ${path.basename(absolute)}` });
       }
-      throw e;
+      log("error", `Failed to save document: ${absolute}, error: ${e.message}`);
+      return json(res, 500, { error: `保存文件失败: ${e.message}` });
     }
-    await refreshCache(true);
+    try {
+      await refreshCache(true);
+    } catch (e) {
+      log("error", `Failed to refresh cache after save: ${e.message}`);
+    }
     return json(res, 200, { ok: true, path: ref });
   }
   if (url.pathname === "/api/browse-folder" && req.method === "POST") {
@@ -939,6 +982,25 @@ async function handleApi(req, res, url) {
       { label: "工作", value: home ? `${home}\\Work` : "~/Work" },
     ];
     return json(res, 200, { paths });
+  }
+
+  if (url.pathname === "/api/open-folder" && req.method === "POST") {
+    const payload = await readJson(req);
+    const target = String(payload.path || "").trim();
+    if (!target) return json(res, 400, { error: "Path is required" });
+    try {
+      const { execFile } = await import("node:child_process");
+      if (process.platform === "win32") {
+        execFile("explorer", [target]);
+      } else if (process.platform === "darwin") {
+        execFile("open", [target]);
+      } else {
+        execFile("xdg-open", [target]);
+      }
+      return json(res, 200, { ok: true });
+    } catch (e) {
+      return json(res, 500, { error: e.message || "Failed to open folder" });
+    }
   }
 
   if (url.pathname === "/api/create-folder" && req.method === "POST") {

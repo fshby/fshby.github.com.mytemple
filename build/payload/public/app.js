@@ -360,7 +360,7 @@ function renderOutline(source) {
 
 function inlineMarkdown(value, searchTerm = "") {
   let html = escapeHtml(value)
-    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" loading="lazy" />')
+    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" class="auto-size-image" loading="lazy" />')
     .replace(/==([^=]+)==/g, "<mark>$1</mark>")
     .replace(/\+\+([^+]+)\+\+/g, "<u>$1</u>")
     .replace(/~~([^~]+)~~/g, "<del>$1</del>")
@@ -512,9 +512,16 @@ function renderTree(nodes, container = els.tree) {
       head.innerHTML = `
         <span class="ws-dot" aria-hidden="true"></span>
         <strong class="ws-name" title="${escapeHtml(node.root || node.name)}">${escapeHtml(compactName(workspace.name || node.name, 28))}</strong>
-        <span class="ws-meta">${escapeHtml(compactName(node.root || "", 36))}</span>
+        <span class="ws-meta" title="${escapeHtml(node.root || "")}">${escapeHtml(compactName(node.root || "", 36))}</span>
+        <button class="ws-open-folder" title="在文件管理器中打开"></button>
       `;
-      head.addEventListener("click", () => {
+      head.addEventListener("click", (e) => {
+        if (e.target.closest(".ws-open-folder")) {
+          if (node.root) {
+            api.post("/api/open-folder", { path: node.root }).catch(() => showToast("无法打开文件夹"));
+          }
+          return;
+        }
         state.activeWorkspaceId = node.workspaceId;
         state.selectedFolder = node.path;
         state.folderExplicit = false;
@@ -1079,6 +1086,10 @@ function flatten(nodes, out = []) {
 
 function setMode(mode) {
   if (state.mode === mode) return;
+  if (state.mode === "view" && mode === "edit") {
+    const readerMax = Math.max(1, els.markdownView.scrollHeight - els.markdownView.clientHeight);
+    state.readerScrollRatio = readerMax > 0 ? els.markdownView.scrollTop / readerMax : 0;
+  }
   state.mode = mode;
   els.readerPanel.classList.toggle("hidden", mode !== "view");
   els.editorPanel.classList.toggle("hidden", mode !== "edit");
@@ -1087,7 +1098,13 @@ function setMode(mode) {
   els.viewBtn.classList.toggle("active", mode === "view");
   els.editBtn.classList.toggle("active", mode === "edit");
   els.graphBtn.classList.toggle("active", mode === "graph");
-  if (mode === "edit") syncPreviewToEditor();
+  if (mode === "edit") {
+    syncPreviewToEditor();
+    requestAnimationFrame(() => {
+      const editorMax = Math.max(1, els.editor.scrollHeight - els.editor.clientHeight);
+      els.editor.scrollTop = Math.round(editorMax * (state.readerScrollRatio || 0));
+    });
+  }
   if (mode === "graph") requestAnimationFrame(() => initGraph());
 }
 
@@ -1147,7 +1164,8 @@ async function openDoc(docPath, options = {}) {
   state.selectedNode = doc.path;
   state.selectedFolder = doc.path.includes("/") ? doc.path.split("/").slice(0, -1).join("/") : "";
   state.folderExplicit = false;
-  els.docPath.textContent = doc.path;
+  els.docPath.textContent = displayPath(doc.path);
+  els.docPath.title = doc.path;
   els.docTitle.textContent = displayName(item);
   els.docTitle.title = doc.title || displayName(item);
   els.markdownView.classList.remove("empty-state");
@@ -2135,6 +2153,20 @@ els.editor.addEventListener("scroll", syncPreviewToEditor, { passive: true });
 els.editor.addEventListener("keydown", (event) => {
   if (expandSequenceOnEnter(event)) return;
   const mod = event.ctrlKey || event.metaKey;
+  if (mod && event.key === ";") {
+    event.preventDefault();
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    insertAtCursor(dateStr);
+    return;
+  }
+  if (mod && event.key === "'") {
+    event.preventDefault();
+    const now = new Date();
+    const timeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
+    insertAtCursor(timeStr);
+    return;
+  }
   if (!mod) return;
   if (event.key.toLowerCase() === "z" && !event.shiftKey) {
     event.preventDefault();

@@ -1,15 +1,6 @@
 {
   "workspaces": [
     {
-      "id": "ws_8cd935b277",
-      "name": "hexo",
-      "root": "O:\\temple\\hexo",
-      "visible": true,
-      "mdOnly": false,
-      "builtin": false,
-      "lastUsed": 1783930515672
-    },
-    {
       "id": "default",
       "name": "默认 docs",
       "root": "D:\\game\\mytemple\\docs",
@@ -17,6 +8,15 @@
       "mdOnly": true,
       "builtin": true,
       "lastUsed": 1783930440395
+    },
+    {
+      "id": "ws_25a724bd6b",
+      "name": "temple",
+      "root": "O:\\temple",
+      "visible": true,
+      "mdOnly": true,
+      "builtin": false,
+      "lastUsed": 1783991828399
     }
   ],
   "defaultWorkspaceId": "default"
