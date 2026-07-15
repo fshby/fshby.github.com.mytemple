@@ -4,6 +4,9 @@
 
 ## 日常查阅
 
+      ![screenshot-1784002006408](/source/screenshot-1784002006408.webp)
+
+
 - 在左侧选择文件即可切换阅读。
 - 使用顶部搜索框检索全部 Markdown 内容。
 - 点击“修改”可以编辑当前文档，并在右侧实时预览。
@@ -16,9 +19,6 @@
 给文档增加标签也会让图谱更准确：
 
 后续重新打包命令
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\packaging\Build-Installer.ps1
-
-
 
 ```md
 ---

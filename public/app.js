@@ -64,6 +64,7 @@ const els = {
   deleteBtn: document.querySelector("#deleteBtn"),
   saveBtn: document.querySelector("#saveBtn"),
   fitGraphBtn: document.querySelector("#fitGraphBtn"),
+  formatBtn: document.querySelector("#formatBtn"),
   canvas: document.querySelector("#graphCanvas"),
   newFolderBtn: document.querySelector("#newFolderBtn"),
   newDocBtn: document.querySelector("#newDocBtn"),
@@ -349,6 +350,76 @@ function extractOutline(source) {
   return outline;
 }
 
+function formatDocument(source) {
+  const lines = source.replace(/\r\n/g, "\n").split("\n");
+  const result = [];
+  let inCode = false;
+  let lastHeadingLevel = 0;
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    
+    if (line.startsWith("```")) {
+      inCode = !inCode;
+      result.push(line);
+      continue;
+    }
+    
+    if (inCode) {
+      result.push(line);
+      continue;
+    }
+    
+    const headingMatch = line.match(/^(\s*)(#{1,6})\s+(.+)$/);
+    if (headingMatch) {
+      const indent = headingMatch[1];
+      const rawLevel = headingMatch[2].length;
+      const title = headingMatch[3];
+      
+      let correctedLevel = rawLevel;
+      
+      if (rawLevel > lastHeadingLevel + 1) {
+        correctedLevel = lastHeadingLevel + 1;
+      }
+      
+      if (rawLevel < lastHeadingLevel) {
+        correctedLevel = rawLevel;
+      }
+      
+      lastHeadingLevel = correctedLevel;
+      
+      result.push(`${indent}${"#".repeat(correctedLevel)} ${title}`);
+      continue;
+    }
+    
+    const cnHeading = line.match(/^([一二三四五六七八九十]{1,4}[、.．]\s*.+)$/);
+    if (cnHeading) {
+      lastHeadingLevel = 2;
+      result.push(line);
+      continue;
+    }
+    
+    const numHeading = line.match(/^(\d{1,3})[、.．]\s*(.+)$/);
+    if (numHeading) {
+      const level = Math.min(6, Math.max(3, numHeading[1].length + 2));
+      
+      let correctedLevel = level;
+      if (level > lastHeadingLevel + 1) {
+        correctedLevel = lastHeadingLevel + 1;
+      }
+      
+      lastHeadingLevel = correctedLevel;
+      
+      result.push(`${numHeading[1]}、${numHeading[2]}`);
+      continue;
+    }
+    
+    result.push(line);
+  }
+  
+  return result.join("\n");
+}
+
 function renderOutline(source) {
   const outline = extractOutline(source);
   els.readerPanel.classList.toggle("has-outline", outline.length > 0);
@@ -403,7 +474,7 @@ function renderMarkdown(source, options = {}) {
 
   const flushList = () => {
     if (!list) return;
-    html.push(`<${list.type}>${list.items.map((item) => `<li>${inlineMarkdown(item, searchTerm)}</li>`).join("")}</${list.type}>`);
+    html.push(`<${list.type}>${list.items.map((item) => `<li>${item}</li>`).join("")}</${list.type}>`);
     list = null;
   };
   const flushTable = () => {
@@ -416,7 +487,8 @@ function renderMarkdown(source, options = {}) {
     table = [];
   };
 
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     if (line.startsWith("```")) {
       flushList();
       flushTable();
@@ -444,25 +516,43 @@ function renderMarkdown(source, options = {}) {
       continue;
     }
     flushTable();
-    const heading = line.match(/^(#{1,6})\s+(.+)$/);
-    if (heading) {
+    const indentedHeading = line.match(/^(\s*)(#{1,6})\s+(.+)$/);
+    if (indentedHeading) {
       flushList();
-      const level = heading[1].length;
+      const indent = indentedHeading[1].length;
+      const level = indentedHeading[2].length;
       const id = level === 1
-        ? headingId(heading[2], h1Index++)
+        ? headingId(indentedHeading[3], h1Index++)
         : level === 2
-          ? headingId(heading[2], `sub-${h2Index++}`)
+          ? headingId(indentedHeading[3], `sub-${h2Index++}`)
           : "";
       const idAttr = id ? ` id="${escapeHtml(id)}"` : "";
-      html.push(`<h${level}${idAttr}>${inlineMarkdown(heading[2], searchTerm)}</h${level}>`);
+      const marginLeft = indent * 16;
+      html.push(`<h${level}${idAttr} style="margin-left: ${marginLeft}px;">${inlineMarkdown(indentedHeading[3], searchTerm)}</h${level}>`);
       continue;
     }
-    const autoHeading = line.match(/^([一二三四五六七八九十]{1,4}[、.．]\s*.+)$/);
-    if (autoHeading) {
+    const cnHeading = line.match(/^(\s*)([一二三四五六七八九十]{1,4}[、.．]\s*.+)$/);
+    if (cnHeading) {
       flushList();
-      const id = headingId(autoHeading[1], `auto-${h2Index++}`);
-      html.push(`<h2 id="${escapeHtml(id)}">${inlineMarkdown(autoHeading[1], searchTerm)}</h2>`);
+      const indent = cnHeading[1].length;
+      const marginLeft = indent * 16;
+      const id = headingId(cnHeading[2], `auto-${h2Index++}`);
+      html.push(`<h2${id ? ` id="${escapeHtml(id)}"` : ""} style="margin-left: ${marginLeft}px;">${inlineMarkdown(cnHeading[2], searchTerm)}</h2>`);
       continue;
+    }
+    const numHeading = line.match(/^(\s*)(\d{1,3})[、.．]\s*([^-*].+)$/);
+    if (numHeading) {
+      const prevLine = i > 0 ? lines[i - 1] : "";
+      const prevIsHeading = prevLine.match(/^(#{1,6})\s+(.+)$/) || prevLine.match(/^([一二三四五六七八九十]{1,4}[、.．]\s*.+)$/);
+      if (!prevIsHeading && numHeading[3].trim().length > 0) {
+        flushList();
+        const indent = numHeading[1].length;
+        const marginLeft = indent * 16;
+        const level = Math.min(6, Math.max(3, numHeading[2].length + 2));
+        const id = headingId(numHeading[3], `num-${h2Index++}`);
+        html.push(`<h${level}${id ? ` id="${escapeHtml(id)}"` : ""} style="margin-left: ${marginLeft}px;">${inlineMarkdown(numHeading[2] + "、" + numHeading[3], searchTerm)}</h${level}>`);
+        continue;
+      }
     }
     const quote = line.match(/^>\s?(.+)$/);
     if (quote) {
@@ -470,15 +560,32 @@ function renderMarkdown(source, options = {}) {
       html.push(`<blockquote>${inlineMarkdown(quote[1], searchTerm)}</blockquote>`);
       continue;
     }
-    const bullet = line.match(/^\s*[-*]\s+(.+)$/);
-    const ordered = line.match(/^\s*\d+[.)]\s+(.+)$/);
+    const bullet = line.match(/^(\s*)[-*]\s+(.+)$/);
+    const ordered = line.match(/^(\s*)(\d+)[.)]\s+(.+)$/);
     if (bullet || ordered) {
       const type = bullet ? "ul" : "ol";
+      const indent = bullet ? bullet[1].length : ordered[1].length;
+      const content = bullet ? bullet[2] : ordered[3];
       if (!list || list.type !== type) {
         flushList();
         list = { type, items: [] };
       }
-      list.items.push((bullet || ordered)[1]);
+      if (indent > 0) {
+        const marginLeft = indent * 16;
+        list.items.push(`<span style="margin-left: ${marginLeft}px;">${inlineMarkdown(content, searchTerm)}</span>`);
+      } else {
+        list.items.push(inlineMarkdown(content, searchTerm));
+      }
+      continue;
+    }
+    const indentedImage = line.match(/^(\s*)(!\[([^\]]*)\]\(([^)]+)\))/);
+    if (indentedImage) {
+      flushList();
+      const indent = indentedImage[1].length;
+      const marginLeft = indent * 16;
+      const maxWidth = Math.max(50, 100 - indent * 10);
+      const widthPercent = maxWidth < 100 ? `${maxWidth}%` : "100%";
+      html.push(`<div style="margin-left: ${marginLeft}px; width: ${widthPercent};"><p>${inlineMarkdown(indentedImage[2], searchTerm)}</p></div>`);
       continue;
     }
     if (!line.trim()) {
@@ -1095,6 +1202,7 @@ function setMode(mode) {
   els.editorPanel.classList.toggle("hidden", mode !== "edit");
   els.graphPanel.classList.toggle("hidden", mode !== "graph");
   els.saveBtn.classList.toggle("hidden", mode !== "edit" || !state.currentPath);
+  els.formatBtn.classList.toggle("hidden", mode !== "edit" || !state.currentPath);
   els.viewBtn.classList.toggle("active", mode === "view");
   els.editBtn.classList.toggle("active", mode === "edit");
   els.graphBtn.classList.toggle("active", mode === "graph");
@@ -1436,7 +1544,7 @@ async function submitCreate(event) {
     if (state.createMode === "folder" && created.path) {
       state.selectedFolder = created.path;
       state.folderExplicit = true;
-      state.collapsedFolders.delete(created.path);
+      state.expandedFolders.add(created.path);
       renderTree(state.tree);
     }
     closeCreateModal();
@@ -1757,34 +1865,137 @@ function expandSequenceOnEnter(event) {
     return lineStartIdx === lineStart;
   });
 
-  // 收集所有同级序号行
+  // 向上扫描找到最近的父级标题（更高层级的标题）
+  let parentHeadingLevel = 0;
+  let parentHeadingLine = -1;
+  for (let i = headerLineIdx - 1; i >= 0; i--) {
+    const cnMatch = lines[i].match(/^(\s*)(##\s*)?([一二三四五六七八九十]{1,4}[、.．]\s*.+)$/);
+    if (cnMatch) {
+      const cnIndent = cnMatch[1].length;
+      const hasMdPrefix = !!cnMatch[2];
+      const currentIndent = indent.length;
+      if (hasMdPrefix && cnIndent <= currentIndent) {
+        parentHeadingLevel = 2;
+        parentHeadingLine = i;
+        break;
+      }
+    }
+    const hMatch = lines[i].match(/^(\s*)(#{1,6})\s+(.+)$/);
+    if (hMatch) {
+      const hLevel = hMatch[2].length;
+      const hIndent = hMatch[1].length;
+      const currentIndent = indent.length;
+      if (hLevel <= 3 && hIndent <= currentIndent) {
+        parentHeadingLevel = hLevel;
+        parentHeadingLine = i;
+        break;
+      }
+    }
+    const numMatch = lines[i].match(/^(\d{1,3})[、.．]\s*(.+)$/);
+    if (numMatch) {
+      const numLevel = Math.min(6, Math.max(3, numMatch[1].length + 2));
+      const numIndent = lines[i].match(/^(\s*)/)?.[1].length || 0;
+      const currentIndent = indent.length;
+      if (numLevel < 6 && numIndent < currentIndent) {
+        parentHeadingLevel = numLevel;
+        parentHeadingLine = i;
+        break;
+      }
+    }
+  }
+
+  // 收集所有同级序号行（在同一个父级标题下）
   const patternType = numberType;
   const rows = [];
-  for (let i = 0; i < lines.length; i++) {
+  for (let i = (parentHeadingLine >= 0 ? parentHeadingLine + 1 : 0); i < lines.length; i++) {
+    const currentLine = lines[i];
+    
     let match;
     if (patternType === "arabic") {
-      match = lines[i].match(/^(\s*)(?:##\s*)?(\d+)([.)、])(.*)$/);
+      match = currentLine.match(/^(\s*)(?:##\s*)?(\d+)([.)、])(.*)$/);
       if (match && match[1] === indent && match[3] === separator) {
-        rows.push({ lineIndex: i, lineStart: lines.slice(0, i).reduce((acc, ll) => acc + ll.length + 1, 0), number: Number(match[2]), prefix: match[1], sep: match[3], rest: match[4], original: lines[i], mdPrefix: lines[i].includes("##") ? "## " : "" });
+        rows.push({ lineIndex: i, lineStart: lines.slice(0, i).reduce((acc, ll) => acc + ll.length + 1, 0), number: Number(match[2]), prefix: match[1], sep: match[3], rest: match[4], original: currentLine, mdPrefix: currentLine.includes("##") ? "## " : "" });
+      } else {
+        // 检查是否遇到更高层级的标题（表示新的段落开始）
+        const hMatch = currentLine.match(/^(\s*)(#{1,6})\s+(.+)$/);
+        if (hMatch) {
+          const hLevel = hMatch[2].length;
+          const hIndent = hMatch[1].length;
+          const currentIndent = indent.length;
+          if (hLevel <= 3 && hIndent <= currentIndent) {
+            break;
+          }
+        }
+        const cnMatch = currentLine.match(/^(\s*)(##\s*)?([一二三四五六七八九十]{1,4}[、.．]\s*.+)$/);
+        if (cnMatch) {
+          const cnIndent = cnMatch[1].length;
+          const hasMdPrefix = !!cnMatch[2];
+          const currentIndent = indent.length;
+          if (hasMdPrefix && cnIndent <= currentIndent) {
+            break;
+          }
+        }
+        const numMatch = currentLine.match(/^(\s*)(\d{1,3})[、.．]\s*(.+)$/);
+        if (numMatch) {
+          const numLevel = Math.min(6, Math.max(3, numMatch[2].length + 2));
+          const numIndent = numMatch[1].length;
+          const currentIndent = indent.length;
+          if (numLevel < 6 && numIndent < currentIndent) {
+            break;
+          }
+        }
       }
     } else if (patternType === "chinese") {
-      match = lines[i].match(/^(\s*)(##\s*)?([一二三四五六七八九十百千]{1,6})([.)、])(.*)$/);
+      match = currentLine.match(/^(\s*)(##\s*)?([一二三四五六七八九十百千]{1,6})([.)、])(.*)$/);
       if (match && match[1] === indent && match[4] === separator) {
         const num = parseChineseNumber(match[3]);
         if (num > 0) {
-          rows.push({ lineIndex: i, lineStart: lines.slice(0, i).reduce((acc, ll) => acc + ll.length + 1, 0), number: num, prefix: match[1], sep: match[4], rest: match[5], original: lines[i], mdPrefix: match[2] || "" });
+          rows.push({ lineIndex: i, lineStart: lines.slice(0, i).reduce((acc, ll) => acc + ll.length + 1, 0), number: num, prefix: match[1], sep: match[4], rest: match[5], original: currentLine, mdPrefix: match[2] || "" });
+        }
+      } else {
+        // 检查是否遇到更高层级的标题（表示新的段落开始）
+        const cnMatch = currentLine.match(/^(\s*)(##\s*)?([一二三四五六七八九十]{1,4}[、.．]\s*.+)$/);
+        if (cnMatch) {
+          const cnIndent = cnMatch[1].length;
+          const hasMdPrefix = !!cnMatch[2];
+          const currentIndent = indent.length;
+          if (hasMdPrefix && cnIndent <= currentIndent) {
+            break;
+          }
+        }
+        const hMatch = currentLine.match(/^(\s*)(#{1,6})\s+(.+)$/);
+        if (hMatch) {
+          const hLevel = hMatch[2].length;
+          const hIndent = hMatch[1].length;
+          const currentIndent = indent.length;
+          if (hLevel <= 3 && hIndent <= currentIndent) {
+            break;
+          }
+        }
+        const numMatch = currentLine.match(/^(\s*)(\d{1,3})[、.．]\s*(.+)$/);
+        if (numMatch) {
+          const numLevel = Math.min(6, Math.max(3, numMatch[2].length + 2));
+          const numIndent = numMatch[1].length;
+          const currentIndent = indent.length;
+          if (numLevel < 6 && numIndent < currentIndent) {
+            break;
+          }
         }
       }
     }
   }
 
-  // 检查是否需要重新编号（序号不是连续的 1,2,3...）
+  // 检查是否需要重新编号（序号不是从1开始，或序号不是连续的 1,2,3...）
   let needRenumber = false;
   if (rows.length >= 1) {
-    for (let i = 0; i < rows.length; i++) {
-      if (rows[i].number !== i + 1) {
-        needRenumber = true;
-        break;
+    if (rows[0].number !== 1) {
+      needRenumber = true;
+    } else {
+      for (let i = 0; i < rows.length; i++) {
+        if (rows[i].number !== i + 1) {
+          needRenumber = true;
+          break;
+        }
       }
     }
   }
@@ -1792,6 +2003,10 @@ function expandSequenceOnEnter(event) {
   // 如果需要重新编号，从前往后替换这些行
   let currentLineIdx = headerLineIdx;
   if (needRenumber && rows.length > 0) {
+    // 检查同一组中是否有任何一行带有 ##，如果有则给所有行添加 ##
+    const hasAnyMdPrefix = rows.some(r => r.mdPrefix);
+    const targetMdPrefix = hasAnyMdPrefix ? "## " : "";
+    
     // 从第一行开始，按照顺序重新编号，处理行号映射
     const newLines = lines.slice();
     for (let i = 0; i < rows.length; i++) {
@@ -1799,7 +2014,7 @@ function expandSequenceOnEnter(event) {
       const newNum = i + 1;
       const newNumStr = patternType === "arabic" ? String(newNum) : numberToChinese(newNum);
       const restTrimmed = row.rest.replace(/^\s+/, "");
-      newLines[row.lineIndex] = `${row.prefix}${row.mdPrefix}${newNumStr}${row.sep}${restTrimmed.length ? (restTrimmed.startsWith(" ") ? restTrimmed : " " + restTrimmed) : " "}`.trimEnd();
+      newLines[row.lineIndex] = `${row.prefix}${targetMdPrefix}${newNumStr}${row.sep}${restTrimmed.length ? (restTrimmed.startsWith(" ") ? restTrimmed : " " + restTrimmed) : " "}`.trimEnd();
     }
     newValue = newLines.join("\n");
     // 计算光标位置的偏移
@@ -1824,20 +2039,39 @@ function expandSequenceOnEnter(event) {
     els.editor.selectionEnd = offset;
     els.editor.dispatchEvent(new Event("input", { bubbles: true }));
     // 插入下一个序号行
-    const afterMarker = patternType === "arabic" ? `${indent}${rows.length + 1}${separator} ` : `${indent}${hasMd ? "## " : ""}${numberToChinese(rows.length + 1)}${separator} `;
+    const afterMarker = patternType === "arabic" ? `${indent}${rows.length + 1}${separator} ` : `${indent}${targetMdPrefix}${numberToChinese(rows.length + 1)}${separator} `;
     insertAtCursor(`\n${afterMarker}`);
     return true;
   }
 
-  // 处理原有的中文行补 ## 的逻辑
-  if (chinese && !chinese[2]) {
-    const fixedLine = `${chinese[1]}## ${chinese[3]}${chinese[4]}${chinese[5]}${chinese[6]}`;
-    els.editor.value = `${value.slice(0, lineStart)}${fixedLine}${value.slice(start)}`;
-    const fixedStart = lineStart + fixedLine.length;
-    els.editor.selectionStart = fixedStart;
-    els.editor.selectionEnd = fixedStart;
+  if (rows.length > 0) {
+    const hasAnyMdPrefix = rows.some(r => r.mdPrefix);
+    const targetMdPrefix = hasAnyMdPrefix ? "## " : "";
+    
+    if (chinese && !chinese[2] && targetMdPrefix) {
+      const fixedLine = `${chinese[1]}## ${chinese[3]}${chinese[4]}${chinese[5]}${chinese[6]}`;
+      els.editor.value = `${value.slice(0, lineStart)}${fixedLine}${value.slice(start)}`;
+      const fixedStart = lineStart + fixedLine.length;
+      els.editor.selectionStart = fixedStart;
+      els.editor.selectionEnd = fixedStart;
+      els.editor.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    
+    const afterMarker = patternType === "arabic" ? `${indent}${rows.length + 1}${separator} ` : `${indent}${targetMdPrefix}${numberToChinese(rows.length + 1)}${separator} `;
+    insertAtCursor(`\n${afterMarker}`);
+  } else {
+    if (chinese && !chinese[2]) {
+      const fixedLine = `${chinese[1]}## ${chinese[3]}${chinese[4]}${chinese[5]}${chinese[6]}`;
+      els.editor.value = `${value.slice(0, lineStart)}${fixedLine}${value.slice(start)}`;
+      const fixedStart = lineStart + fixedLine.length;
+      els.editor.selectionStart = fixedStart;
+      els.editor.selectionEnd = fixedStart;
+      els.editor.dispatchEvent(new Event("input", { bubbles: true }));
+      const next = nextChineseNumber(chinese[3]);
+      if (next) marker = `${indent}## ${next}${separator}${chinese[5] || " "}`;
+    }
+    insertAtCursor(`\n${marker}`);
   }
-  insertAtCursor(`\n${marker}`);
   return true;
 }
 
@@ -1978,6 +2212,17 @@ function handleTreeMultiSelect(path, event) {
 }
 
 function keyboardCopy(event) {
+  if (event.target === els.editor) {
+    const selected = els.editor.value.substring(els.editor.selectionStart, els.editor.selectionEnd);
+    if (selected.trim()) {
+      navigator.clipboard.writeText(selected).then(() => {
+        showToast("已复制到剪贴板");
+      }).catch(() => {
+        showToast("复制成功");
+      });
+    }
+    return;
+  }
   if (event.target && (event.target.tagName === "INPUT" || event.target.tagName === "TEXTAREA" || event.target.isContentEditable)) return;
   event.preventDefault();
   const sources = pickClipboardSource();
@@ -2125,6 +2370,12 @@ els.markdownView.addEventListener("click", (event) => {
   const file = state.flatFiles.find((item) => item.title.toLowerCase() === label || item.path.toLowerCase().endsWith(`${label}.md`));
   if (file) openDoc(file.path);
 });
+els.markdownView.addEventListener("copy", (event) => {
+  const selection = window.getSelection();
+  if (selection && selection.toString().trim()) {
+    showToast("已复制到剪贴板");
+  }
+});
 els.preview.addEventListener("click", (event) => {
   const copy = event.target.closest(".code-copy");
   if (!copy) return;
@@ -2152,6 +2403,25 @@ els.editor.addEventListener("input", () => {
 els.editor.addEventListener("scroll", syncPreviewToEditor, { passive: true });
 els.editor.addEventListener("keydown", (event) => {
   if (expandSequenceOnEnter(event)) return;
+  if (event.key === "Tab") {
+    event.preventDefault();
+    const start = els.editor.selectionStart;
+    const lineStart = els.editor.value.lastIndexOf("\n", start - 1) + 1;
+    const lineEnd = els.editor.value.indexOf("\n", start);
+    const line = els.editor.value.substring(lineStart, lineEnd === -1 ? els.editor.value.length : lineEnd);
+    
+    const headingMatch = line.match(/^(#+)\s+(.+)$/);
+    const imageMatch = line.match(/^!\[([^\]]*)\]\(([^)]+)\)/);
+    
+    if (headingMatch) {
+      insertAtCursor("    ");
+    } else if (imageMatch) {
+      insertAtCursor("    ");
+    } else {
+      insertAtCursor("    ");
+    }
+    return;
+  }
   const mod = event.ctrlKey || event.metaKey;
   if (mod && event.key === ";") {
     event.preventDefault();
@@ -2165,6 +2435,11 @@ els.editor.addEventListener("keydown", (event) => {
     const now = new Date();
     const timeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
     insertAtCursor(timeStr);
+    return;
+  }
+  if (mod && event.key.toLowerCase() === "s") {
+    event.preventDefault();
+    saveCurrentDoc({ refreshTree: true });
     return;
   }
   if (!mod) return;
@@ -2287,6 +2562,15 @@ els.saveBtn.addEventListener("click", async () => {
     alert(error.message || "\u4fdd\u5b58\u5931\u8d25");
   }
 });
+els.formatBtn.addEventListener("click", () => {
+  if (!state.currentPath) return;
+  const formatted = formatDocument(els.editor.value);
+  els.editor.value = formatted;
+  state.currentContent = formatted;
+  recordUndo(formatted);
+  updatePreview();
+  showToast("文档格式化完成");
+});
 els.fitGraphBtn.addEventListener("click", () => {
   state.graphReady = false;
   initGraph(true);
@@ -2334,6 +2618,15 @@ window.addEventListener("resize", debounce(() => {
     drawGraph();
   }
 }, 120));
+
+if (els.recentDocs) {
+  els.recentDocs.addEventListener("wheel", (event) => {
+    if (event.deltaX === 0) {
+      event.preventDefault();
+      els.recentDocs.scrollLeft += event.deltaY;
+    }
+  }, { passive: false });
+}
 
 async function bootstrap(refresh = false) {
   const data = await api.get(`/api/tree${refresh ? "?refresh=1" : ""}`);

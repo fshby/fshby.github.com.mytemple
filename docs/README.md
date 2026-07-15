@@ -2,6 +2,8 @@
 
 这是一个本地 Markdown 技术文档查看页面。把 `.md` 文件放进 `docs/` 目录后，左侧目录会按照文件夹结构分类显示。
 
+---
+
 ## 日常查阅
 
 - 在左侧选择文件即可切换阅读。
@@ -16,9 +18,6 @@
 给文档增加标签也会让图谱更准确：
 
 后续重新打包命令
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\packaging\Build-Installer.ps1
-
-
 
 ```md
 ---

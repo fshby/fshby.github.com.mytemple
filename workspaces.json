@@ -1,22 +1,31 @@
 {
   "workspaces": [
     {
+      "id": "ws_25a724bd6b",
+      "name": "temple",
+      "root": "O:\\temple",
+      "visible": false,
+      "mdOnly": true,
+      "builtin": false,
+      "lastUsed": 1784079446148
+    },
+    {
       "id": "default",
       "name": "默认 docs",
       "root": "D:\\game\\mytemple\\docs",
       "visible": true,
       "mdOnly": true,
       "builtin": true,
-      "lastUsed": 1783930440395
+      "lastUsed": 1784079438265
     },
     {
-      "id": "ws_25a724bd6b",
-      "name": "temple",
-      "root": "O:\\temple",
-      "visible": true,
-      "mdOnly": true,
+      "id": "ws_1a01d7e784",
+      "name": "AIXunLianShi",
+      "root": "C:\\Users\\fshby\\Desktop\\AIXunLianShi",
+      "visible": false,
+      "mdOnly": false,
       "builtin": false,
-      "lastUsed": 1783991828399
+      "lastUsed": 1784005156339
     }
   ],
   "defaultWorkspaceId": "default"
