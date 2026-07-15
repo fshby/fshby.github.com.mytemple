@@ -66,8 +66,8 @@ function workspaceRef(id, relative = "") {
   return `${id}:${relative}`;
 }
 
-function splitWorkspaceRef(input) {
-  const decoded = decodeURIComponent(input || "").replace(/\\/g, "/");
+function splitWorkspaceRef(input, alreadyDecoded = false) {
+  const decoded = alreadyDecoded ? (input || "").replace(/\\/g, "/") : decodeURIComponent(input || "").replace(/\\/g, "/");
   const colon = decoded.indexOf(":");
   if (colon > 0) {
     const prefix = decoded.slice(0, colon);
@@ -153,9 +153,9 @@ async function saveWorkspaces(config) {
   workspacesCacheStamp = 0;
 }
 
-async function normalizeDocPath(input) {
+async function normalizeDocPath(input, alreadyDecoded = false) {
   const { workspaces } = await loadWorkspaces();
-  const { id, relative: rawRelative } = splitWorkspaceRef(input);
+  const { id, relative: rawRelative } = splitWorkspaceRef(input, alreadyDecoded);
   let workspace = workspaces.find((item) => item.id === id);
   if (!workspace) {
     log("warn", `Workspace not found for id: ${id}, reloading workspaces`);
@@ -872,8 +872,18 @@ async function handleApi(req, res, url) {
   if (url.pathname === "/api/graph") return json(res, 200, data.graph);
   if (url.pathname === "/api/search") return json(res, 200, { results: search(data.files, url.searchParams.get("q") || "") });
   if (url.pathname === "/api/doc") {
-    const target = data.files.find((file) => file.path === url.searchParams.get("path"));
-    if (!target) return json(res, 404, { error: "Document not found" });
+    const docPath = url.searchParams.get("path");
+    const target = data.files.find((file) => file.path === docPath);
+    if (!target) {
+      try {
+        const normalized = await normalizeDocPath(docPath, true);
+        const content = await readFile(normalized.absolute, "utf8");
+        const title = extractTitle(content, path.basename(normalized.absolute));
+        return json(res, 200, { path: normalized.ref, title, content, tags: [], terms: [] });
+      } catch (e) {
+        return json(res, 404, { error: "Document not found" });
+      }
+    }
     return json(res, 200, { path: target.path, title: target.title, content: target.content, tags: target.tags, terms: target.terms });
   }
   if (url.pathname === "/api/save" && req.method === "POST") {
