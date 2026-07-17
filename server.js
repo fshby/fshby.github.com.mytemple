@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { createHash, randomUUID } from "node:crypto";
 import { cp, readFile, writeFile, readdir, stat, mkdir, rm, rename } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -9,7 +9,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DOCS_ROOT = process.env.MYTEMPLE_DOCS_ROOT || path.join(__dirname, "docs");
 const PUBLIC_ROOT = path.join(__dirname, "public");
 const SOURCE_ROOT = process.env.MYTEMPLE_SOURCE_ROOT || path.join(__dirname, "source");
-const DATA_ROOT = process.env.MYTEMPLE_DATA_ROOT || path.dirname(DOCS_ROOT);
+
+const APP_DATA_DIR = path.join(process.env.LOCALAPPDATA || path.join(process.env.APPDATA, "..", "Local"), "MyTempleKnowledgeData");
+const DATA_ROOT = process.env.MYTEMPLE_DATA_ROOT || APP_DATA_DIR;
 const WORKSPACE_CONFIG = path.join(DATA_ROOT, "workspaces.json");
 const PORT = Number(process.env.PORT || 4173);
 
@@ -864,6 +866,24 @@ async function handleApi(req, res, url) {
       return json(res, 200, { current: resolved, items, breadcrumbs, parent: parent !== resolved ? parent : null });
     } catch (e) {
       return json(res, 400, { error: e.message || "无法访问目录" });
+    }
+  }
+
+  if (url.pathname === "/api/version") {
+    try {
+      const projectVersionPath = path.join(__dirname, "version.json");
+      const dataVersionPath = path.join(DATA_ROOT, "version.json");
+      let versionData;
+      if (existsSync(projectVersionPath)) {
+        versionData = JSON.parse(readFileSync(projectVersionPath, "utf8"));
+      } else if (existsSync(dataVersionPath)) {
+        versionData = JSON.parse(readFileSync(dataVersionPath, "utf8"));
+      } else {
+        versionData = { version: "1.0.0", downloadUrl: "", releaseNotes: "", releaseDate: "" };
+      }
+      return json(res, 200, versionData);
+    } catch (e) {
+      return json(res, 200, { version: "1.0.0", downloadUrl: "", releaseNotes: "", releaseDate: "" });
     }
   }
 

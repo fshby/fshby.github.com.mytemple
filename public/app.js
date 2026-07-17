@@ -99,6 +99,13 @@ const els = {
   settingsBtn: document.querySelector("#settingsBtn"),
   settingsModal: document.querySelector("#settingsModal"),
   closeSettingsBtn: document.querySelector("#closeSettingsBtn"),
+  aboutBtn: document.querySelector("#aboutBtn"),
+  aboutModal: document.querySelector("#aboutModal"),
+  closeAboutBtn: document.querySelector("#closeAboutBtn"),
+  aboutVersion: document.querySelector("#aboutVersion"),
+  aboutDate: document.querySelector("#aboutDate"),
+  aboutReleaseNotes: document.querySelector("#aboutReleaseNotes"),
+  checkUpdateBtn: document.querySelector("#checkUpdateBtn"),
   themeChoices: document.querySelector("#themeChoices"),
   bgImageInput: document.querySelector("#bgImageInput"),
   globalFontSize: document.querySelector("#globalFontSize"),
@@ -2798,9 +2805,44 @@ function renderDefaultWorkspaceChoices() {
   });
 }
 
+async function loadAboutInfo() {
+  try {
+    const result = await api.get("/api/version");
+    if (result.version) {
+      els.aboutVersion.textContent = result.version;
+    }
+    if (result.releaseDate) {
+      els.aboutDate.textContent = "发布日期：" + result.releaseDate;
+    }
+    if (result.releaseNotes) {
+      els.aboutReleaseNotes.textContent = result.releaseNotes;
+    }
+  } catch (error) {
+    els.aboutVersion.textContent = "1.0.0";
+    els.aboutDate.textContent = "";
+    els.aboutReleaseNotes.textContent = "暂无更新日志";
+  }
+}
+
 els.closeSettingsBtn.addEventListener("click", () => els.settingsModal.classList.add("hidden"));
 els.settingsModal.addEventListener("click", (event) => {
   if (event.target === els.settingsModal) els.settingsModal.classList.add("hidden");
+});
+
+els.aboutBtn.addEventListener("click", async () => {
+  els.settingsModal.classList.add("hidden");
+  await loadAboutInfo();
+  els.aboutModal.classList.remove("hidden");
+});
+
+els.closeAboutBtn.addEventListener("click", () => els.aboutModal.classList.add("hidden"));
+els.aboutModal.addEventListener("click", (event) => {
+  if (event.target === els.aboutModal) els.aboutModal.classList.add("hidden");
+});
+
+els.checkUpdateBtn.addEventListener("click", () => {
+  els.aboutModal.classList.add("hidden");
+  showToast("正在检查更新...");
 });
 
 els.coffeeBtn = document.querySelector("#coffeeBtn");

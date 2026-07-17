@@ -179,6 +179,16 @@
           <div class="progress hidden" id="normalizeProgress"><span></span></div>
           <p id="normalizeStatus" class="muted"></p>
         </section>
+        <section class="settings-section about-section">
+          <button type="button" id="aboutBtn" class="about-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <circle cx="12" cy="12" r="4"/>
+              <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            <span>关于文档知识库</span>
+          </button>
+        </section>
 
         <div class="modal-actions">
           <button type="button" id="closeSettingsBtn">&#20851;&#38381;</button>
@@ -296,6 +306,31 @@
         <circle cx="24" cy="32" r="2.5" fill="rgba(255,255,255,0.25)"/>
       </svg>
     </button>
+    <div id="aboutModal" class="modal hidden" role="dialog" aria-modal="true">
+      <div class="modal-dialog about-dialog">
+        <button type="button" class="close-about-btn" id="closeAboutBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+        <div class="about-header">
+          <div class="about-logo">
+            <div class="brand-mark">MD</div>
+          </div>
+          <h2>文档知识库</h2>
+          <div class="about-version">版本 <span id="aboutVersion">--</span></div>
+          <div class="about-date" id="aboutDate"></div>
+        </div>
+        <div class="about-release-notes">
+          <strong>更新日志</strong>
+          <div id="aboutReleaseNotes"></div>
+        </div>
+        <div class="about-actions">
+          <button type="button" id="checkUpdateBtn" class="primary">检查更新</button>
+        </div>
+      </div>
+    </div>
     <div id="donationModal" class="modal hidden" role="dialog" aria-modal="true">
       <div class="modal-dialog donation-dialog">
         <button type="button" class="close-donation-btn" id="closeDonationBtn">
