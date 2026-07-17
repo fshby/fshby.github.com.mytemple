@@ -7,7 +7,7 @@
       "visible": false,
       "mdOnly": true,
       "builtin": false,
-      "lastUsed": 1784079446148
+      "lastUsed": 1784258581298
     },
     {
       "id": "default",
@@ -16,16 +16,7 @@
       "visible": true,
       "mdOnly": true,
       "builtin": true,
-      "lastUsed": 1784079438265
-    },
-    {
-      "id": "ws_1a01d7e784",
-      "name": "AIXunLianShi",
-      "root": "C:\\Users\\fshby\\Desktop\\AIXunLianShi",
-      "visible": false,
-      "mdOnly": false,
-      "builtin": false,
-      "lastUsed": 1784005156339
+      "lastUsed": 1784257028596
     }
   ],
   "defaultWorkspaceId": "default"

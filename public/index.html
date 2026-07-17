@@ -3,8 +3,11 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <title>&#25991;&#26723;&#30693;&#35782;&#24211;</title>
-    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/styles.css?v=20260715" />
   </head>
   <body>
     <div class="app-shell">
@@ -176,6 +179,7 @@
           <div class="progress hidden" id="normalizeProgress"><span></span></div>
           <p id="normalizeStatus" class="muted"></p>
         </section>
+
         <div class="modal-actions">
           <button type="button" id="closeSettingsBtn">&#20851;&#38381;</button>
         </div>
@@ -274,7 +278,98 @@
         </div>
       </div>
     </div>
+    <button type="button" id="coffeeBtn" class="coffee-button" title="请我喝杯咖啡">
+      <div class="coffee-steam">
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
+      <svg viewBox="0 0 48 48" fill="none">
+        <path d="M12 16h24v24c0 2.2-1.8 4-4 4H16c-2.2 0-4-1.8-4-4V16z" fill="currentColor"/>
+        <path d="M14 20h20v18c0 1.1-.9 2-2 2H16c-1.1 0-2-.9-2-2V20z" fill="rgba(255,255,255,0.15)"/>
+        <ellipse cx="24" cy="14" rx="12" ry="4" fill="currentColor"/>
+        <ellipse cx="24" cy="12" rx="8" ry="2" fill="rgba(255,255,255,0.2)"/>
+        <path d="M8 16h4v-6c0-2.2 1.8-4 4-4h12c2.2 0 4 1.8 4 4v6h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        <path d="M16 8h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        <circle cx="20" cy="28" r="3" fill="rgba(255,255,255,0.3)"/>
+        <circle cx="28" cy="26" r="2" fill="rgba(255,255,255,0.2)"/>
+        <circle cx="24" cy="32" r="2.5" fill="rgba(255,255,255,0.25)"/>
+      </svg>
+    </button>
+    <div id="donationModal" class="modal hidden" role="dialog" aria-modal="true">
+      <div class="modal-dialog donation-dialog">
+        <button type="button" class="close-donation-btn" id="closeDonationBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+        <div class="donation-header">
+          <div class="donation-icon-lg">
+            <svg viewBox="0 0 48 48" fill="none">
+              <path d="M12 16h24v24c0 2.2-1.8 4-4 4H16c-2.2 0-4-1.8-4-4V16z" fill="currentColor"/>
+              <ellipse cx="24" cy="14" rx="12" ry="4" fill="currentColor"/>
+              <path d="M8 16h4v-6c0-2.2 1.8-4 4-4h12c2.2 0 4 1.8 4 4v6h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <h2>请我喝杯咖啡</h2>
+          <p>如果这个工具对你有帮助，欢迎扫码支持</p>
+        </div>
+        <div class="donation-methods">
+          <div class="donation-card-item" id="wechatDonation">
+            <div class="donation-card-header">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/>
+              </svg>
+              <span>微信支付</span>
+            </div>
+            <div class="qr-code">
+              <img src="/wechat-pay.webp" alt="微信支付二维码" />
+            </div>
+          </div>
+          <div class="donation-card-item" id="alipayDonation">
+            <div class="donation-card-header">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+              </svg>
+              <span>支付宝</span>
+            </div>
+            <div class="qr-code">
+              <img src="/alipay.webp" alt="支付宝二维码" />
+            </div>
+          </div>
+        </div>
+        <div class="contact-section">
+          <strong>联系方式</strong>
+          <div class="contact-item">
+            <span class="contact-label">邮箱</span>
+            <div class="contact-value">
+              <span>1101139736@qq.com</span>
+              <!-- <span>dev@example.com</span> -->
+              <button type="button" class="copy-btn" data-copy="dev@example.com">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="contact-item">
+            <span class="contact-label">微信</span>
+            <div class="contact-value">
+              <span>zkffshby</span>
+              <button type="button" class="copy-btn" data-copy="dev_wechat_id">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
     <div id="toast" class="toast hidden"></div>
-    <script src="/app.js?v=20260711-outline" type="module"></script>
+    <script src="/app.js?v=20260714" type="module"></script>
   </body>
 </html>

@@ -41,6 +41,7 @@ const state = {
   lastSavedContent: "",
   toastTimer: 0,
   recentDocs: [],
+  secondaryCursors: [],
 };
 
 const els = {
@@ -331,21 +332,57 @@ function extractOutline(source) {
   let inCode = false;
   let h1Index = 0;
   let h2Index = 0;
+  let h3Index = 0;
+  let h4Index = 0;
   for (const line of lines) {
     if (line.startsWith("```")) {
       inCode = !inCode;
       continue;
     }
     if (inCode) continue;
-    const heading = line.match(/^(#{1,2})\s+(.+)$/);
+    const heading = line.match(/^(\s*)(#{1,6})\s+(.+)$/);
     if (heading) {
-      const level = heading[1].length;
-      const index = level === 1 ? h1Index++ : `sub-${h2Index++}`;
-      outline.push({ id: headingId(heading[2], index), title: plainText(heading[2]), level });
+      const level = heading[2].length;
+      let index;
+      if (level === 1) {
+        index = h1Index++;
+        h2Index = 0;
+        h3Index = 0;
+        h4Index = 0;
+      } else if (level === 2) {
+        index = `sub-${h2Index++}`;
+        h3Index = 0;
+        h4Index = 0;
+      } else if (level === 3) {
+        index = `h3-${h3Index++}`;
+        h4Index = 0;
+      } else {
+        index = `h4-${h4Index++}`;
+      }
+      outline.push({ id: headingId(heading[3], index), title: plainText(heading[3]), level });
       continue;
     }
-    const autoHeading = line.match(/^([一二三四五六七八九十]{1,4}[、.．]\s*.+)$/);
-    if (autoHeading) outline.push({ id: headingId(autoHeading[1], `auto-${h2Index++}`), title: plainText(autoHeading[1]), level: 2 });
+    const autoHeading = line.match(/^(\s*)([一二三四五六七八九十]{1,4}[、.．]\s*.+)$/);
+    if (autoHeading) {
+      const level = 2;
+      outline.push({ id: headingId(autoHeading[2], `auto-${h2Index++}`), title: plainText(autoHeading[2]), level });
+      h3Index = 0;
+      h4Index = 0;
+      continue;
+    }
+    const dottedHeading = line.match(/^(\s*)(\d+(?:\.\d+)+)[、.．]\s*([^-*].+)$/);
+    if (dottedHeading) {
+      const level = 3;
+      outline.push({ id: headingId(dottedHeading[3], `num-h3-${h3Index++}`), title: plainText(dottedHeading[3]), level });
+      h4Index = 0;
+      continue;
+    }
+    
+    const numHeading = line.match(/^(\s*)(\((?:\d{1,3})\)|(\d{1,3})([、.．)]))\s*([^-*].+)$/);
+    if (numHeading) {
+      const level = 4;
+      outline.push({ id: headingId(numHeading[5], `num-h4-${h4Index++}`), title: plainText(numHeading[5]), level });
+    }
   }
   return outline;
 }
@@ -399,9 +436,20 @@ function formatDocument(source) {
       continue;
     }
     
-    const numHeading = line.match(/^(\d{1,3})[、.．]\s*(.+)$/);
+    const dottedHeading = line.match(/^(\d+(?:\.\d+)+)[、.．]\s*(.+)$/);
+    if (dottedHeading) {
+      const dotCount = (dottedHeading[1].match(/\./g) || []).length;
+      const level = Math.min(6, 3 + dotCount);
+      lastHeadingLevel = level;
+      result.push(`${dottedHeading[1]}、${dottedHeading[2]}`);
+      continue;
+    }
+    
+    const numHeading = line.match(/^(\s*)(\((?:\d{1,3})\)|(\d{1,3})([、.．)]))\s*(.+)$/);
     if (numHeading) {
-      const level = Math.min(6, Math.max(3, numHeading[1].length + 2));
+      const indent = numHeading[1].length;
+      const indentLevel = Math.floor(indent / 4);
+      const level = Math.min(6, Math.max(3, 3 + indentLevel));
       
       let correctedLevel = level;
       if (level > lastHeadingLevel + 1) {
@@ -410,7 +458,7 @@ function formatDocument(source) {
       
       lastHeadingLevel = correctedLevel;
       
-      result.push(`${numHeading[1]}、${numHeading[2]}`);
+      result.push(`${numHeading[1]}${numHeading[2]}${numHeading[5]}`);
       continue;
     }
     
@@ -467,6 +515,8 @@ function renderMarkdown(source, options = {}) {
   const html = [];
   let h1Index = 0;
   let h2Index = 0;
+  let h3Index = 0;
+  let h4Index = 0;
   let inCode = false;
   let code = [];
   let list = null;
@@ -521,11 +571,22 @@ function renderMarkdown(source, options = {}) {
       flushList();
       const indent = indentedHeading[1].length;
       const level = indentedHeading[2].length;
-      const id = level === 1
-        ? headingId(indentedHeading[3], h1Index++)
-        : level === 2
-          ? headingId(indentedHeading[3], `sub-${h2Index++}`)
-          : "";
+      let id;
+      if (level === 1) {
+        id = headingId(indentedHeading[3], h1Index++);
+        h2Index = 0;
+        h3Index = 0;
+        h4Index = 0;
+      } else if (level === 2) {
+        id = headingId(indentedHeading[3], `sub-${h2Index++}`);
+        h3Index = 0;
+        h4Index = 0;
+      } else if (level === 3) {
+        id = headingId(indentedHeading[3], `h3-${h3Index++}`);
+        h4Index = 0;
+      } else {
+        id = headingId(indentedHeading[3], `h4-${h4Index++}`);
+      }
       const idAttr = id ? ` id="${escapeHtml(id)}"` : "";
       const marginLeft = indent * 16;
       html.push(`<h${level}${idAttr} style="margin-left: ${marginLeft}px;">${inlineMarkdown(indentedHeading[3], searchTerm)}</h${level}>`);
@@ -536,21 +597,36 @@ function renderMarkdown(source, options = {}) {
       flushList();
       const indent = cnHeading[1].length;
       const marginLeft = indent * 16;
+      const level = 2;
       const id = headingId(cnHeading[2], `auto-${h2Index++}`);
-      html.push(`<h2${id ? ` id="${escapeHtml(id)}"` : ""} style="margin-left: ${marginLeft}px;">${inlineMarkdown(cnHeading[2], searchTerm)}</h2>`);
+      h3Index = 0;
+      h4Index = 0;
+      html.push(`<h${level}${id ? ` id="${escapeHtml(id)}"` : ""} style="margin-left: ${marginLeft}px;">${inlineMarkdown(cnHeading[2], searchTerm)}</h${level}>`);
       continue;
     }
-    const numHeading = line.match(/^(\s*)(\d{1,3})[、.．]\s*([^-*].+)$/);
+    const dottedHeading = line.match(/^(\s*)(\d+(?:\.\d+)+)([、.．])\s*([^-*].+)$/);
+    if (dottedHeading) {
+      if (dottedHeading[4].trim().length > 0) {
+        flushList();
+        const indent = dottedHeading[1].length;
+        const marginLeft = indent * 16;
+        const level = 3;
+        const id = headingId(dottedHeading[4], `num-h3-${h3Index++}`);
+        h4Index = 0;
+        html.push(`<h${level}${id ? ` id="${escapeHtml(id)}"` : ""} style="margin-left: ${marginLeft}px;">${inlineMarkdown(dottedHeading[2] + dottedHeading[3] + dottedHeading[4], searchTerm)}</h${level}>`);
+        continue;
+      }
+    }
+    
+    const numHeading = line.match(/^(\s*)(\((?:\d{1,3})\)|(\d{1,3})([、.．)]))\s*([^-*].+)$/);
     if (numHeading) {
-      const prevLine = i > 0 ? lines[i - 1] : "";
-      const prevIsHeading = prevLine.match(/^(#{1,6})\s+(.+)$/) || prevLine.match(/^([一二三四五六七八九十]{1,4}[、.．]\s*.+)$/);
-      if (!prevIsHeading && numHeading[3].trim().length > 0) {
+      if (numHeading[5].trim().length > 0) {
         flushList();
         const indent = numHeading[1].length;
         const marginLeft = indent * 16;
-        const level = Math.min(6, Math.max(3, numHeading[2].length + 2));
-        const id = headingId(numHeading[3], `num-${h2Index++}`);
-        html.push(`<h${level}${id ? ` id="${escapeHtml(id)}"` : ""} style="margin-left: ${marginLeft}px;">${inlineMarkdown(numHeading[2] + "、" + numHeading[3], searchTerm)}</h${level}>`);
+        const level = 4;
+        const id = headingId(numHeading[5], `num-h4-${h4Index++}`);
+        html.push(`<h${level}${id ? ` id="${escapeHtml(id)}"` : ""} style="margin-left: ${marginLeft}px;">${inlineMarkdown(numHeading[2] + numHeading[5], searchTerm)}</h${level}>`);
         continue;
       }
     }
@@ -1198,6 +1274,8 @@ function setMode(mode) {
     state.readerScrollRatio = readerMax > 0 ? els.markdownView.scrollTop / readerMax : 0;
   }
   state.mode = mode;
+  lastInputLength = els.editor.value.length;
+  lastInputValue = els.editor.value;
   els.readerPanel.classList.toggle("hidden", mode !== "view");
   els.editorPanel.classList.toggle("hidden", mode !== "edit");
   els.graphPanel.classList.toggle("hidden", mode !== "graph");
@@ -1206,12 +1284,17 @@ function setMode(mode) {
   els.viewBtn.classList.toggle("active", mode === "view");
   els.editBtn.classList.toggle("active", mode === "edit");
   els.graphBtn.classList.toggle("active", mode === "graph");
+  updateMultiCursorDisplay();
   if (mode === "edit") {
     syncPreviewToEditor();
     requestAnimationFrame(() => {
       const editorMax = Math.max(1, els.editor.scrollHeight - els.editor.clientHeight);
       els.editor.scrollTop = Math.round(editorMax * (state.readerScrollRatio || 0));
     });
+  }
+  if (mode === "view") {
+    els.markdownView.innerHTML = renderMarkdown(state.currentContent);
+    renderOutline(state.currentContent);
   }
   if (mode === "graph") requestAnimationFrame(() => initGraph());
 }
@@ -1285,6 +1368,8 @@ async function openDoc(docPath, options = {}) {
   els.preview.scrollTop = 0;
   state.syncPreviewScroll.ratio = 0;
   resetUndo(doc.content);
+  lastInputLength = doc.content.length;
+  lastInputValue = doc.content;
   setSaveStatus("\u4fdd\u5b58", false);
   renderTree(state.tree);
   if (state.mode === "graph") drawGraph();
@@ -1387,10 +1472,15 @@ const updatePreview = debounce(() => {
   syncPreviewToEditor();
 }, 80);
 
-async function saveCurrentDoc({ refreshTree = false } = {}) {
+async function saveCurrentDoc({ refreshTree = false, keepEditorState = true } = {}) {
   if (!state.currentPath) return false;
   const content = els.editor.value;
   if (!refreshTree && content === state.lastSavedContent) return true;
+  
+  const selectionStart = keepEditorState ? els.editor.selectionStart : 0;
+  const selectionEnd = keepEditorState ? els.editor.selectionEnd : 0;
+  const scrollTop = keepEditorState ? els.editor.scrollTop : 0;
+  
   const seq = ++state.saveSeq;
   setSaveStatus("\u4fdd\u5b58\u4e2d", true);
   try {
@@ -1404,8 +1494,12 @@ async function saveCurrentDoc({ refreshTree = false } = {}) {
   if (seq !== state.saveSeq) return true;
   state.currentContent = content;
   state.lastSavedContent = content;
-  els.markdownView.innerHTML = renderMarkdown(content);
-  renderOutline(content);
+  if (state.mode === "read") {
+    els.markdownView.innerHTML = renderMarkdown(content);
+    renderOutline(content);
+  } else {
+    els.preview.innerHTML = renderMarkdown(content);
+  }
   state.graphReady = false;
   setSaveStatus(refreshTree ? "\u5df2\u4fdd\u5b58" : "\u5df2\u81ea\u52a8\u4fdd\u5b58", false);
   if (refreshTree) {
@@ -1414,13 +1508,25 @@ async function saveCurrentDoc({ refreshTree = false } = {}) {
     await openDoc(path);
     setMode("edit");
   }
+  
+  if (keepEditorState) {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        els.editor.focus();
+        els.editor.setSelectionRange(selectionStart, selectionEnd);
+        els.editor.scrollTop = scrollTop;
+      });
+    });
+  }
+  
   return true;
 }
 
 const autoSaveCurrentDoc = debounce(async () => {
   if (state.mode !== "edit" || !state.currentPath) return;
+  if (document.activeElement !== els.editor) return;
   try {
-    await saveCurrentDoc();
+    await saveCurrentDoc({ keepEditorState: false });
   } catch (error) {
     setSaveStatus("\u4fdd\u5b58\u5931\u8d25", true);
     console.error(error);
@@ -2387,7 +2493,8 @@ els.readerOutline.addEventListener("click", (event) => {
   if (!button) return;
   let target = els.markdownView.querySelector(`#${CSS.escape(button.dataset.heading)}`);
   if (!target) {
-    const selector = button.dataset.level === "1" ? "h1" : "h2";
+    const level = parseInt(button.dataset.level) || 2;
+    const selector = `h${level}`;
     target = [...els.markdownView.querySelectorAll(selector)]
       .find((heading) => plainText(heading.textContent) === button.dataset.title);
   }
@@ -2442,6 +2549,113 @@ els.editor.addEventListener("keydown", (event) => {
     saveCurrentDoc({ refreshTree: true });
     return;
   }
+  if (mod && event.key.toLowerCase() === "d") {
+    event.preventDefault();
+    const value = els.editor.value;
+    const start = els.editor.selectionStart;
+    const end = els.editor.selectionEnd;
+    
+    const lineStart = value.lastIndexOf("\n", start - 1) + 1;
+    const lineEnd = value.indexOf("\n", start);
+    
+    let selectedStart = lineStart;
+    let selectedEnd = lineEnd === -1 ? value.length : lineEnd;
+    
+    if (start !== end) {
+      const selLineStart = value.lastIndexOf("\n", start - 1) + 1;
+      const selLineEnd = value.indexOf("\n", end - 1);
+      selectedStart = selLineStart;
+      selectedEnd = selLineEnd === -1 ? value.length : selLineEnd + 1;
+    }
+    
+    const textToCopy = value.substring(selectedStart, selectedEnd);
+    const newText = "\n" + textToCopy;
+    
+    els.editor.value = value.substring(0, selectedEnd) + newText + value.substring(selectedEnd);
+    
+    const newCursorPos = selectedEnd + newText.length;
+    els.editor.selectionStart = newCursorPos;
+    els.editor.selectionEnd = newCursorPos;
+    
+    els.editor.dispatchEvent(new Event("input", { bubbles: true }));
+    return;
+  }
+  if (mod && event.key.toLowerCase() === "m") {
+    event.preventDefault();
+    const value = els.editor.value;
+    const start = els.editor.selectionStart;
+    const end = els.editor.selectionEnd;
+    
+    const lineStart = value.lastIndexOf("\n", start - 1) + 1;
+    const lineEnd = value.indexOf("\n", end);
+    
+    const before = value.substring(0, lineStart);
+    const after = lineEnd === -1 ? "" : value.substring(lineEnd + 1);
+    
+    els.editor.value = before + after;
+    
+    const newCursorPos = Math.max(0, before.length);
+    els.editor.selectionStart = newCursorPos;
+    els.editor.selectionEnd = newCursorPos;
+    
+    els.editor.dispatchEvent(new Event("input", { bubbles: true }));
+    return;
+  }
+  if (event.altKey && event.shiftKey) {
+    event.preventDefault();
+    const value = els.editor.value;
+    const start = els.editor.selectionStart;
+    
+    const lineNum = (pos) => {
+      return value.substring(0, pos).split("\n").length;
+    };
+    
+    const posFromLine = (line) => {
+      const lines = value.split("\n");
+      if (line <= 1) return 0;
+      if (line > lines.length) return value.length;
+      return lines.slice(0, line - 1).reduce((acc, l) => acc + l.length + 1, 0);
+    };
+    
+    const currentLine = lineNum(start);
+    
+    if (event.key === "ArrowDown") {
+      if (currentLine < value.split("\n").length) {
+        const targetLine = currentLine + 1;
+        const targetPos = posFromLine(targetLine);
+        if (!state.secondaryCursors.includes(targetPos)) {
+          state.secondaryCursors.push(targetPos);
+          state.secondaryCursors.sort((a, b) => a - b);
+        }
+      }
+    } else if (event.key === "ArrowUp") {
+      if (currentLine > 1) {
+        const targetLine = currentLine - 1;
+        const targetPos = posFromLine(targetLine);
+        if (!state.secondaryCursors.includes(targetPos)) {
+          state.secondaryCursors.push(targetPos);
+          state.secondaryCursors.sort((a, b) => a - b);
+        }
+      }
+    } else if (event.key >= "1" && event.key <= "9") {
+      const count = parseInt(event.key);
+      for (let i = 1; i <= count; i++) {
+        const targetLine = currentLine + i;
+        if (targetLine <= value.split("\n").length) {
+          const targetPos = posFromLine(targetLine);
+          if (!state.secondaryCursors.includes(targetPos)) {
+            state.secondaryCursors.push(targetPos);
+          }
+        }
+      }
+      state.secondaryCursors.sort((a, b) => a - b);
+    } else if (event.key === "Escape") {
+      state.secondaryCursors = [];
+    }
+    
+    updateMultiCursorDisplay();
+    return;
+  }
   if (!mod) return;
   if (event.key.toLowerCase() === "z" && !event.shiftKey) {
     event.preventDefault();
@@ -2451,6 +2665,104 @@ els.editor.addEventListener("keydown", (event) => {
     redoEditor();
   }
 });
+
+let lastInputLength = 0;
+let lastInputValue = "";
+let isMultiCursorEditing = false;
+
+els.editor.addEventListener("input", () => {
+  if (isMultiCursorEditing) return;
+  
+  if (state.secondaryCursors.length === 0) {
+    lastInputLength = els.editor.value.length;
+    lastInputValue = els.editor.value;
+    return;
+  }
+  
+  const newValue = els.editor.value;
+  const diff = newValue.length - lastInputLength;
+  
+  if (diff !== 0) {
+    isMultiCursorEditing = true;
+    
+    const primaryStart = els.editor.selectionStart;
+    const primaryEnd = els.editor.selectionEnd;
+    
+    const char = diff > 0 ? newValue[primaryStart - 1] : null;
+    const deleteCount = diff < 0 ? -diff : 0;
+    
+    let offset = 0;
+    state.secondaryCursors.forEach((cursorPos) => {
+      let targetPos = cursorPos + offset;
+      
+      if (diff > 0 && char) {
+        els.editor.value = els.editor.value.substring(0, targetPos) + char + els.editor.value.substring(targetPos);
+        offset += 1;
+      } else if (diff < 0) {
+        const start = Math.max(0, targetPos - deleteCount);
+        els.editor.value = els.editor.value.substring(0, start) + els.editor.value.substring(targetPos);
+        offset -= deleteCount;
+      }
+    });
+    
+    els.editor.selectionStart = primaryStart + offset;
+    els.editor.selectionEnd = primaryEnd + offset;
+    
+    state.secondaryCursors = state.secondaryCursors.map(pos => pos + offset);
+    
+    isMultiCursorEditing = false;
+  }
+  
+  lastInputLength = els.editor.value.length;
+  lastInputValue = els.editor.value;
+});
+
+function updateMultiCursorDisplay() {
+  let overlay = document.getElementById("cursor-overlay");
+  if (!overlay || overlay.parentElement !== els.editorPanel) {
+    if (overlay) overlay.remove();
+    overlay = document.createElement("div");
+    overlay.id = "cursor-overlay";
+    els.editorPanel.appendChild(overlay);
+  }
+  
+  if (state.mode !== "edit") {
+    overlay.style.display = "none";
+    return;
+  }
+  
+  const editorRect = els.editor.getBoundingClientRect();
+  const panelRect = els.editorPanel.getBoundingClientRect();
+  const computedStyle = window.getComputedStyle(els.editor);
+  const lineHeight = parseInt(computedStyle.lineHeight) || 20;
+  const fontSize = parseInt(computedStyle.fontSize) || 14;
+  const charWidth = fontSize * 0.6;
+  
+  overlay.style.left = `${editorRect.left - panelRect.left}px`;
+  overlay.style.top = `${editorRect.top - panelRect.top}px`;
+  overlay.style.width = `${editorRect.width}px`;
+  overlay.style.height = `${editorRect.height}px`;
+  
+  const paddingLeft = parseInt(computedStyle.paddingLeft) || 22;
+  const paddingTop = parseInt(computedStyle.paddingTop) || 22;
+  
+  overlay.innerHTML = state.secondaryCursors.map((pos) => {
+    const value = els.editor.value.substring(0, pos);
+    const lines = value.split("\n");
+    const row = lines.length - 1;
+    const col = lines[lines.length - 1].length;
+    
+    const top = row * lineHeight + paddingTop - els.editor.scrollTop;
+    const left = col * charWidth + paddingLeft - els.editor.scrollLeft;
+    
+    return `<div class="secondary-cursor" style="top: ${top}px; left: ${left}px;"></div>`;
+  }).join("");
+  
+  overlay.style.display = state.secondaryCursors.length > 0 ? "block" : "none";
+}
+
+els.editor.addEventListener("scroll", updateMultiCursorDisplay);
+window.addEventListener("resize", updateMultiCursorDisplay);
 els.editor.addEventListener("paste", handleEditorPaste);
 els.sidebarResizer.addEventListener("pointerdown", startSidebarResize);
 els.sidebarResizer.addEventListener("pointermove", moveSidebarResize);
@@ -2489,6 +2801,43 @@ function renderDefaultWorkspaceChoices() {
 els.closeSettingsBtn.addEventListener("click", () => els.settingsModal.classList.add("hidden"));
 els.settingsModal.addEventListener("click", (event) => {
   if (event.target === els.settingsModal) els.settingsModal.classList.add("hidden");
+});
+
+els.coffeeBtn = document.querySelector("#coffeeBtn");
+els.donationModal = document.querySelector("#donationModal");
+els.closeDonationBtn = document.querySelector("#closeDonationBtn");
+
+els.coffeeBtn.addEventListener("click", () => {
+  els.donationModal.classList.remove("hidden");
+});
+
+els.closeDonationBtn.addEventListener("click", () => {
+  els.donationModal.classList.add("hidden");
+});
+
+els.donationModal.addEventListener("click", (event) => {
+  if (event.target === els.donationModal) {
+    els.donationModal.classList.add("hidden");
+  }
+});
+
+document.querySelectorAll(".copy-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const text = btn.dataset.copy;
+    navigator.clipboard.writeText(text).then(() => {
+      const originalHTML = btn.innerHTML;
+      btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>';
+      btn.style.color = "var(--accent)";
+      btn.style.borderColor = "var(--accent)";
+      setTimeout(() => {
+        btn.innerHTML = originalHTML;
+        btn.style.color = "";
+        btn.style.borderColor = "";
+      }, 2000);
+    }).catch(() => {
+      alert("复制失败，请手动复制");
+    });
+  });
 });
 els.themeChoices.addEventListener("click", (event) => {
   const button = event.target.closest("[data-theme]");
@@ -2550,7 +2899,12 @@ els.confirmDeleteBtn.addEventListener("click", confirmDeleteSelected);
 els.deleteModal.addEventListener("click", (event) => {
   if (event.target === els.deleteModal) closeDeleteModal();
 });
-els.viewBtn.addEventListener("click", () => setMode("view"));
+els.viewBtn.addEventListener("click", async () => {
+  if (state.mode === "edit" && state.currentPath) {
+    await saveCurrentDoc({ keepEditorState: false });
+  }
+  setMode("view");
+});
 els.editBtn.addEventListener("click", () => state.currentPath && setMode("edit"));
 els.graphBtn.addEventListener("click", () => setMode("graph"));
 els.deleteBtn.addEventListener("click", deleteSelected);
