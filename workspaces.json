@@ -1,15 +1,6 @@
 {
   "workspaces": [
     {
-      "id": "ws_25a724bd6b",
-      "name": "temple",
-      "root": "O:\\temple",
-      "visible": false,
-      "mdOnly": true,
-      "builtin": false,
-      "lastUsed": 1784258581298
-    },
-    {
       "id": "default",
       "name": "默认 docs",
       "root": "D:\\game\\mytemple\\docs",

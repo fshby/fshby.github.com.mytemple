@@ -4,12 +4,16 @@ using System.IO;
 using System.Net;
 using System.Threading;
 using System.Windows.Forms;
+using System.Net.Security;
+using System.Security.Cryptography.X509Certificates;
 
 class MyTempleLauncher
 {
     const string APP_NAME = "MyTempleKnowledge";
     const string APP_TITLE = "MyTemple Knowledge";
     const int DEFAULT_PORT = 4173;
+    const string VERSION_CHECK_URL = "https://raw.githubusercontent.com/fshby/fshby.github.com.mytemple/main/version.json";
+    static string CURRENT_VERSION = "1.0.0";
 
     static string installDir;
     static string userDataDir;
@@ -25,12 +29,17 @@ class MyTempleLauncher
         installDir = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
         userDataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), APP_NAME + "Data");
 
+        LoadCurrentVersion();
+
         if (!EnsureNodeJS())
         {
             MessageBox.Show("未找到 Node.js，请先安装 Node.js 18+", APP_TITLE, MessageBoxButtons.OK, MessageBoxIcon.Error);
             Process.Start("https://nodejs.org/zh-cn/download/");
             return;
         }
+
+        // 检查更新
+        CheckForUpdates();
 
         InitializeUserData();
         port = FindAvailablePort();
@@ -49,6 +58,7 @@ class MyTempleLauncher
 
                 ContextMenu contextMenu = new ContextMenu();
                 contextMenu.MenuItems.Add("打开主页", (sender, e) => Process.Start("http://localhost:" + port));
+                contextMenu.MenuItems.Add("检查更新", (sender, e) => CheckForUpdates(true));
                 contextMenu.MenuItems.Add("退出", (sender, e) =>
                 {
                     ShutdownServer();
@@ -66,6 +76,240 @@ class MyTempleLauncher
         {
             MessageBox.Show("启动失败: " + ex.Message, APP_TITLE, MessageBoxButtons.OK, MessageBoxIcon.Error);
             ShutdownServer();
+        }
+    }
+
+    static void LoadCurrentVersion()
+    {
+        try
+        {
+            string versionFile = Path.Combine(installDir, "version.json");
+            if (File.Exists(versionFile))
+            {
+                string json = File.ReadAllText(versionFile);
+                CURRENT_VERSION = ParseVersion(json);
+            }
+        }
+        catch
+        {
+        }
+    }
+
+    static void CheckForUpdates(bool force = false)
+    {
+        try
+        {
+            string lastCheckFile = Path.Combine(userDataDir, "last_update_check.txt");
+            long lastCheck = 0;
+            if (File.Exists(lastCheckFile))
+            {
+                long.TryParse(File.ReadAllText(lastCheckFile), out lastCheck);
+            }
+
+            // 每隔24小时检查一次，强制检查时跳过时间限制
+            unchecked
+            {
+                if (!force && (DateTime.Now.Ticks - lastCheck) < 24L * 60 * 60 * 10000000)
+                {
+                    return;
+                }
+            }
+
+            // 更新检查时间
+            File.WriteAllText(lastCheckFile, DateTime.Now.Ticks.ToString());
+
+            // 下载版本信息
+            string versionJson = DownloadString(VERSION_CHECK_URL);
+            if (string.IsNullOrEmpty(versionJson))
+            {
+                return;
+            }
+
+            // 解析版本信息
+            string latestVersion = ParseVersion(versionJson);
+            string downloadUrl = ParseDownloadUrl(versionJson);
+
+            if (string.IsNullOrEmpty(latestVersion) || string.IsNullOrEmpty(downloadUrl))
+            {
+                return;
+            }
+
+            // 比较版本
+            if (CompareVersions(CURRENT_VERSION, latestVersion) < 0)
+            {
+                DialogResult result = MessageBox.Show(
+                    string.Format("发现新版本 v{0}，当前版本 v{1}\n\n是否立即更新？", latestVersion, CURRENT_VERSION),
+                    APP_TITLE + " - 更新提示",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Information
+                );
+
+                if (result == DialogResult.Yes)
+                {
+                    DownloadAndUpdate(downloadUrl);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            // 忽略更新检查错误，不影响正常启动
+        }
+    }
+
+    static string DownloadString(string url)
+    {
+        try
+        {
+            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+            ServicePointManager.ServerCertificateValidationCallback = (sender, cert, chain, sslPolicyErrors) => true;
+
+            HttpWebRequest request = (HttpWebRequest)WebRequest.Create(url);
+            request.Timeout = 10000;
+            request.ReadWriteTimeout = 10000;
+
+            using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
+            using (StreamReader reader = new StreamReader(response.GetResponseStream()))
+            {
+                return reader.ReadToEnd();
+            }
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    static string ParseVersion(string json)
+    {
+        try
+        {
+            int start = json.IndexOf("\"version\"") + 10;
+            int end = json.IndexOf("\"", start);
+            return json.Substring(start, end - start).Trim();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    static string ParseDownloadUrl(string json)
+    {
+        try
+        {
+            int start = json.IndexOf("\"downloadUrl\"") + 14;
+            int end = json.IndexOf("\"", start);
+            return json.Substring(start, end - start).Trim();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    static int CompareVersions(string v1, string v2)
+    {
+        try
+        {
+            string[] parts1 = v1.Split('.');
+            string[] parts2 = v2.Split('.');
+            int len = Math.Max(parts1.Length, parts2.Length);
+
+            for (int i = 0; i < len; i++)
+            {
+                int p1 = i < parts1.Length ? int.Parse(parts1[i]) : 0;
+                int p2 = i < parts2.Length ? int.Parse(parts2[i]) : 0;
+                if (p1 != p2) return p1.CompareTo(p2);
+            }
+            return 0;
+        }
+        catch
+        {
+            return v1.CompareTo(v2);
+        }
+    }
+
+    static void DownloadAndUpdate(string downloadUrl)
+    {
+        try
+        {
+            string tempExe = Path.Combine(Path.GetTempPath(), APP_NAME + "_update.exe");
+
+            // 删除旧的更新文件
+            if (File.Exists(tempExe))
+            {
+                File.Delete(tempExe);
+            }
+
+            using (WebClient client = new WebClient())
+            {
+                ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+                ServicePointManager.ServerCertificateValidationCallback = (sender, cert, chain, sslPolicyErrors) => true;
+
+                // 创建进度窗口
+                Form progressForm = new Form();
+                progressForm.Text = APP_TITLE + " - 更新下载";
+                progressForm.Size = new System.Drawing.Size(300, 100);
+                progressForm.StartPosition = FormStartPosition.CenterScreen;
+                progressForm.FormBorderStyle = FormBorderStyle.FixedDialog;
+                progressForm.MaximizeBox = false;
+                progressForm.MinimizeBox = false;
+
+                ProgressBar progressBar = new ProgressBar();
+                progressBar.Location = new System.Drawing.Point(10, 20);
+                progressBar.Size = new System.Drawing.Size(260, 20);
+                progressBar.Style = ProgressBarStyle.Continuous;
+                progressForm.Controls.Add(progressBar);
+
+                Label label = new Label();
+                label.Location = new System.Drawing.Point(10, 45);
+                label.Size = new System.Drawing.Size(260, 20);
+                label.Text = "正在下载更新...";
+                progressForm.Controls.Add(label);
+
+                progressForm.Show();
+
+                client.DownloadProgressChanged += (sender, e) =>
+                {
+                    progressBar.Value = e.ProgressPercentage;
+                    label.Text = string.Format("正在下载更新... {0}%", e.ProgressPercentage);
+                    progressForm.Update();
+                };
+
+                client.DownloadFileCompleted += (sender, e) =>
+                {
+                    progressForm.Close();
+
+                    if (!e.Cancelled && e.Error == null)
+                    {
+                        ShutdownServer();
+
+                        ProcessStartInfo psi = new ProcessStartInfo(tempExe);
+                        psi.UseShellExecute = true;
+                        psi.Verb = "runas";
+                        try
+                        {
+                            Process.Start(psi);
+                        }
+                        catch
+                        {
+                            Process.Start(tempExe);
+                        }
+
+                        Application.Exit();
+                    }
+                    else
+                    {
+                        MessageBox.Show("下载失败，请稍后重试", APP_TITLE, MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                };
+
+                client.DownloadFileAsync(new Uri(downloadUrl), tempExe);
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show("更新失败: " + ex.Message, APP_TITLE, MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 

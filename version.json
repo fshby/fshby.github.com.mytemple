@@ -1,0 +1,7 @@
+{
+  "version": "1.1.4",
+  "downloadUrl": "https://github.com/fshby/fshby.github.com.mytemple/releases/download/v1.1.4/MyTempleKnowledge_Setup.exe",
+  "downloadUrl": "https://github.com/fshby/fshby.github.com.mytemple/releases/download/v1.1.4/MyTempleKnowledge_Setup_v1.1.4.exe",
+  "releaseNotes": "新增功能：\n- 支持键盘快捷键操作（Ctrl+C复制、Ctrl+V粘贴、Delete删除）\n- 文档标题自动排序\n- 修复权限问题\n- 支持在所有工作区创建和删除文件夹/文档\n- mdOnly模式下过滤空文件夹\n- 新增卸载功能\n- 新增自动更新功能",
+  "releaseDate": "2026-07-17"
+}

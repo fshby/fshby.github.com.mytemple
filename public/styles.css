@@ -1149,6 +1149,147 @@ body.resizing-sidebar {
   }
 }
 
+.about-dialog {
+  max-width: 420px;
+  width: 90%;
+  padding: 0;
+  overflow: hidden;
+}
+
+.close-about-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  background: rgba(0, 0, 0, 0.05);
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  transition: all 0.2s ease;
+  z-index: 10;
+}
+
+.close-about-btn:hover {
+  background: rgba(0, 0, 0, 0.1);
+  color: var(--text);
+}
+
+.close-about-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.about-header {
+  text-align: center;
+  padding: 32px 24px 20px;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%);
+  color: #fff;
+}
+
+.about-logo {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 16px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.about-logo .brand-mark {
+  width: 36px;
+  height: 36px;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.about-header h2 {
+  margin: 0 0 8px;
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.about-version {
+  font-size: 16px;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.about-version span {
+  font-weight: 700;
+}
+
+.about-date {
+  font-size: 13px;
+  opacity: 0.85;
+}
+
+.about-release-notes {
+  padding: 20px 24px;
+  border-top: 1px solid var(--line);
+}
+
+.about-release-notes strong {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.about-release-notes > div {
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--muted);
+  white-space: pre-wrap;
+}
+
+.about-actions {
+  padding: 0 24px 24px;
+  display: flex;
+  gap: 12px;
+}
+
+.about-actions .primary {
+  flex: 1;
+}
+
+.about-btn {
+  width: 100%;
+  padding: 12px 16px;
+  background: var(--control-bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.about-btn:hover {
+  background: var(--hover-bg);
+  border-color: var(--accent);
+}
+
+.about-btn svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.about-section {
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+
 .donation-dialog {
   max-width: 480px;
   width: 90%;
