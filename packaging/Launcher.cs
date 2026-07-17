@@ -12,7 +12,7 @@ class MyTempleLauncher
     const string APP_NAME = "MyTempleKnowledge";
     const string APP_TITLE = "MyTemple Knowledge";
     const int DEFAULT_PORT = 4173;
-    const string VERSION_CHECK_URL = "https://raw.githubusercontent.com/fshby/fshby.github.com.mytemple/main/version.json";
+    const string VERSION_CHECK_URL = "https://raw.githubusercontent.com/fshby/fshby.github.com.mytemple/master/version.json";
     static string CURRENT_VERSION = "1.0.0";
 
     static string installDir;
