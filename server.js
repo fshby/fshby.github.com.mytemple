@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { createHash, randomUUID } from "node:crypto";
 import { cp, readFile, writeFile, readdir, stat, mkdir, rm, rename } from "node:fs/promises";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, watch } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -14,8 +14,35 @@ const APP_DATA_DIR = path.join(process.env.LOCALAPPDATA || path.join(process.env
 const DATA_ROOT = process.env.MYTEMPLE_DATA_ROOT || APP_DATA_DIR;
 const WORKSPACE_CONFIG = path.join(DATA_ROOT, "workspaces.json");
 const PORT = Number(process.env.PORT || 4173);
+const KNOWLEDGE_INDEX_FILENAME = "知识库主清单.json";
+const KNOWLEDGE_INDEX_SCHEMA_VERSION = 1;
 
-let cache = { stamp: 0, files: [], tree: [], graph: { nodes: [], edges: [] }, workspaces: [] };
+let cache = {
+  stamp: 0,
+  files: [],
+  tree: [],
+  graph: { nodes: [], edges: [] },
+  graphDirty: false,
+  graphVersion: 0,
+  knowledgeVersion: "",
+  graphProjection: null,
+  documentCache: new Map(),
+  knowledgeDocuments: new Map(),
+  workspaces: [],
+};
+let cacheRefreshPromise = null;
+let structureDirty = true;
+let structureGeneration = 1;
+const dirtyPaths = new Set();
+const dirtyVersions = new Map();
+let dirtyVersion = 0;
+let watcherSignature = "";
+let workspaceWatchers = new Map();
+let watcherRefreshTimer = 0;
+let knowledgeIndexSyncPromise = Promise.resolve();
+let knowledgeIndexSyncTimer = 0;
+let knowledgeIndexVersion = "";
+let knowledgeIndexLoaded = false;
 const MAX_ASSET_BYTES = 5 * 1024 * 1024;
 const MAX_REQUEST_BODY = 10 * 1024 * 1024;
 
@@ -45,8 +72,8 @@ const mimeTypes = {
   ".webp": "image/webp",
 };
 
-function send(res, status, body, type = "application/json; charset=utf-8") {
-  res.writeHead(status, { "Content-Type": type, "Cache-Control": "no-store" });
+function send(res, status, body, type = "application/json; charset=utf-8", headers = {}) {
+  res.writeHead(status, { "Content-Type": type, "Cache-Control": "no-store", ...headers });
   res.end(body);
 }
 
@@ -167,7 +194,11 @@ async function normalizeDocPath(input, alreadyDecoded = false) {
       throw new Error(`工作区不存在: ${id}`);
     }
   }
-  const clean = path.posix.normalize(rawRelative || "").replace(/^(\.\.\/)+/, "").replace(/^\.$/, "");
+  const normalizedRelative = path.posix.normalize(rawRelative || "");
+  if (normalizedRelative === ".." || normalizedRelative.startsWith("../") || path.posix.isAbsolute(normalizedRelative)) {
+    throw new Error("无效的文档路径");
+  }
+  const clean = normalizedRelative.replace(/^\.$/, "");
   const absolute = path.resolve(workspace.root, clean);
   if (!isInside(workspace.root, absolute)) throw new Error("无效的文档路径");
   return {
@@ -208,31 +239,101 @@ async function ensureDocs() {
   }
 }
 
-async function getLatestMtime(dir) {
-  let latest = 0;
-  try {
-    latest = (await stat(dir)).mtimeMs;
-  } catch {
-    return 0;
-  }
-  try {
-    const entries = await readdir(dir, { withFileTypes: true });
-    const tasks = [];
-    for (const entry of entries) {
-      const absolute = path.join(dir, entry.name);
-      tasks.push((async () => {
-        try {
-          const entryStat = await stat(absolute);
-          latest = Math.max(latest, entryStat.mtimeMs);
-          if (entry.isDirectory()) {
-            latest = Math.max(latest, await getLatestMtime(absolute));
-          }
-        } catch {}
-      })());
+function closeWorkspaceWatchers() {
+  for (const entries of workspaceWatchers.values()) {
+    for (const watcher of entries) {
+      try { watcher.close(); } catch {}
     }
-    await Promise.all(tasks);
-  } catch {}
-  return latest;
+  }
+  workspaceWatchers = new Map();
+  watcherSignature = "";
+}
+
+function isIgnoredWorkspacePath(absolute) {
+  const name = path.basename(absolute).toLowerCase();
+  return name === KNOWLEDGE_INDEX_FILENAME.toLowerCase()
+    || name.startsWith(`.${KNOWLEDGE_INDEX_FILENAME.toLowerCase()}.`)
+    || name.endsWith(".tmp")
+    || name.endsWith(".swp")
+    || name.endsWith("~");
+}
+
+function workspaceForAbsolute(workspaces, absolute) {
+  return workspaces.find((workspace) => isInside(workspace.root, absolute));
+}
+
+function markWorkspaceDirty(workspace, filename, eventType, baseDir = workspace.root) {
+  const rawName = filename == null ? "" : String(filename).replace(/\\/g, path.sep);
+  const absolute = path.resolve(baseDir, rawName || ".");
+  if (isIgnoredWorkspacePath(absolute)) return;
+  dirtyVersion += 1;
+  dirtyPaths.add(absolute);
+  dirtyVersions.set(absolute, dirtyVersion);
+  if (eventType === "rename" || !rawName || !path.extname(absolute).toLowerCase().endsWith(".md")) {
+    structureDirty = true;
+    structureGeneration += 1;
+  }
+  scheduleWatchedRefresh();
+}
+
+function scheduleWatchedRefresh() {
+  clearTimeout(watcherRefreshTimer);
+  watcherRefreshTimer = setTimeout(() => {
+    watcherRefreshTimer = 0;
+    refreshCache().catch((error) => log("warn", `文件监听刷新失败: ${error.message}`));
+  }, 160);
+}
+
+async function collectWorkspaceDirectories(root, out = []) {
+  out.push(root);
+  let entries = [];
+  try { entries = await readdir(root, { withFileTypes: true }); } catch { return out; }
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
+    await collectWorkspaceDirectories(path.join(root, entry.name), out);
+  }
+  return out;
+}
+
+function addWorkspaceWatcher(workspace, baseDir, recursive, entries) {
+  try {
+    const watcher = watch(baseDir, recursive ? { recursive: true } : undefined, (eventType, filename) => {
+      markWorkspaceDirty(workspace, filename, eventType, baseDir);
+    });
+    watcher.on("error", (error) => {
+      log("warn", `文件监听异常 (${workspace.root}): ${error.message}`);
+      structureDirty = true;
+      structureGeneration += 1;
+      scheduleWatchedRefresh();
+    });
+    entries.push(watcher);
+    return true;
+  } catch (error) {
+    log("debug", `递归文件监听不可用 (${baseDir}): ${error.message}`);
+    return false;
+  }
+}
+
+async function installWorkspaceWatchers(workspaces, force = false) {
+  const visible = workspaces.filter((workspace) => workspace.visible).slice(0, 2);
+  const signature = visible.map((workspace) => `${workspace.id}|${path.resolve(workspace.root)}`).join("\n");
+  if (!force && signature === watcherSignature) return;
+  closeWorkspaceWatchers();
+  for (const workspace of visible) {
+    if (!existsSync(workspace.root)) continue;
+    const entries = [];
+    if (!addWorkspaceWatcher(workspace, workspace.root, true, entries)) {
+      const directories = await collectWorkspaceDirectories(workspace.root);
+      for (const directory of directories) addWorkspaceWatcher(workspace, directory, false, entries);
+    }
+    workspaceWatchers.set(workspace.id, entries);
+  }
+  watcherSignature = signature;
+}
+
+function markStructureDirty() {
+  structureDirty = true;
+  structureGeneration += 1;
 }
 
 async function walk(workspace, dir = workspace.root, prefix = "") {
@@ -257,22 +358,22 @@ async function walk(workspace, dir = workspace.root, prefix = "") {
       }
       items.push({ type: "folder", name: entry.name, path: workspaceRef(workspace.id, relative), workspaceId: workspace.id, root: workspace.root, children });
     } else if (entry.isFile()) {
+      if (entry.name === KNOWLEDGE_INDEX_FILENAME) continue;
       const isMarkdown = entry.name.toLowerCase().endsWith(".md");
       if (mdOnly && !isMarkdown) continue;
       try {
         if (isMarkdown) {
-          const { text: source, encoding } = await readMarkdownFile(absolute);
           const stats = await stat(absolute);
           items.push({
             type: "file",
             name: entry.name,
-            title: extractTitle(source, entry.name),
+            title: entry.name.replace(/\.md$/i, ""),
             displayName: entry.name,
             path: workspaceRef(workspace.id, relative),
             relative,
             workspaceId: workspace.id,
             root: workspace.root,
-            encoding,
+            encoding: "",
             size: stats.size,
             modified: stats.mtimeMs,
           });
@@ -364,28 +465,29 @@ async function readMarkdownFile(absolute) {
     }
     throw e;
   }
+  const hash = createHash("sha256").update(buffer).digest("hex");
   if (buffer.length >= 3 && buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf) {
-    return { text: new TextDecoder("utf-8").decode(buffer.subarray(3)), encoding: "utf-8-bom" };
+    return { text: new TextDecoder("utf-8").decode(buffer.subarray(3)), encoding: "utf-8-bom", hash };
   }
 
   const utf8 = new TextDecoder("utf-8", { fatal: false }).decode(buffer);
   const utf8Bad = replacementScore(utf8);
   if (utf8Bad === 0 && !looksLikeMojibake(utf8)) {
-    return { text: utf8, encoding: "utf-8" };
+    return { text: utf8, encoding: "utf-8", hash };
   }
 
   let gbText = utf8;
   try {
     gbText = new TextDecoder("gb18030", { fatal: false }).decode(buffer);
   } catch {
-    return { text: utf8, encoding: "utf-8" };
+    return { text: utf8, encoding: "utf-8", hash };
   }
 
   const gbBad = replacementScore(gbText);
   if (gbBad < utf8Bad || (utf8Bad > 0 && !looksLikeMojibake(gbText))) {
-    return { text: gbText, encoding: "gb18030" };
+    return { text: gbText, encoding: "gb18030", hash };
   }
-  return { text: utf8, encoding: "utf-8" };
+  return { text: utf8, encoding: "utf-8", hash };
 }
 
 function replacementScore(text) {
@@ -399,12 +501,35 @@ function looksLikeMojibake(text) {
 function extractTerms(text) {
   const body = text
     .toLowerCase()
+    .replace(/^---\s*[\r\n]+[\s\S]*?^---\s*$/m, " ")
     .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`[^`]+`/g, " ")
+    .replace(/!\[[^\]]*\]\([^)]+\)/g, " ")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/^\s*[a-z_][\w.-]{1,32}\s*(?:=|:)\s*\S.*$/gim, " ")
+    .replace(/https?:\/\/\S+|www\.\S+/g, " ")
     .replace(/[^\p{L}\p{N}\s-]/gu, " ");
-  const stop = new Set(["the", "and", "for", "with", "from", "this", "that", "you", "are", "was", "were"]);
+  const stop = new Set([
+    "the", "and", "for", "with", "from", "this", "that", "you", "are", "was", "were",
+    "http", "https", "www", "com", "org", "net", "html", "href", "src",
+    "一个", "这个", "可以", "进行", "使用", "支持", "以及", "相关", "文档", "内容", "功能",
+    "或者", "如果", "需要", "没有", "我们", "你们", "他们", "其中", "通过", "由于", "就是", "不是", "能够", "已经", "可能",
+    "整理", "记录", "方法", "实践", "说明", "介绍", "示例", "问题", "数据", "信息",
+    "文件", "命令", "视频", "地址", "密码", "测试", "版本", "属性", "桌面", "网络", "设备", "服务", "名称", "内容",
+    "确认", "融合", "播放", "建议", "直接", "平台", "配置", "查看", "网关", "是否", "输入", "关闭", "恢复", "格式", "显示",
+  ]);
   const counts = new Map();
-  for (const token of body.match(/[\p{L}\p{N}][\p{L}\p{N}-]{1,}/gu) || []) {
+  let tokens;
+  try {
+    const segmenter = new Intl.Segmenter("zh-Hans", { granularity: "word" });
+    tokens = [...segmenter.segment(body)].filter((part) => part.isWordLike).map((part) => part.segment);
+  } catch {
+    tokens = body.match(/[\p{L}\p{N}][\p{L}\p{N}-]{1,}/gu) || [];
+  }
+  for (const token of tokens) {
     if (stop.has(token) || token.length < 2) continue;
+    if (token.length > 32) continue;
     counts.set(token, (counts.get(token) || 0) + 1);
   }
   return [...counts.entries()]
@@ -415,40 +540,212 @@ function extractTerms(text) {
 
 function extractTags(text) {
   const tags = new Set();
-  for (const match of text.matchAll(/(?:^|\s)#([\p{L}\p{N}_-]{2,})/gu)) tags.add(match[1].toLowerCase());
   const frontMatter = text.match(/^---\s*[\r\n]+([\s\S]*?)---/);
-  const tagLine = frontMatter?.[1]?.match(/^tags:\s*(.+)$/m);
+  const tagLine = frontMatter?.[1]?.match(/^(?:tags|tag):[^\S\r\n]*(.*)$/mi);
   if (tagLine) {
-    tagLine[1].split(/[,\s]+/).filter(Boolean).forEach((tag) => tags.add(tag.replace(/^#/, "").toLowerCase()));
+    tagLine[1].replace(/[\[\]"']/g, " ").split(/[,\s]+/).filter(Boolean)
+      .forEach((tag) => tags.add(tag.replace(/^#/, "").toLowerCase()));
+    const afterTagLine = frontMatter[1].slice((tagLine.index || 0) + tagLine[0].length);
+    const tagBlock = afterTagLine.split(/\r?\n(?=[\p{L}_-][\p{L}\p{N}_-]*:\s*)/u)[0];
+    for (const match of tagBlock.matchAll(/^\s*-\s*#?([\p{L}\p{N}_/-]{2,})\s*$/gmu)) {
+      tags.add(match[1].toLowerCase());
+    }
+  }
+  const withoutFrontMatter = frontMatter ? text.slice(frontMatter[0].length) : text;
+  let inFence = false;
+  for (const line of withoutFrontMatter.split(/\r?\n/)) {
+    if (/^\s*```/.test(line)) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence || /^\s{0,3}#{1,6}\s+/.test(line)) continue;
+    for (const match of line.matchAll(/(?:^|[\s([{>])#(?!#)([\p{L}\p{N}_/-]{2,})/gu)) {
+      tags.add(match[1].toLowerCase());
+    }
   }
   return [...tags];
 }
 
+function documentTemplate(name) {
+  const today = new Date().toISOString().slice(0, 10);
+  return `---\ntags:\n  - 待分类\ncreated: ${today}\n---\n\n# ${name}\n\n`;
+}
+
+function cleanSuggestedTag(value) {
+  return String(value || "")
+    .trim()
+    .replace(/^#+/, "")
+    .replace(/[\s#,:;，；：]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 32)
+    .toLowerCase();
+}
+
+function replaceFrontmatterTags(content, tags) {
+  const normalizedTags = [...new Set(tags.map(cleanSuggestedTag).filter((tag) => tag && tag !== "待分类"))].slice(0, 5);
+  const tagLines = normalizedTags.length
+    ? ["tags:", ...normalizedTags.map((tag) => `  - ${tag}`)]
+    : ["tags: []"];
+  const match = String(content || "").match(/^---\s*\r?\n([\s\S]*?)\r?\n---\s*/);
+  if (!match) {
+    return `---\n${tagLines.join("\n")}\n---\n\n${String(content || "").replace(/^\s+/, "")}`;
+  }
+  const bodyLines = match[1].split(/\r?\n/);
+  const tagIndex = bodyLines.findIndex((line) => /^(?:tags|tag):/i.test(line.trim()));
+  if (tagIndex >= 0) {
+    let end = tagIndex + 1;
+    while (end < bodyLines.length && /^\s+-\s+/.test(bodyLines[end])) end += 1;
+    bodyLines.splice(tagIndex, end - tagIndex, ...tagLines);
+  } else {
+    bodyLines.push(...tagLines);
+  }
+  const suffix = String(content).slice(match[0].length).replace(/^\s*/, "");
+  return `---\n${bodyLines.join("\n")}\n---\n\n${suffix}`;
+}
+
+function suggestSemanticTags(files, maxTags = 3) {
+  const termDocs = new Map();
+  const titleTerms = new Map(files.map((file) => [file.path, new Set(extractTerms(file.title || "").map((item) => cleanSuggestedTag(item.term)))]));
+  for (const file of files) {
+    for (const item of file.terms || []) {
+      const term = cleanSuggestedTag(item.term);
+      if (!term || term.length < 2 || /^\d+$/.test(term)) continue;
+      if (!termDocs.has(term)) termDocs.set(term, []);
+      termDocs.get(term).push({ file, count: item.count || 1 });
+    }
+  }
+  const total = Math.max(1, files.length);
+  const semanticStop = new Set(["文件", "命令", "视频", "地址", "密码", "测试", "版本", "属性", "桌面", "网络", "设备", "服务", "名称", "内容"]);
+  const rankedCandidates = [];
+  for (const [term, hits] of termDocs) {
+    const minDocumentFrequency = total < 10 ? 2 : 3;
+    if (hits.length < minDocumentFrequency || hits.length > Math.max(3, Math.ceil(total * 0.5))) continue;
+    const hasHan = /\p{Script=Han}/u.test(term);
+    if (!hasHan || semanticStop.has(term) || term.length > 6) continue;
+    const idf = Math.log((total + 1) / (hits.length + 1)) + 1;
+    const globalScore = idf * hits.reduce((sum, hit) => sum + Math.log2(1 + hit.count), 0);
+    rankedCandidates.push([term, { hits, idf, globalScore }]);
+  }
+  const candidateLimit = Math.min(28, Math.max(10, Math.ceil(Math.sqrt(total) * 2.2)));
+  const candidates = new Map(rankedCandidates.sort((a, b) => b[1].globalScore - a[1].globalScore).slice(0, candidateLimit));
+  const changes = [];
+  for (const file of files) {
+    const existing = new Set((file.tags || []).map(cleanSuggestedTag));
+    const ranked = [...candidates.entries()]
+      .map(([term, info]) => {
+        const hit = info.hits.find((item) => item.file.path === file.path);
+        const titleBoost = titleTerms.get(file.path)?.has(term) ? 3.2 : 0;
+        return hit ? { term, score: Math.log2(1 + hit.count) * info.idf + titleBoost } : null;
+      })
+      .filter(Boolean)
+      .filter((item) => item.score >= 5.5)
+      .sort((a, b) => b.score - a.score || a.term.localeCompare(b.term, "zh-Hans-CN"));
+    const additions = ranked.map((item) => item.term).filter((term) => !existing.has(term)).slice(0, Math.max(1, Math.min(5, maxTags)));
+    const nextTags = [...new Set([...existing].filter((tag) => tag !== "待分类").concat(additions))];
+    if (!additions.length || nextTags.join("|") === [...existing].filter((tag) => tag !== "待分类").join("|")) continue;
+    changes.push({ path: file.path, title: file.title, before: [...existing].filter(Boolean), after: nextTags, content: replaceFrontmatterTags(file.content, nextTags) });
+  }
+  return changes;
+}
+
+function documentRelationSignature(content, tags = [], terms = []) {
+  const links = [...String(content || "").matchAll(/\[\[([^\]]+)\]\]|\]\(([^)]+\.md(?:#[^)]+)?)\)/gi)]
+    .map((match) => (match[1] || match[2] || "").split("|")[0].split("#")[0].trim().replace(/\\/g, "/").toLowerCase())
+    .filter(Boolean)
+    .sort();
+  const normalizedTerms = (terms || []).slice(0, 10).map((item) => [item.term, item.count]).sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+  return JSON.stringify({ links, tags: [...new Set(tags)].sort(), terms: normalizedTerms });
+}
+
+function applyDocumentMetadata(item, workspace) {
+  return {
+    ...item,
+    workspaceName: workspace.name,
+    root: workspace.root,
+    workspaceId: workspace.id,
+  };
+}
+
+async function hydrateDocument(item, workspace, previous = null, forceRead = false) {
+  const metadata = applyDocumentMetadata(item, workspace);
+  if (previous && !forceRead && previous.size === item.size && previous.modified === item.modified) {
+    return Object.assign(previous, metadata);
+  }
+  const absolute = path.resolve(workspace.root, item.relative || "");
+  const parsed = await readMarkdownFile(absolute);
+  if (previous && parsed.hash === previous.contentSha256) {
+    return Object.assign(previous, metadata, {
+      encoding: parsed.encoding,
+      size: item.size,
+      modified: item.modified,
+    });
+  }
+  const tags = extractTags(parsed.text);
+  const terms = extractTerms(parsed.text);
+  return {
+    ...metadata,
+    title: extractTitle(parsed.text, item.name),
+    encoding: parsed.encoding,
+    content: parsed.text,
+    contentSha256: parsed.hash,
+    plain: parsed.text.replace(/[#>*_`[\]()!-]/g, " "),
+    tags,
+    terms,
+    relationSignature: documentRelationSignature(parsed.text, tags, terms),
+  };
+}
+
 function buildGraph(files) {
-  const byBase = new Map(files.map((file) => [path.basename(file.path, ".md").toLowerCase(), file]));
+  const byBase = new Map(files.map((file) => [path.basename(file.relative || file.path, ".md").toLowerCase(), file]));
+  const byWorkspaceBase = new Map(files.map((file) => [`${file.workspaceId}:${path.basename(file.relative || file.path, ".md").toLowerCase()}`, file]));
   const byPath = new Map(files.map((file) => [file.path.toLowerCase(), file]));
   const nodes = files.map((file) => ({
     id: file.path,
     label: file.title,
     kind: "doc",
     group: file.workspaceName || file.workspaceId || "docs",
-    weight: Math.max(1, file.terms.length),
+    weight: 1,
+    modified: file.modified || 0,
   }));
   const edgeMap = new Map();
-  const addEdge = (source, target, type, weight = 1) => {
-    if (!source || !target || source.path === target.path) return;
-    const key = [source.path, target.path, type].sort().join("|");
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  const addNode = (node) => {
+    if (nodeIds.has(node.id)) return false;
+    nodeIds.add(node.id);
+    nodes.push(node);
+    return true;
+  };
+  const addEdge = (source, target, type, weight = 1, directed = false) => {
+    const sourceId = typeof source === "string" ? source : source?.path;
+    const targetId = typeof target === "string" ? target : target?.path;
+    if (!sourceId || !targetId || sourceId === targetId) return;
+    const pair = directed ? `${sourceId}|${targetId}` : [sourceId, targetId].sort().join("|");
+    const key = `${pair}|${type}`;
     const existing = edgeMap.get(key);
     if (existing) existing.weight += weight;
-    else edgeMap.set(key, { source: source.path, target: target.path, type, weight });
+    else edgeMap.set(key, { source: sourceId, target: targetId, type, weight, directed });
   };
 
+  let missingCount = 0;
   for (const file of files) {
     for (const match of file.content.matchAll(/\[\[([^\]]+)\]\]|\]\(([^)]+\.md(?:#[^)]+)?)\)/gi)) {
-      const raw = (match[1] || match[2] || "").split("#")[0].trim().replace(/\\/g, "/");
-      const baseTarget = byBase.get(path.basename(raw, ".md").toLowerCase());
-      const pathTarget = byPath.get(path.posix.normalize(path.posix.join(path.posix.dirname(file.path), raw)).toLowerCase());
-      addEdge(file, pathTarget || baseTarget, "link", 3);
+      const raw = (match[1] || match[2] || "").split("|")[0].split("#")[0].trim().replace(/\\/g, "/");
+      if (!raw) continue;
+      const rawWithExtension = raw.toLowerCase().endsWith(".md") ? raw : `${raw}.md`;
+      const rawBase = path.basename(rawWithExtension, ".md").toLowerCase();
+      const baseTarget = byWorkspaceBase.get(`${file.workspaceId}:${rawBase}`) || byBase.get(rawBase);
+      const relativeTarget = path.posix.normalize(path.posix.join(path.posix.dirname(file.relative || ""), rawWithExtension));
+      const pathTarget = byPath.get(workspaceRef(file.workspaceId, relativeTarget).toLowerCase());
+      const target = pathTarget || baseTarget;
+      if (target) {
+        addEdge(file, target, "link", 3, true);
+      } else {
+        const missingId = `missing:${file.workspaceId || "default"}:${raw.toLowerCase()}`;
+        if (nodeIds.has(missingId) || missingCount < 120) {
+          if (addNode({ id: missingId, label: path.basename(raw, ".md"), kind: "missing", group: "未创建", weight: 1 })) missingCount += 1;
+          addEdge(file, missingId, "missing", 2, true);
+        }
+      }
     }
   }
 
@@ -460,72 +757,304 @@ function buildGraph(files) {
     }
   }
 
-  for (const [, tagFiles] of tagFileMap) {
-    for (let i = 0; i < tagFiles.length; i += 1) {
-      for (let j = i + 1; j < tagFiles.length; j += 1) {
-        addEdge(tagFiles[i], tagFiles[j], "tag", 2);
-      }
+  const topTags = [...tagFileMap.entries()].sort((a, b) => b[1].length - a[1].length).slice(0, 160);
+  for (const [tag, tagFiles] of topTags) {
+    const tagId = `tag:${tag}`;
+    addNode({ id: tagId, label: `#${tag}`, kind: "tag", group: "标签", weight: tagFiles.length });
+    for (const file of tagFiles) {
+      addEdge(file, tagId, "tag", 2);
     }
   }
 
   const termFileMap = new Map();
   for (const file of files) {
-    for (const item of file.terms.slice(0, 8)) {
-      if (/^\d+$/.test(item.term) || item.term.length < 2) continue;
-      if (!termFileMap.has(item.term)) termFileMap.set(item.term, []);
-      termFileMap.get(item.term).push(file);
-    }
-  }
-
-  for (const [, termFiles] of termFileMap) {
-    for (let i = 0; i < termFiles.length; i += 1) {
-      for (let j = i + 1; j < termFiles.length; j += 1) {
-        addEdge(termFiles[i], termFiles[j], "semantic", 1);
-      }
-    }
-  }
-
-  const keywordTermMap = new Map();
-  for (const file of files) {
     for (const item of file.terms.slice(0, 10)) {
       if (/^\d+$/.test(item.term) || item.term.length < 2) continue;
-      if (!keywordTermMap.has(item.term)) keywordTermMap.set(item.term, []);
-      keywordTermMap.get(item.term).push({ file, count: item.count });
+      if (!termFileMap.has(item.term)) termFileMap.set(item.term, []);
+      termFileMap.get(item.term).push({ file, count: item.count });
     }
   }
 
-  for (const [term, hits] of keywordTermMap) {
-    if (hits.length < 2) continue;
+  const keywordLimit = Math.min(48, Math.max(12, Math.ceil(Math.sqrt(Math.max(1, files.length)) * 3)));
+  const keywordCandidates = [...termFileMap.entries()]
+    .filter(([, hits]) => hits.length >= 2 && hits.length <= Math.max(12, Math.ceil(files.length * 0.45)))
+    .map(([term, hits]) => ({
+      term,
+      hits,
+      score: (Math.log((files.length + 1) / (hits.length + 1)) + 1)
+        * hits.reduce((sum, hit) => sum + Math.log2(1 + hit.count), 0)
+        * (1 + Math.log2(1 + hits.length) * 0.35),
+    }))
+    .sort((a, b) => b.score - a.score || a.term.localeCompare(b.term, "zh-Hans-CN"))
+    .slice(0, keywordLimit);
+
+  const semanticDegree = new Map();
+  for (const { term, hits } of keywordCandidates) {
+    const selectedHits = hits
+      .sort((a, b) => b.count - a.count)
+      .filter((hit) => (semanticDegree.get(hit.file.path) || 0) < 5)
+      .slice(0, 10);
+    if (selectedHits.length < 2) continue;
     const keywordId = `keyword:${term}`;
-    nodes.push({
+    addNode({
       id: keywordId,
       label: term,
       kind: "keyword",
-      group: "keywords",
-      weight: hits.reduce((sum, hit) => sum + hit.count, 0),
+      group: "语义",
+      weight: selectedHits.reduce((sum, hit) => sum + hit.count, 0),
     });
-    for (const hit of hits.slice(0, 8)) {
-      edgeMap.set(`${hit.file.path}|${keywordId}|keyword`, {
-        source: hit.file.path,
-        target: keywordId,
-        type: "keyword",
-        weight: Math.max(1, Math.min(6, hit.count)),
-      });
+    for (const hit of selectedHits) {
+      addEdge(hit.file, keywordId, "keyword", Math.max(1, Math.min(6, hit.count)));
+      semanticDegree.set(hit.file.path, (semanticDegree.get(hit.file.path) || 0) + 1);
     }
   }
 
-  return { nodes, edges: [...edgeMap.values()].sort((a, b) => b.weight - a.weight).slice(0, 160) };
+  const edgeOrder = { link: 0, missing: 1, tag: 2, keyword: 3 };
+  const edgeLimit = Math.min(2400, Math.max(240, files.length * 8));
+  const edges = [...edgeMap.values()]
+    .sort((a, b) => (edgeOrder[a.type] ?? 9) - (edgeOrder[b.type] ?? 9) || b.weight - a.weight)
+    .slice(0, edgeLimit);
+  const degree = new Map();
+  for (const edge of edges) {
+    degree.set(edge.source, (degree.get(edge.source) || 0) + 1);
+    degree.set(edge.target, (degree.get(edge.target) || 0) + 1);
+  }
+  for (const node of nodes) {
+    node.degree = degree.get(node.id) || 0;
+    node.orphan = node.kind === "doc" && (degree.get(node.id) || 0) === 0;
+    node.weight = Math.max(node.weight || 1, 1 + node.degree);
+  }
+
+  return { nodes, edges, stats: { documents: files.length, nodes: nodes.length, edges: edges.length } };
 }
 
-async function refreshCache(force = false) {
+function extractIndexHeadings(content) {
+  return [...String(content || "").matchAll(/^\s*(#{1,6})\s+(.+?)\s*$/gm)]
+    .slice(0, 32)
+    .map((match) => ({ level: match[1].length, title: match[2].replace(/\s+#+\s*$/, "").trim() }))
+    .filter((item) => item.title);
+}
+
+function createIndexExcerpt(content, limit = 320) {
+  const text = String(content || "")
+    .replace(/^---\s*[\r\n]+[\s\S]*?^---\s*$/m, " ")
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/!\[[^\]]*\]\([^)]+\)/g, " ")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g, "$1")
+    .replace(/^\s{0,3}#{1,6}\s+/gm, "")
+    .replace(/[*_`>#~-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return text.length > limit ? `${text.slice(0, limit).trimEnd()}…` : text;
+}
+
+function createGraphProjection(graph) {
+  const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
+  const outgoingLinks = new Map();
+  const backlinks = new Map();
+  const concepts = new Map();
+  const missingLinks = new Map();
+  const pushUnique = (map, key, value) => {
+    if (!map.has(key)) map.set(key, new Set());
+    map.get(key).add(value);
+  };
+  for (const edge of graph.edges) {
+    const sourceNode = nodeById.get(edge.source);
+    const targetNode = nodeById.get(edge.target);
+    if (edge.type === "link") {
+      pushUnique(outgoingLinks, edge.source, edge.target);
+      pushUnique(backlinks, edge.target, edge.source);
+    } else if (edge.type === "missing") {
+      pushUnique(missingLinks, edge.source, targetNode?.label || edge.target);
+    } else if (edge.type === "keyword") {
+      if (sourceNode?.kind === "doc") pushUnique(concepts, sourceNode.id, targetNode?.label || targetNode?.id);
+      if (targetNode?.kind === "doc") pushUnique(concepts, targetNode.id, sourceNode?.label || sourceNode?.id);
+    }
+  }
+  return { version: 0, outgoingLinks, backlinks, concepts, missingLinks };
+}
+
+function getGraphProjection(data) {
+  if (data.graphProjection?.version === data.graphVersion) return data.graphProjection;
+  const projection = createGraphProjection(data.graph);
+  projection.version = data.graphVersion;
+  data.graphProjection = projection;
+  return projection;
+}
+
+function calculateKnowledgeVersion(data) {
+  const workspacePart = (data.workspaces || [])
+    .filter((workspace) => workspace.visible)
+    .map((workspace) => `${workspace.id}|${workspace.name}|${path.resolve(workspace.root)}`)
+    .sort()
+    .join("\n");
+  const documentPart = (data.files || [])
+    .map((file) => `${file.path}|${file.contentSha256 || ""}`)
+    .sort()
+    .join("\n");
+  return createHash("sha1")
+    .update(`${data.defaultWorkspaceId || DEFAULT_WORKSPACE_ID}\n${workspacePart}\n${documentPart}`)
+    .digest("hex");
+}
+
+function refreshKnowledgeVersion(data = cache) {
+  data.knowledgeVersion = calculateKnowledgeVersion(data);
+  return data.knowledgeVersion;
+}
+
+function buildKnowledgeIndex(data) {
+  if (data.graphDirty) {
+    data.graph = buildGraph(data.files);
+    data.graphDirty = false;
+    data.graphVersion = (data.graphVersion || 0) + 1;
+    data.graphProjection = null;
+  }
+  const graph = data.graph;
+  const knowledgeVersion = refreshKnowledgeVersion(data);
+  const projection = getGraphProjection(data);
+  const visibleWorkspaceIds = new Set(data.files.map((file) => file.workspaceId));
+  const previousDocuments = data.knowledgeDocuments || new Map();
+  const nextDocuments = new Map();
+  const documents = [...data.files]
+    .sort((a, b) => a.path.localeCompare(b.path, "zh-Hans-CN"))
+    .map((file) => {
+      const signature = `${file.contentSha256 || ""}|${data.graphVersion || 0}`;
+      const previous = previousDocuments.get(file.path);
+      if (previous?.signature === signature) {
+        nextDocuments.set(file.path, previous);
+        return previous.document;
+      }
+      const document = {
+        id: file.path,
+        workspaceId: file.workspaceId,
+        workspace: file.workspaceName,
+        relativePath: file.relative,
+        absolutePath: path.resolve(file.root, file.relative || ""),
+        title: file.title,
+        tags: file.tags,
+        headings: extractIndexHeadings(file.content),
+        keywords: (file.terms || []).slice(0, 12),
+        semanticConcepts: [...(projection.concepts.get(file.path) || [])].sort((a, b) => a.localeCompare(b, "zh-Hans-CN")),
+        outgoingLinks: [...(projection.outgoingLinks.get(file.path) || [])].sort(),
+        backlinks: [...(projection.backlinks.get(file.path) || [])].sort(),
+        missingLinks: [...(projection.missingLinks.get(file.path) || [])].sort((a, b) => a.localeCompare(b, "zh-Hans-CN")),
+        excerpt: createIndexExcerpt(file.content),
+        bytes: file.size || 0,
+        modifiedAt: file.modified ? new Date(file.modified).toISOString() : "",
+        contentSha256: file.contentSha256 || "",
+      };
+      nextDocuments.set(file.path, { signature, document });
+      return document;
+    });
+  data.knowledgeDocuments = nextDocuments;
+  const workspaceCounts = new Map();
+  for (const document of documents) workspaceCounts.set(document.workspaceId, (workspaceCounts.get(document.workspaceId) || 0) + 1);
+  const workspaces = data.workspaces
+    .filter((workspace) => visibleWorkspaceIds.has(workspace.id))
+    .map((workspace) => ({
+      id: workspace.id,
+      name: workspace.name,
+      root: workspace.root,
+      documentCount: workspaceCounts.get(workspace.id) || 0,
+    }));
+  return {
+    schemaVersion: KNOWLEDGE_INDEX_SCHEMA_VERSION,
+    knowledgeVersion,
+    generatedAt: new Date().toISOString(),
+    purpose: "供 AI 大模型快速定位本地知识库文档、标签、语义概念和图谱关系；命中候选后再读取 absolutePath 对应原文。",
+    aiUsage: [
+      "先检索 documents 的 title、tags、headings、keywords 和 excerpt。",
+      "使用 outgoingLinks、backlinks、semanticConcepts 和 graph 扩展关联上下文。",
+      "最后按 absolutePath 读取少量候选原文，避免一次加载整个知识库。",
+    ],
+    library: {
+      defaultWorkspaceId: data.defaultWorkspaceId || DEFAULT_WORKSPACE_ID,
+      workspaceCount: workspaces.length,
+      documentCount: documents.length,
+      nodeCount: graph.nodes.length,
+      edgeCount: graph.edges.length,
+      tagCount: graph.nodes.filter((node) => node.kind === "tag").length,
+      semanticConceptCount: graph.nodes.filter((node) => node.kind === "keyword").length,
+      missingLinkCount: graph.nodes.filter((node) => node.kind === "missing").length,
+    },
+    workspaces,
+    documents,
+    graph: {
+      nodes: graph.nodes.map(({ id, label, kind, group, weight, degree, orphan, modified }) => ({ id, label, kind, group, weight, degree, orphan: Boolean(orphan), modified: modified || 0 })),
+      edges: graph.edges.map(({ source, target, type, weight, directed }) => ({ source, target, type, weight, directed: Boolean(directed) })),
+    },
+  };
+}
+
+async function writeKnowledgeIndex(data) {
+  const indexPath = path.join(DOCS_ROOT, KNOWLEDGE_INDEX_FILENAME);
+  await mkdir(DOCS_ROOT, { recursive: true });
+  const index = buildKnowledgeIndex(data);
+  const tempPath = path.join(DOCS_ROOT, `.${KNOWLEDGE_INDEX_FILENAME}.${process.pid}.${randomUUID()}.tmp`);
+  try {
+    await writeFile(tempPath, `${JSON.stringify(index, null, 2)}\n`, "utf8");
+    try {
+      await rename(tempPath, indexPath);
+    } catch (error) {
+      if (!["EEXIST", "EPERM", "ENOTEMPTY"].includes(error.code)) throw error;
+      await rm(indexPath, { force: true });
+      await rename(tempPath, indexPath);
+    }
+  } finally {
+    await rm(tempPath, { force: true }).catch(() => {});
+  }
+  return { indexPath, index };
+}
+
+async function loadKnowledgeIndexVersion() {
+  if (knowledgeIndexLoaded) return knowledgeIndexVersion;
+  knowledgeIndexLoaded = true;
+  try {
+    const existing = JSON.parse(await readFile(path.join(DOCS_ROOT, KNOWLEDGE_INDEX_FILENAME), "utf8"));
+    knowledgeIndexVersion = String(existing.knowledgeVersion || "");
+  } catch {
+    knowledgeIndexVersion = "";
+  }
+  return knowledgeIndexVersion;
+}
+
+function syncKnowledgeIndex() {
+  knowledgeIndexSyncPromise = knowledgeIndexSyncPromise
+    .catch(() => {})
+    .then(async () => {
+      await loadKnowledgeIndexVersion();
+      const version = refreshKnowledgeVersion(cache);
+      if (!version || version === knowledgeIndexVersion) return null;
+      const result = await writeKnowledgeIndex(cache);
+      knowledgeIndexVersion = result.index.knowledgeVersion || version;
+      return result;
+    })
+    .then((result) => {
+      if (cache.knowledgeVersion && cache.knowledgeVersion !== knowledgeIndexVersion) scheduleKnowledgeIndexSync();
+      return result;
+    });
+  return knowledgeIndexSyncPromise;
+}
+
+function scheduleKnowledgeIndexSync() {
+  const version = refreshKnowledgeVersion(cache);
+  if (!version || version === knowledgeIndexVersion) return;
+  clearTimeout(knowledgeIndexSyncTimer);
+  knowledgeIndexSyncTimer = setTimeout(() => {
+    knowledgeIndexSyncTimer = 0;
+    syncKnowledgeIndex().catch((error) => log("warn", `知识库主清单更新失败: ${error.message}`));
+  }, 450);
+}
+
+/* Retained below only as a migration reference; the active cache path is the
+   watcher-driven implementation after this block. */
+/*
+async function legacyRefreshCache(force = false) {
   await ensureDocs();
   const { workspaces, defaultWorkspaceId } = await loadWorkspaces();
   const visibleWorkspaces = workspaces.filter((workspace) => workspace.visible).slice(0, 2);
-  let latestMtime = 0;
-  for (const workspace of visibleWorkspaces) {
-    latestMtime = Math.max(latestMtime, await getLatestMtime(workspace.root));
-  }
-  if (!force && cache.stamp >= latestMtime && cache.files.length) return cache;
+  if (!force && cache.stamp) return cache;
   const tree = [];
   const files = [];
   for (const workspace of visibleWorkspaces) {
@@ -544,6 +1073,8 @@ async function refreshCache(force = false) {
     const { absolute, workspace } = await normalizeDocPath(item.path);
     try {
       const { text: content, encoding } = await readMarkdownFile(absolute);
+      item.title = extractTitle(content, item.name);
+      item.encoding = encoding;
       files.push({
         ...item,
         encoding,
@@ -561,8 +1092,264 @@ async function refreshCache(force = false) {
       }
     }
   }
-  cache = { stamp: Date.now(), files, tree, graph: buildGraph(files), workspaces, defaultWorkspaceId };
+  cache = { stamp: Date.now(), files, tree, graph: buildGraph(files), graphDirty: false, workspaces, defaultWorkspaceId };
+  try {
+    scheduleKnowledgeIndexSync();
+  } catch (error) {
+    log("warn", `知识库主清单更新失败: ${error.message}`);
+  }
   return cache;
+}
+
+async function legacyUpdateCachedDocument(normalized, content) {
+  const cachedFile = cache.files.find((file) => file.path === normalized.ref);
+  if (!cachedFile) return false;
+  const stats = await stat(normalized.absolute);
+  const title = extractTitle(content, path.basename(normalized.absolute));
+  const next = {
+    title,
+    encoding: "utf-8",
+    size: stats.size,
+    modified: stats.mtimeMs,
+    content,
+    plain: content.replace(/[#>*_`[\]()!-]/g, " "),
+    tags: extractTags(content),
+    terms: extractTerms(content),
+  };
+  Object.assign(cachedFile, next);
+  const treeFile = flattenTree(cache.tree).find((file) => file.path === normalized.ref);
+  if (treeFile) Object.assign(treeFile, {
+    title: next.title,
+    encoding: next.encoding,
+    size: next.size,
+    modified: next.modified,
+  });
+  cache.graphDirty = true;
+  cache.stamp = Math.max(Date.now(), stats.mtimeMs);
+  scheduleKnowledgeIndexSync();
+  return true;
+}
+*/
+
+function updateGraphDocumentNodes(graph, files) {
+  const byId = new Map(files.map((file) => [file.path, file]));
+  for (const node of graph.nodes) {
+    if (node.kind !== "doc") continue;
+    const file = byId.get(node.id);
+    if (!file) continue;
+    node.label = file.title;
+    node.group = file.workspaceName || file.workspaceId || "docs";
+    node.modified = file.modified || 0;
+  }
+  graph.stats.documents = files.length;
+  return graph;
+}
+
+function clearProcessedDirty(pending) {
+  for (const [absolute, version] of pending) {
+    if (dirtyVersions.get(absolute) !== version) continue;
+    dirtyVersions.delete(absolute);
+    dirtyPaths.delete(absolute);
+  }
+}
+
+async function rebuildTreeCache(workspaces, defaultWorkspaceId, pending) {
+  const visibleWorkspaces = workspaces.filter((workspace) => workspace.visible).slice(0, 2);
+  const previousFiles = cache.documentCache?.size
+    ? cache.documentCache
+    : new Map(cache.files.map((file) => [file.path, file]));
+  const tree = [];
+  const files = [];
+  const documentCache = new Map();
+  let relationChanged = !cache.stamp;
+  for (const workspace of visibleWorkspaces) {
+    if (!existsSync(workspace.root)) continue;
+    const children = await walk(workspace);
+    tree.push({
+      type: "workspace",
+      name: workspace.name,
+      path: workspaceRef(workspace.id),
+      workspaceId: workspace.id,
+      root: workspace.root,
+      children,
+    });
+  }
+  for (const item of flattenTree(tree)) {
+    const workspace = visibleWorkspaces.find((candidate) => candidate.id === item.workspaceId);
+    if (!workspace) continue;
+    const absolute = path.resolve(workspace.root, item.relative || "");
+    const previous = previousFiles.get(item.path);
+    try {
+      const next = await hydrateDocument(item, workspace, previous, pending.has(absolute));
+      if (!previous || previous.relationSignature !== next.relationSignature) relationChanged = true;
+      files.push(next);
+      documentCache.set(next.path, next);
+    } catch (error) {
+      if (["ENOENT", "EPERM", "EACCES"].includes(error.code)) {
+        log("debug", `跳过暂不可读文件: ${absolute}`);
+        markStructureDirty();
+        continue;
+      }
+      throw error;
+    }
+  }
+  if (previousFiles.size !== documentCache.size || [...previousFiles.keys()].some((key) => !documentCache.has(key))) relationChanged = true;
+  const graph = relationChanged || !cache.graph?.nodes?.length
+    ? buildGraph(files)
+    : updateGraphDocumentNodes(cache.graph, files);
+  const nextGraphVersion = relationChanged ? (cache.graphVersion || 0) + 1 : cache.graphVersion || 0;
+  cache = {
+    ...cache,
+    stamp: Date.now(),
+    files,
+    tree,
+    graph,
+    graphDirty: false,
+    graphVersion: nextGraphVersion,
+    graphProjection: relationChanged ? null : cache.graphProjection,
+    documentCache,
+    workspaces,
+    defaultWorkspaceId,
+  };
+  clearProcessedDirty(pending);
+  scheduleKnowledgeIndexSync();
+  return { relationChanged, visibleWorkspaces };
+}
+
+async function applyDirtyDocuments(workspaces, pending) {
+  const visibleWorkspaces = workspaces.filter((workspace) => workspace.visible).slice(0, 2);
+  let relationChanged = false;
+  let requiresStructure = false;
+  for (const [absolute, version] of pending) {
+    const workspace = workspaceForAbsolute(visibleWorkspaces, absolute);
+    if (!workspace) continue;
+    const relative = path.relative(workspace.root, absolute).replace(/\\/g, "/");
+    if (!relative.toLowerCase().endsWith(".md")) {
+      requiresStructure = true;
+      continue;
+    }
+    const ref = workspaceRef(workspace.id, relative);
+    const previous = cache.documentCache.get(ref) || cache.files.find((file) => file.path === ref);
+    if (!previous) {
+      requiresStructure = true;
+      continue;
+    }
+    let stats;
+    try { stats = await stat(absolute); } catch (error) {
+      if (error.code === "ENOENT") requiresStructure = true;
+      continue;
+    }
+    if (!stats.isFile()) {
+      requiresStructure = true;
+      continue;
+    }
+    const item = {
+      ...previous,
+      type: "file",
+      name: path.basename(relative),
+      relative,
+      size: stats.size,
+      modified: stats.mtimeMs,
+    };
+    const next = await hydrateDocument(item, workspace, previous, true);
+    relationChanged ||= previous.relationSignature !== next.relationSignature;
+    const index = cache.files.findIndex((file) => file.path === ref);
+    if (index >= 0) cache.files[index] = next;
+    cache.documentCache.set(ref, next);
+    const treeFile = flattenTree(cache.tree).find((file) => file.path === ref);
+    if (treeFile) Object.assign(treeFile, { title: next.title, encoding: next.encoding, size: next.size, modified: next.modified });
+    if (dirtyVersions.get(absolute) === version) {
+      dirtyVersions.delete(absolute);
+      dirtyPaths.delete(absolute);
+    }
+  }
+  if (requiresStructure) markStructureDirty();
+  if (relationChanged) {
+    cache.graphDirty = true;
+    cache.graphProjection = null;
+  } else if (cache.graph?.nodes?.length) {
+    updateGraphDocumentNodes(cache.graph, cache.files);
+  }
+  if (pending.size) {
+    cache.stamp = Date.now();
+    scheduleKnowledgeIndexSync();
+  }
+  return { relationChanged, requiresStructure };
+}
+
+async function refreshCacheInternal() {
+  await ensureDocs();
+  const { workspaces, defaultWorkspaceId } = await loadWorkspaces();
+  const visibleWorkspaces = workspaces.filter((workspace) => workspace.visible).slice(0, 2);
+  const expectedSignature = visibleWorkspaces.map((workspace) => `${workspace.id}|${path.resolve(workspace.root)}`).join("\n");
+  if (cache.stamp && expectedSignature !== watcherSignature) markStructureDirty();
+  await installWorkspaceWatchers(workspaces);
+  const pending = new Map([...dirtyPaths].map((absolute) => [absolute, dirtyVersions.get(absolute)]));
+  if (!cache.stamp || structureDirty) {
+    const generation = structureGeneration;
+    const result = await rebuildTreeCache(workspaces, defaultWorkspaceId, pending);
+    if (structureGeneration === generation) structureDirty = false;
+    if (result.visibleWorkspaces.length) await installWorkspaceWatchers(workspaces, true);
+    return cache;
+  }
+  if (pending.size) await applyDirtyDocuments(workspaces, pending);
+  return cache;
+}
+
+async function refreshCache(force = false) {
+  if (force) markStructureDirty();
+  if (cacheRefreshPromise) return cacheRefreshPromise;
+  cacheRefreshPromise = (async () => {
+    let attempts = 0;
+    do {
+      await refreshCacheInternal();
+      attempts += 1;
+    } while (attempts < 3 && (structureDirty || dirtyPaths.size));
+    return cache;
+  })()
+    .finally(() => { cacheRefreshPromise = null; });
+  return cacheRefreshPromise;
+}
+
+async function updateCachedDocument(normalized, content) {
+  const cachedFile = cache.documentCache.get(normalized.ref) || cache.files.find((file) => file.path === normalized.ref);
+  if (!cachedFile) return false;
+  const stats = await stat(normalized.absolute);
+  const tags = extractTags(content);
+  const terms = extractTerms(content);
+  const relationSignature = documentRelationSignature(content, tags, terms);
+  const next = {
+    ...cachedFile,
+    title: extractTitle(content, path.basename(normalized.absolute)),
+    encoding: "utf-8",
+    size: stats.size,
+    modified: stats.mtimeMs,
+    content,
+    contentSha256: createHash("sha256").update(Buffer.from(content, "utf8")).digest("hex"),
+    plain: content.replace(/[#>*_`[\]()!-]/g, " "),
+    tags,
+    terms,
+    relationSignature,
+  };
+  const index = cache.files.findIndex((file) => file.path === normalized.ref);
+  if (index >= 0) cache.files[index] = next;
+  cache.documentCache.set(normalized.ref, next);
+  const treeFile = flattenTree(cache.tree).find((file) => file.path === normalized.ref);
+  if (treeFile) Object.assign(treeFile, {
+    title: next.title,
+    encoding: next.encoding,
+    size: next.size,
+    modified: next.modified,
+  });
+  if (cachedFile.relationSignature !== relationSignature) {
+    cache.graphDirty = true;
+    cache.graphProjection = null;
+  } else if (cache.graph?.nodes?.length) {
+    updateGraphDocumentNodes(cache.graph, cache.files);
+  }
+  cache.stamp = Date.now();
+  scheduleKnowledgeIndexSync();
+  return true;
 }
 
 function search(files, query) {
@@ -889,7 +1676,16 @@ async function handleApi(req, res, url) {
 
   const data = await refreshCache(url.searchParams.get("refresh") === "1");
   if (url.pathname === "/api/tree") return json(res, 200, { tree: data.tree, count: data.files.length, workspaces: data.workspaces, defaultWorkspaceId: data.defaultWorkspaceId || "default" });
-  if (url.pathname === "/api/graph") return json(res, 200, data.graph);
+  if (url.pathname === "/api/graph") {
+    if (data.graphDirty) {
+      data.graph = buildGraph(data.files);
+      data.graphDirty = false;
+      data.graphVersion = (data.graphVersion || 0) + 1;
+      data.graphProjection = null;
+      scheduleKnowledgeIndexSync();
+    }
+    return json(res, 200, data.graph);
+  }
   if (url.pathname === "/api/search") return json(res, 200, { results: search(data.files, url.searchParams.get("q") || "") });
   if (url.pathname === "/api/doc") {
     const docPath = url.searchParams.get("path");
@@ -938,7 +1734,8 @@ async function handleApi(req, res, url) {
       return json(res, 500, { error: `保存文件失败: ${e.message}` });
     }
     try {
-      await refreshCache(true);
+      const updated = await updateCachedDocument(normalized, String(payload.content ?? ""));
+      if (!updated) await refreshCache(true);
     } catch (e) {
       log("error", `Failed to refresh cache after save: ${e.message}`);
     }
@@ -1057,9 +1854,36 @@ async function handleApi(req, res, url) {
     const { absolute, ref } = await normalizeDocPath(workspaceRef(parentPath.workspace.id, relativePath));
     if (existsSync(absolute)) return json(res, 409, { error: "Document already exists" });
     await mkdir(path.dirname(absolute), { recursive: true });
-    await writeFile(absolute, `# ${name}\n\n`, "utf8");
+    await writeFile(absolute, documentTemplate(name), "utf8");
     await refreshCache(true);
     return json(res, 200, { ok: true, path: ref });
+  }
+  if (url.pathname === "/api/semantic-tags" && req.method === "POST") {
+    const payload = await readJson(req);
+    const data = await refreshCache();
+    const visibleWorkspaces = data.workspaces.filter((item) => item.visible).slice(0, 2);
+    const selectedWorkspaceIds = Array.isArray(payload.workspaceIds) && payload.workspaceIds.length
+      ? payload.workspaceIds.map((id) => String(id))
+      : visibleWorkspaces.map((item) => item.id);
+    const selectedFiles = data.files.filter((file) => selectedWorkspaceIds.includes(file.workspaceId));
+    const maxTags = Math.max(1, Math.min(5, Number(payload.maxTags || 3)));
+    const changes = suggestSemanticTags(selectedFiles, maxTags);
+    if (payload.apply === true) {
+      let applied = 0;
+      for (const change of changes) {
+        const normalized = await normalizeDocPath(change.path);
+        await writeFile(normalized.absolute, change.content, "utf8");
+        await updateCachedDocument(normalized, change.content);
+        applied += 1;
+      }
+      return json(res, 200, { ok: true, applied, changed: changes.length });
+    }
+    return json(res, 200, {
+      ok: true,
+      total: selectedFiles.length,
+      changed: changes.length,
+      changes: changes.slice(0, 60).map(({ path: filePath, title, before, after }) => ({ path: filePath, title, before, after })),
+    });
   }
   if (url.pathname === "/api/normalize-md" && req.method === "POST") {
     const payload = await readJson(req);
@@ -1161,7 +1985,9 @@ async function serveStatic(res, pathname) {
     const { absolute } = normalizeSourcePath(pathname.slice("/source/".length));
     try {
       const body = await readFile(absolute);
-      return send(res, 200, body, mimeTypes[path.extname(absolute).toLowerCase()] || "application/octet-stream");
+      return send(res, 200, body, mimeTypes[path.extname(absolute).toLowerCase()] || "application/octet-stream", {
+        "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
+      });
     } catch {
       return send(res, 404, "Not found", "text/plain; charset=utf-8");
     }
@@ -1169,10 +1995,14 @@ async function serveStatic(res, pathname) {
 
   const clean = pathname === "/" ? "/index.html" : pathname;
   const absolute = path.resolve(PUBLIC_ROOT, `.${decodeURIComponent(clean)}`);
-  if (!absolute.startsWith(path.resolve(PUBLIC_ROOT))) return send(res, 403, "Forbidden", "text/plain");
+  if (!isInside(PUBLIC_ROOT, absolute)) return send(res, 403, "Forbidden", "text/plain");
   try {
     const body = await readFile(absolute);
-    send(res, 200, body, mimeTypes[path.extname(absolute)] || "application/octet-stream");
+    const extension = path.extname(absolute).toLowerCase();
+    const cacheable = [".css", ".js", ".webp"].includes(extension);
+    send(res, 200, body, mimeTypes[extension] || "application/octet-stream", cacheable ? {
+      "Cache-Control": "public, max-age=31536000, immutable",
+    } : undefined);
   } catch {
     send(res, 404, "Not found", "text/plain; charset=utf-8");
   }
