@@ -65,6 +65,8 @@ try {
     Write-Step "Validating project and version metadata"
     $requiredFiles = @(
         "server.js",
+        "package.json",
+        "server",
         "version.json",
         "public",
         "public\qqqun.webp",
@@ -110,10 +112,18 @@ try {
         $node = Get-Command node.exe -ErrorAction SilentlyContinue
         if ($node) {
             Write-Step "Checking JavaScript syntax"
-            & $node.Source --check (Join-Path $projectRoot "server.js")
-            if ($LASTEXITCODE -ne 0) { throw "server.js syntax check failed." }
-            & $node.Source --check (Join-Path $projectRoot "public\app.js")
-            if ($LASTEXITCODE -ne 0) { throw "public\app.js syntax check failed." }
+            $javascriptFiles = @(
+                "server.js",
+                "server\rag.js",
+                "server\frontmatter.js",
+                "server\agent-policy.js",
+                "public\app.js",
+                "public\graph-worker.js"
+            )
+            foreach ($javascriptFile in $javascriptFiles) {
+                & $node.Source --check (Join-Path $projectRoot $javascriptFile)
+                if ($LASTEXITCODE -ne 0) { throw "$javascriptFile syntax check failed." }
+            }
         } else {
             Write-Warning "Node.js was not found. JavaScript syntax checks were skipped; the installed app still requires Node.js."
         }
@@ -140,6 +150,8 @@ try {
 
     Write-Step "Assembling and validating payload.zip"
     Copy-PayloadItem "server.js"
+    Copy-PayloadItem "package.json"
+    Copy-PayloadItem "server"
     Copy-PayloadItem "version.json"
     Copy-PayloadItem "public"
     Copy-PayloadItem "docs"
@@ -154,6 +166,10 @@ try {
         $entries = @($archive.Entries | ForEach-Object { $_.FullName.Replace('\', '/') })
         $requiredPayloadEntries = @(
             "server.js",
+            "package.json",
+            "server/rag.js",
+            "server/frontmatter.js",
+            "server/agent-policy.js",
             "version.json",
             "MyTempleKnowledge.exe",
             "public/index.html",

@@ -4,6 +4,9 @@ import { cp, readFile, writeFile, readdir, stat, mkdir, rm, rename } from "node:
 import { existsSync, readFileSync, watch } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createDocumentTemplate, frontmatterSummary, normalizeFrontmatter } from "./server/frontmatter.js";
+import { agentPolicyPath, appendAuditRecord, defaultAgentRules, loadAgentPolicy, policyAllows } from "./server/agent-policy.js";
+import { RagService } from "./server/rag.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DOCS_ROOT = process.env.MYTEMPLE_DOCS_ROOT || path.join(__dirname, "docs");
@@ -16,6 +19,7 @@ const WORKSPACE_CONFIG = path.join(DATA_ROOT, "workspaces.json");
 const PORT = Number(process.env.PORT || 4173);
 const KNOWLEDGE_INDEX_FILENAME = "知识库主清单.json";
 const KNOWLEDGE_INDEX_SCHEMA_VERSION = 1;
+const ragService = new RagService(DATA_ROOT, log);
 
 let cache = {
   stamp: 0,
@@ -567,8 +571,7 @@ function extractTags(text) {
 }
 
 function documentTemplate(name) {
-  const today = new Date().toISOString().slice(0, 10);
-  return `---\ntags:\n  - 待分类\ncreated: ${today}\n---\n\n# ${name}\n\n`;
+  return createDocumentTemplate(name);
 }
 
 function cleanSuggestedTag(value) {
@@ -1047,6 +1050,12 @@ function scheduleKnowledgeIndexSync() {
   }, 450);
 }
 
+function scheduleRagIndex(data = cache, force = false) {
+  if (!ragService.loaded) return;
+  const version = refreshKnowledgeVersion(data);
+  ragService.schedule(data.files, version, { force });
+}
+
 /* Retained below only as a migration reference; the active cache path is the
    watcher-driven implementation after this block. */
 /*
@@ -1305,6 +1314,7 @@ async function refreshCache(force = false) {
       await refreshCacheInternal();
       attempts += 1;
     } while (attempts < 3 && (structureDirty || dirtyPaths.size));
+    scheduleRagIndex(cache);
     return cache;
   })()
     .finally(() => { cacheRefreshPromise = null; });
@@ -1349,6 +1359,7 @@ async function updateCachedDocument(normalized, content) {
   }
   cache.stamp = Date.now();
   scheduleKnowledgeIndexSync();
+  scheduleRagIndex(cache);
   return true;
 }
 
@@ -1441,6 +1452,23 @@ async function addWorkspace(rootInput, nameInput = "") {
   await saveWorkspaces(workspaces);
   cache.stamp = 0;
   return workspaces.find((item) => item.id === id);
+}
+
+async function atomicWriteText(absolute, content) {
+  const tempPath = path.join(path.dirname(absolute), `.${path.basename(absolute)}.${process.pid}.${randomUUID()}.tmp`);
+  await mkdir(path.dirname(absolute), { recursive: true });
+  try {
+    await writeFile(tempPath, content, "utf8");
+    try {
+      await rename(tempPath, absolute);
+    } catch (error) {
+      if (!["EEXIST", "EPERM", "ENOTEMPTY"].includes(error.code)) throw error;
+      await rm(absolute, { force: true });
+      await rename(tempPath, absolute);
+    }
+  } finally {
+    await rm(tempPath, { force: true }).catch(() => {});
+  }
 }
 
 async function readBody(req) {
@@ -1675,6 +1703,182 @@ async function handleApi(req, res, url) {
   }
 
   const data = await refreshCache(url.searchParams.get("refresh") === "1");
+  const currentKnowledgeVersion = refreshKnowledgeVersion(data);
+
+  if (url.pathname === "/api/ai/status") {
+    await ragService.initialize();
+    ragService.schedule(data.files, currentKnowledgeVersion);
+    return json(res, 200, ragService.status());
+  }
+  if (url.pathname === "/api/ai/test" && req.method === "POST") {
+    try {
+      const payload = await readJson(req);
+      const result = await ragService.discoverModels(payload.baseUrl);
+      return json(res, 200, result);
+    } catch (error) {
+      return json(res, 503, { error: `无法连接本地 AI 服务：${error.message}` });
+    }
+  }
+  if (url.pathname === "/api/ai/config" && req.method === "POST") {
+    const payload = await readJson(req);
+    try {
+      const result = await ragService.updateSettings(payload);
+      if (result.rebuildRequired) ragService.schedule(data.files, currentKnowledgeVersion, { force: true });
+      return json(res, 200, { ok: true, ...result, status: ragService.status() });
+    } catch (error) {
+      return json(res, 400, { error: error.message });
+    }
+  }
+  if (url.pathname === "/api/ai/reindex" && req.method === "POST") {
+    await ragService.initialize();
+    ragService.schedule(data.files, currentKnowledgeVersion, { force: true });
+    return json(res, 202, { ok: true, status: ragService.status() });
+  }
+  if (url.pathname === "/api/ai/query" && req.method === "POST") {
+    const payload = await readJson(req);
+    await ragService.ensure(data.files, currentKnowledgeVersion);
+    const scopedFile = payload.scope === "current" ? data.files.find((file) => file.path === payload.path) : null;
+    const policyWorkspaces = scopedFile
+      ? data.workspaces.filter((workspace) => workspace.id === scopedFile.workspaceId)
+      : data.workspaces.filter((workspace) => workspace.visible);
+    const policies = await Promise.all(policyWorkspaces.map((workspace) => loadAgentPolicy(workspace.root).catch(() => null)));
+    try {
+      const result = await ragService.ask(payload.question, {
+        scope: payload.scope === "current" ? "current" : "all",
+        path: scopedFile?.path || "",
+        policyInstructions: policies.filter(Boolean).map((policy) => policy.instructions).filter(Boolean).join("\n\n"),
+      });
+      return json(res, 200, result);
+    } catch (error) {
+      return json(res, 400, { error: error.message });
+    }
+  }
+
+  if (url.pathname === "/api/frontmatter" && req.method === "GET") {
+    const target = data.files.find((file) => file.path === url.searchParams.get("path"));
+    if (!target) return json(res, 404, { error: "文档不存在" });
+    return json(res, 200, { path: target.path, contentSha256: target.contentSha256, ...frontmatterSummary(target.content) });
+  }
+  if (url.pathname === "/api/frontmatter/preview" && req.method === "POST") {
+    const payload = await readJson(req);
+    const target = data.files.find((file) => file.path === payload.path);
+    if (!target) return json(res, 404, { error: "文档不存在" });
+    const content = normalizeFrontmatter(target.content, payload.metadata || {});
+    return json(res, 200, {
+      path: target.path,
+      baseHash: target.contentSha256,
+      changed: content !== target.content,
+      before: target.content.match(/^---[ \t]*\r?\n[\s\S]*?\r?\n---/)?.[0] || "（当前文档没有 Frontmatter）",
+      after: content.match(/^---[ \t]*\r?\n[\s\S]*?\r?\n---/)?.[0] || "",
+      summary: frontmatterSummary(content),
+    });
+  }
+  if (url.pathname === "/api/frontmatter/apply" && req.method === "POST") {
+    const payload = await readJson(req);
+    if (payload.confirmed !== true) return json(res, 400, { error: "必须先预览并确认变更" });
+    const normalized = await normalizeDocPath(String(payload.path || ""));
+    const current = await readMarkdownFile(normalized.absolute);
+    const currentHash = current.hash || createHash("sha256").update(Buffer.from(current.text, "utf8")).digest("hex");
+    if (!payload.baseHash || payload.baseHash !== currentHash) return json(res, 409, { error: "文档已发生变化，请重新预览" });
+    const content = normalizeFrontmatter(current.text, payload.metadata || {});
+    if (content === current.text) return json(res, 200, { ok: true, changed: false, path: normalized.ref });
+    const backupDir = path.join(DATA_ROOT, "backups", new Date().toISOString().slice(0, 10));
+    await mkdir(backupDir, { recursive: true });
+    const backupPath = path.join(backupDir, `${Date.now()}-${path.basename(normalized.absolute)}.bak`);
+    await writeFile(backupPath, current.text, "utf8");
+    await atomicWriteText(normalized.absolute, content);
+    await updateCachedDocument(normalized, content).catch(() => false);
+    await appendAuditRecord(DATA_ROOT, {
+      action: "frontmatter.normalize",
+      path: normalized.ref,
+      beforeHash: currentHash,
+      afterHash: createHash("sha256").update(Buffer.from(content, "utf8")).digest("hex"),
+      backupPath,
+    });
+    return json(res, 200, { ok: true, changed: true, path: normalized.ref });
+  }
+
+  if (url.pathname === "/api/agent/policy" && req.method === "GET") {
+    const workspaceId = url.searchParams.get("workspaceId") || data.defaultWorkspaceId;
+    const workspace = data.workspaces.find((item) => item.id === workspaceId);
+    if (!workspace) return json(res, 404, { error: "工作区不存在" });
+    return json(res, 200, await loadAgentPolicy(workspace.root));
+  }
+  if (url.pathname === "/api/agent/policy/create" && req.method === "POST") {
+    const payload = await readJson(req);
+    if (payload.confirmed !== true) return json(res, 400, { error: "创建规则文件前需要确认" });
+    const workspace = data.workspaces.find((item) => item.id === (payload.workspaceId || data.defaultWorkspaceId));
+    if (!workspace) return json(res, 404, { error: "工作区不存在" });
+    const policyPath = agentPolicyPath(workspace.root);
+    if (existsSync(policyPath)) return json(res, 409, { error: "规则文件已经存在" });
+    await mkdir(path.dirname(policyPath), { recursive: true });
+    await atomicWriteText(policyPath, defaultAgentRules());
+    await appendAuditRecord(DATA_ROOT, { action: "agent.policy.create", workspaceId: workspace.id, path: policyPath });
+    return json(res, 200, { ok: true, policy: await loadAgentPolicy(workspace.root) });
+  }
+  if (url.pathname === "/api/agent/action/preview" && req.method === "POST") {
+    const payload = await readJson(req);
+    const action = String(payload.action || "replace").toLowerCase();
+    if (!["create", "replace"].includes(action)) return json(res, 400, { error: "仅支持 create 或 replace 动作" });
+    const normalized = await normalizeDocPath(String(payload.path || ""));
+    if (!normalized.relative.toLowerCase().endsWith(".md")) return json(res, 400, { error: "AI 只能维护 Markdown 文档" });
+    const policy = await loadAgentPolicy(normalized.workspace.root);
+    if (policy.writeMode === "readonly") return json(res, 403, { error: "当前工作区规则为只读" });
+    if (!policyAllows(policy, normalized.relative)) return json(res, 403, { error: "规则文件不允许维护该路径" });
+    const exists = existsSync(normalized.absolute);
+    if (action === "create" && exists) return json(res, 409, { error: "目标文档已经存在" });
+    if (action === "replace" && !exists) return json(res, 404, { error: "目标文档不存在" });
+    const current = exists ? await readMarkdownFile(normalized.absolute) : { text: "", hash: "" };
+    const content = String(payload.content || "");
+    const afterHash = createHash("sha256").update(Buffer.from(content, "utf8")).digest("hex");
+    return json(res, 200, {
+      action,
+      path: normalized.ref,
+      baseHash: current.hash || "",
+      afterHash,
+      changed: current.text !== content,
+      before: current.text,
+      after: content,
+      policy: { writeMode: policy.writeMode, maxFilesPerAction: policy.maxFilesPerAction },
+    });
+  }
+  if (url.pathname === "/api/agent/action/apply" && req.method === "POST") {
+    const payload = await readJson(req);
+    if (payload.confirmed !== true) return json(res, 400, { error: "AI 文档写入必须经过用户确认" });
+    const action = String(payload.action || "replace").toLowerCase();
+    if (!["create", "replace"].includes(action)) return json(res, 400, { error: "仅支持 create 或 replace 动作" });
+    const normalized = await normalizeDocPath(String(payload.path || ""));
+    if (!normalized.relative.toLowerCase().endsWith(".md")) return json(res, 400, { error: "AI 只能维护 Markdown 文档" });
+    const policy = await loadAgentPolicy(normalized.workspace.root);
+    if (policy.writeMode === "readonly" || !policyAllows(policy, normalized.relative)) return json(res, 403, { error: "规则文件禁止本次写入" });
+    const exists = existsSync(normalized.absolute);
+    if (action === "create" && exists) return json(res, 409, { error: "目标文档已经存在" });
+    if (action === "replace" && !exists) return json(res, 404, { error: "目标文档不存在" });
+    const current = exists ? await readMarkdownFile(normalized.absolute) : { text: "", hash: "" };
+    if (String(payload.baseHash || "") !== String(current.hash || "")) return json(res, 409, { error: "文档已发生变化，请重新预览" });
+    const content = String(payload.content || "");
+    const afterHash = createHash("sha256").update(Buffer.from(content, "utf8")).digest("hex");
+    if (payload.afterHash !== afterHash) return json(res, 409, { error: "应用内容与预览内容不一致" });
+    let backupPath = "";
+    if (exists) {
+      const backupDir = path.join(DATA_ROOT, "backups", new Date().toISOString().slice(0, 10));
+      await mkdir(backupDir, { recursive: true });
+      backupPath = path.join(backupDir, `${Date.now()}-${path.basename(normalized.absolute)}.bak`);
+      await writeFile(backupPath, current.text, "utf8");
+    }
+    await atomicWriteText(normalized.absolute, content);
+    const updated = await updateCachedDocument(normalized, content).catch(() => false);
+    if (!updated) await refreshCache(true);
+    await appendAuditRecord(DATA_ROOT, {
+      action: `agent.${action}`,
+      path: normalized.ref,
+      beforeHash: current.hash || "",
+      afterHash,
+      backupPath,
+    });
+    return json(res, 200, { ok: true, path: normalized.ref, afterHash, backupPath: Boolean(backupPath) });
+  }
+
   if (url.pathname === "/api/tree") return json(res, 200, { tree: data.tree, count: data.files.length, workspaces: data.workspaces, defaultWorkspaceId: data.defaultWorkspaceId || "default" });
   if (url.pathname === "/api/graph") {
     if (data.graphDirty) {
