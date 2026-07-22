@@ -1,6 +1,6 @@
 {
-  "version": "1.1.5",
-  "downloadUrl": "https://github.com/fshby/fshby.github.com.mytemple/releases/download/v1.1.5/MyTempleKnowledge_Setup_v1.1.5.exe",
-  "releaseNotes": "1.1.5 更新说明：\n- 新增知识神经网络与文档标记使用指南。\n- 新增文档编写与管理规范及可复制模板。\n- 默认使用说明随安装包释放到安装目录的 docs 文件夹。\n- 新增供 AI 快速读取的知识库主清单，随知识库刷新同步更新文档索引和完整图谱关系。\n- 目录树改为折叠懒挂载，展开时才创建子节点；文档选择、多选和工作区切换采用局部状态更新。\n- 阅读模式三级目录默认折叠，支持展开和点击跳转。\n- 图谱领域深度改为全部层级与当前文档邻域的直观切换。\n- 修复图谱拖动到底部时 Canvas 旧帧残留和重复渲染。\n- 优化设置弹窗响应式布局，支持 100% 浏览器窗口完整显示。\n- 新增安装包内置的只读沟通群入口，二维码随安装包发布且不可在界面修改。\n- 优化赞助入口、编辑预览、图谱空闲仿真和文件校验性能。\n- 图谱仿真复用节点索引、邻接表、弹簧边、力缓冲区与空间网格，并按拖动、活跃、空闲和图谱规模自适应帧率。\n- 图谱主干构建与初始力导向布局迁移至 Web Worker，失败时自动回退主线程算法。\n- 超过 100KB 的文档默认关闭实时预览，主动开启后在停止输入 700ms 后更新。\n- 图谱模式关闭高开销背景模糊并减少阴影，主要面板增加布局与绘制隔离。\n- CSS、JavaScript、WebP 启用静态缓存，HTML 与 API 保持不缓存。\n- 服务端改用 fs.watch 脏路径监听与单文档增量解析，复用文档哈希、语义和图谱缓存。\n- AI 主清单采用知识库版本哈希，仅内容或结构变化时异步原子写入。\n- 兼容 GitHub Markdown 任务清单，支持点击勾选或取消并同步保存原始 Markdown。",
+  "version": "1.1.6",
+  "downloadUrl": "https://github.com/fshby/fshby.github.com.mytemple/releases/download/v1.1.6/MyTempleKnowledge_Setup_v1.1.6.exe",
+  "releaseNotes": "1.1.6 P0：\n- 新增本地 RAG 语义检索与来源溯源，支持点击来源跳转原文。\n- 增量生成 Markdown 分块索引，Ollama 不可用时自动降级关键词检索。\n- 新增 Ollama 连接检测、模型配置、索引状态和后台重建。\n- 新增 mytemple/v1 Frontmatter 标准化预览、确认、备份和审计。\n- 新增 .mytemple/AGENTS.md 规则文件基础，默认确认写入模式。\n- 保持现有阅读、编辑、图谱、工作区和安装包流程不变。",
   "releaseDate": "2026-07-22"
 }

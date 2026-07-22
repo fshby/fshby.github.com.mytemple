@@ -3696,3 +3696,60 @@ body[data-theme="image"] .app-shell {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* P0 local RAG surface: an overlay keeps the editor and graph layout stable. */
+.ai-drawer {
+  position: fixed;
+  z-index: 40;
+  top: 0;
+  right: 0;
+  width: min(430px, calc(100vw - 24px));
+  height: 100dvh;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  color: var(--text);
+  background: color-mix(in srgb, var(--surface-1) 96%, transparent);
+  border-left: 1px solid var(--hairline);
+  box-shadow: -20px 0 50px color-mix(in srgb, #000 18%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+.ai-drawer.hidden { display: none; }
+.ai-drawer-head, .ai-scope-row, .ai-composer { padding: 14px 16px; }
+.ai-drawer-head { display: flex; align-items: flex-start; justify-content: space-between; border-bottom: 1px solid var(--hairline); }
+.ai-drawer-head > div { display: grid; gap: 5px; }
+.ai-drawer-head > button { width: 30px; height: 30px; padding: 0; font-size: 20px; }
+.ai-status-badge { width: fit-content; padding: 3px 8px; border-radius: 999px; color: var(--muted); background: var(--surface-2); font-size: 11px; }
+.ai-status-badge.ready { color: var(--accent-strong); background: color-mix(in srgb, var(--accent) 14%, var(--surface-2)); }
+.ai-status-badge.warn { color: var(--warning, #b7791f); }
+.ai-scope-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 1px solid var(--hairline); }
+.ai-scope-row label { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+.ai-scope-row select { min-width: 128px; }
+.ai-messages { display: flex; flex-direction: column; gap: 12px; overflow: auto; padding: 16px; contain: content; }
+.ai-empty { display: grid; gap: 8px; margin: auto 0; padding: 20px; color: var(--muted); text-align: center; border: 1px dashed var(--hairline); border-radius: 16px; }
+.ai-message { display: grid; gap: 8px; max-width: 96%; }
+.ai-message.user { align-self: flex-end; }
+.ai-message-bubble { padding: 11px 13px; border-radius: 14px; white-space: pre-wrap; line-height: 1.6; font-size: 13px; background: var(--surface-2); }
+.ai-message.user .ai-message-bubble { background: color-mix(in srgb, var(--accent) 17%, var(--surface-2)); }
+.ai-sources { display: grid; gap: 6px; }
+.ai-source { display: grid; gap: 3px; width: 100%; padding: 8px 10px; color: var(--text); text-align: left; border: 1px solid var(--hairline); border-radius: 10px; background: transparent; }
+.ai-source:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.ai-source-title { overflow: hidden; font-size: 12px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.ai-source-meta, .ai-source-excerpt { overflow: hidden; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.ai-composer { border-top: 1px solid var(--hairline); background: color-mix(in srgb, var(--surface-2) 70%, transparent); }
+.ai-composer textarea { width: 100%; min-height: 74px; resize: vertical; }
+.ai-composer > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; }
+.ai-composer span { color: var(--muted); font-size: 11px; }
+.setting-field { display: grid; grid-template-columns: 76px minmax(0, 1fr); align-items: center; gap: 8px; }
+.setting-field > span { color: var(--muted); font-size: 12px; }
+.setting-field input { min-width: 0; }
+.inline-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.ai-settings-section, .ai-governance-section { grid-column: 1 / -1; }
+.frontmatter-dialog { width: min(980px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; }
+.frontmatter-diff { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.frontmatter-diff section { min-width: 0; display: grid; gap: 6px; }
+.frontmatter-diff pre { max-height: 48dvh; overflow: auto; margin: 0; padding: 12px; color: var(--muted); border: 1px solid var(--hairline); border-radius: 10px; background: var(--surface-2); white-space: pre-wrap; word-break: break-word; font: 12px/1.55 "Cascadia Code", Consolas, monospace; }
+@media (max-width: 720px) {
+  .frontmatter-diff { grid-template-columns: 1fr; }
+  .ai-drawer { width: 100vw; }
+}
