@@ -8,6 +8,10 @@ const text = {
   deleteConfirm: "\u786e\u5b9a\u5220\u9664\u5f53\u524d\u9879\u5417\uff1f",
 };
 
+const LARGE_PREVIEW_BYTES = 100 * 1024;
+const LARGE_PREVIEW_DELAY = 700;
+const GRAPH_WORKER_URL = "/graph-worker.js?v=20260722-worker-1";
+
 const state = {
   tree: [],
   flatFiles: [],
@@ -15,7 +19,42 @@ const state = {
   currentContent: "",
   mode: "view",
   graph: { nodes: [], edges: [] },
+  graphSource: null,
+  graphLayouts: new Map(),
+  graphLayoutPromises: new Map(),
+  graphLayoutSeq: 0,
+  graphWorker: null,
+  graphWorkerFailed: false,
+  graphWorkerSeq: 0,
+  graphWorkerPending: new Map(),
   graphReady: false,
+  graphView: {
+    visibleNodes: [],
+    visibleEdges: [],
+    scale: 1,
+    tx: 0,
+    ty: 0,
+    hoveredId: "",
+    query: "",
+    scope: "global",
+    depth: 2,
+    showTags: true,
+    showKeywords: true,
+    showOrphans: false,
+    showMissing: true,
+    dynamic: localStorage.getItem("graphDynamic") !== "0",
+    frame: 0,
+    relaxFrame: 0,
+    simulationFrame: 0,
+    simulationTimer: 0,
+    simulationLastTime: 0,
+    simulationCache: null,
+    motionTime: 0,
+    chainUntil: 0,
+    reboundUntil: 0,
+    reboundAnimation: 0,
+    fitted: false,
+  },
   selectedNode: "",
   selectedFolder: "",
   multiSelected: new Set(),
@@ -42,6 +81,16 @@ const state = {
   toastTimer: 0,
   recentDocs: [],
   secondaryCursors: [],
+  immersive: false,
+  previewVisible: true,
+  previewBeforeImmersive: true,
+  previewTimer: 0,
+  previewLastContent: "",
+  currentContentBytes: 0,
+  largeDocument: false,
+  previewAutoHidden: false,
+  taskSaveQueue: Promise.resolve(),
+  semanticTagPreview: null,
 };
 
 const els = {
@@ -64,7 +113,21 @@ const els = {
   graphBtn: document.querySelector("#graphBtn"),
   deleteBtn: document.querySelector("#deleteBtn"),
   saveBtn: document.querySelector("#saveBtn"),
+  focusModeBtn: document.querySelector("#focusModeBtn"),
+  previewToggleBtn: document.querySelector("#previewToggleBtn"),
   fitGraphBtn: document.querySelector("#fitGraphBtn"),
+  graphStats: document.querySelector("#graphStats"),
+  graphSearchInput: document.querySelector("#graphSearchInput"),
+  graphScope: document.querySelector("#graphScope"),
+  graphDepth: document.querySelector("#graphDepth"),
+  graphShowTags: document.querySelector("#graphShowTags"),
+  graphShowKeywords: document.querySelector("#graphShowKeywords"),
+  graphShowOrphans: document.querySelector("#graphShowOrphans"),
+  graphShowMissing: document.querySelector("#graphShowMissing"),
+  graphZoomOutBtn: document.querySelector("#graphZoomOutBtn"),
+  graphZoomInBtn: document.querySelector("#graphZoomInBtn"),
+  graphDynamic: document.querySelector("#graphDynamic"),
+  graphTooltip: document.querySelector("#graphTooltip"),
   formatBtn: document.querySelector("#formatBtn"),
   canvas: document.querySelector("#graphCanvas"),
   newFolderBtn: document.querySelector("#newFolderBtn"),
@@ -99,6 +162,10 @@ const els = {
   settingsBtn: document.querySelector("#settingsBtn"),
   settingsModal: document.querySelector("#settingsModal"),
   closeSettingsBtn: document.querySelector("#closeSettingsBtn"),
+  communityBtn: document.querySelector("#communityBtn"),
+  communityModal: document.querySelector("#communityModal"),
+  closeCommunityBtn: document.querySelector("#closeCommunityBtn"),
+  backCommunityBtn: document.querySelector("#backCommunityBtn"),
   aboutBtn: document.querySelector("#aboutBtn"),
   aboutModal: document.querySelector("#aboutModal"),
   closeAboutBtn: document.querySelector("#closeAboutBtn"),
@@ -136,9 +203,18 @@ const els = {
   cancelNormalizeMdBtn: document.querySelector("#cancelNormalizeMdBtn"),
   confirmNormalizeMdBtn: document.querySelector("#confirmNormalizeMdBtn"),
   normalizeStatus: document.querySelector("#normalizeStatus"),
+  semanticTagsBtn: document.querySelector("#semanticTagsBtn"),
+  semanticTagsStatus: document.querySelector("#semanticTagsStatus"),
+  semanticTagsModal: document.querySelector("#semanticTagsModal"),
+  semanticTagsMax: document.querySelector("#semanticTagsMax"),
+  semanticTagsPreview: document.querySelector("#semanticTagsPreview"),
+  cancelSemanticTagsBtn: document.querySelector("#cancelSemanticTagsBtn"),
+  applySemanticTagsBtn: document.querySelector("#applySemanticTagsBtn"),
   toast: document.querySelector("#toast"),
   recentDocs: document.querySelector("#recentDocs"),
 };
+
+if (els.graphDynamic) els.graphDynamic.checked = state.graphView.dynamic;
 
 const api = {
   async get(path) {
@@ -189,6 +265,7 @@ function applySettings(settings = loadSettings()) {
   [...els.themeChoices.querySelectorAll("[data-theme]")].forEach((button) => {
     button.classList.toggle("active", button.dataset.theme === settings.theme);
   });
+  if (state.mode === "graph") requestAnimationFrame(scheduleGraphDraw);
 }
 
 function loadRecentDocs() {
@@ -386,7 +463,7 @@ function extractOutline(source) {
     }
     
     const numHeading = line.match(/^(\s*)(\((?:\d{1,3})\)|(\d{1,3})([、.．)]))\s*([^-*].+)$/);
-    if (numHeading) {
+    if (numHeading && !/^\s*\d+[.)]\s+\[[ xX]\](?:\s|$)/.test(line)) {
       const level = 4;
       outline.push({ id: headingId(numHeading[5], `num-h4-${h4Index++}`), title: plainText(numHeading[5]), level });
     }
@@ -453,7 +530,7 @@ function formatDocument(source) {
     }
     
     const numHeading = line.match(/^(\s*)(\((?:\d{1,3})\)|(\d{1,3})([、.．)]))\s*(.+)$/);
-    if (numHeading) {
+    if (numHeading && !/^\s*\d+[.)]\s+\[[ xX]\](?:\s|$)/.test(line)) {
       const indent = numHeading[1].length;
       const indentLevel = Math.floor(indent / 4);
       const level = Math.min(6, Math.max(3, 3 + indentLevel));
@@ -479,9 +556,39 @@ function renderOutline(source) {
   const outline = extractOutline(source);
   els.readerPanel.classList.toggle("has-outline", outline.length > 0);
   els.readerOutline.classList.toggle("hidden", outline.length === 0);
-  els.readerOutline.innerHTML = outline.length
-    ? `<p class="reader-outline-title">\u672c\u6587\u76ee\u5f55</p>${outline.map((item) => `<button class="level-${item.level}" data-heading="${escapeHtml(item.id)}" data-level="${item.level}" data-title="${escapeHtml(item.title)}" title="${escapeHtml(item.title)}">${escapeHtml(compactName(item.title, 22))}</button>`).join("")}`
-    : "";
+  if (!outline.length) {
+    els.readerOutline.innerHTML = "";
+    return;
+  }
+  const headingButton = (item, extraClass = "") => `<button class="level-${item.level} ${extraClass}" data-heading="${escapeHtml(item.id)}" data-level="${item.level}" data-title="${escapeHtml(item.title)}" title="${escapeHtml(item.title)}">${escapeHtml(compactName(item.title, 22))}</button>`;
+  const rows = [];
+  for (let index = 0; index < outline.length; index += 1) {
+    const item = outline[index];
+    if (item.level !== 2) {
+      rows.push(headingButton(item));
+      continue;
+    }
+    const children = [];
+    let cursor = index + 1;
+    while (cursor < outline.length && outline[cursor].level > 2) {
+      children.push(outline[cursor]);
+      cursor += 1;
+    }
+    if (!children.length) {
+      rows.push(headingButton(item));
+      continue;
+    }
+    const groupId = `outline-group-${index}`;
+    rows.push(`<section class="outline-group is-collapsed">
+      <div class="outline-group-head">
+        ${headingButton(item, "outline-parent")}
+        <button type="button" class="outline-toggle" data-outline-toggle="${groupId}" aria-controls="${groupId}" aria-expanded="false" title="展开三级目录"><span aria-hidden="true">&#8250;</span></button>
+      </div>
+      <div id="${groupId}" class="outline-children">${children.map((child) => headingButton(child)).join("")}</div>
+    </section>`);
+    index = cursor - 1;
+  }
+  els.readerOutline.innerHTML = `<p class="reader-outline-title">\u672c\u6587\u76ee\u5f55</p>${rows.join("")}`;
 }
 
 function inlineMarkdown(value, searchTerm = "") {
@@ -513,7 +620,15 @@ function inlineMarkdown(value, searchTerm = "") {
 
   return html
     .replace(/\[\[([^\]]+)\]\]/g, '<a href="#" data-doc-link="$1">$1</a>')
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, url) => `<a href="${safeMarkdownUrl(url)}">${label}</a>`);
+}
+
+function safeMarkdownUrl(value) {
+  const url = String(value || "").trim();
+  if (!url) return "#";
+  const protocol = url.match(/^([a-z][a-z0-9+.-]*):/i)?.[1]?.toLowerCase();
+  if (protocol && !["http", "https", "mailto"].includes(protocol)) return "#";
+  return url;
 }
 
 function renderMarkdown(source, options = {}) {
@@ -531,7 +646,10 @@ function renderMarkdown(source, options = {}) {
 
   const flushList = () => {
     if (!list) return;
-    html.push(`<${list.type}>${list.items.map((item) => `<li>${item}</li>`).join("")}</${list.type}>`);
+    const hasTasks = list.items.some((item) => item.task);
+    const listClass = hasTasks ? ' class="contains-task-list"' : "";
+    const items = list.items.map((item) => `<li${item.task ? ' class="task-list-item"' : ""}>${item.html}</li>`).join("");
+    html.push(`<${list.type}${listClass}>${items}</${list.type}>`);
     list = null;
   };
   const flushTable = () => {
@@ -626,7 +744,7 @@ function renderMarkdown(source, options = {}) {
     }
     
     const numHeading = line.match(/^(\s*)(\((?:\d{1,3})\)|(\d{1,3})([、.．)]))\s*([^-*].+)$/);
-    if (numHeading) {
+    if (numHeading && !/^\s*\d+[.)]\s+\[[ xX]\](?:\s|$)/.test(line)) {
       if (numHeading[5].trim().length > 0) {
         flushList();
         const indent = numHeading[1].length;
@@ -649,15 +767,21 @@ function renderMarkdown(source, options = {}) {
       const type = bullet ? "ul" : "ol";
       const indent = bullet ? bullet[1].length : ordered[1].length;
       const content = bullet ? bullet[2] : ordered[3];
+      const task = content.match(/^\[([ xX])\](?:\s+(.*))?$/);
       if (!list || list.type !== type) {
         flushList();
         list = { type, items: [] };
       }
-      if (indent > 0) {
-        const marginLeft = indent * 16;
-        list.items.push(`<span style="margin-left: ${marginLeft}px;">${inlineMarkdown(content, searchTerm)}</span>`);
+      const marginStyle = indent > 0 ? ` style="margin-left: ${indent * 16}px;"` : "";
+      if (task) {
+        const checked = task[1].toLowerCase() === "x";
+        const label = inlineMarkdown(task[2] || "", searchTerm);
+        list.items.push({
+          task: true,
+          html: `<label${marginStyle}><input type="checkbox" data-task-line="${i}"${checked ? " checked" : ""} aria-label="${checked ? "已完成" : "未完成"}" title="点击更新任务状态" /><span>${label}</span></label>`,
+        });
       } else {
-        list.items.push(inlineMarkdown(content, searchTerm));
+        list.items.push({ task: false, html: `<span${marginStyle}>${inlineMarkdown(content, searchTerm)}</span>` });
       }
       continue;
     }
@@ -688,6 +812,102 @@ function renderMarkdown(source, options = {}) {
   return html.join("\n");
 }
 
+function syncTaskInputs(lineIndex, checked) {
+  document.querySelectorAll(`input[data-task-line="${lineIndex}"]`).forEach((input) => {
+    input.checked = checked;
+    input.setAttribute("aria-label", checked ? "已完成" : "未完成");
+  });
+}
+
+async function toggleMarkdownTask(input) {
+  const lineIndex = Number(input?.dataset.taskLine);
+  if (!state.currentPath || !Number.isInteger(lineIndex) || lineIndex < 0) {
+    if (input) input.checked = !input.checked;
+    return;
+  }
+  const previousContent = state.currentContent;
+  const taskPath = state.currentPath;
+  const newline = previousContent.includes("\r\n") ? "\r\n" : "\n";
+  const lines = previousContent.replace(/\r\n/g, "\n").split("\n");
+  const line = lines[lineIndex] || "";
+  const taskPattern = /^(\s*(?:[-*]|\d+[.)])\s+)\[([ xX])\]/;
+  if (!taskPattern.test(line)) {
+    input.checked = !input.checked;
+    showToast("任务位置已变化，请刷新文档后重试");
+    return;
+  }
+  const checked = Boolean(input.checked);
+  lines[lineIndex] = line.replace(taskPattern, (_, prefix) => `${prefix}[${checked ? "x" : " "}]`);
+  const nextContent = lines.join(newline);
+  state.currentContent = nextContent;
+  els.editor.value = nextContent;
+  updateLargeDocumentState(nextContent);
+  recordUndo(nextContent);
+  syncTaskInputs(lineIndex, checked);
+  setSaveStatus("保存中", true);
+
+  const saveJob = state.taskSaveQueue
+    .catch(() => {})
+    .then(() => api.post("/api/save", { path: taskPath, content: nextContent }));
+  state.taskSaveQueue = saveJob;
+  try {
+    await saveJob;
+    if (state.currentPath === taskPath && state.currentContent === nextContent) {
+      state.lastSavedContent = nextContent;
+      setSaveStatus("已保存", false);
+    }
+    state.graphReady = false;
+  } catch (error) {
+    if (state.currentPath === taskPath && state.currentContent === nextContent) {
+      state.currentContent = previousContent;
+      els.editor.value = previousContent;
+      updateLargeDocumentState(previousContent, true);
+      recordUndo(previousContent);
+      syncTaskInputs(lineIndex, !checked);
+      setSaveStatus("保存失败", true);
+    }
+    showToast(error.message || "任务状态保存失败");
+  }
+}
+
+function syncTreeSelectionState() {
+  if (!els.tree) return;
+  for (const panel of els.tree.querySelectorAll(".tree-workspace[data-workspace-id]")) {
+    panel.classList.toggle("active-workspace", panel.dataset.workspaceId === state.activeWorkspaceId);
+  }
+  for (const title of els.tree.querySelectorAll(".folder-title[data-tree-path]")) {
+    const treePath = title.dataset.treePath;
+    const multiSelected = state.multiSelected.has(treePath);
+    title.classList.toggle("selected", multiSelected || state.selectedFolder === treePath);
+    title.classList.toggle("multi-selected", multiSelected);
+  }
+  for (const button of els.tree.querySelectorAll(".file-item[data-tree-path]")) {
+    const treePath = button.dataset.treePath;
+    button.classList.toggle("active", state.currentPath === treePath);
+    button.classList.toggle("multi-selected", state.multiSelected.has(treePath));
+  }
+}
+
+function updateLazyFolderMount(node, wrapper, title, children) {
+  const expanded = state.expandedFolders.has(node.path);
+  wrapper.classList.toggle("collapsed", !expanded);
+  title.setAttribute("aria-expanded", String(expanded));
+  if (expanded && children.dataset.mounted !== "1") {
+    renderTree(node.children || [], children);
+    children.dataset.mounted = "1";
+  } else if (!expanded && children.dataset.mounted === "1") {
+    children.replaceChildren();
+    children.dataset.mounted = "0";
+  }
+}
+
+function rerenderWorkspacePanel(node, panel) {
+  const staging = document.createElement("div");
+  renderTree([node], staging);
+  const nextPanel = staging.firstElementChild;
+  if (nextPanel) panel.replaceWith(nextPanel);
+}
+
 function renderTree(nodes, container = els.tree) {
   container.innerHTML = "";
   for (const node of nodes) {
@@ -716,7 +936,7 @@ function renderTree(nodes, container = els.tree) {
         state.selectedFolder = node.path;
         state.folderExplicit = false;
         state.multiSelected.clear();
-        renderTree(state.tree);
+        syncTreeSelectionState();
       });
 
       const actions = document.createElement("div");
@@ -761,7 +981,7 @@ function renderTree(nodes, container = els.tree) {
         if (moved.type === "folder" && moved.path) {
           state.selectedFolder = moved.path;
           state.folderExplicit = true;
-          renderTree(state.tree);
+          syncTreeSelectionState();
         }
       });
 
@@ -778,12 +998,13 @@ function renderTree(nodes, container = els.tree) {
       const isExpanded = state.expandedWorkspaceRoots.has(node.workspaceId);
       const displayFiles = isExpanded ? allFiles : allFiles.slice(0, maxFiles);
 
-      folders.forEach((folder) => renderTree([folder], children));
+      renderTree(folders, children);
 
       for (const file of displayFiles) {
         const button = document.createElement("button");
         const isSelected = state.multiSelected.has(file.path) || state.currentPath === file.path;
         button.className = `file-item ${state.currentPath === file.path ? "active" : ""} ${state.multiSelected.has(file.path) ? "multi-selected" : ""}`;
+        button.dataset.treePath = file.path;
         button.draggable = true;
         button.title = file.path + "（按住 Ctrl 点击可多选）";
         button.innerHTML = `<span class="file-icon">-</span><span>${escapeHtml(compactName(displayName(file)))}</span>`;
@@ -793,10 +1014,11 @@ function renderTree(nodes, container = els.tree) {
           if (event && (event.ctrlKey || event.metaKey || event.shiftKey)) {
             if (state.multiSelected.has(file.path)) state.multiSelected.delete(file.path);
             else state.multiSelected.add(file.path);
-            renderTree(state.tree);
+            syncTreeSelectionState();
           } else {
             state.multiSelected.clear();
             state.multiSelected.add(file.path);
+            syncTreeSelectionState();
             openDoc(file.path);
           }
         });
@@ -818,7 +1040,7 @@ function renderTree(nodes, container = els.tree) {
           } else {
             state.expandedWorkspaceRoots.add(workspaceId);
           }
-          renderTree(state.tree);
+          rerenderWorkspacePanel(node, panel);
         });
         children.append(moreBtn);
       }
@@ -835,8 +1057,10 @@ function renderTree(nodes, container = els.tree) {
       const title = document.createElement("button");
       const isSelected = state.multiSelected.has(node.path) || state.selectedFolder === node.path;
       title.className = `folder-title ${isSelected ? "selected" : ""} ${state.multiSelected.has(node.path) ? "multi-selected" : ""}`;
+      title.dataset.treePath = node.path;
       title.type = "button";
       title.draggable = true;
+      title.setAttribute("aria-expanded", String(expanded));
       title.title = node.path + "（按住 Ctrl 点击可多选）";
       title.innerHTML = `<span class="folder-icon">v</span><span>${escapeHtml(compactName(node.name))}</span>`;
       title.addEventListener("click", (event) => {
@@ -854,7 +1078,8 @@ function renderTree(nodes, container = els.tree) {
           if (state.expandedFolders.has(node.path)) state.expandedFolders.delete(node.path);
           else state.expandedFolders.add(node.path);
         }
-        renderTree(state.tree);
+        updateLazyFolderMount(node, wrapper, title, children);
+        syncTreeSelectionState();
       });
       title.addEventListener("dragstart", (event) => startTreeDrag(event, { type: "folder", path: node.path }));
       title.addEventListener("dragend", endTreeDrag);
@@ -863,16 +1088,18 @@ function renderTree(nodes, container = els.tree) {
       title.addEventListener("drop", (event) => dropOnFolder(event, node.path));
       const children = document.createElement("div");
       children.className = "folder-children";
-      renderTree(node.children, children);
+      children.dataset.mounted = "0";
       wrapper.append(title);
       wrapper.append(children);
       container.append(wrapper);
+      if (expanded) updateLazyFolderMount(node, wrapper, title, children);
       continue;
     }
 
     const button = document.createElement("button");
     const isSelected = state.multiSelected.has(node.path) || state.currentPath === node.path;
     button.className = `file-item ${state.currentPath === node.path ? "active" : ""} ${state.multiSelected.has(node.path) ? "multi-selected" : ""}`;
+    button.dataset.treePath = node.path;
     button.draggable = true;
     button.title = node.path + "（按住 Ctrl 点击可多选）";
     button.innerHTML = `<span class="file-icon">-</span><span>${escapeHtml(compactName(displayName(node)))}</span>`;
@@ -883,10 +1110,11 @@ function renderTree(nodes, container = els.tree) {
         // 多选添加/移除，不打开文档
         if (state.multiSelected.has(node.path)) state.multiSelected.delete(node.path);
         else state.multiSelected.add(node.path);
-        renderTree(state.tree);
+        syncTreeSelectionState();
       } else {
         state.multiSelected.clear();
         state.multiSelected.add(node.path);
+        syncTreeSelectionState();
         openDoc(node.path);
       }
     });
@@ -1236,7 +1464,7 @@ async function dropOnFolder(event, targetFolder) {
   if (moved.type === "folder" && moved.path) {
     state.selectedFolder = moved.path;
     state.folderExplicit = true;
-    renderTree(state.tree);
+    syncTreeSelectionState();
   }
 }
 
@@ -1262,7 +1490,7 @@ async function dropOnRoot(event) {
   if (moved.type === "folder" && moved.path) {
     state.selectedFolder = moved.path;
     state.folderExplicit = true;
-    renderTree(state.tree);
+    syncTreeSelectionState();
   }
 }
 
@@ -1276,11 +1504,13 @@ function flatten(nodes, out = []) {
 
 function setMode(mode) {
   if (state.mode === mode) return;
+  if (mode !== "edit" && state.immersive) setImmersiveEditing(false);
   if (state.mode === "view" && mode === "edit") {
     const readerMax = Math.max(1, els.markdownView.scrollHeight - els.markdownView.clientHeight);
     state.readerScrollRatio = readerMax > 0 ? els.markdownView.scrollTop / readerMax : 0;
   }
   state.mode = mode;
+  document.body.classList.toggle("graph-mode", mode === "graph");
   lastInputLength = els.editor.value.length;
   lastInputValue = els.editor.value;
   els.readerPanel.classList.toggle("hidden", mode !== "view");
@@ -1303,6 +1533,7 @@ function setMode(mode) {
     els.markdownView.innerHTML = renderMarkdown(state.currentContent);
     renderOutline(state.currentContent);
   }
+  if (mode !== "graph") stopGraphSimulation();
   if (mode === "graph") requestAnimationFrame(() => initGraph());
 }
 
@@ -1310,6 +1541,21 @@ function resetUndo(content) {
   state.undo.stack = [content];
   state.undo.index = 0;
   state.undo.applying = false;
+}
+
+function contentByteLength(content) {
+  return new TextEncoder().encode(String(content || "")).byteLength;
+}
+
+function updateLargeDocumentState(content, exact = false) {
+  const value = String(content || "");
+  const characterThreshold = Math.floor(LARGE_PREVIEW_BYTES / 3);
+  if (exact || (!state.largeDocument && value.length > characterThreshold)
+    || (state.largeDocument && value.length < characterThreshold)) {
+    state.currentContentBytes = contentByteLength(value);
+  }
+  state.largeDocument = state.currentContentBytes > LARGE_PREVIEW_BYTES || value.length > LARGE_PREVIEW_BYTES;
+  return state.largeDocument;
 }
 
 function recordUndo(value) {
@@ -1325,7 +1571,8 @@ function applyEditorValue(value) {
   state.undo.applying = true;
   els.editor.value = value;
   state.currentContent = value;
-  els.preview.innerHTML = renderMarkdown(value);
+  updateLargeDocumentState(value);
+  schedulePreviewUpdate();
   els.editor.dispatchEvent(new Event("input", { bubbles: true }));
   state.undo.applying = false;
 }
@@ -1356,8 +1603,10 @@ async function openDoc(docPath, options = {}) {
   if (seq !== state.openSeq) return;
 
   const item = state.flatFiles.find((file) => file.path === doc.path) || doc;
+  state.activeWorkspaceId = item.workspaceId || doc.path.split(":", 1)[0] || state.activeWorkspaceId;
   state.currentPath = doc.path;
   state.currentContent = doc.content;
+  updateLargeDocumentState(doc.content, true);
   state.lastSavedContent = doc.content;
   state.selectedNode = doc.path;
   state.selectedFolder = doc.path.includes("/") ? doc.path.split("/").slice(0, -1).join("/") : "";
@@ -1370,7 +1619,22 @@ async function openDoc(docPath, options = {}) {
   els.markdownView.innerHTML = renderMarkdown(doc.content, { searchTerm: options.searchTerm || "" });
   renderOutline(doc.content);
   els.editor.value = doc.content;
-  els.preview.innerHTML = renderMarkdown(doc.content);
+  els.preview.classList.remove("preview-pending");
+  if (state.largeDocument) {
+    clearTimeout(state.previewTimer);
+    els.preview.replaceChildren();
+    state.previewLastContent = "";
+    if (state.previewVisible) setPreviewVisible(false, { automatic: true });
+  } else {
+    if (state.previewAutoHidden) setPreviewVisible(true, { automatic: true });
+    if (state.previewVisible) {
+      els.preview.innerHTML = renderMarkdown(doc.content);
+      state.previewLastContent = doc.content;
+    } else {
+      els.preview.replaceChildren();
+      state.previewLastContent = "";
+    }
+  }
   els.editor.scrollTop = 0;
   els.preview.scrollTop = 0;
   state.syncPreviewScroll.ratio = 0;
@@ -1378,8 +1642,8 @@ async function openDoc(docPath, options = {}) {
   lastInputLength = doc.content.length;
   lastInputValue = doc.content;
   setSaveStatus("\u4fdd\u5b58", false);
-  renderTree(state.tree);
-  if (state.mode === "graph") drawGraph();
+  syncTreeSelectionState();
+  if (state.mode === "graph") scheduleGraphDraw();
   if (options.searchTerm) {
     requestAnimationFrame(() => scrollReaderToElement(els.markdownView.querySelector(".search-hit"), "auto"));
   }
@@ -1427,7 +1691,7 @@ function setSidebarCollapsed(collapsed) {
   }
   if (state.mode === "graph") requestAnimationFrame(() => {
     resizeCanvas();
-    drawGraph();
+    scheduleGraphDraw();
   });
 }
 
@@ -1474,10 +1738,64 @@ function syncPreviewToEditor() {
   });
 }
 
-const updatePreview = debounce(() => {
+function renderCurrentPreview() {
+  if (!state.previewVisible || state.mode !== "edit") return;
+  if (state.previewLastContent === state.currentContent) {
+    els.preview.classList.remove("preview-pending");
+    syncPreviewToEditor();
+    return;
+  }
   els.preview.innerHTML = renderMarkdown(state.currentContent);
+  els.preview.classList.remove("preview-pending");
+  state.previewLastContent = state.currentContent;
   syncPreviewToEditor();
-}, 80);
+}
+
+function schedulePreviewUpdate() {
+  clearTimeout(state.previewTimer);
+  if (!state.previewVisible || state.mode !== "edit") return;
+  const length = state.currentContent.length;
+  const wait = state.largeDocument ? LARGE_PREVIEW_DELAY : length > 500000 ? 420 : length > 100000 ? 240 : 120;
+  els.preview.classList.toggle("preview-pending", state.largeDocument && state.previewLastContent !== state.currentContent);
+  state.previewTimer = setTimeout(renderCurrentPreview, wait);
+}
+
+function setPreviewVisible(visible, { automatic = false } = {}) {
+  state.previewVisible = Boolean(visible);
+  if (!automatic) state.previewAutoHidden = false;
+  else state.previewAutoHidden = !state.previewVisible;
+  els.editorPanel.classList.toggle("preview-hidden", !state.previewVisible);
+  els.previewToggleBtn.textContent = state.previewVisible ? "隐藏预览" : "显示预览";
+  els.previewToggleBtn.setAttribute("aria-pressed", String(state.previewVisible));
+  els.previewToggleBtn.textContent = state.previewVisible
+    ? "\u9690\u85cf\u9884\u89c8"
+    : state.largeDocument ? "\u663e\u793a\u9884\u89c8\uff08\u5927\u6587\u6863\uff09" : "\u663e\u793a\u9884\u89c8";
+  if (state.previewVisible) {
+    if (state.largeDocument) schedulePreviewUpdate();
+    else requestAnimationFrame(renderCurrentPreview);
+  } else {
+    clearTimeout(state.previewTimer);
+    els.preview.classList.remove("preview-pending");
+  }
+}
+
+function setImmersiveEditing(enabled) {
+  if (enabled && !state.currentPath) return showToast("请先打开一篇文档");
+  const wasImmersive = state.immersive;
+  state.immersive = Boolean(enabled);
+  els.appShell.classList.toggle("immersive", state.immersive);
+  document.body.classList.toggle("immersive-editing", state.immersive);
+  els.focusModeBtn.textContent = state.immersive ? "退出沉浸" : "沉浸";
+  els.focusModeBtn.setAttribute("aria-pressed", String(state.immersive));
+  if (state.immersive) {
+    if (!wasImmersive) state.previewBeforeImmersive = state.previewVisible;
+    if (state.mode !== "edit") setMode("edit");
+    setPreviewVisible(false);
+    requestAnimationFrame(() => els.editor.focus());
+  } else if (wasImmersive) {
+    setPreviewVisible(state.previewBeforeImmersive);
+  }
+}
 
 async function saveCurrentDoc({ refreshTree = false, keepEditorState = true } = {}) {
   if (!state.currentPath) return false;
@@ -1500,12 +1818,17 @@ async function saveCurrentDoc({ refreshTree = false, keepEditorState = true } = 
   }
   if (seq !== state.saveSeq) return true;
   state.currentContent = content;
+  updateLargeDocumentState(content);
   state.lastSavedContent = content;
   if (state.mode === "read") {
     els.markdownView.innerHTML = renderMarkdown(content);
     renderOutline(content);
-  } else {
+  } else if (state.previewVisible) {
     els.preview.innerHTML = renderMarkdown(content);
+    els.preview.classList.remove("preview-pending");
+    state.previewLastContent = content;
+  } else {
+    state.previewLastContent = "";
   }
   state.graphReady = false;
   setSaveStatus(refreshTree ? "\u5df2\u4fdd\u5b58" : "\u5df2\u81ea\u52a8\u4fdd\u5b58", false);
@@ -1556,6 +1879,57 @@ async function normalizeAllToMarkdown() {
   } finally {
     els.normalizeProgress.classList.add("hidden");
     els.normalizeMdBtn.disabled = false;
+  }
+}
+
+function closeSemanticTagsModal() {
+  els.semanticTagsModal.classList.add("hidden");
+  state.semanticTagPreview = null;
+}
+
+async function previewSemanticTags() {
+  els.semanticTagsPreview.textContent = "正在分析全库语义，请稍候...";
+  els.applySemanticTagsBtn.disabled = true;
+  try {
+    const result = await api.post("/api/semantic-tags", {
+      maxTags: Number(els.semanticTagsMax.value || 3),
+      apply: false,
+    });
+    state.semanticTagPreview = result;
+    if (!result.changed) {
+      els.semanticTagsPreview.textContent = `已检查 ${result.total || 0} 篇文档，没有发现高置信度的新标签。`;
+      return;
+    }
+    const rows = (result.changes || []).map((item) => `<div class="tag-preview-row"><span class="tag-preview-name">${escapeHtml(item.title || item.path)}</span><span class="tag-preview-tags">${escapeHtml((item.before || []).join(" · ") || "无")} → ${escapeHtml((item.after || []).join(" · "))}</span></div>`).join("");
+    els.semanticTagsPreview.innerHTML = `<strong>将为 ${result.changed} / ${result.total} 篇文档更新标签</strong>${rows}${result.changed > 60 ? `<div class="muted">其余 ${result.changed - 60} 篇将在应用时一并处理。</div>` : ""}`;
+    els.applySemanticTagsBtn.disabled = false;
+  } catch (error) {
+    els.semanticTagsPreview.textContent = error.message || "语义分析失败";
+  }
+}
+
+function openSemanticTagsModal() {
+  els.semanticTagsModal.classList.remove("hidden");
+  previewSemanticTags();
+}
+
+async function applySemanticTags() {
+  if (!state.semanticTagPreview?.changed) return;
+  els.applySemanticTagsBtn.disabled = true;
+  els.semanticTagsPreview.textContent = "正在写入标签...";
+  try {
+    const result = await api.post("/api/semantic-tags", {
+      maxTags: Number(els.semanticTagsMax.value || 3),
+      apply: true,
+    });
+    closeSemanticTagsModal();
+    els.semanticTagsStatus.textContent = `已为 ${result.applied || 0} 篇文档适配标签`;
+    state.graphReady = false;
+    await bootstrap(true);
+    showToast(`智能标签已应用：${result.applied || 0} 篇文档`);
+  } catch (error) {
+    els.semanticTagsPreview.textContent = error.message || "标签应用失败";
+    els.applySemanticTagsBtn.disabled = false;
   }
 }
 
@@ -1742,7 +2116,7 @@ function closeSearchWhenIdle(event) {
 
 function resizeCanvas() {
   const rect = els.canvas.getBoundingClientRect();
-  const ratio = window.devicePixelRatio || 1;
+  const ratio = Math.min(2, window.devicePixelRatio || 1);
   els.canvas.width = Math.max(1, Math.floor(rect.width * ratio));
   els.canvas.height = Math.max(1, Math.floor(rect.height * ratio));
   els.canvas.getContext("2d").setTransform(ratio, 0, 0, ratio, 0, 0);
@@ -1751,134 +2125,1154 @@ function resizeCanvas() {
 async function initGraph(force = false) {
   if (!state.graphReady || force) {
     const graph = await api.get("/api/graph");
-    state.graph = layoutGraph(graph);
+    state.graphSource = graph;
+    state.graphLayouts.clear();
+    state.graphLayoutPromises.clear();
+    const layoutSeq = ++state.graphLayoutSeq;
+    const layout = await getGraphLayoutForMode();
+    if (layoutSeq !== state.graphLayoutSeq) return;
+    state.graph = layout;
     state.graphReady = true;
+    state.graphView.fitted = false;
   }
   resizeCanvas();
-  drawGraph();
+  refreshGraphView(!state.graphView.fitted);
+  startGraphSimulation();
+}
+
+function graphModeName() {
+  if (state.graphView.showTags && state.graphView.showKeywords) return "混合脉络";
+  if (state.graphView.showTags) return "标签脉络";
+  if (state.graphView.showKeywords) return "语义脉络";
+  return "双链脉络";
+}
+
+function ensureGraphWorker() {
+  if (state.graphWorker || state.graphWorkerFailed || typeof Worker === "undefined") return state.graphWorker;
+  try {
+    const worker = new Worker(GRAPH_WORKER_URL);
+    worker.onmessage = (event) => {
+      const { id, layout, error } = event.data || {};
+      const pending = state.graphWorkerPending.get(id);
+      if (!pending) return;
+      state.graphWorkerPending.delete(id);
+      if (error) pending.reject(new Error(error));
+      else pending.resolve(layout);
+    };
+    worker.onerror = (event) => {
+      state.graphWorkerFailed = true;
+      for (const pending of state.graphWorkerPending.values()) pending.reject(event.error || new Error("Graph worker unavailable"));
+      state.graphWorkerPending.clear();
+      worker.terminate();
+      state.graphWorker = null;
+    };
+    state.graphWorker = worker;
+  } catch {
+    state.graphWorkerFailed = true;
+  }
+  return state.graphWorker;
+}
+
+function layoutGraphInWorker(graph) {
+  const worker = ensureGraphWorker();
+  if (!worker) return Promise.resolve(layoutGraph(graph));
+  const id = ++state.graphWorkerSeq;
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      state.graphWorkerPending.delete(id);
+      reject(new Error("Graph worker timeout"));
+    }, 20000);
+    state.graphWorkerPending.set(id, {
+      resolve: (layout) => { clearTimeout(timeout); resolve(layout); },
+      reject: (error) => { clearTimeout(timeout); reject(error); },
+    });
+    try {
+      worker.postMessage({ id, graph });
+    } catch (error) {
+      clearTimeout(timeout);
+      state.graphWorkerPending.delete(id);
+      reject(error);
+    }
+  }).catch(() => layoutGraph(graph));
+}
+
+async function getGraphLayoutForMode() {
+  const view = state.graphView;
+  const key = `${Number(view.showTags)}${Number(view.showKeywords)}${Number(view.showMissing)}${Number(view.showOrphans)}`;
+  if (state.graphLayouts.has(key)) return state.graphLayouts.get(key);
+  if (state.graphLayoutPromises.has(key)) return state.graphLayoutPromises.get(key);
+  const source = state.graphSource || { nodes: [], edges: [], stats: {} };
+  const allowedTypes = new Set(["link"]);
+  if (view.showTags) allowedTypes.add("tag");
+  if (view.showKeywords) allowedTypes.add("keyword");
+  if (view.showMissing) allowedTypes.add("missing");
+  const edges = source.edges.filter((edge) => allowedTypes.has(edge.type)).map((edge) => ({ ...edge }));
+  const attached = new Set();
+  edges.forEach((edge) => {
+    attached.add(edge.source);
+    attached.add(edge.target);
+  });
+  const nodes = source.nodes
+    .filter((node) => {
+      if (node.kind === "tag" && !view.showTags) return false;
+      if (node.kind === "keyword" && !view.showKeywords) return false;
+      if (node.kind === "missing" && !view.showMissing) return false;
+      if (node.kind === "doc") return attached.has(node.id) || view.showOrphans;
+      return attached.has(node.id);
+    })
+    .map((node) => ({ ...node, modeOrphan: node.kind === "doc" && !attached.has(node.id) }));
+  const promise = layoutGraphInWorker({ nodes, edges, stats: source.stats || {} }).then((layout) => {
+    if (state.graphSource === source) state.graphLayouts.set(key, layout);
+    if (state.graphLayoutPromises.get(key) === promise) state.graphLayoutPromises.delete(key);
+    return layout;
+  }).catch((error) => {
+    if (state.graphLayoutPromises.get(key) === promise) state.graphLayoutPromises.delete(key);
+    throw error;
+  });
+  state.graphLayoutPromises.set(key, promise);
+  return promise;
+}
+
+async function applyGraphModeLayout() {
+  if (!state.graphSource) return;
+  const layoutSeq = ++state.graphLayoutSeq;
+  state.graph = await getGraphLayoutForMode();
+  if (layoutSeq !== state.graphLayoutSeq) return;
+  state.graphView.fitted = false;
+  refreshGraphView(true);
+}
+
+function graphHash(value) {
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i += 1) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0) / 4294967295;
+}
+
+function graphEdgeStrength(edge) {
+  const typeWeight = edge.type === "link" ? 9 : edge.type === "missing" ? 7 : edge.type === "tag" ? 4 : 2;
+  return typeWeight * (1 + Math.log2(1 + Math.max(1, edge.weight || 1)) * 0.24);
+}
+
+function buildNeuralBackbone(nodes, edges) {
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const adjacency = new Map(nodes.map((node) => [node.id, []]));
+  const centrality = new Map(nodes.map((node) => [node.id, 0]));
+  edges.forEach((edge, index) => {
+    edge.layoutIndex = index;
+    edge.backbone = false;
+    const strength = graphEdgeStrength(edge);
+    adjacency.get(edge.source)?.push({ id: edge.target, edge, strength });
+    adjacency.get(edge.target)?.push({ id: edge.source, edge, strength });
+    centrality.set(edge.source, (centrality.get(edge.source) || 0) + strength);
+    centrality.set(edge.target, (centrality.get(edge.target) || 0) + strength);
+  });
+
+  for (let pass = 0; pass < 4; pass += 1) {
+    const next = new Map();
+    let max = 1;
+    for (const node of nodes) {
+      const neighbors = adjacency.get(node.id) || [];
+      const propagated = neighbors.reduce((sum, item) => sum + (centrality.get(item.id) || 0) * item.strength * 0.025, 0);
+      const score = (centrality.get(node.id) || 0) * 0.72 + propagated;
+      next.set(node.id, score);
+      max = Math.max(max, score);
+    }
+    for (const node of nodes) centrality.set(node.id, next.get(node.id) / max);
+  }
+  nodes.forEach((node) => { node.centrality = centrality.get(node.id) || 0; });
+
+  const parent = new Map(nodes.map((node) => [node.id, node.id]));
+  const find = (id) => {
+    let root = id;
+    while (parent.get(root) !== root) root = parent.get(root);
+    while (parent.get(id) !== id) {
+      const next = parent.get(id);
+      parent.set(id, root);
+      id = next;
+    }
+    return root;
+  };
+  const union = (a, b) => {
+    const rootA = find(a);
+    const rootB = find(b);
+    if (rootA === rootB) return false;
+    parent.set(rootB, rootA);
+    return true;
+  };
+  [...edges]
+    .sort((a, b) => graphEdgeStrength(b) - graphEdgeStrength(a)
+      || (centrality.get(b.source) || 0) + (centrality.get(b.target) || 0)
+      - (centrality.get(a.source) || 0) - (centrality.get(a.target) || 0))
+    .forEach((edge) => {
+      if (union(edge.source, edge.target)) edge.backbone = true;
+    });
+
+  const tree = new Map(nodes.map((node) => [node.id, []]));
+  for (const edge of edges.filter((item) => item.backbone)) {
+    tree.get(edge.source)?.push(edge.target);
+    tree.get(edge.target)?.push(edge.source);
+  }
+  const componentNodes = new Map();
+  for (const node of nodes) {
+    const root = find(node.id);
+    if (!componentNodes.has(root)) componentNodes.set(root, []);
+    componentNodes.get(root).push(node);
+  }
+  const components = [...componentNodes.values()].sort((a, b) => b.length - a.length);
+  const isolated = components.filter((component) => component.length === 1);
+  const connected = components.filter((component) => component.length > 1);
+
+  connected.forEach((component) => {
+    const componentIds = new Set(component.map((node) => node.id));
+    const root = [...component].sort((a, b) => {
+      const docBiasA = a.kind === "doc" ? 0.18 : 0;
+      const docBiasB = b.kind === "doc" ? 0.18 : 0;
+      return b.centrality + docBiasB - a.centrality - docBiasA;
+    })[0];
+    root.layoutRoot = true;
+    const children = new Map(component.map((node) => [node.id, []]));
+    const depth = new Map([[root.id, 0]]);
+    const queue = [root.id];
+    for (let cursor = 0; cursor < queue.length; cursor += 1) {
+      const id = queue[cursor];
+      for (const neighbor of tree.get(id) || []) {
+        if (!componentIds.has(neighbor) || depth.has(neighbor)) continue;
+        depth.set(neighbor, depth.get(id) + 1);
+        children.get(id).push(neighbor);
+        queue.push(neighbor);
+      }
+    }
+    const subtree = new Map();
+    const measure = (id) => {
+      const childIds = children.get(id) || [];
+      const size = childIds.length ? childIds.reduce((sum, child) => sum + measure(child), 0) : 1;
+      subtree.set(id, size);
+      return size;
+    };
+    measure(root.id);
+    const maxLayer = new Map();
+    depth.forEach((value) => maxLayer.set(value, (maxLayer.get(value) || 0) + 1));
+    const ringRadius = new Map([...maxLayer].map(([level, count]) => [level, Math.max(level * 106, count * 23 / (Math.PI * 2))]));
+    root.x = 0;
+    root.y = 0;
+    const place = (id, startAngle, endAngle) => {
+      let angle = startAngle;
+      const total = Math.max(1, subtree.get(id) || 1);
+      for (const childId of children.get(id) || []) {
+        const portion = (endAngle - startAngle) * (subtree.get(childId) || 1) / total;
+        const childAngle = angle + portion / 2;
+        const level = depth.get(childId) || 1;
+        const radius = ringRadius.get(level) || level * 106;
+        const child = byId.get(childId);
+        child.x = Math.cos(childAngle) * radius;
+        child.y = Math.sin(childAngle) * radius;
+        place(childId, angle, angle + portion);
+        angle += portion;
+      }
+    };
+    place(root.id, -Math.PI, Math.PI);
+    const extent = Math.max(120, ...component.map((node) => Math.hypot(node.x || 0, node.y || 0) + 38));
+    component.layoutRadius = extent;
+  });
+
+  const mainRadius = connected[0]?.layoutRadius || 100;
+  connected.forEach((component, index) => {
+    if (index === 0) return;
+    const angle = index * 2.399963;
+    const distance = mainRadius + component.layoutRadius + 90 + Math.sqrt(index) * 55;
+    const offsetX = Math.cos(angle) * distance;
+    const offsetY = Math.sin(angle) * distance;
+    component.forEach((node) => { node.x += offsetX; node.y += offsetY; });
+  });
+  const outerRadius = mainRadius + 150 + Math.sqrt(isolated.length) * 24;
+  isolated.forEach((component, index) => {
+    const node = component[0];
+    const angle = -Math.PI / 2 + index * 2.399963;
+    const radius = outerRadius + (index % 3) * 34;
+    node.x = Math.cos(angle) * radius;
+    node.y = Math.sin(angle) * radius;
+  });
 }
 
 function layoutGraph(graph) {
   const nodes = graph.nodes.map((node) => ({
     ...node,
-    label: node.kind === "keyword" ? node.label : node.id.split("/").pop(),
+    label: node.label || node.id.split("/").pop(),
+    vx: 0,
+    vy: 0,
   }));
-  const groups = [...new Set(nodes.map((node) => node.group || "docs"))];
-  const byGroup = new Map(groups.map((group) => [group, []]));
-  for (const node of nodes) byGroup.get(node.group || "docs").push(node);
-
-  const centerX = 520;
-  const centerY = 340;
-  const groupRadius = Math.max(180, groups.length * 48);
-  groups.forEach((group, groupIndex) => {
-    const bucket = byGroup.get(group);
-    const groupAngle = (Math.PI * 2 * groupIndex) / Math.max(1, groups.length);
-    const gx = centerX + Math.cos(groupAngle) * groupRadius;
-    const gy = centerY + Math.sin(groupAngle) * groupRadius;
-    const localRadius = Math.max(42, bucket.length * 12);
-    bucket.forEach((node, index) => {
-      const angle = (Math.PI * 2 * index) / Math.max(1, bucket.length);
-      node.x = gx + Math.cos(angle) * localRadius;
-      node.y = gy + Math.sin(angle) * localRadius;
-    });
+  buildNeuralBackbone(nodes, graph.edges);
+  nodes.forEach((node) => {
+    node.targetX = node.x;
+    node.targetY = node.y;
   });
 
-  const usefulEdges = graph.edges
-    .filter((edge) => edge.type === "keyword" || edge.type !== "semantic" || edge.weight >= 4)
-    .sort((a, b) => {
-      const order = { link: 0, tag: 1, semantic: 2 };
-      return (order[a.type] ?? 9) - (order[b.type] ?? 9) || b.weight - a.weight;
-    })
-    .slice(0, Math.max(80, nodes.length * 4));
+  const byId = new Map(nodes.map((node, index) => [node.id, { node, index }]));
+  const springs = graph.edges
+    .map((edge) => ({ edge, a: byId.get(edge.source)?.index, b: byId.get(edge.target)?.index }))
+    .filter((item) => item.a !== undefined && item.b !== undefined);
+  const iterations = nodes.length < 120 ? 72 : nodes.length < 420 ? 44 : 24;
+  const fx = new Float64Array(nodes.length);
+  const fy = new Float64Array(nodes.length);
+  const cellSize = 96;
 
-  return { nodes, edges: usefulEdges };
+  for (let step = 0; step < iterations; step += 1) {
+    fx.fill(0);
+    fy.fill(0);
+    const grid = new Map();
+    nodes.forEach((node, index) => {
+      const key = `${Math.floor(node.x / cellSize)},${Math.floor(node.y / cellSize)}`;
+      if (!grid.has(key)) grid.set(key, []);
+      grid.get(key).push(index);
+    });
+
+    nodes.forEach((node, index) => {
+      const cx = Math.floor(node.x / cellSize);
+      const cy = Math.floor(node.y / cellSize);
+      for (let ox = -1; ox <= 1; ox += 1) {
+        for (let oy = -1; oy <= 1; oy += 1) {
+          for (const otherIndex of grid.get(`${cx + ox},${cy + oy}`) || []) {
+            if (otherIndex <= index) continue;
+            const other = nodes[otherIndex];
+            let dx = other.x - node.x;
+            let dy = other.y - node.y;
+            let distanceSq = dx * dx + dy * dy;
+            if (distanceSq < 1) {
+              dx = 0.5 - graphHash(`${node.id}:${other.id}`);
+              dy = 0.5 - graphHash(`${other.id}:${node.id}`);
+              distanceSq = dx * dx + dy * dy;
+            }
+            if (distanceSq > 26000) continue;
+            const distance = Math.sqrt(distanceSq);
+            const force = 1120 / (distanceSq + 90);
+            const pushX = (dx / distance) * force;
+            const pushY = (dy / distance) * force;
+            fx[index] -= pushX;
+            fy[index] -= pushY;
+            fx[otherIndex] += pushX;
+            fy[otherIndex] += pushY;
+          }
+        }
+      }
+    });
+
+    for (const spring of springs) {
+      const a = nodes[spring.a];
+      const b = nodes[spring.b];
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const distance = Math.max(1, Math.hypot(dx, dy));
+      const desired = spring.edge.type === "tag" ? 72 : spring.edge.type === "keyword" ? 88 : 104;
+      const strength = spring.edge.backbone ? (spring.edge.type === "link" ? 0.02 : 0.014) : 0.0014;
+      const pull = (distance - desired) * strength * Math.min(2, 0.7 + spring.edge.weight * 0.18);
+      const pullX = (dx / distance) * pull;
+      const pullY = (dy / distance) * pull;
+      fx[spring.a] += pullX;
+      fy[spring.a] += pullY;
+      fx[spring.b] -= pullX;
+      fy[spring.b] -= pullY;
+    }
+
+    nodes.forEach((node, index) => {
+      const attraction = node.layoutRoot ? 0.12 : 0.028;
+      fx[index] += (node.targetX - node.x) * attraction;
+      fy[index] += (node.targetY - node.y) * attraction;
+      node.vx = (node.vx + fx[index]) * 0.72;
+      node.vy = (node.vy + fy[index]) * 0.72;
+      const speed = Math.max(1, Math.hypot(node.vx, node.vy));
+      const limit = Math.min(9, speed);
+      node.x += (node.vx / speed) * limit;
+      node.y += (node.vy / speed) * limit;
+    });
+  }
+
+  return { nodes, edges: graph.edges, stats: graph.stats || {} };
 }
 
-function graphTransform(rect, nodes) {
-  const minX = Math.min(...nodes.map((n) => n.x));
-  const maxX = Math.max(...nodes.map((n) => n.x));
-  const minY = Math.min(...nodes.map((n) => n.y));
-  const maxY = Math.max(...nodes.map((n) => n.y));
-  const scale = Math.min((rect.width - 90) / Math.max(1, maxX - minX), (rect.height - 90) / Math.max(1, maxY - minY), 1.35);
-  return {
-    scale,
-    tx: (rect.width - (minX + maxX) * scale) / 2,
-    ty: (rect.height - (minY + maxY) * scale) / 2,
+function refreshGraphView(refit = false) {
+  const view = state.graphView;
+  const kindAllowed = (node) => {
+    if (node.kind === "tag" && !view.showTags) return false;
+    if (node.kind === "keyword" && !view.showKeywords) return false;
+    if (node.kind === "doc" && (node.orphan || node.modeOrphan) && !view.showOrphans) return false;
+    if (node.kind === "missing" && !view.showMissing) return false;
+    return true;
   };
+  let nodes = state.graph.nodes.filter(kindAllowed);
+  let nodeIds = new Set(nodes.map((node) => node.id));
+  let edges = state.graph.edges.filter((edge) => nodeIds.has(edge.source) && nodeIds.has(edge.target));
+
+  if (view.scope === "local" && state.currentPath && nodeIds.has(state.currentPath)) {
+    const adjacency = new Map(nodes.map((node) => [node.id, []]));
+    for (const edge of edges) {
+      adjacency.get(edge.source)?.push(edge.target);
+      adjacency.get(edge.target)?.push(edge.source);
+    }
+    const visible = new Set([state.currentPath]);
+    let frontier = [state.currentPath];
+    for (let depth = 0; depth < view.depth; depth += 1) {
+      const next = [];
+      for (const id of frontier) {
+        for (const neighbor of adjacency.get(id) || []) {
+          if (visible.has(neighbor)) continue;
+          visible.add(neighbor);
+          next.push(neighbor);
+        }
+      }
+      frontier = next;
+      if (!frontier.length) break;
+    }
+    nodes = nodes.filter((node) => visible.has(node.id));
+    nodeIds = visible;
+    edges = edges.filter((edge) => nodeIds.has(edge.source) && nodeIds.has(edge.target));
+  }
+
+  const attached = new Set();
+  for (const edge of edges) {
+    attached.add(edge.source);
+    attached.add(edge.target);
+  }
+  nodes = nodes.filter((node) => node.kind === "doc" || attached.has(node.id));
+  nodeIds = new Set(nodes.map((node) => node.id));
+  edges = edges.filter((edge) => nodeIds.has(edge.source) && nodeIds.has(edge.target));
+
+  view.visibleNodes = nodes;
+  view.visibleEdges = edges;
+  // Visible graph arrays define the lifetime of all simulation caches. A
+  // filter/scope change gets a fresh cache; ordinary frames and pointer moves
+  // keep reusing the same indexes, springs, force buffers and spatial buckets.
+  view.simulationCache = null;
+  const docCount = nodes.filter((node) => node.kind === "doc").length;
+  const backboneCount = edges.filter((edge) => edge.backbone).length;
+  const totalDocs = state.graph.stats?.documents || docCount;
+  const docLabel = docCount === totalDocs ? `${docCount}` : `${docCount}/${totalDocs}`;
+  els.graphStats.textContent = `${graphModeName()} · ${docLabel} 篇文档 · ${backboneCount} 条主干 · ${edges.length} 条关联`;
+  resizeCanvas();
+  if (refit || !view.fitted) fitGraphView();
+  else scheduleGraphDraw();
 }
 
 function graphPoint(node) {
+  const view = state.graphView;
+  return { x: node.x * view.scale + view.tx, y: node.y * view.scale + view.ty };
+}
+
+function constrainGraphPan() {
+  const nodes = state.graphView.visibleNodes;
   const rect = els.canvas.getBoundingClientRect();
-  const { scale, tx, ty } = graphTransform(rect, state.graph.nodes || []);
-  return { x: node.x * scale + tx, y: node.y * scale + ty };
+  if (!nodes.length || !rect.width || !rect.height) return;
+  const view = state.graphView;
+  const minX = Math.min(...nodes.map((node) => node.x)) * view.scale;
+  const maxX = Math.max(...nodes.map((node) => node.x)) * view.scale;
+  const minY = Math.min(...nodes.map((node) => node.y)) * view.scale;
+  const maxY = Math.max(...nodes.map((node) => node.y)) * view.scale;
+  const marginX = Math.min(180, rect.width * 0.24);
+  const marginY = Math.min(150, rect.height * 0.24);
+  view.tx = clamp(view.tx, marginX - maxX, rect.width - marginX - minX);
+  view.ty = clamp(view.ty, marginY - maxY, rect.height - marginY - minY);
 }
 
 function screenToGraph(clientX, clientY) {
   const rect = els.canvas.getBoundingClientRect();
-  const { scale, tx, ty } = graphTransform(rect, state.graph.nodes || []);
+  const view = state.graphView;
   return {
-    x: (clientX - rect.left - tx) / scale,
-    y: (clientY - rect.top - ty) / scale,
+    x: (clientX - rect.left - view.tx) / view.scale,
+    y: (clientY - rect.top - view.ty) / view.scale,
   };
+}
+
+function fitGraphView() {
+  const nodes = state.graphView.visibleNodes;
+  const rect = els.canvas.getBoundingClientRect();
+  if (!nodes.length || !rect.width || !rect.height) return scheduleGraphDraw();
+  const minX = Math.min(...nodes.map((node) => node.x));
+  const maxX = Math.max(...nodes.map((node) => node.x));
+  const minY = Math.min(...nodes.map((node) => node.y));
+  const maxY = Math.max(...nodes.map((node) => node.y));
+  const padding = Math.min(110, Math.max(54, Math.min(rect.width, rect.height) * 0.14));
+  const scale = Math.min(
+    (rect.width - padding * 2) / Math.max(120, maxX - minX),
+    (rect.height - padding * 2) / Math.max(120, maxY - minY),
+    1.65,
+  );
+  state.graphView.scale = clamp(scale, 0.12, 2.8);
+  state.graphView.tx = rect.width / 2 - ((minX + maxX) / 2) * state.graphView.scale;
+  state.graphView.ty = rect.height / 2 - ((minY + maxY) / 2) * state.graphView.scale;
+  state.graphView.fitted = true;
+  scheduleGraphDraw();
+}
+
+function zoomGraph(factor, clientX, clientY) {
+  const rect = els.canvas.getBoundingClientRect();
+  const px = clientX === undefined ? rect.left + rect.width / 2 : clientX;
+  const py = clientY === undefined ? rect.top + rect.height / 2 : clientY;
+  const before = screenToGraph(px, py);
+  state.graphView.scale = clamp(state.graphView.scale * factor, 0.12, 4);
+  state.graphView.tx = px - rect.left - before.x * state.graphView.scale;
+  state.graphView.ty = py - rect.top - before.y * state.graphView.scale;
+  state.graphView.fitted = true;
+  scheduleGraphDraw();
+}
+
+function getGraphPalette() {
+  const style = getComputedStyle(document.body);
+  const color = (name, fallback) => style.getPropertyValue(name).trim() || fallback;
+  return {
+    text: color("--graph-text", "#263244"),
+    muted: color("--graph-muted", "#7a8798"),
+    edge: color("--graph-edge", "rgba(100, 116, 139, .32)"),
+    link: color("--graph-link", "#14b8a6"),
+    doc: color("--graph-doc", "#ffffff"),
+    docBorder: color("--graph-doc-border", "#94a3b8"),
+    tag: color("--graph-tag", "#f59e0b"),
+    keyword: color("--graph-keyword", "#8b5cf6"),
+    missing: color("--graph-missing", "#ef6a6a"),
+    active: color("--graph-active", "#10b981"),
+    labelBg: color("--graph-label-bg", "rgba(255,255,255,.86)"),
+  };
+}
+
+function graphNodeRadius(node) {
+  const base = node.kind === "doc" ? 5.5 : node.kind === "tag" ? 5 : node.kind === "keyword" ? 4.5 : 4;
+  return base + Math.min(8, Math.sqrt(Math.max(0, node.degree || node.weight || 1)) * 1.45);
+}
+
+function graphGridKey(cellX, cellY) {
+  // Graph coordinates remain several orders of magnitude below this stride,
+  // so a number key is both collision-free in practice and allocation-free.
+  return cellX * 131071 + cellY;
+}
+
+const EMPTY_GRAPH_BUCKET = [];
+
+function getGraphSimulationCache(nodes = state.graphView.visibleNodes, edges = state.graphView.visibleEdges) {
+  const previous = state.graphView.simulationCache;
+  if (previous?.nodes === nodes && previous?.edges === edges) return previous;
+
+  const nodeIndex = new Map();
+  const nodeById = new Map();
+  nodes.forEach((node, index) => {
+    nodeIndex.set(node.id, index);
+    nodeById.set(node.id, node);
+  });
+  const springs = [];
+  const adjacency = Array.from({ length: nodes.length }, () => []);
+  for (const edge of edges) {
+    const a = nodeIndex.get(edge.source);
+    const b = nodeIndex.get(edge.target);
+    if (a === undefined || b === undefined) continue;
+    springs.push({ edge, a, b });
+    adjacency[a].push({ index: b, edge });
+    adjacency[b].push({ index: a, edge });
+  }
+
+  const cache = {
+    nodes,
+    edges,
+    nodeIndex,
+    nodeById,
+    springs,
+    adjacency,
+    fx: new Float64Array(nodes.length),
+    fy: new Float64Array(nodes.length),
+    phases: Float64Array.from(nodes, (node) => graphHash(node.id) * Math.PI * 2),
+    radii: Float64Array.from(nodes, graphNodeRadius),
+    forceGrid: new Map(),
+    forceBuckets: [],
+    forceCellX: new Int32Array(nodes.length),
+    forceCellY: new Int32Array(nodes.length),
+    collisionGrid: new Map(),
+    collisionBuckets: [],
+    collisionCellX: new Int32Array(nodes.length),
+    collisionCellY: new Int32Array(nodes.length),
+    visitMarks: new Uint32Array(nodes.length),
+    visitToken: 0,
+    frontierA: [],
+    frontierB: [],
+    connected: new Set(),
+    matches: new Set(),
+    matchQuery: null,
+    maxEnergy: 0,
+  };
+  state.graphView.simulationCache = cache;
+  return cache;
+}
+
+function fillGraphSpatialGrid(grid, buckets, cellX, cellY, nodes, cellSize) {
+  grid.clear();
+  let bucketCount = 0;
+  nodes.forEach((node, index) => {
+    const x = Math.floor(node.x / cellSize);
+    const y = Math.floor(node.y / cellSize);
+    cellX[index] = x;
+    cellY[index] = y;
+    const key = graphGridKey(x, y);
+    let bucket = grid.get(key);
+    if (!bucket) {
+      bucket = buckets[bucketCount] || [];
+      buckets[bucketCount] = bucket;
+      bucketCount += 1;
+      bucket.length = 0;
+      grid.set(key, bucket);
+    }
+    bucket.push(index);
+  });
+  return grid;
+}
+
+function relaxGraphCollisions(pinnedNode = null, passes = 2) {
+  const nodes = state.graphView.visibleNodes;
+  if (nodes.length < 2) return false;
+  const cache = getGraphSimulationCache(nodes, state.graphView.visibleEdges);
+  const scale = clamp(state.graphView.scale, 0.55, 1.25);
+  let moved = false;
+  for (let pass = 0; pass < passes; pass += 1) {
+    const cellSize = 54 / scale;
+    const grid = fillGraphSpatialGrid(
+      cache.collisionGrid,
+      cache.collisionBuckets,
+      cache.collisionCellX,
+      cache.collisionCellY,
+      nodes,
+      cellSize,
+    );
+    nodes.forEach((node, index) => {
+      const cx = cache.collisionCellX[index];
+      const cy = cache.collisionCellY[index];
+      for (let ox = -1; ox <= 1; ox += 1) {
+        for (let oy = -1; oy <= 1; oy += 1) {
+          for (const otherIndex of grid.get(graphGridKey(cx + ox, cy + oy)) || EMPTY_GRAPH_BUCKET) {
+            if (otherIndex <= index) continue;
+            const other = nodes[otherIndex];
+            let dx = other.x - node.x;
+            let dy = other.y - node.y;
+            let distance = Math.hypot(dx, dy);
+            if (distance < 0.01) {
+              const angle = graphHash(`${node.id}|${other.id}`) * Math.PI * 2;
+              dx = Math.cos(angle);
+              dy = Math.sin(angle);
+              distance = 1;
+            }
+            const minimum = (cache.radii[index] + cache.radii[otherIndex] + 13) / scale;
+            if (distance >= minimum) continue;
+            const overlap = minimum - distance;
+            const ux = dx / distance;
+            const uy = dy / distance;
+            if (node === pinnedNode) {
+              other.x += ux * overlap;
+              other.y += uy * overlap;
+            } else if (other === pinnedNode) {
+              node.x -= ux * overlap;
+              node.y -= uy * overlap;
+            } else {
+              node.x -= ux * overlap * 0.5;
+              node.y -= uy * overlap * 0.5;
+              other.x += ux * overlap * 0.5;
+              other.y += uy * overlap * 0.5;
+            }
+            moved = true;
+          }
+        }
+      }
+    });
+  }
+  return moved;
+}
+
+function animateGraphRelaxation(frames = 12) {
+  if (state.graphView.dynamic) {
+    startGraphSimulation();
+    return;
+  }
+  if (state.graphView.relaxFrame) cancelAnimationFrame(state.graphView.relaxFrame);
+  const settle = (remaining) => {
+    state.graphView.relaxFrame = 0;
+    if (!relaxGraphCollisions(null, remaining > 5 ? 2 : 1) || remaining <= 1) {
+      scheduleGraphDraw();
+      return;
+    }
+    scheduleGraphDraw();
+    state.graphView.relaxFrame = requestAnimationFrame(() => settle(remaining - 1));
+  };
+  state.graphView.relaxFrame = requestAnimationFrame(() => settle(frames));
+}
+
+function startGraphRebound(previousPositions) {
+  if (state.graphView.reboundAnimation) cancelAnimationFrame(state.graphView.reboundAnimation);
+  stopGraphSimulation();
+  const items = state.graphView.visibleNodes
+    .map((node) => ({ node, fromX: node.x, fromY: node.y, to: previousPositions.get(node.id) }))
+    .filter((item) => item.to);
+  if (!items.length) return;
+  const started = performance.now();
+  const duration = 1250;
+  const tick = (now) => {
+    const progress = clamp((now - started) / duration, 0, 1);
+    // Damped spring: it overshoots subtly, then settles at the pre-drag layout.
+    const eased = progress >= 1
+      ? 1
+      : 1 - Math.exp(-5.2 * progress) * Math.cos(11.5 * progress);
+    for (const item of items) {
+      item.node.x = item.fromX + (item.to.x - item.fromX) * eased;
+      item.node.y = item.fromY + (item.to.y - item.fromY) * eased;
+      item.node.energy = Math.max(item.node.energy || 0, 0.35 * (1 - progress));
+    }
+    scheduleGraphDraw();
+    if (progress < 1) {
+      state.graphView.reboundAnimation = requestAnimationFrame(tick);
+    } else {
+      state.graphView.reboundAnimation = 0;
+      if (state.graphView.dynamic) startGraphSimulation();
+    }
+  };
+  state.graphView.reboundAnimation = requestAnimationFrame(tick);
+}
+
+function exciteGraphNode(source, dragDx = 0, dragDy = 0) {
+  const nodes = state.graphView.visibleNodes;
+  const cache = getGraphSimulationCache(nodes, state.graphView.visibleEdges);
+  const sourceIndex = cache.nodeIndex.get(source.id);
+  if (sourceIndex === undefined) return;
+  // Keep a short-lived wave alive after every pointer move.  This is
+  // intentionally independent from the persistent "dynamic" toggle: a
+  // deliberate drag should always produce a visible chain response.
+  state.graphView.chainUntil = performance.now() + 2200;
+  source.vx = dragDx * 1.15;
+  source.vy = dragDy * 1.15;
+  source.energy = 1;
+  cache.visitToken = (cache.visitToken + 1) >>> 0;
+  if (!cache.visitToken) {
+    cache.visitMarks.fill(0);
+    cache.visitToken = 1;
+  }
+  cache.visitMarks[sourceIndex] = cache.visitToken;
+  let frontier = cache.frontierA;
+  let next = cache.frontierB;
+  frontier.length = 0;
+  next.length = 0;
+  frontier.push(sourceIndex);
+  for (let depth = 1; depth <= 3; depth += 1) {
+    next.length = 0;
+    for (const itemIndex of frontier) {
+      const item = nodes[itemIndex];
+      for (const relation of cache.adjacency[itemIndex]) {
+        const targetIndex = relation.index;
+        if (cache.visitMarks[targetIndex] === cache.visitToken) continue;
+        cache.visitMarks[targetIndex] = cache.visitToken;
+        const target = nodes[targetIndex];
+        const dx = item.x - target.x;
+        const dy = item.y - target.y;
+        const distance = Math.max(1, Math.hypot(dx, dy));
+        const edgePower = relation.edge.backbone ? 0.8 : 0.22;
+        const falloff = edgePower / depth;
+        // Transfer part of the pointer displacement immediately.  Forces
+        // alone only create a delayed pull, which looks like a static line
+        // while the source is pinned during the drag.
+        const transfer = relation.edge.backbone
+          ? ([0.8, 0.42, 0.2][depth - 1] || 0.12)
+          : ([0.58, 0.3, 0.14][depth - 1] || 0.08);
+        target.x += dragDx * transfer;
+        target.y += dragDy * transfer;
+        target.vx += (dx / distance) * falloff + dragDx * (0.42 / depth);
+        target.vy += (dy / distance) * falloff + dragDy * (0.42 / depth);
+        target.energy = Math.max(target.energy || 0, 1 / (depth * 1.15));
+        next.push(targetIndex);
+      }
+    }
+    const previous = frontier;
+    frontier = next;
+    next = previous;
+    if (!frontier.length) break;
+  }
+  startGraphSimulation();
+}
+
+function graphMotionReduced() {
+  return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+}
+
+function stopGraphSimulation() {
+  if (state.graphView.simulationFrame) cancelAnimationFrame(state.graphView.simulationFrame);
+  if (state.graphView.simulationTimer) clearTimeout(state.graphView.simulationTimer);
+  state.graphView.simulationFrame = 0;
+  state.graphView.simulationTimer = 0;
+  state.graphView.simulationLastTime = 0;
+}
+
+function graphSimulationInterval(now, cache) {
+  const count = cache.nodes.length;
+  const urgent = Boolean(state.graphDrag) || now < state.graphView.chainUntil || now < state.graphView.reboundUntil;
+  if (urgent) return count > 900 ? 42 : count > 500 ? 36 : 30;
+  if (state.graphView.hoveredId || cache.maxEnergy > 0.08) return count > 900 ? 56 : count > 500 ? 45 : 40;
+  return count > 900 ? 100 : count > 500 ? 80 : count > 250 ? 66 : 50;
+}
+
+function queueGraphSimulation(delay = 0) {
+  if (state.graphView.simulationFrame || state.graphView.simulationTimer) return;
+  if (delay <= 12) {
+    state.graphView.simulationFrame = requestAnimationFrame(runGraphSimulation);
+    return;
+  }
+  state.graphView.simulationTimer = window.setTimeout(() => {
+    state.graphView.simulationTimer = 0;
+    state.graphView.simulationFrame = requestAnimationFrame(runGraphSimulation);
+  }, Math.max(0, delay - 8));
+}
+
+function startGraphSimulation() {
+  const now = performance.now();
+  if ((!state.graphView.dynamic && now > state.graphView.chainUntil && now > state.graphView.reboundUntil) || graphMotionReduced()) return;
+  if (state.mode !== "graph" || document.hidden) return;
+  const urgent = Boolean(state.graphDrag) || now < state.graphView.chainUntil || now < state.graphView.reboundUntil;
+  if (urgent && state.graphView.simulationTimer) {
+    clearTimeout(state.graphView.simulationTimer);
+    state.graphView.simulationTimer = 0;
+  }
+  if (!state.graphView.simulationLastTime) state.graphView.simulationLastTime = now;
+  queueGraphSimulation(urgent ? 0 : graphSimulationInterval(now, getGraphSimulationCache()));
+}
+
+function runGraphSimulation(timestamp) {
+  state.graphView.simulationFrame = 0;
+  const temporaryChain = timestamp < state.graphView.chainUntil;
+  const rebound = timestamp < state.graphView.reboundUntil;
+  if ((!state.graphView.dynamic && !temporaryChain && !rebound) || state.mode !== "graph" || document.hidden || graphMotionReduced()) return;
+  const nodes = state.graphView.visibleNodes;
+  if (!nodes.length) return;
+  const cache = getGraphSimulationCache(nodes, state.graphView.visibleEdges);
+  const frameBudget = graphSimulationInterval(timestamp, cache);
+  const elapsed = timestamp - state.graphView.simulationLastTime;
+  if (elapsed < frameBudget) {
+    queueGraphSimulation(frameBudget - elapsed);
+    return;
+  }
+  state.graphView.simulationLastTime = timestamp;
+  state.graphView.motionTime = timestamp;
+  const dt = clamp(elapsed / 33.333, 0.55, 1.8);
+  const fx = cache.fx;
+  const fy = cache.fy;
+  fx.fill(0);
+  fy.fill(0);
+  const cellSize = 155;
+  const grid = fillGraphSpatialGrid(
+    cache.forceGrid,
+    cache.forceBuckets,
+    cache.forceCellX,
+    cache.forceCellY,
+    nodes,
+    cellSize,
+  );
+  nodes.forEach((node, index) => {
+    const cx = cache.forceCellX[index];
+    const cy = cache.forceCellY[index];
+    for (let ox = -1; ox <= 1; ox += 1) {
+      for (let oy = -1; oy <= 1; oy += 1) {
+        for (const otherIndex of grid.get(graphGridKey(cx + ox, cy + oy)) || EMPTY_GRAPH_BUCKET) {
+          if (otherIndex <= index) continue;
+          const other = nodes[otherIndex];
+          let dx = other.x - node.x;
+          let dy = other.y - node.y;
+          let distanceSq = dx * dx + dy * dy;
+          if (distanceSq < 1) {
+            const angle = graphHash(`${node.id}|${other.id}`) * Math.PI * 2;
+            dx = Math.cos(angle);
+            dy = Math.sin(angle);
+            distanceSq = 1;
+          }
+          if (distanceSq > 42000) continue;
+          const distance = Math.sqrt(distanceSq);
+          const force = 24 / (1 + distanceSq / 900);
+          const pushX = (dx / distance) * force;
+          const pushY = (dy / distance) * force;
+          fx[index] -= pushX;
+          fy[index] -= pushY;
+          fx[otherIndex] += pushX;
+          fy[otherIndex] += pushY;
+        }
+      }
+    }
+  });
+  for (const spring of cache.springs) {
+    const { edge, a: aIndex, b: bIndex } = spring;
+    const a = nodes[aIndex];
+    const b = nodes[bIndex];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const distance = Math.max(1, Math.hypot(dx, dy));
+    const desired = edge.type === "tag" ? 78 : edge.type === "keyword" ? 94 : 112;
+    const strength = edge.backbone ? 0.038 : 0.006;
+    const pull = clamp((distance - desired) * strength, -5, 5);
+    const pullX = (dx / distance) * pull;
+    const pullY = (dy / distance) * pull;
+    fx[aIndex] += pullX;
+    fy[aIndex] += pullY;
+    fx[bIndex] -= pullX;
+    fy[bIndex] -= pullY;
+  }
+  const pinned = state.graphDrag?.type === "node" ? state.graphDrag.node : null;
+  let maxEnergy = 0;
+  nodes.forEach((node, index) => {
+    if (node === pinned) {
+      node.vx = 0;
+      node.vy = 0;
+      node.energy = 1;
+      maxEnergy = 1;
+      return;
+    }
+    const phase = cache.phases[index];
+    const drift = node.layoutRoot ? 0.026 : 0.078;
+    fx[index] += Math.sin(timestamp * 0.00047 + phase) * drift;
+    fy[index] += Math.cos(timestamp * 0.00039 + phase * 1.31) * drift;
+    const returnStrength = rebound
+      ? (node.layoutRoot ? 0.075 : 0.052)
+      : (node.layoutRoot ? 0.006 : 0.0014);
+    fx[index] += (node.targetX - node.x) * returnStrength;
+    fy[index] += (node.targetY - node.y) * returnStrength;
+    node.vx = (node.vx + fx[index] * dt) * 0.88;
+    node.vy = (node.vy + fy[index] * dt) * 0.88;
+    node.energy = Math.max(0, (node.energy || 0) * 0.95);
+    maxEnergy = Math.max(maxEnergy, node.energy);
+    const speed = Math.max(0.001, Math.hypot(node.vx, node.vy));
+    const limit = Math.min(node.layoutRoot ? 1.5 : 3.2, speed);
+    node.x += (node.vx / speed) * limit * dt;
+    node.y += (node.vy / speed) * limit * dt;
+  });
+  cache.maxEnergy = maxEnergy;
+  relaxGraphCollisions(pinned, 1);
+  scheduleGraphDraw();
+  queueGraphSimulation(graphSimulationInterval(timestamp, cache));
+}
+
+function scheduleGraphDraw() {
+  if (state.graphView.frame) return;
+  state.graphView.frame = requestAnimationFrame(() => {
+    state.graphView.frame = 0;
+    drawGraph();
+  });
 }
 
 function drawGraph() {
   if (state.mode !== "graph") return;
   const ctx = els.canvas.getContext("2d");
   const rect = els.canvas.getBoundingClientRect();
-  ctx.clearRect(0, 0, rect.width, rect.height);
-  const nodes = state.graph.nodes || [];
+  // Clear the complete backing store in physical pixels. Clearing with the
+  // DPR transform still active can leave a stale strip after browser zoom or
+  // a resize, which looks like the network was rendered twice at the bottom.
+  const ratio = rect.width > 0 ? els.canvas.width / rect.width : 1;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, els.canvas.width, els.canvas.height);
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  const nodes = state.graphView.visibleNodes;
   if (!nodes.length) {
-    ctx.fillStyle = "#667085";
+    ctx.fillStyle = getGraphPalette().muted;
+    ctx.font = `500 13px ${getComputedStyle(document.body).fontFamily}`;
     ctx.fillText(text.noGraph, 24, 32);
     return;
   }
 
-  const { scale, tx, ty } = graphTransform(rect, nodes);
-  const point = (node) => ({ x: node.x * scale + tx, y: node.y * scale + ty });
-  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const palette = getGraphPalette();
+  const view = state.graphView;
+  const point = graphPoint;
+  const cache = getGraphSimulationCache(nodes, view.visibleEdges);
+  const byId = cache.nodeById;
+  const focusId = view.hoveredId;
+  const connected = cache.connected;
+  connected.clear();
+  if (focusId) connected.add(focusId);
+  if (focusId) {
+    for (const edge of view.visibleEdges) {
+      if (edge.source === focusId) connected.add(edge.target);
+      if (edge.target === focusId) connected.add(edge.source);
+    }
+  }
+  const query = view.query.trim().toLowerCase();
+  const matches = cache.matches;
+  if (cache.matchQuery !== query) {
+    cache.matchQuery = query;
+    matches.clear();
+    if (query) {
+      for (const node of nodes) {
+        if (`${node.label} ${node.group}`.toLowerCase().includes(query)) matches.add(node.id);
+      }
+    }
+  }
 
-  for (const edge of state.graph.edges) {
+  ctx.lineCap = "round";
+  for (const edge of view.visibleEdges) {
     const a = byId.get(edge.source);
     const b = byId.get(edge.target);
     if (!a || !b) continue;
     const pa = point(a);
     const pb = point(b);
-    ctx.strokeStyle = edge.type === "link" ? "#0f766e" : edge.type === "tag" ? "#b45309" : edge.type === "keyword" ? "#6941c6" : "#98a2b3";
-    ctx.globalAlpha = edge.type === "semantic" ? 0.22 : edge.type === "keyword" ? 0.42 : 0.58;
-    ctx.lineWidth = Math.min(3, 0.8 + edge.weight * 0.2);
+    const focused = !focusId || edge.source === focusId || edge.target === focusId;
+    const queryRelated = !query || matches.has(edge.source) || matches.has(edge.target);
+    if (edge.type === "keyword" && !edge.backbone && view.scale < 0.9 && !focusId && !query) continue;
+    if ((pa.x < -40 && pb.x < -40) || (pa.x > rect.width + 40 && pb.x > rect.width + 40)
+      || (pa.y < -40 && pb.y < -40) || (pa.y > rect.height + 40 && pb.y > rect.height + 40)) continue;
+    ctx.strokeStyle = edge.type === "link" || edge.type === "missing" ? palette.link : edge.type === "tag" ? palette.tag : edge.type === "keyword" ? palette.keyword : palette.edge;
+    const energy = clamp(((a.energy || 0) + (b.energy || 0)) * 0.5, 0, 1);
+    // Keep the graph structure legible without letting the links overpower
+    // document/topic nodes. Energy from an active drag can still brighten a
+    // local chain, while idle connections stay deliberately subdued.
+    const baseAlpha = edge.backbone ? (edge.type === "link" ? 0.48 : 0.3) : (edge.type === "link" ? 0.11 : 0.045);
+    ctx.globalAlpha = focused && queryRelated ? Math.min(0.78, baseAlpha + energy * 0.24) : 0.022;
+    ctx.lineWidth = (edge.backbone ? 0.86 : 0.34) + Math.min(1.35, edge.weight * (edge.backbone ? 0.14 : 0.055)) + energy * 0.8;
+    ctx.shadowColor = edge.backbone && focused ? ctx.strokeStyle : "transparent";
+    ctx.shadowBlur = edge.backbone && focused ? 3 + energy * 6 : 0;
+    const dx = pb.x - pa.x;
+    const dy = pb.y - pa.y;
+    const distance = Math.max(1, Math.hypot(dx, dy));
+    const bendSign = graphHash(`${edge.source}|${edge.target}`) > 0.5 ? 1 : -1;
+    const bend = Math.min(22, distance * 0.08) * bendSign;
+    const controlX = (pa.x + pb.x) / 2 - (dy / distance) * bend;
+    const controlY = (pa.y + pb.y) / 2 + (dx / distance) * bend;
     ctx.beginPath();
     ctx.moveTo(pa.x, pa.y);
-    ctx.lineTo(pb.x, pb.y);
+    ctx.quadraticCurveTo(controlX, controlY, pb.x, pb.y);
     ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    if (edge.directed && focused && view.scale > 0.45) {
+      const angle = Math.atan2(pb.y - controlY, pb.x - controlX);
+      const targetRadius = graphNodeRadius(b) + 3;
+      const ax = pb.x - Math.cos(angle) * targetRadius;
+      const ay = pb.y - Math.sin(angle) * targetRadius;
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(ax - Math.cos(angle - 0.55) * 5, ay - Math.sin(angle - 0.55) * 5);
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(ax - Math.cos(angle + 0.55) * 5, ay - Math.sin(angle + 0.55) * 5);
+      ctx.stroke();
+    }
   }
 
   ctx.globalAlpha = 1;
+  const labelCandidates = [];
+  const motionTime = view.motionTime || performance.now();
   for (const node of nodes) {
     const p = point(node);
     const active = node.id === state.selectedNode;
-    const keyword = node.kind === "keyword";
-    ctx.fillStyle = active ? "#0f766e" : keyword ? "#f4efff" : "#ffffff";
-    ctx.strokeStyle = active ? "#115e59" : keyword ? "#6941c6" : "#98a2b3";
-    ctx.lineWidth = active ? 3 : 1.5;
+    const hovered = node.id === focusId;
+    const related = !focusId || connected.has(node.id);
+    const queryMatch = !query || matches.has(node.id);
+    const energy = clamp(node.energy || 0, 0, 1);
+    const idlePulse = view.dynamic ? Math.sin(motionTime * 0.002 + graphHash(node.id) * Math.PI * 2) * 0.025 : 0;
+    const radius = graphNodeRadius(node) * clamp(view.scale, 0.72, 1.18) * (1 + idlePulse + energy * 0.2);
+    const kindColor = node.kind === "tag" ? palette.tag : node.kind === "keyword" ? palette.keyword : node.kind === "missing" ? palette.missing : palette.doc;
+    ctx.globalAlpha = related && queryMatch ? 1 : query && matches.has(node.id) ? 1 : 0.18;
+    ctx.fillStyle = active || hovered ? palette.active : kindColor;
+    ctx.strokeStyle = active || hovered ? palette.active : node.kind === "doc" ? palette.docBorder : kindColor;
+    ctx.lineWidth = active || hovered ? 2.6 : 1.2;
+    ctx.shadowColor = active || hovered ? palette.active : energy > 0.08 ? kindColor : "transparent";
+    ctx.shadowBlur = active || hovered ? 14 : energy > 0.08 ? 5 + energy * 9 : 0;
     ctx.beginPath();
-    ctx.arc(p.x, p.y, active ? 13 : keyword ? 8 : 10, 0, Math.PI * 2);
+    if (node.kind === "tag") {
+      ctx.moveTo(p.x, p.y - radius);
+      ctx.lineTo(p.x + radius, p.y);
+      ctx.lineTo(p.x, p.y + radius);
+      ctx.lineTo(p.x - radius, p.y);
+      ctx.closePath();
+    } else if (node.kind === "keyword") {
+      for (let side = 0; side < 6; side += 1) {
+        const angle = -Math.PI / 2 + side * Math.PI / 3;
+        const x = p.x + Math.cos(angle) * radius;
+        const y = p.y + Math.sin(angle) * radius;
+        if (side === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+    } else {
+      ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+    }
     ctx.fill();
+    if (node.kind === "missing") ctx.setLineDash([3, 2]);
     ctx.stroke();
-    ctx.fillStyle = active ? "#115e59" : keyword ? "#53389e" : "#1d2430";
-    ctx.font = active ? "700 13px Segoe UI" : keyword ? "700 11px Segoe UI" : "12px Segoe UI";
-    ctx.fillText(node.label, p.x + 15, p.y + 4);
+    ctx.setLineDash([]);
+    ctx.shadowBlur = 0;
+
+    const importantHub = node.kind !== "doc" && (node.degree || 0) >= 4;
+    const tagModeLabel = view.showTags && !view.showKeywords && node.kind === "tag" && view.scale > 0.34;
+    const semanticModeLabel = !view.showTags && view.showKeywords && node.kind === "keyword"
+      && (node.degree || 0) >= 3 && view.scale > 0.54;
+    const showLabel = hovered || active || matches.has(node.id)
+      || (node.layoutRoot && view.scale > 0.58)
+      || tagModeLabel
+      || semanticModeLabel
+      || (view.scale > 0.9 && importantHub)
+      || (view.scale > 1.15 && node.kind === "doc" && (node.degree || 0) >= 3)
+      || (view.scale > 1.65 && node.kind === "doc");
+    if (showLabel) labelCandidates.push({ node, p, radius, active, hovered, related, queryMatch });
   }
+
+  const occupied = [];
+  labelCandidates.sort((a, b) => Number(b.hovered || b.active || matches.has(b.node.id)) - Number(a.hovered || a.active || matches.has(a.node.id))
+    || (b.node.degree || 0) - (a.node.degree || 0));
+  for (const item of labelCandidates) {
+    const label = compactName(item.node.label, view.scale > 1 ? 28 : 20);
+    ctx.font = item.hovered || item.active ? "700 12px Segoe UI, Microsoft YaHei" : "600 11px Segoe UI, Microsoft YaHei";
+    const width = ctx.measureText(label).width;
+    const labelX = item.p.x + item.radius + 7;
+    const labelY = item.p.y + 4;
+    const box = { x: labelX - 3, y: labelY - 12, width: width + 7, height: 17 };
+    const overlaps = occupied.some((other) => box.x < other.x + other.width + 4 && box.x + box.width + 4 > other.x
+      && box.y < other.y + other.height + 3 && box.y + box.height + 3 > other.y);
+    if (overlaps && !item.hovered && !item.active && !matches.has(item.node.id)) continue;
+    occupied.push(box);
+    ctx.globalAlpha = item.related && item.queryMatch ? 0.94 : 0.28;
+    ctx.fillStyle = palette.labelBg;
+    ctx.fillRect(box.x, box.y, box.width, box.height);
+    ctx.fillStyle = palette.text;
+    ctx.fillText(label, labelX, labelY);
+  }
+  ctx.globalAlpha = 1;
+  ctx.shadowBlur = 0;
 }
 
 function hitGraph(event) {
-  const nodes = state.graph.nodes || [];
+  const nodes = state.graphView.visibleNodes;
   if (!nodes.length) return null;
   const rect = els.canvas.getBoundingClientRect();
-  const { scale, tx, ty } = graphTransform(rect, nodes);
   const x = event.clientX - rect.left;
   const y = event.clientY - rect.top;
-  return nodes.find((node) => Math.hypot(node.x * scale + tx - x, node.y * scale + ty - y) < 18);
+  for (let index = nodes.length - 1; index >= 0; index -= 1) {
+    const node = nodes[index];
+    const point = graphPoint(node);
+    if (Math.hypot(point.x - x, point.y - y) <= Math.max(12, graphNodeRadius(node) * state.graphView.scale + 5)) return node;
+  }
+  return null;
+}
+
+function updateGraphTooltip(node, event) {
+  if (!node) {
+    els.graphTooltip.classList.add("hidden");
+    return;
+  }
+  const kindNames = { doc: "文档", tag: "显式标签（# / frontmatter）", keyword: "语义概念（自动提取）", missing: "未创建链接" };
+  els.graphTooltip.textContent = `${node.label} · ${kindNames[node.kind] || "节点"} · ${node.degree || 0} 条关联`;
+  const rect = els.canvas.getBoundingClientRect();
+  els.graphTooltip.style.left = `${Math.min(rect.width - 180, Math.max(10, event.clientX - rect.left + 14))}px`;
+  els.graphTooltip.style.top = `${Math.min(rect.height - 44, Math.max(10, event.clientY - rect.top + 14))}px`;
+  els.graphTooltip.classList.remove("hidden");
+}
+
+async function activateGraphNode(node) {
+  if (!node) return;
+  if (node.kind === "doc") {
+    await openDoc(node.id);
+    setMode("view");
+    return;
+  }
+  if (node.kind === "missing") {
+    showToast(`尚未创建文档：${node.label}`);
+    return;
+  }
+  const query = node.kind === "tag" ? node.label.replace(/^#/, "") : node.label;
+  els.graphSearchInput.value = query;
+  state.graphView.query = query.toLowerCase();
+  scheduleGraphDraw();
 }
 
 function insertAtCursor(value) {
@@ -2321,7 +3715,7 @@ function handleTreeMultiSelect(path, event) {
     state.multiSelected.clear();
     state.multiSelected.add(path);
   }
-  renderTree(state.tree);
+  syncTreeSelectionState();
 }
 
 function keyboardCopy(event) {
@@ -2378,6 +3772,14 @@ function keyboardDelete(event) {
 
 // 全局键盘快捷键
 document.addEventListener("keydown", (event) => {
+  if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "f") {
+    event.preventDefault();
+    return setImmersiveEditing(!state.immersive);
+  }
+  if (event.key === "Escape" && state.immersive) {
+    event.preventDefault();
+    return setImmersiveEditing(false);
+  }
   if ((event.ctrlKey || event.metaKey) && event.key && event.key.toLowerCase() === "c") return keyboardCopy(event);
   if ((event.ctrlKey || event.metaKey) && event.key && event.key.toLowerCase() === "v") return keyboardPaste(event);
   if ((event.ctrlKey || event.metaKey) && event.key && event.key.toLowerCase() === "d") return keyboardDelete(event);
@@ -2470,6 +3872,12 @@ els.searchResults.addEventListener("click", (event) => {
   }
 });
 els.markdownView.addEventListener("click", (event) => {
+  const taskInput = event.target.closest("input[data-task-line]");
+  if (taskInput) {
+    event.stopPropagation();
+    toggleMarkdownTask(taskInput);
+    return;
+  }
   const copy = event.target.closest(".code-copy");
   if (copy) {
     const code = copy.closest(".code-block")?.querySelector("code")?.innerText || "";
@@ -2490,12 +3898,26 @@ els.markdownView.addEventListener("copy", (event) => {
   }
 });
 els.preview.addEventListener("click", (event) => {
+  const taskInput = event.target.closest("input[data-task-line]");
+  if (taskInput) {
+    event.stopPropagation();
+    toggleMarkdownTask(taskInput);
+    return;
+  }
   const copy = event.target.closest(".code-copy");
   if (!copy) return;
   const code = copy.closest(".code-block")?.querySelector("code")?.innerText || "";
   navigator.clipboard?.writeText(code).then(() => showToast("\u4ee3\u7801\u5df2\u590d\u5236"));
 });
 els.readerOutline.addEventListener("click", (event) => {
+  const toggle = event.target.closest("[data-outline-toggle]");
+  if (toggle) {
+    const group = toggle.closest(".outline-group");
+    const collapsed = group.classList.toggle("is-collapsed");
+    toggle.setAttribute("aria-expanded", String(!collapsed));
+    toggle.title = collapsed ? "展开三级目录" : "收起三级目录";
+    return;
+  }
   const button = event.target.closest("[data-heading]");
   if (!button) return;
   let target = els.markdownView.querySelector(`#${CSS.escape(button.dataset.heading)}`);
@@ -2509,9 +3931,10 @@ els.readerOutline.addEventListener("click", (event) => {
 });
 els.editor.addEventListener("input", () => {
   state.currentContent = els.editor.value;
+  updateLargeDocumentState(state.currentContent);
   recordUndo(state.currentContent);
   setSaveStatus("\u672a\u4fdd\u5b58", true);
-  updatePreview();
+  schedulePreviewUpdate();
   autoSaveCurrentDoc();
 });
 els.editor.addEventListener("scroll", syncPreviewToEditor, { passive: true });
@@ -2829,6 +4252,23 @@ els.settingsModal.addEventListener("click", (event) => {
   if (event.target === els.settingsModal) els.settingsModal.classList.add("hidden");
 });
 
+function openCommunityModal() {
+  els.settingsModal.classList.add("hidden");
+  els.communityModal.classList.remove("hidden");
+}
+
+function closeCommunityModal({ reopenSettings = true } = {}) {
+  els.communityModal.classList.add("hidden");
+  if (reopenSettings) els.settingsModal.classList.remove("hidden");
+}
+
+els.communityBtn.addEventListener("click", openCommunityModal);
+els.closeCommunityBtn.addEventListener("click", () => closeCommunityModal());
+els.backCommunityBtn.addEventListener("click", () => closeCommunityModal());
+els.communityModal.addEventListener("click", (event) => {
+  if (event.target === els.communityModal) closeCommunityModal();
+});
+
 els.aboutBtn.addEventListener("click", async () => {
   els.settingsModal.classList.add("hidden");
   await loadAboutInfo();
@@ -2911,6 +4351,10 @@ els.globalFontFamily.addEventListener("change", () => {
   applySettings();
 });
 els.normalizeMdBtn.addEventListener("click", openNormalizeMdModal);
+if (els.semanticTagsBtn) els.semanticTagsBtn.addEventListener("click", openSemanticTagsModal);
+if (els.cancelSemanticTagsBtn) els.cancelSemanticTagsBtn.addEventListener("click", closeSemanticTagsModal);
+if (els.applySemanticTagsBtn) els.applySemanticTagsBtn.addEventListener("click", applySemanticTags);
+if (els.semanticTagsMax) els.semanticTagsMax.addEventListener("change", previewSemanticTags);
 if (els.cancelNormalizeMdBtn) {
   els.cancelNormalizeMdBtn.addEventListener("click", closeNormalizeMdModal);
 }
@@ -2920,6 +4364,11 @@ if (els.confirmNormalizeMdBtn) {
 if (els.normalizeMdModal) {
   els.normalizeMdModal.addEventListener("click", (event) => {
     if (event.target === els.normalizeMdModal) closeNormalizeMdModal();
+  });
+}
+if (els.semanticTagsModal) {
+  els.semanticTagsModal.addEventListener("click", (event) => {
+    if (event.target === els.semanticTagsModal) closeSemanticTagsModal();
   });
 }
 els.editorToolbar.addEventListener("mousedown", (event) => {
@@ -2949,6 +4398,8 @@ els.viewBtn.addEventListener("click", async () => {
 });
 els.editBtn.addEventListener("click", () => state.currentPath && setMode("edit"));
 els.graphBtn.addEventListener("click", () => setMode("graph"));
+els.focusModeBtn.addEventListener("click", () => setImmersiveEditing(!state.immersive));
+els.previewToggleBtn.addEventListener("click", () => setPreviewVisible(!state.previewVisible));
 els.deleteBtn.addEventListener("click", deleteSelected);
 els.saveBtn.addEventListener("click", async () => {
   try {
@@ -2963,37 +4414,146 @@ els.formatBtn.addEventListener("click", () => {
   const formatted = formatDocument(els.editor.value);
   els.editor.value = formatted;
   state.currentContent = formatted;
+  updateLargeDocumentState(formatted);
   recordUndo(formatted);
-  updatePreview();
+  schedulePreviewUpdate();
   showToast("文档格式化完成");
 });
 els.fitGraphBtn.addEventListener("click", () => {
-  state.graphReady = false;
-  initGraph(true);
+  fitGraphView();
+});
+els.graphZoomOutBtn.addEventListener("click", () => zoomGraph(0.82));
+els.graphZoomInBtn.addEventListener("click", () => zoomGraph(1.22));
+els.graphSearchInput.addEventListener("input", debounce(() => {
+  state.graphView.query = els.graphSearchInput.value.trim().toLowerCase();
+  scheduleGraphDraw();
+}, 100));
+els.graphScope.addEventListener("change", () => {
+  if (els.graphScope.value === "local" && !state.currentPath) {
+    els.graphScope.value = "global";
+    showToast("请先打开一篇文档，再查看局部图谱");
+  }
+  state.graphView.scope = els.graphScope.value;
+  els.graphDepth.value = state.graphView.scope === "local" ? String(state.graphView.depth) : "all";
+  refreshGraphView(true);
+});
+els.graphDepth.addEventListener("change", () => {
+  if (els.graphDepth.value === "all") {
+    state.graphView.scope = "global";
+    els.graphScope.value = "global";
+    refreshGraphView(true);
+    return;
+  }
+  if (!state.currentPath) {
+    els.graphDepth.value = "all";
+    state.graphView.scope = "global";
+    els.graphScope.value = "global";
+    showToast("请先打开一篇文档，再选择邻域深度");
+    return;
+  }
+  state.graphView.depth = Number(els.graphDepth.value || 2);
+  state.graphView.scope = "local";
+  els.graphScope.value = "local";
+  refreshGraphView(true);
+});
+els.graphShowTags.addEventListener("change", () => {
+  state.graphView.showTags = els.graphShowTags.checked;
+  applyGraphModeLayout();
+});
+els.graphShowKeywords.addEventListener("change", () => {
+  state.graphView.showKeywords = els.graphShowKeywords.checked;
+  applyGraphModeLayout();
+});
+els.graphShowOrphans.addEventListener("change", () => {
+  state.graphView.showOrphans = els.graphShowOrphans.checked;
+  applyGraphModeLayout();
+});
+els.graphShowMissing.addEventListener("change", () => {
+  state.graphView.showMissing = els.graphShowMissing.checked;
+  applyGraphModeLayout();
+});
+els.graphDynamic.addEventListener("change", () => {
+  state.graphView.dynamic = els.graphDynamic.checked;
+  localStorage.setItem("graphDynamic", state.graphView.dynamic ? "1" : "0");
+  if (state.graphView.dynamic) {
+    if (graphMotionReduced()) showToast("系统已开启减少动画，动态图谱保持暂停");
+    startGraphSimulation();
+  } else {
+    stopGraphSimulation();
+    scheduleGraphDraw();
+  }
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) stopGraphSimulation();
+  else startGraphSimulation();
+});
+const graphMotionPreference = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+graphMotionPreference?.addEventListener?.("change", () => {
+  if (graphMotionReduced()) stopGraphSimulation();
+  else startGraphSimulation();
 });
 els.canvas.addEventListener("pointerdown", (event) => {
   if (state.mode !== "graph") return;
   const node = hitGraph(event);
-  if (!node) return;
-  const graphPos = screenToGraph(event.clientX, event.clientY);
-  state.graphDrag = {
-    node,
-    offsetX: node.x - graphPos.x,
-    offsetY: node.y - graphPos.y,
-    startX: event.clientX,
-    startY: event.clientY,
-    moved: false,
-  };
+  if (node) {
+    if (state.graphView.reboundAnimation) cancelAnimationFrame(state.graphView.reboundAnimation);
+    state.graphView.reboundAnimation = 0;
+    state.graphView.hoveredId = "";
+    const graphPos = screenToGraph(event.clientX, event.clientY);
+    state.graphDrag = {
+      type: "node",
+      node,
+      offsetX: node.x - graphPos.x,
+      offsetY: node.y - graphPos.y,
+      startX: event.clientX,
+      startY: event.clientY,
+      moved: false,
+      previousPositions: new Map(state.graphView.visibleNodes.map((item) => [item.id, { x: item.x, y: item.y }])),
+    };
+  } else {
+    state.graphDrag = {
+      type: "pan",
+      startX: event.clientX,
+      startY: event.clientY,
+      tx: state.graphView.tx,
+      ty: state.graphView.ty,
+      moved: false,
+    };
+  }
   els.canvas.classList.add("dragging");
   els.canvas.setPointerCapture?.(event.pointerId);
 });
 els.canvas.addEventListener("pointermove", (event) => {
-  if (!state.graphDrag) return;
-  const graphPos = screenToGraph(event.clientX, event.clientY);
-  state.graphDrag.node.x = graphPos.x + state.graphDrag.offsetX;
-  state.graphDrag.node.y = graphPos.y + state.graphDrag.offsetY;
-  state.graphDrag.moved ||= Math.hypot(event.clientX - state.graphDrag.startX, event.clientY - state.graphDrag.startY) > 4;
-  drawGraph();
+  if (!state.graphDrag) {
+    const node = hitGraph(event);
+    const nextId = node?.id || "";
+    if (nextId !== state.graphView.hoveredId) {
+      state.graphView.hoveredId = nextId;
+      scheduleGraphDraw();
+    }
+    updateGraphTooltip(node, event);
+    return;
+  }
+  const drag = state.graphDrag;
+  drag.moved ||= Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) > 4;
+  if (drag.type === "node") {
+    const graphPos = screenToGraph(event.clientX, event.clientY);
+    const previousX = drag.node.x;
+    const previousY = drag.node.y;
+    const rect = els.canvas.getBoundingClientRect();
+    const edgePadding = 20;
+    drag.node.x = clamp(graphPos.x + drag.offsetX, (edgePadding - state.graphView.tx) / state.graphView.scale, (rect.width - edgePadding - state.graphView.tx) / state.graphView.scale);
+    drag.node.y = clamp(graphPos.y + drag.offsetY, (edgePadding - state.graphView.ty) / state.graphView.scale, (rect.height - edgePadding - state.graphView.ty) / state.graphView.scale);
+    if (drag.moved) exciteGraphNode(drag.node, drag.node.x - previousX, drag.node.y - previousY);
+    relaxGraphCollisions(drag.node, 2);
+  } else {
+    state.graphView.tx = drag.tx + event.clientX - drag.startX;
+    state.graphView.ty = drag.ty + event.clientY - drag.startY;
+    constrainGraphPan();
+  }
+  state.graphView.fitted = true;
+  els.graphTooltip.classList.add("hidden");
+  scheduleGraphDraw();
 });
 els.canvas.addEventListener("pointerup", (event) => {
   if (!state.graphDrag) return;
@@ -3001,17 +4561,50 @@ els.canvas.addEventListener("pointerup", (event) => {
   state.graphDrag = null;
   els.canvas.classList.remove("dragging");
   els.canvas.releasePointerCapture?.(event.pointerId);
-  if (!drag.moved) openDoc(drag.node.id);
+  if (drag.type === "node" && drag.moved) {
+    state.graphView.reboundUntil = performance.now() + 1800;
+    state.graphView.hoveredId = "";
+    els.graphTooltip.classList.add("hidden");
+    startGraphRebound(drag.previousPositions);
+  }
+  if (!drag.moved && drag.type === "node") activateGraphNode(drag.node);
 });
 els.canvas.addEventListener("pointercancel", () => {
   state.graphDrag = null;
   els.canvas.classList.remove("dragging");
 });
+els.canvas.addEventListener("pointerleave", () => {
+  if (!state.graphDrag) {
+    state.graphView.hoveredId = "";
+    els.graphTooltip.classList.add("hidden");
+    scheduleGraphDraw();
+  }
+});
+els.canvas.addEventListener("wheel", (event) => {
+  event.preventDefault();
+  zoomGraph(Math.exp(-event.deltaY * 0.0012), event.clientX, event.clientY);
+}, { passive: false });
+els.canvas.addEventListener("dblclick", (event) => {
+  if (!hitGraph(event)) fitGraphView();
+});
+els.canvas.addEventListener("keydown", (event) => {
+  const step = event.shiftKey ? 64 : 24;
+  if (["+", "="].includes(event.key)) zoomGraph(1.2);
+  else if (event.key === "-") zoomGraph(0.84);
+  else if (event.key === "0") fitGraphView();
+  else if (event.key === "ArrowLeft") state.graphView.tx += step;
+  else if (event.key === "ArrowRight") state.graphView.tx -= step;
+  else if (event.key === "ArrowUp") state.graphView.ty += step;
+  else if (event.key === "ArrowDown") state.graphView.ty -= step;
+  else return;
+  event.preventDefault();
+  scheduleGraphDraw();
+});
 window.addEventListener("resize", debounce(() => {
   restoreSidebarWidth();
   if (state.mode === "graph") {
     resizeCanvas();
-    drawGraph();
+    fitGraphView();
   }
 }, 120));
 

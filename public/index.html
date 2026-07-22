@@ -7,7 +7,7 @@
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     <title>&#25991;&#26723;&#30693;&#35782;&#24211;</title>
-    <link rel="stylesheet" href="/styles.css?v=20260715" />
+    <link rel="stylesheet" href="/styles.css?v=20260722-task-toggle" />
   </head>
   <body>
     <div class="app-shell">
@@ -49,6 +49,7 @@
             <button id="graphBtn" title="graph">&#22270;&#35889;</button>
             <button id="settingsBtn" title="settings">&#35774;&#32622;</button>
             <button id="deleteBtn" class="danger" title="delete (Ctrl+D)">&#21024;&#38500;</button>
+            <button id="focusModeBtn" title="沉浸编辑 (Ctrl+Shift+F)" aria-pressed="false">沉浸</button>
             <button id="saveBtn" class="primary hidden" title="save">&#20445;&#23384;</button>
           </div>
         </header>
@@ -87,6 +88,7 @@
             <button data-format="bg" title="apply background">&#32972;&#26223;</button>
             <button data-format="size" title="apply size">&#23383;&#21495;</button>
             <button id="formatBtn" title="format document" class="format-btn">Fmt</button>
+            <button id="previewToggleBtn" title="切换实时预览" aria-pressed="true">隐藏预览</button>
           </div>
           <textarea id="editor" spellcheck="false"></textarea>
           <article id="preview" class="markdown-body"></article>
@@ -94,13 +96,48 @@
 
         <section id="graphPanel" class="graph-panel hidden">
           <div class="graph-tools">
-            <div>
-              <strong>&#30693;&#35782;&#26641;&#22270;&#35889;</strong>
-              <span>&#40664;&#35748;&#31361;&#20986;&#26174;&#31034;&#26126;&#30830;&#38142;&#25509;&#21644;&#26631;&#31614;&#20851;&#31995;</span>
+            <div class="graph-heading">
+              <strong>知识神经图谱</strong>
+              <span id="graphStats">正在构建关系网络</span>
             </div>
-            <button id="fitGraphBtn" title="reset">&#37325;&#32622;</button>
+            <div class="graph-controls" aria-label="图谱控制">
+              <label class="graph-search" title="搜索并高亮节点">
+                <span aria-hidden="true">⌕</span>
+                <input id="graphSearchInput" placeholder="搜索节点" autocomplete="off" />
+              </label>
+              <select id="graphScope" title="图谱范围" aria-label="图谱范围">
+                <option value="global">全局图谱</option>
+                <option value="local">当前文档邻域</option>
+              </select>
+              <select id="graphDepth" title="图谱显示深度；选择具体层级将切换到当前文档邻域" aria-label="图谱显示深度">
+                <option value="all" selected>全部层级</option>
+                <option value="1">1 层</option>
+                <option value="2">2 层</option>
+                <option value="3">3 层</option>
+              </select>
+              <label class="graph-toggle" title="仅识别 #标签或 frontmatter tags"><input id="graphShowTags" type="checkbox" checked /> 显式标签</label>
+              <label class="graph-toggle" title="根据全库词频自动提取语义概念"><input id="graphShowKeywords" type="checkbox" checked /> 语义概念</label>
+              <label class="graph-toggle" title="开启神经元弹性牵引与游离运动"><input id="graphDynamic" type="checkbox" checked /> 动态</label>
+              <label class="graph-toggle"><input id="graphShowOrphans" type="checkbox" /> 孤立</label>
+              <label class="graph-toggle"><input id="graphShowMissing" type="checkbox" checked /> 未创建</label>
+              <div class="graph-zoom" role="group" aria-label="图谱缩放">
+                <button id="graphZoomOutBtn" type="button" title="缩小">−</button>
+                <button id="graphZoomInBtn" type="button" title="放大">＋</button>
+                <button id="fitGraphBtn" type="button" title="适配全部节点">适配</button>
+              </div>
+            </div>
           </div>
-          <canvas id="graphCanvas"></canvas>
+          <div class="graph-stage">
+            <canvas id="graphCanvas" tabindex="0" aria-label="知识神经图谱，可拖拽、滚轮缩放，点击文档节点打开"></canvas>
+            <div id="graphTooltip" class="graph-tooltip hidden"></div>
+            <div class="graph-legend" aria-hidden="true">
+              <span><i class="doc"></i>文档</span>
+              <span><i class="tag"></i>显式标签</span>
+              <span><i class="keyword"></i>语义概念</span>
+              <span><i class="missing"></i>未创建链接</span>
+            </div>
+            <div class="graph-hint">拖动神经元可触发连锁牵引 · 动态游离 · 双击适配</div>
+          </div>
         </section>
       </main>
     </div>
@@ -113,6 +150,7 @@
           <div id="createWorkspaceChoices" class="create-workspace-choices"></div>
         </div>
         <input id="createName" placeholder="输入名称" autocomplete="off" />
+        <p class="create-template-hint">将自动写入 tags: 待分类 模板，可在正文中继续添加 #标签。</p>
         <div class="modal-actions">
           <button type="button" id="cancelCreateBtn">取消</button>
           <button type="submit" class="primary">确定</button>
@@ -179,6 +217,17 @@
           <div class="progress hidden" id="normalizeProgress"><span></span></div>
           <p id="normalizeStatus" class="muted"></p>
         </section>
+        <section class="settings-section">
+          <strong>知识标签</strong>
+          <p class="muted">根据全库语义权重为旧文档补充标签，保留已有标签并移除“待分类”。</p>
+          <button type="button" id="semanticTagsBtn" class="primary">智能适配标签</button>
+          <p id="semanticTagsStatus" class="muted"></p>
+        </section>
+        <section class="settings-section community-settings-section">
+          <strong>沟通交流群</strong>
+          <p class="muted">查看官方沟通群介绍与入群二维码。</p>
+          <button type="button" id="communityBtn">查看沟通群</button>
+        </section>
         <section class="settings-section about-section">
           <button type="button" id="aboutBtn" class="about-btn">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -192,6 +241,30 @@
 
         <div class="modal-actions">
           <button type="button" id="closeSettingsBtn">&#20851;&#38381;</button>
+        </div>
+      </div>
+    </div>
+    <div id="communityModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="communityTitle">
+      <div class="modal-dialog community-dialog community-dialog-readonly">
+        <div class="community-head">
+          <div>
+            <h2 id="communityTitle">加入沟通交流群</h2>
+            <p class="muted">交流知识库整理、Markdown 工作流和知识图谱使用经验。</p>
+          </div>
+          <button type="button" id="closeCommunityBtn" class="community-close" aria-label="关闭">&times;</button>
+        </div>
+        <div class="community-readonly-body">
+          <div class="community-description">
+            <strong>MyTemple Knowledge 沟通群</strong>
+            <p>欢迎交流产品建议、使用反馈、文档管理方法和知识图谱实践。</p>
+            <span>请使用 QQ 扫描二维码申请加入。</span>
+          </div>
+          <div class="community-qr-preview community-qr-static">
+            <img src="/qqqun.webp" alt="MyTemple Knowledge QQ 沟通群二维码" />
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" id="backCommunityBtn" class="primary">返回设置</button>
         </div>
       </div>
     </div>
@@ -285,6 +358,26 @@
         <div class="modal-actions">
           <button type="button" id="cancelNormalizeMdBtn">取消</button>
           <button type="button" id="confirmNormalizeMdBtn" class="primary">确认转换</button>
+        </div>
+      </div>
+    </div>
+    <div id="semanticTagsModal" class="modal hidden" role="dialog" aria-modal="true">
+      <div class="modal-dialog normalize-dialog semantic-tags-dialog">
+        <h2>智能适配标签</h2>
+        <p class="muted">按全库语义关联为文档补充显式标签。只改 frontmatter，不改正文、标题和链接。</p>
+        <div class="normalize-section">
+          <div class="section-title"><strong>每篇最多新增</strong><span class="muted">建议保留少量高置信标签</span></div>
+          <select id="semanticTagsMax" class="semantic-tags-max">
+            <option value="2">2 个</option>
+            <option value="3" selected>3 个</option>
+            <option value="4">4 个</option>
+            <option value="5">5 个</option>
+          </select>
+        </div>
+        <div id="semanticTagsPreview" class="semantic-tags-preview muted">正在分析文档语义...</div>
+        <div class="modal-actions">
+          <button type="button" id="cancelSemanticTagsBtn">取消</button>
+          <button type="button" id="applySemanticTagsBtn" class="primary" disabled>应用标签</button>
         </div>
       </div>
     </div>
@@ -405,6 +498,6 @@
       </div>
     </div>
     <div id="toast" class="toast hidden"></div>
-    <script src="/app.js?v=20260714" type="module"></script>
+    <script src="/app.js?v=20260722-task-toggle" type="module"></script>
   </body>
 </html>
