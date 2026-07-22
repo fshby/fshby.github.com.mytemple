@@ -91,6 +91,14 @@ const state = {
   previewAutoHidden: false,
   taskSaveQueue: Promise.resolve(),
   semanticTagPreview: null,
+  ai: {
+    open: false,
+    settings: null,
+    status: null,
+    messages: [],
+    preview: null,
+    statusTimer: 0,
+  },
 };
 
 const els = {
@@ -212,6 +220,32 @@ const els = {
   applySemanticTagsBtn: document.querySelector("#applySemanticTagsBtn"),
   toast: document.querySelector("#toast"),
   recentDocs: document.querySelector("#recentDocs"),
+  aiBtn: document.querySelector("#aiBtn"),
+  aiDrawer: document.querySelector("#aiDrawer"),
+  aiCloseBtn: document.querySelector("#aiCloseBtn"),
+  aiStatusBadge: document.querySelector("#aiStatusBadge"),
+  aiScope: document.querySelector("#aiScope"),
+  aiClearBtn: document.querySelector("#aiClearBtn"),
+  aiMessages: document.querySelector("#aiMessages"),
+  aiForm: document.querySelector("#aiForm"),
+  aiQuestion: document.querySelector("#aiQuestion"),
+  aiSendBtn: document.querySelector("#aiSendBtn"),
+  aiBaseUrl: document.querySelector("#aiBaseUrl"),
+  aiEmbeddingModel: document.querySelector("#aiEmbeddingModel"),
+  aiChatModel: document.querySelector("#aiChatModel"),
+  aiModelChoices: document.querySelector("#aiModelChoices"),
+  aiTestBtn: document.querySelector("#aiTestBtn"),
+  aiSaveBtn: document.querySelector("#aiSaveBtn"),
+  aiReindexBtn: document.querySelector("#aiReindexBtn"),
+  aiSettingsStatus: document.querySelector("#aiSettingsStatus"),
+  standardizeFrontmatterBtn: document.querySelector("#standardizeFrontmatterBtn"),
+  createAgentPolicyBtn: document.querySelector("#createAgentPolicyBtn"),
+  agentPolicyStatus: document.querySelector("#agentPolicyStatus"),
+  frontmatterModal: document.querySelector("#frontmatterModal"),
+  frontmatterBefore: document.querySelector("#frontmatterBefore"),
+  frontmatterAfter: document.querySelector("#frontmatterAfter"),
+  cancelFrontmatterBtn: document.querySelector("#cancelFrontmatterBtn"),
+  applyFrontmatterBtn: document.querySelector("#applyFrontmatterBtn"),
 };
 
 if (els.graphDynamic) els.graphDynamic.checked = state.graphView.dynamic;
@@ -219,7 +253,10 @@ if (els.graphDynamic) els.graphDynamic.checked = state.graphView.dynamic;
 const api = {
   async get(path) {
     const response = await fetch(path);
-    if (!response.ok) throw new Error(await response.text());
+    if (!response.ok) {
+      const body = await response.text();
+      try { throw new Error(JSON.parse(body).error || body); } catch (error) { if (error instanceof SyntaxError) throw new Error(body); throw error; }
+    }
     return response.json();
   },
   async post(path, payload) {
@@ -228,7 +265,10 @@ const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-    if (!response.ok) throw new Error(await response.text());
+    if (!response.ok) {
+      const body = await response.text();
+      try { throw new Error(JSON.parse(body).error || body); } catch (error) { if (error instanceof SyntaxError) throw new Error(body); throw error; }
+    }
     return response.json();
   },
 };
@@ -1661,6 +1701,171 @@ function debounce(fn, wait = 180) {
 function setSaveStatus(label, active = false) {
   els.saveBtn.textContent = label;
   els.saveBtn.classList.toggle("active", active);
+}
+
+function setAiStatus(status) {
+  state.ai.status = status;
+  if (!els.aiStatusBadge) return;
+  const indexing = status?.indexing;
+  const hasError = status?.lastError;
+  els.aiStatusBadge.classList.toggle("ready", !indexing && !hasError && status?.mode === "hybrid");
+  els.aiStatusBadge.classList.toggle("warn", Boolean(hasError) || status?.mode === "keyword");
+  if (indexing) els.aiStatusBadge.textContent = `正在建立索引 ${status.progress?.done || 0}/${status.progress?.total || 0}`;
+  else if (hasError) els.aiStatusBadge.textContent = "关键词降级";
+  else if (status?.mode === "hybrid") els.aiStatusBadge.textContent = `语义索引 · ${status.chunkCount || 0} 段`;
+  else els.aiStatusBadge.textContent = `关键词模式 · ${status?.chunkCount || 0} 段`;
+  if (els.aiSettingsStatus) {
+    const model = status?.embeddingModel || "未设置向量模型";
+    els.aiSettingsStatus.textContent = `${els.aiStatusBadge.textContent} · ${model}${hasError ? ` · ${hasError}` : ""}`;
+  }
+}
+
+async function loadAiStatus() {
+  try {
+    const status = await api.get("/api/ai/status");
+    setAiStatus(status);
+    state.ai.settings = status;
+    if (els.aiBaseUrl) els.aiBaseUrl.value = status.baseUrl || "http://127.0.0.1:11434";
+    if (els.aiEmbeddingModel) els.aiEmbeddingModel.value = status.embeddingModel || "";
+    if (els.aiChatModel) els.aiChatModel.value = status.chatModel || "";
+    clearTimeout(state.ai.statusTimer);
+    if (status.indexing && (state.ai.open || !els.settingsModal.classList.contains("hidden"))) {
+      state.ai.statusTimer = setTimeout(loadAiStatus, 900);
+    }
+  } catch (error) {
+    if (els.aiSettingsStatus) els.aiSettingsStatus.textContent = error.message || "无法读取 AI 状态";
+  }
+}
+
+function renderAiMessages() {
+  if (!els.aiMessages) return;
+  els.aiMessages.replaceChildren();
+  if (!state.ai.messages.length) {
+    const empty = document.createElement("div");
+    empty.className = "ai-empty";
+    empty.innerHTML = "<strong>查找存过但记不清位置的内容</strong><span>回答会列出原文来源；点击来源即可返回文档核对。</span>";
+    els.aiMessages.append(empty);
+    return;
+  }
+  for (const message of state.ai.messages) {
+    const item = document.createElement("article");
+    item.className = `ai-message ${message.role}`;
+    const bubble = document.createElement("div");
+    bubble.className = "ai-message-bubble";
+    bubble.textContent = message.content;
+    item.append(bubble);
+    if (message.sources?.length) {
+      const sources = document.createElement("div");
+      sources.className = "ai-sources";
+      for (const source of message.sources) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "ai-source";
+        button.dataset.path = source.path;
+        button.dataset.heading = source.heading || "";
+        const title = document.createElement("span");
+        title.className = "ai-source-title";
+        title.textContent = `[${source.rank}] ${source.title || source.path}`;
+        const meta = document.createElement("span");
+        meta.className = "ai-source-meta";
+        meta.textContent = `${source.heading || "正文"} · 第 ${source.startLine}-${source.endLine} 行`;
+        const excerpt = document.createElement("span");
+        excerpt.className = "ai-source-excerpt";
+        excerpt.textContent = source.excerpt || "";
+        button.append(title, meta, excerpt);
+        sources.append(button);
+      }
+      item.append(sources);
+    }
+    els.aiMessages.append(item);
+  }
+  els.aiMessages.scrollTop = els.aiMessages.scrollHeight;
+}
+
+function toggleAiDrawer(open = !state.ai.open) {
+  state.ai.open = open;
+  els.aiDrawer?.classList.toggle("hidden", !open);
+  els.aiBtn?.setAttribute("aria-pressed", String(open));
+  els.aiBtn?.classList.toggle("active", open);
+  if (open) {
+    loadAiStatus();
+    els.aiQuestion?.focus();
+  }
+}
+
+async function jumpToAiSource(source) {
+  if (!source?.path) return;
+  toggleAiDrawer(false);
+  setMode("view");
+  await openDoc(source.path);
+  requestAnimationFrame(() => {
+    const target = [...els.markdownView.querySelectorAll("h1,h2,h3,h4,h5,h6")]
+      .find((heading) => !source.heading || heading.textContent.trim() === source.heading.trim() || heading.textContent.includes(source.heading.trim()));
+    scrollReaderToElement(target, "smooth");
+  });
+}
+
+async function submitAiQuestion(event) {
+  event?.preventDefault();
+  const question = els.aiQuestion?.value.trim();
+  if (!question || els.aiSendBtn?.disabled) return;
+  state.ai.messages.push({ role: "user", content: question });
+  els.aiQuestion.value = "";
+  renderAiMessages();
+  els.aiSendBtn.disabled = true;
+  els.aiSendBtn.textContent = "检索中...";
+  try {
+    const result = await api.post("/api/ai/query", {
+      question,
+      scope: els.aiScope?.value || "all",
+      path: state.currentPath,
+    });
+    state.ai.messages.push({ role: "assistant", content: result.answer || "没有返回内容", sources: result.sources || [] });
+    if (result.warning) showToast(result.warning);
+    setAiStatus({ ...(state.ai.status || {}), mode: result.retrievalMode === "hybrid" ? "hybrid" : "keyword", lastError: result.warning || "" });
+  } catch (error) {
+    state.ai.messages.push({ role: "assistant", content: `检索失败：${error.message || "未知错误"}` });
+  } finally {
+    els.aiSendBtn.disabled = false;
+    els.aiSendBtn.textContent = "提问";
+    renderAiMessages();
+  }
+}
+
+async function loadAgentPolicyStatus() {
+  if (!els.agentPolicyStatus) return;
+  try {
+    const workspaceId = state.activeWorkspaceId || state.defaultWorkspaceId;
+    const policy = await api.get(`/api/agent/policy?workspaceId=${encodeURIComponent(workspaceId)}`);
+    els.agentPolicyStatus.textContent = policy.exists ? `规则已启用：${policy.writeMode}，最多 ${policy.maxFilesPerAction} 个文件/次` : "当前工作区尚未创建规则文件，将使用内置安全规则";
+    els.createAgentPolicyBtn.textContent = policy.exists ? "规则已存在" : "创建规则文件";
+    els.createAgentPolicyBtn.disabled = policy.exists;
+  } catch (error) { els.agentPolicyStatus.textContent = error.message || "无法读取规则状态"; }
+}
+
+async function openFrontmatterPreview() {
+  if (!state.currentPath) return showToast("请先打开一篇文档");
+  try {
+    const result = await api.post("/api/frontmatter/preview", { path: state.currentPath });
+    state.ai.preview = result;
+    els.frontmatterBefore.textContent = result.before;
+    els.frontmatterAfter.textContent = result.after;
+    els.applyFrontmatterBtn.disabled = !result.changed;
+    els.frontmatterModal.classList.remove("hidden");
+  } catch (error) { showToast(error.message || "无法生成预览"); }
+}
+
+async function applyFrontmatterPreview() {
+  const preview = state.ai.preview;
+  if (!preview || !preview.changed) return;
+  els.applyFrontmatterBtn.disabled = true;
+  try {
+    await api.post("/api/frontmatter/apply", { path: preview.path, baseHash: preview.baseHash, confirmed: true });
+    els.frontmatterModal.classList.add("hidden");
+    await openDoc(preview.path);
+    showToast("Frontmatter 已标准化，原文已备份");
+  } catch (error) { showToast(error.message || "应用失败"); }
+  finally { els.applyFrontmatterBtn.disabled = false; }
 }
 
 function clamp(value, min, max) {
@@ -4200,10 +4405,82 @@ els.sidebarResizer.addEventListener("pointerup", endSidebarResize);
 els.sidebarResizer.addEventListener("pointercancel", endSidebarResize);
 els.sidebarHideBtn.addEventListener("click", () => setSidebarCollapsed(true));
 els.sidebarShowBtn.addEventListener("click", () => setSidebarCollapsed(!state.sidebarCollapsed));
+els.aiBtn?.addEventListener("click", () => toggleAiDrawer());
+els.aiCloseBtn?.addEventListener("click", () => toggleAiDrawer(false));
+els.aiClearBtn?.addEventListener("click", () => {
+  state.ai.messages = [];
+  renderAiMessages();
+});
+els.aiForm?.addEventListener("submit", submitAiQuestion);
+els.aiQuestion?.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    submitAiQuestion(event);
+  }
+});
+els.aiMessages?.addEventListener("click", (event) => {
+  const button = event.target.closest(".ai-source");
+  if (button) jumpToAiSource({ path: button.dataset.path, heading: button.dataset.heading });
+});
 els.settingsBtn.addEventListener("click", async () => {
   applySettings();
   renderDefaultWorkspaceChoices();
   els.settingsModal.classList.remove("hidden");
+  await Promise.all([loadAiStatus(), loadAgentPolicyStatus()]);
+});
+
+els.aiTestBtn?.addEventListener("click", async () => {
+  els.aiTestBtn.disabled = true;
+  els.aiSettingsStatus.textContent = "正在检测 Ollama...";
+  try {
+    const result = await api.post("/api/ai/test", { baseUrl: els.aiBaseUrl.value });
+    els.aiModelChoices.innerHTML = result.models.map((model) => `<option value="${escapeHtml(model.name)}"></option>`).join("");
+    if (!els.aiEmbeddingModel.value) els.aiEmbeddingModel.value = result.models.find((model) => /embed/i.test(model.name))?.name || "";
+    if (!els.aiChatModel.value) els.aiChatModel.value = result.models.find((model) => !/embed/i.test(model.name))?.name || "";
+    els.aiSettingsStatus.textContent = `连接正常，发现 ${result.models.length} 个本地模型`;
+  } catch (error) { els.aiSettingsStatus.textContent = error.message || "连接失败"; }
+  finally { els.aiTestBtn.disabled = false; }
+});
+
+els.aiSaveBtn?.addEventListener("click", async () => {
+  els.aiSaveBtn.disabled = true;
+  try {
+    const result = await api.post("/api/ai/config", {
+      baseUrl: els.aiBaseUrl.value,
+      embeddingModel: els.aiEmbeddingModel.value,
+      chatModel: els.aiChatModel.value,
+      enabled: true,
+    });
+    setAiStatus(result.status);
+    showToast(result.rebuildRequired ? "配置已保存，正在重建语义索引" : "AI 配置已保存");
+  } catch (error) { showToast(error.message || "保存失败"); }
+  finally { els.aiSaveBtn.disabled = false; }
+});
+
+els.aiReindexBtn?.addEventListener("click", async () => {
+  els.aiReindexBtn.disabled = true;
+  try {
+    const result = await api.post("/api/ai/reindex", {});
+    setAiStatus(result.status);
+    showToast("已开始后台重建索引");
+  } catch (error) { showToast(error.message || "无法重建索引"); }
+  finally { els.aiReindexBtn.disabled = false; }
+});
+
+els.standardizeFrontmatterBtn?.addEventListener("click", openFrontmatterPreview);
+els.cancelFrontmatterBtn?.addEventListener("click", () => els.frontmatterModal.classList.add("hidden"));
+els.applyFrontmatterBtn?.addEventListener("click", applyFrontmatterPreview);
+els.frontmatterModal?.addEventListener("click", (event) => {
+  if (event.target === els.frontmatterModal) els.frontmatterModal.classList.add("hidden");
+});
+els.createAgentPolicyBtn?.addEventListener("click", async () => {
+  const workspaceId = state.activeWorkspaceId || state.defaultWorkspaceId;
+  if (!window.confirm("将在当前工作区的 .mytemple 目录创建 AGENTS.md。AI 写入仍需逐次确认，是否继续？")) return;
+  try {
+    await api.post("/api/agent/policy/create", { workspaceId, confirmed: true });
+    await loadAgentPolicyStatus();
+    showToast("AI 规则文件已创建");
+  } catch (error) { showToast(error.message || "创建失败"); }
 });
 
 function renderDefaultWorkspaceChoices() {

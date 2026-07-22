@@ -7,7 +7,7 @@
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     <title>&#25991;&#26723;&#30693;&#35782;&#24211;</title>
-    <link rel="stylesheet" href="/styles.css?v=20260722-task-toggle" />
+    <link rel="stylesheet" href="/styles.css?v=20260722-p0-rag" />
   </head>
   <body>
     <div class="app-shell">
@@ -47,6 +47,7 @@
             <button id="viewBtn" class="active" title="view">&#38405;&#35835;</button>
             <button id="editBtn" title="edit">&#20462;&#25913;</button>
             <button id="graphBtn" title="graph">&#22270;&#35889;</button>
+            <button id="aiBtn" title="本地知识库问答" aria-pressed="false">AI</button>
             <button id="settingsBtn" title="settings">&#35774;&#32622;</button>
             <button id="deleteBtn" class="danger" title="delete (Ctrl+D)">&#21024;&#38500;</button>
             <button id="focusModeBtn" title="沉浸编辑 (Ctrl+Shift+F)" aria-pressed="false">沉浸</button>
@@ -223,6 +224,29 @@
           <button type="button" id="semanticTagsBtn" class="primary">智能适配标签</button>
           <p id="semanticTagsStatus" class="muted"></p>
         </section>
+        <section class="settings-section ai-settings-section">
+          <strong>本地 AI 与语义索引</strong>
+          <p class="muted">通过 Ollama 在本机完成向量化与问答；未配置时自动使用关键词检索。</p>
+          <label class="setting-field"><span>服务地址</span><input id="aiBaseUrl" value="http://127.0.0.1:11434" /></label>
+          <label class="setting-field"><span>向量模型</span><input id="aiEmbeddingModel" list="aiModelChoices" placeholder="例如 qwen3-embedding" /></label>
+          <label class="setting-field"><span>对话模型</span><input id="aiChatModel" list="aiModelChoices" placeholder="选择本机已有模型" /></label>
+          <datalist id="aiModelChoices"></datalist>
+          <div class="inline-actions">
+            <button type="button" id="aiTestBtn">检测连接</button>
+            <button type="button" id="aiSaveBtn" class="primary">保存配置</button>
+            <button type="button" id="aiReindexBtn">重建索引</button>
+          </div>
+          <p id="aiSettingsStatus" class="muted">尚未读取索引状态</p>
+        </section>
+        <section class="settings-section ai-governance-section">
+          <strong>文档标准与 AI 规则</strong>
+          <p class="muted">标准化当前文档的 YAML 元数据；规则文件约束 AI 的读写范围，任何写入仍需确认。</p>
+          <div class="inline-actions">
+            <button type="button" id="standardizeFrontmatterBtn" class="primary">标准化当前文档</button>
+            <button type="button" id="createAgentPolicyBtn">创建规则文件</button>
+          </div>
+          <p id="agentPolicyStatus" class="muted">尚未读取规则状态</p>
+        </section>
         <section class="settings-section community-settings-section">
           <strong>沟通交流群</strong>
           <p class="muted">查看官方沟通群介绍与入群二维码。</p>
@@ -381,6 +405,40 @@
         </div>
       </div>
     </div>
+    <aside id="aiDrawer" class="ai-drawer hidden" aria-label="本地知识库 AI">
+      <header class="ai-drawer-head">
+        <div>
+          <strong>知识库问答</strong>
+          <span id="aiStatusBadge" class="ai-status-badge">正在准备索引</span>
+        </div>
+        <button type="button" id="aiCloseBtn" aria-label="关闭 AI 侧栏">&times;</button>
+      </header>
+      <div class="ai-scope-row">
+        <label><span>范围</span><select id="aiScope"><option value="all">全知识库</option><option value="current">当前文档</option></select></label>
+        <button type="button" id="aiClearBtn">清空</button>
+      </div>
+      <div id="aiMessages" class="ai-messages" aria-live="polite">
+        <div class="ai-empty"><strong>查找存过但记不清位置的内容</strong><span>回答会列出原文来源；点击来源即可返回文档核对。</span></div>
+      </div>
+      <form id="aiForm" class="ai-composer">
+        <textarea id="aiQuestion" rows="3" maxlength="4000" placeholder="例如：关于 Docker 内存溢出的排查记录在哪里？"></textarea>
+        <div><span id="aiQuestionHint">Enter 发送，Shift+Enter 换行</span><button type="submit" id="aiSendBtn" class="primary">提问</button></div>
+      </form>
+    </aside>
+    <div id="frontmatterModal" class="modal hidden" role="dialog" aria-modal="true">
+      <div class="modal-dialog frontmatter-dialog">
+        <h2>确认 Frontmatter 标准化</h2>
+        <p class="muted">仅更新标准元数据字段，未知字段与正文会保留。保存前将创建本地备份。</p>
+        <div class="frontmatter-diff">
+          <section><strong>修改前</strong><pre id="frontmatterBefore"></pre></section>
+          <section><strong>修改后</strong><pre id="frontmatterAfter"></pre></section>
+        </div>
+        <div class="modal-actions">
+          <button type="button" id="cancelFrontmatterBtn">取消</button>
+          <button type="button" id="applyFrontmatterBtn" class="primary">确认应用</button>
+        </div>
+      </div>
+    </div>
     <button type="button" id="coffeeBtn" class="coffee-button" title="请我喝杯咖啡">
       <div class="coffee-steam">
         <span></span>
@@ -498,6 +556,6 @@
       </div>
     </div>
     <div id="toast" class="toast hidden"></div>
-    <script src="/app.js?v=20260722-task-toggle" type="module"></script>
+    <script src="/app.js?v=20260722-p0-rag" type="module"></script>
   </body>
 </html>
