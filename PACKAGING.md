@@ -1,6 +1,52 @@
 打包与安装说明
 
-生成安装包
+## 一键生成安装包
+
+双击项目根目录下的 `一键打包.cmd` 即可完成打包。
+
+也可以在 PowerShell 中执行：
+
+```powershell
+.\build-installer.ps1
+```
+
+工具会自动完成：
+
+1. 读取并校验 `version.json`。
+2. 检查必要文件、C# 编译器和 JavaScript 语法。
+3. 编译启动器并组装、校验 `payload.zip`。
+4. 将当前版本号自动注入安装程序。
+5. 同时生成通用安装包和带版本号安装包。
+6. 生成 SHA-256 校验文件与构建清单。
+7. 构建成功或失败后自动清理临时目录。
+
+构建会强制校验 `docs` 中的默认使用说明和 `知识库主清单.json`。安装后这些文件位于：
+
+```text
+%LOCALAPPDATA%\MyTempleKnowledge\docs
+```
+
+应用每次刷新知识库时会在该目录重新生成 `知识库主清单.json`，供本地 AI 工具快速读取文档索引和图谱关系。用户实际知识文档仍保存在工作区或 `%LOCALAPPDATA%\MyTempleKnowledgeData\docs`，不会被主清单覆盖。
+
+生成结果：
+
+```text
+dist\MyTempleKnowledge.exe
+dist\MyTempleKnowledge_Setup.exe
+dist\MyTempleKnowledge_Setup_v<version>.exe
+dist\checksums.sha256
+dist\build-manifest.json
+```
+
+其中 `<version>` 自动取自 `version.json`，以后升级版本只需修改这一个文件。
+
+如需保留临时构建文件以便排查：
+
+```powershell
+.\build-installer.ps1 -KeepBuildFiles
+```
+
+## 手工生成安装包（备用）
 
 在项目根目录执行以下步骤：
 
@@ -145,32 +191,18 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v3
-      - name: Compile Launcher
-        run: C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe /target:winexe /out:dist\MyTempleKnowledge.exe /win32icon:packaging\logo.ico /platform:x64 /nologo /reference:System.Windows.Forms.dll /reference:System.Drawing.dll packaging\Launcher.cs
-      - name: Create payload.zip
-        run: |
-          $tempDir = "packaging\build_temp"
-          if (Test-Path $tempDir) { Remove-Item $tempDir -Recurse -Force }
-          New-Item -ItemType Directory -Path $tempDir | Out-Null
-          Copy-Item "server.js" -Destination $tempDir
-          Copy-Item "version.json" -Destination $tempDir
-          Copy-Item "public" -Destination $tempDir -Recurse
-          Copy-Item "docs" -Destination $tempDir -Recurse
-          Copy-Item "source" -Destination $tempDir -Recurse
-          Copy-Item "packaging\logo.ico" -Destination $tempDir
-          Copy-Item "dist\MyTempleKnowledge.exe" -Destination $tempDir
-          $zipPath = "packaging\payload.zip"
-          if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
-          Compress-Archive -Path "$tempDir\*" -DestinationPath $zipPath -Force
-          Remove-Item $tempDir -Recurse -Force
-      - name: Compile Installer
-        run: C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe /target:exe /out:dist\MyTempleKnowledge_Setup.exe /resource:packaging\payload.zip,payload.zip /win32icon:packaging\logo.ico /platform:x64 /nologo /reference:System.IO.Compression.dll /reference:System.IO.Compression.FileSystem.dll packaging\SelfExtractInstaller.cs
+      - uses: actions/checkout@v4
+      - name: Build and validate installer
+        shell: powershell
+        run: .\build-installer.ps1
       - name: Upload artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: MyTempleKnowledge_Setup.exe
-          path: dist/MyTempleKnowledge_Setup.exe
+          name: MyTempleKnowledge-${{ github.ref_name }}
+          path: |
+            dist/MyTempleKnowledge_Setup*.exe
+            dist/checksums.sha256
+            dist/build-manifest.json
 ```
 
 故障排除

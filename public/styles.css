@@ -23,6 +23,19 @@
   --brand-bg: #374151;
   --inline-code-bg: rgba(156, 163, 175, 0.15);
   --inline-code-text: #4a5568;
+  --graph-bg: #f7fafc;
+  --graph-grid: rgba(100, 116, 139, 0.08);
+  --graph-text: #263244;
+  --graph-muted: #7a8798;
+  --graph-edge: rgba(100, 116, 139, 0.34);
+  --graph-link: #0f9f91;
+  --graph-doc: #ffffff;
+  --graph-doc-border: #94a3b8;
+  --graph-tag: #e69a12;
+  --graph-keyword: #8061d9;
+  --graph-missing: #e66a6a;
+  --graph-active: #10b981;
+  --graph-label-bg: rgba(255, 255, 255, 0.88);
 }
 
 body[data-theme="dark"] {
@@ -43,6 +56,19 @@ body[data-theme="dark"] {
   --brand-bg: #020617;
   --inline-code-bg: rgba(71, 85, 105, 0.2);
   --inline-code-text: #cbd5e1;
+  --graph-bg: #0c1424;
+  --graph-grid: rgba(148, 163, 184, 0.07);
+  --graph-text: #e2e8f0;
+  --graph-muted: #8391a7;
+  --graph-edge: rgba(100, 116, 139, 0.42);
+  --graph-link: #2dd4bf;
+  --graph-doc: #1e293b;
+  --graph-doc-border: #64748b;
+  --graph-tag: #fbbf24;
+  --graph-keyword: #a78bfa;
+  --graph-missing: #fb7185;
+  --graph-active: #34d399;
+  --graph-label-bg: rgba(15, 23, 42, 0.88);
 }
 
 body[data-theme="eye"] {
@@ -63,6 +89,19 @@ body[data-theme="eye"] {
   --brand-bg: #1a2e05;
   --inline-code-bg: rgba(156, 196, 138, 0.15);
   --inline-code-text: #374151;
+  --graph-bg: #f3f8ef;
+  --graph-grid: rgba(77, 124, 15, 0.08);
+  --graph-text: #35422e;
+  --graph-muted: #718066;
+  --graph-edge: rgba(101, 128, 84, 0.34);
+  --graph-link: #4d9b42;
+  --graph-doc: #ffffff;
+  --graph-doc-border: #9cad91;
+  --graph-tag: #c88a16;
+  --graph-keyword: #7c69ba;
+  --graph-missing: #d76464;
+  --graph-active: #65a30d;
+  --graph-label-bg: rgba(247, 252, 243, 0.9);
 }
 
 body[data-theme="image"] {
@@ -75,6 +114,19 @@ body[data-theme="image"] {
   --active-bg: rgba(255, 255, 255, 0.4);
   --soft: rgba(255, 255, 255, 0.35);
   --inline-code-bg: rgba(255, 255, 255, 0.4);
+  --graph-bg: rgba(248, 250, 252, 0.72);
+  --graph-grid: rgba(51, 65, 85, 0.09);
+  --graph-text: #1f2937;
+  --graph-muted: #64748b;
+  --graph-edge: rgba(71, 85, 105, 0.38);
+  --graph-link: #0f9f91;
+  --graph-doc: rgba(255, 255, 255, 0.92);
+  --graph-doc-border: #7c8da3;
+  --graph-tag: #d89315;
+  --graph-keyword: #7356c4;
+  --graph-missing: #d95d6c;
+  --graph-active: #059669;
+  --graph-label-bg: rgba(255, 255, 255, 0.86);
   background: var(--custom-bg, var(--bg));
   background-size: cover;
   background-position: center;
@@ -135,6 +187,21 @@ button.danger:hover {
 }
 
 .hidden { display: none !important; }
+
+/* Keep scrolling and canvas painting local to the active panel. */
+.reader-panel,
+.editor-panel,
+.graph-panel {
+  contain: layout paint;
+}
+
+.tree,
+.reader-panel > .markdown-body,
+#editor,
+#preview,
+.graph-stage {
+  contain: layout paint;
+}
 
 .app-shell {
   display: grid;
@@ -746,6 +813,18 @@ body.resizing-sidebar {
 .toolbar {
   display: flex;
   gap: 8px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.toolbar::-webkit-scrollbar {
+  display: none;
+}
+
+.toolbar button {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .graph-panel {
@@ -828,6 +907,52 @@ body.resizing-sidebar {
   color: var(--accent-strong);
 }
 
+.outline-group {
+  margin: 1px 0;
+}
+
+.outline-group-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: 2px;
+}
+
+.reader-outline .outline-group-head .outline-parent {
+  min-width: 0;
+}
+
+.reader-outline .outline-toggle {
+  width: 28px;
+  min-height: 28px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+}
+
+.outline-toggle span {
+  display: block;
+  font-size: 18px;
+  line-height: 1;
+  transform: rotate(90deg);
+  transition: transform 160ms ease;
+}
+
+.outline-group.is-collapsed .outline-toggle span {
+  transform: rotate(0deg);
+}
+
+.outline-group.is-collapsed .outline-children {
+  display: none;
+}
+
+.outline-children {
+  margin-left: 10px;
+  padding-left: 6px;
+  border-left: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
+}
+
 .reader-panel > .markdown-body {
   height: 100%;
   overflow: auto;
@@ -876,6 +1001,44 @@ body.resizing-sidebar {
 .markdown-body h3 { font-size: calc(var(--doc-font-size) * 1.2); }
 .markdown-body p { margin: 0 0 1em; }
 .markdown-body a { color: var(--accent-strong); }
+
+.markdown-body .contains-task-list {
+  padding-left: 1.25em;
+}
+
+.markdown-body .task-list-item {
+  list-style: none;
+  margin: 0.42em 0;
+}
+
+.markdown-body .task-list-item > label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.68em;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.markdown-body .task-list-item input[type="checkbox"] {
+  width: 1.05em;
+  height: 1.05em;
+  flex: 0 0 auto;
+  margin: 0.3em 0 0;
+  accent-color: var(--accent);
+  opacity: 1;
+  cursor: pointer;
+}
+
+.markdown-body .task-list-item input[type="checkbox"]:checked + span {
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.markdown-body .task-list-item > label > span {
+  min-width: 0;
+}
+
 .markdown-body blockquote {
   margin: 16px 0;
   padding: 8px 16px;
@@ -1034,6 +1197,52 @@ body.resizing-sidebar {
   background: var(--panel-glass);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+}
+
+.editor-panel.preview-hidden {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.editor-panel.preview-hidden #editor {
+  border-right: 0;
+  padding-left: max(28px, calc((100% - 860px) / 2));
+  padding-right: max(28px, calc((100% - 860px) / 2));
+  font-size: calc(var(--doc-font-size) * 1.05);
+  line-height: 1.8;
+}
+
+.editor-panel.preview-hidden #preview {
+  display: none;
+}
+
+.app-shell.immersive {
+  grid-template-columns: 0 0 minmax(0, 1fr);
+}
+
+.app-shell.immersive .sidebar,
+.app-shell.immersive .sidebar-resizer {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.app-shell.immersive .workspace {
+  grid-template-rows: 48px minmax(0, 1fr);
+  height: 100vh;
+}
+
+.app-shell.immersive .topbar {
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 7px 18px;
+}
+
+.app-shell.immersive .doc-meta span,
+.app-shell.immersive .recent-docs,
+.app-shell.immersive .toolbar button:not(#focusModeBtn):not(#saveBtn) {
+  display: none;
+}
+
+.app-shell.immersive .doc-meta strong {
+  font-size: 14px;
 }
 
 .modal {
@@ -1787,22 +1996,157 @@ body.resizing-sidebar {
 
 .graph-panel {
   display: grid;
-  grid-template-rows: 52px minmax(0, 1fr);
-  background: #f8fafb;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  overflow: hidden;
+  background: var(--graph-bg);
 }
 
 .graph-tools {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 18px;
+  gap: 16px;
+  min-height: 62px;
+  padding: 10px 14px 10px 18px;
   border-bottom: 1px solid var(--line);
+  background: var(--panel-glass);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  position: relative;
+  z-index: 2;
+  min-width: 0;
+  overflow: hidden;
 }
 
-.graph-tools span {
+.graph-heading {
+  min-width: 180px;
+  display: grid;
+  gap: 3px;
+}
+
+.graph-heading strong {
+  font-size: 14px;
+  letter-spacing: 0.02em;
+}
+
+.graph-heading span {
   color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.graph-controls {
+  min-width: 0;
+  width: 0;
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.graph-controls::-webkit-scrollbar {
+  display: none;
+}
+
+.graph-controls select,
+.graph-controls button,
+.graph-toggle,
+.graph-search {
+  flex: 0 0 auto;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--control-bg);
+  color: var(--text);
+}
+
+.graph-controls select {
+  padding: 0 26px 0 9px;
   font-size: 12px;
-  margin-left: 10px;
+}
+
+.graph-search {
+  width: 150px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 9px;
+}
+
+.graph-search span {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.graph-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.graph-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  font-size: 11px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.graph-toggle:has(input:checked) {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  color: var(--accent-strong);
+  background: var(--active-bg);
+}
+
+.graph-toggle input {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.graph-zoom {
+  display: inline-flex;
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.graph-zoom button {
+  min-width: 32px;
+  border: 0;
+  border-radius: 0;
+  border-right: 1px solid var(--line);
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.graph-zoom button:last-child {
+  border-right: 0;
+}
+
+.graph-stage {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background-color: var(--graph-bg);
+  background-image:
+    radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 45%),
+    radial-gradient(var(--graph-grid) 1px, transparent 1px);
+  background-size: auto, 24px 24px;
 }
 
 #graphCanvas {
@@ -1811,16 +2155,148 @@ body.resizing-sidebar {
   display: block;
   cursor: grab;
   touch-action: none;
+  outline: none;
 }
 
 #graphCanvas.dragging {
   cursor: grabbing;
 }
 
+#graphCanvas:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.graph-tooltip {
+  position: absolute;
+  z-index: 4;
+  max-width: 260px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.16);
+  font-size: 11px;
+  line-height: 1.4;
+  pointer-events: none;
+  backdrop-filter: blur(16px);
+}
+
+.graph-legend,
+.graph-hint {
+  position: absolute;
+  bottom: 14px;
+  z-index: 2;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel-glass);
+  color: var(--muted);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.07);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  pointer-events: none;
+}
+
+.semantic-tags-max {
+  min-width: 110px;
+}
+
+.semantic-tags-preview {
+  max-height: 260px;
+  overflow: auto;
+  margin: 12px 0 4px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--soft);
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.semantic-tags-preview strong {
+  color: var(--text);
+}
+
+.semantic-tags-preview .tag-preview-row {
+  display: flex;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.semantic-tags-preview .tag-preview-row:last-child {
+  border-bottom: 0;
+}
+
+.semantic-tags-preview .tag-preview-name {
+  flex: 0 0 34%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.semantic-tags-preview .tag-preview-tags {
+  color: var(--accent-strong);
+}
+
+.create-template-hint {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.graph-legend {
+  left: 14px;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 7px 10px;
+  font-size: 10px;
+}
+
+.graph-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.graph-legend i {
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--graph-doc-border);
+  border-radius: 50%;
+  background: var(--graph-doc);
+}
+
+.graph-legend i.tag {
+  background: var(--graph-tag);
+  border-color: var(--graph-tag);
+  border-radius: 1px;
+  transform: rotate(45deg) scale(0.82);
+}
+.graph-legend i.keyword {
+  background: var(--graph-keyword);
+  border-color: var(--graph-keyword);
+  border-radius: 2px;
+  clip-path: polygon(50% 0, 95% 25%, 95% 75%, 50% 100%, 5% 75%, 5% 25%);
+}
+.graph-legend i.missing {
+  background: transparent;
+  border-color: var(--graph-missing);
+  border-style: dashed;
+}
+
+.graph-hint {
+  right: 14px;
+  padding: 7px 10px;
+  font-size: 10px;
+}
+
 @media (max-width: 860px) {
   .app-shell {
     grid-template-columns: 1fr;
-    grid-template-rows: 42vh 58vh;
+    grid-template-rows: 36vh 64vh;
   }
 
   .app-shell.sidebar-collapsed {
@@ -1838,7 +2314,21 @@ body.resizing-sidebar {
   }
 
   .workspace {
-    height: 58vh;
+    height: 64vh;
+  }
+
+  .topbar {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 8px 12px;
+  }
+
+  .topbar .doc-meta,
+  .topbar .recent-docs {
+    display: none;
+  }
+
+  .toolbar {
+    width: 100%;
   }
 
   .reader-panel.has-outline {
@@ -1860,6 +2350,35 @@ body.resizing-sidebar {
   #editor {
     border-right: 0;
     border-bottom: 1px solid var(--line);
+  }
+
+  .app-shell.immersive {
+    grid-template-rows: 0 100vh;
+  }
+
+  .app-shell.immersive .workspace {
+    height: 100vh;
+  }
+
+  .graph-tools {
+    min-height: 54px;
+    padding: 8px 10px;
+  }
+
+  .graph-heading {
+    min-width: 120px;
+  }
+
+  .graph-heading span {
+    display: none;
+  }
+
+  .graph-search {
+    width: 118px;
+  }
+
+  .graph-hint {
+    display: none;
   }
 }
 
@@ -2405,6 +2924,28 @@ button.primary.full:hover {
 }
 
 @media (max-width: 560px) {
+  .app-shell {
+    grid-template-rows: 32vh 68vh;
+  }
+  .workspace {
+    height: 68vh;
+  }
+  .toolbar {
+    gap: 4px;
+  }
+  .toolbar button {
+    padding: 0 7px;
+  }
+  .graph-heading {
+    display: none;
+  }
+  .graph-controls {
+    justify-content: flex-start;
+  }
+  .graph-legend {
+    max-width: calc(100% - 28px);
+    overflow: hidden;
+  }
   .quick-jumps {
     gap: 10px;
   }
@@ -2422,5 +2963,736 @@ button.primary.full:hover {
   }
   .browser-footer .primary {
     width: 100%;
+  }
+}
+
+/* -------------------------------------------------------------------------
+   Immersive visual system
+   Kept CSS-only so document, graph and editor behavior remain unchanged.
+   Surfaces use opaque/color-mixed layers by default; blur is reserved for
+   the few floating chrome elements to keep scrolling and canvas rendering
+   inexpensive on large libraries.
+--------------------------------------------------------------------------- */
+:root {
+  --surface-0: #f5f7f9;
+  --surface-1: color-mix(in srgb, var(--panel) 96%, transparent);
+  --surface-2: color-mix(in srgb, var(--panel) 88%, var(--soft));
+  --surface-3: color-mix(in srgb, var(--soft) 82%, var(--panel));
+  --hairline: color-mix(in srgb, var(--line) 74%, transparent);
+  --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
+  --accent-wash: color-mix(in srgb, var(--accent) 6%, transparent);
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05), 0 8px 24px rgba(15, 23, 42, 0.04);
+  --shadow-md: 0 18px 46px rgba(15, 23, 42, 0.12);
+  --radius-sm: 9px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+}
+
+body[data-theme="dark"] {
+  --surface-0: #080e19;
+  --surface-1: color-mix(in srgb, #111b2b 92%, transparent);
+  --surface-2: color-mix(in srgb, #18263a 88%, #0b1220);
+  --surface-3: color-mix(in srgb, #22334b 76%, #0b1220);
+  --hairline: rgba(148, 163, 184, 0.18);
+  --accent-soft: color-mix(in srgb, var(--accent) 15%, transparent);
+  --accent-wash: color-mix(in srgb, var(--accent) 7%, transparent);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.22), 0 10px 26px rgba(0, 0, 0, 0.16);
+  --shadow-md: 0 22px 60px rgba(0, 0, 0, 0.34);
+}
+
+body[data-theme="eye"] {
+  --surface-0: #edf5e9;
+  --surface-1: color-mix(in srgb, #f8fcf5 94%, transparent);
+  --surface-2: color-mix(in srgb, #e7f0e2 84%, #fff);
+  --surface-3: color-mix(in srgb, #dbe9d5 78%, #fff);
+  --hairline: rgba(79, 112, 71, 0.2);
+  --accent-soft: color-mix(in srgb, var(--accent) 13%, transparent);
+  --accent-wash: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+body {
+  background: var(--surface-0);
+  letter-spacing: 0.005em;
+  text-rendering: optimizeLegibility;
+}
+
+.app-shell {
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(900px 520px at 78% -18%, var(--accent-wash), transparent 68%),
+    radial-gradient(720px 520px at -12% 112%, color-mix(in srgb, var(--accent) 4%, transparent), transparent 72%),
+    var(--surface-0);
+}
+
+.app-shell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(135deg, transparent 0 48%, color-mix(in srgb, var(--accent) 2%, transparent) 100%);
+}
+
+.sidebar,
+.topbar,
+.reader-panel,
+.editor-toolbar,
+#editor,
+#preview {
+  background: var(--surface-1);
+  border-color: var(--hairline);
+}
+
+.sidebar {
+  box-shadow: 10px 0 32px rgba(15, 23, 42, 0.035);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+#preview.preview-pending {
+  cursor: progress;
+  opacity: 0.86;
+}
+
+.brand {
+  padding: 22px 20px 16px;
+  gap: 13px;
+}
+
+.brand-mark {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: linear-gradient(145deg, var(--accent), var(--accent-strong));
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--accent) 24%, transparent);
+  letter-spacing: -0.04em;
+}
+
+.brand h1 {
+  font-size: 16px;
+  letter-spacing: 0.02em;
+}
+
+.search-box {
+  height: 40px;
+  margin: 8px 16px 12px;
+  border-color: var(--hairline);
+  border-radius: 12px;
+  background: var(--surface-2);
+  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.search-box:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 64%, var(--line));
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  background: var(--surface-1);
+}
+
+.sidebar-actions {
+  gap: 7px;
+  padding: 0 16px 12px;
+}
+
+button,
+.editor-toolbar button,
+.editor-toolbar select,
+.editor-toolbar label,
+.graph-controls select,
+.graph-controls button,
+.graph-toggle,
+.graph-search {
+  border-color: var(--hairline);
+  border-radius: var(--radius-sm);
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+button {
+  background: var(--surface-2);
+}
+
+button:hover,
+button.active {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 54%, var(--line));
+  color: var(--accent-strong);
+}
+
+button:active {
+  transform: translateY(1px);
+}
+
+button.primary {
+  background: linear-gradient(145deg, var(--accent), var(--accent-strong));
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.tree,
+.search-results {
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
+.tree-workspace {
+  margin: 9px 4px 17px;
+  padding: 11px;
+  border-color: var(--hairline);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface-2) 86%, transparent);
+  box-shadow: var(--shadow-sm);
+}
+
+.tree-workspace::before {
+  left: 16px;
+  right: 16px;
+  height: 2px;
+  opacity: 0.72;
+}
+
+.tree-workspace.active-workspace {
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--line));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent), var(--shadow-sm);
+}
+
+.folder-title,
+.file-item,
+.search-item {
+  min-height: 36px;
+  border-radius: 10px;
+  color: var(--text);
+}
+
+.folder-title:hover,
+.file-item:hover,
+.search-item:hover {
+  background: var(--accent-wash);
+}
+
+.file-item.active,
+.folder-title.selected {
+  background: linear-gradient(90deg, var(--accent-soft), transparent);
+  color: var(--accent-strong);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.folder-children {
+  border-left-color: color-mix(in srgb, var(--accent) 25%, var(--line));
+}
+
+.workspace {
+  position: relative;
+}
+
+.topbar {
+  min-height: 58px;
+  padding: 9px 20px;
+  box-shadow: 0 1px 0 var(--hairline), 0 8px 28px rgba(15, 23, 42, 0.025);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.doc-meta strong {
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.recent-docs .recent-item {
+  border-radius: 999px;
+  background: var(--surface-2);
+  border-color: transparent;
+}
+
+.recent-docs .recent-item.active {
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.reader-panel {
+  background: color-mix(in srgb, var(--surface-1) 82%, transparent);
+}
+
+.reader-outline {
+  background: var(--surface-2);
+  border-color: var(--hairline);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.markdown-body {
+  width: min(860px, calc(100% - 56px));
+  padding-top: 48px;
+  padding-bottom: 112px;
+  line-height: 1.82;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3 {
+  letter-spacing: -0.018em;
+  color: color-mix(in srgb, var(--text) 94%, var(--accent));
+}
+
+.markdown-body h1 {
+  padding-bottom: 16px;
+  border-bottom-color: var(--hairline);
+}
+
+.markdown-body blockquote {
+  border-left-width: 2px;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--accent-wash);
+  padding: 12px 18px;
+}
+
+.markdown-body pre {
+  border: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.markdown-body img {
+  border-color: var(--hairline);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.editor-panel {
+  background: color-mix(in srgb, var(--surface-1) 88%, transparent);
+}
+
+.editor-toolbar {
+  padding: 7px 14px;
+  gap: 7px;
+  box-shadow: 0 1px 0 var(--hairline);
+}
+
+#editor,
+#preview {
+  background: color-mix(in srgb, var(--surface-1) 84%, transparent);
+}
+
+#editor {
+  padding: 30px max(28px, calc((100% - 800px) / 2));
+  line-height: 1.74;
+}
+
+#editor:focus {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 34%, transparent);
+}
+
+#preview {
+  padding-left: 30px;
+  padding-right: 30px;
+}
+
+.modal {
+  background: color-mix(in srgb, #0b1220 30%, transparent);
+  backdrop-filter: blur(7px);
+  -webkit-backdrop-filter: blur(7px);
+}
+
+.modal-dialog {
+  border-color: var(--hairline);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-md);
+  padding: 22px;
+}
+
+.settings-section {
+  border-top-color: var(--hairline);
+}
+
+.graph-panel {
+  background: var(--graph-bg);
+}
+
+.graph-tools {
+  min-height: 68px;
+  padding: 11px 18px;
+  border-bottom-color: var(--hairline);
+  background: color-mix(in srgb, var(--surface-1) 90%, transparent);
+  box-shadow: 0 8px 26px rgba(15, 23, 42, 0.04);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.graph-heading strong {
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.graph-controls {
+  gap: 6px;
+}
+
+.graph-controls select,
+.graph-controls button,
+.graph-toggle,
+.graph-search {
+  background: color-mix(in srgb, var(--surface-2) 90%, transparent);
+}
+
+.graph-stage {
+  background-image:
+    radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 46%),
+    radial-gradient(var(--graph-grid) 1px, transparent 1px);
+}
+
+.graph-tooltip,
+.graph-legend,
+.graph-hint {
+  border-color: var(--hairline);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-1) 90%, transparent);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* Graph mode is a high-frequency canvas surface; avoid compositor blur and
+   deep shadows here while keeping the static reader treatment unchanged. */
+body.graph-mode .graph-tools,
+body.graph-mode .graph-tooltip,
+body.graph-mode .graph-legend,
+body.graph-mode .graph-hint {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+}
+
+body.graph-mode .graph-panel {
+  contain: layout paint;
+}
+
+.graph-legend,
+.graph-hint {
+  bottom: 18px;
+}
+
+.graph-legend {
+  left: 18px;
+  padding: 8px 11px;
+}
+
+.graph-hint {
+  right: 18px;
+  padding: 8px 11px;
+}
+
+.coffee-button {
+  width: 56px;
+  height: 56px;
+  right: 22px;
+  bottom: 22px;
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+body[data-theme="image"] .app-shell {
+  background: linear-gradient(135deg, rgba(10, 18, 28, 0.08), rgba(255, 255, 255, 0.18));
+}
+
+/* Quiet support affordance: visible, reachable and theme-aware without
+   competing with the document canvas or graph nodes. */
+.coffee-button {
+  width: 46px;
+  height: 46px;
+  right: 20px;
+  bottom: 20px;
+  color: var(--accent-strong);
+  background: color-mix(in srgb, var(--surface-2) 92%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--line));
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.1);
+  opacity: 0.62;
+  transform: scale(0.92);
+  transition: opacity 180ms ease, transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.coffee-button:hover,
+.coffee-button:focus-visible {
+  opacity: 1;
+  transform: scale(1);
+  border-color: color-mix(in srgb, var(--accent) 66%, var(--line));
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.coffee-button:focus-visible {
+  outline: 3px solid var(--accent-soft);
+  outline-offset: 3px;
+}
+
+.coffee-button svg {
+  width: 25px;
+  height: 25px;
+}
+
+.coffee-steam {
+  display: none;
+}
+
+.donation-dialog {
+  max-width: 540px;
+  border-radius: 22px;
+  background: var(--surface-1);
+  border-color: var(--hairline);
+}
+
+.donation-header {
+  padding: 28px 30px 22px;
+  color: var(--text);
+  text-align: left;
+  background:
+    radial-gradient(280px 140px at 8% 0%, var(--accent-soft), transparent 70%),
+    var(--surface-1);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.donation-icon-lg {
+  width: 48px;
+  height: 48px;
+  margin: 0 0 16px;
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
+  border-radius: 14px;
+}
+
+.donation-icon-lg svg {
+  width: 28px;
+  height: 28px;
+}
+
+.donation-header h2 {
+  margin-bottom: 6px;
+  font-size: 20px;
+  letter-spacing: -0.02em;
+}
+
+.donation-header p {
+  color: var(--muted);
+  opacity: 1;
+  font-size: 13px;
+}
+
+.donation-methods {
+  gap: 12px;
+  padding: 20px 24px 16px;
+}
+
+.donation-card-item {
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--surface-2);
+  border-color: var(--hairline);
+  transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+.donation-card-item:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
+  box-shadow: var(--shadow-sm);
+}
+
+.qr-code {
+  width: 132px;
+  height: 132px;
+  border-radius: 10px;
+  box-shadow: none;
+}
+
+.contact-section {
+  padding: 0 24px 24px;
+}
+
+.contact-item {
+  padding: 9px 11px;
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+}
+
+/* Responsive settings workspace. The dialog remains fully usable at 100%
+   browser zoom and scrolls internally on short screens. */
+.modal {
+  padding: 16px;
+  overflow: auto;
+}
+
+.modal-dialog {
+  position: relative;
+}
+
+.settings-dialog {
+  width: min(780px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.settings-dialog > h2,
+.settings-dialog > .modal-actions {
+  grid-column: 1 / -1;
+}
+
+.settings-dialog > h2 {
+  padding: 2px 2px 6px;
+}
+
+.settings-dialog .settings-section {
+  min-width: 0;
+  align-content: start;
+  gap: 9px;
+  padding: 14px;
+  border: 1px solid var(--hairline);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface-2) 84%, transparent);
+}
+
+.settings-dialog .settings-section:first-of-type {
+  border-top: 1px solid var(--hairline);
+}
+
+.settings-dialog .settings-section p {
+  margin: 0;
+  line-height: 1.55;
+}
+
+.settings-dialog .about-section {
+  padding: 10px;
+}
+
+.settings-dialog > .modal-actions {
+  position: sticky;
+  bottom: -22px;
+  margin: 0 -4px -4px;
+  padding: 10px 4px 4px;
+  background: linear-gradient(transparent, var(--surface-1) 24%);
+}
+
+.community-settings-section button {
+  width: 100%;
+}
+
+.community-dialog {
+  width: min(620px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+}
+
+.community-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.community-head p {
+  margin-bottom: 0;
+}
+
+.community-close {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  padding: 0;
+  font-size: 21px;
+  line-height: 1;
+}
+
+.community-readonly-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  gap: 22px;
+  align-items: center;
+  padding: 18px;
+  border: 1px solid var(--hairline);
+  border-radius: 16px;
+  background: var(--surface-2);
+}
+
+.community-description {
+  display: grid;
+  gap: 10px;
+  color: var(--text);
+}
+
+.community-description strong {
+  font-size: 16px;
+}
+
+.community-description p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.community-description span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.community-qr-preview {
+  width: 220px;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line));
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 12px 28px color-mix(in srgb, #000 14%, transparent);
+}
+
+.community-qr-preview img {
+  width: 100%;
+  height: 100%;
+  padding: 8px;
+  object-fit: contain;
+}
+
+.community-dialog > .modal-actions {
+  margin-top: 16px;
+}
+
+@media (max-width: 720px) {
+  .settings-dialog {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-dialog > h2,
+  .settings-dialog > .modal-actions {
+    grid-column: 1;
+  }
+
+  .community-readonly-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .community-qr-preview {
+    width: min(220px, 100%);
+    margin: 0 auto;
+  }
+}
+
+@media (max-width: 560px) {
+  .coffee-button {
+    right: 14px;
+    bottom: 14px;
+  }
+
+  .donation-methods {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0.01ms !important;
   }
 }
