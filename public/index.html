@@ -7,13 +7,17 @@
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     <title>&#25991;&#26723;&#30693;&#35782;&#24211;</title>
-    <link rel="stylesheet" href="/styles.css?v=20260722-p0-rag" />
+    <meta name="theme-color" content="#0f172a" />
+    <meta name="application-name" content="MyTemple Knowledge" />
+    <link rel="icon" href="/favicon.ico" type="image/x-icon" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="stylesheet" href="/styles.css?v=20260731-settings-14" />
   </head>
   <body>
     <div class="app-shell">
       <aside class="sidebar">
         <div class="brand">
-          <div class="brand-mark">MD</div>
+          <div class="brand-mark" aria-label="MyTemple Knowledge logo"><img src="/logo1.png" alt="" width="42" height="42" decoding="async" /></div>
           <div>
             <h1>&#25991;&#26723;&#30693;&#35782;&#24211;</h1>
             <p id="docCount">&#27491;&#22312;&#25195;&#25551;</p>
@@ -65,10 +69,21 @@
 
         <section id="editorPanel" class="editor-panel hidden">
           <div id="editorToolbar" class="editor-toolbar" aria-label="editor tools">
+            <button data-format="h1" title="一级标题 (Ctrl+1)">H1</button>
+            <button data-format="h2" title="二级标题 (Ctrl+2)">H2</button>
+            <button data-format="h3" title="三级标题 (Ctrl+3)">H3</button>
             <button data-format="bold" title="bold">B</button>
+            <button data-format="italic" title="斜体 (Ctrl+I)">I</button>
             <button data-format="underline" title="underline">U</button>
             <button data-format="strike" title="strike">S</button>
             <button data-format="highlight" title="highlight">HL</button>
+            <button data-format="code" title="行内代码 (Ctrl+`)">&lt;/&gt;</button>
+            <button data-format="link" title="链接 (Ctrl+K)">Link</button>
+            <button data-format="quote" title="引用">❯</button>
+            <button data-format="ul" title="无序列表">•</button>
+            <button data-format="ol" title="有序列表">1.</button>
+            <button data-format="task" title="任务清单">☑</button>
+            <button data-format="table" title="插入 Markdown 表格">Table</button>
             <button data-format="hr" title="divider">--</button>
             <label title="text color">
               <span>C</span>
@@ -91,7 +106,7 @@
             <button id="formatBtn" title="format document" class="format-btn">Fmt</button>
             <button id="previewToggleBtn" title="切换实时预览" aria-pressed="true">隐藏预览</button>
           </div>
-          <textarea id="editor" spellcheck="false"></textarea>
+          <div id="editor" role="textbox" aria-multiline="true"></div>
           <article id="preview" class="markdown-body"></article>
         </section>
 
@@ -170,8 +185,15 @@
     </div>
     <div id="settingsModal" class="modal hidden" role="dialog" aria-modal="true">
       <div class="modal-dialog settings-dialog">
-        <h2>&#31616;&#26131;&#35774;&#32622;</h2>
-        <section class="settings-section">
+        <header class="settings-header">
+          <div>
+            <span class="settings-kicker">PREFERENCES</span>
+            <h2>简易设置</h2>
+            <p>外观、编辑、索引与 AI 行为</p>
+          </div>
+          <button type="button" id="closeSettingsBtn" class="settings-close" aria-label="关闭设置">×</button>
+        </header>
+        <section class="settings-section appearance-settings-section">
           <strong>&#20027;&#39064;</strong>
           <div class="segmented" id="themeChoices">
             <button type="button" data-theme="light">&#26126;&#20142;</button>
@@ -184,7 +206,7 @@
             <input id="bgImageInput" type="file" accept="image/*" />
           </label>
         </section>
-        <section class="settings-section">
+        <section class="settings-section typography-settings-section">
           <strong>&#25991;&#23383;&#26174;&#31034;</strong>
           <label class="setting-row">
             <span>&#30028;&#38754;&#23383;&#21495;</span>
@@ -206,19 +228,19 @@
             </select>
           </label>
         </section>
-        <section class="settings-section">
+        <section class="settings-section workspace-settings-section">
           <strong>默认工作路径</strong>
           <p class="muted">创建新文档和文件夹时，若未选择具体文件夹，则保存到该路径下。</p>
           <div id="defaultWorkspaceChoices" class="segmented workspace-options"></div>
         </section>
-        <section class="settings-section">
+        <section class="settings-section markdown-settings-section">
           <strong>Markdown 工具</strong>
           <p class="muted">将非 .md 文件批量重命名为 .md。可选择目标工作路径与文件扩展名。</p>
           <button type="button" id="normalizeMdBtn" class="primary">一键 MD 化</button>
           <div class="progress hidden" id="normalizeProgress"><span></span></div>
           <p id="normalizeStatus" class="muted"></p>
         </section>
-        <section class="settings-section">
+        <section class="settings-section semantic-settings-section">
           <strong>知识标签</strong>
           <p class="muted">根据全库语义权重为旧文档补充标签，保留已有标签并移除“待分类”。</p>
           <button type="button" id="semanticTagsBtn" class="primary">智能适配标签</button>
@@ -235,6 +257,16 @@
             <button type="button" id="aiTestBtn">检测连接</button>
             <button type="button" id="aiSaveBtn" class="primary">保存配置</button>
             <button type="button" id="aiReindexBtn">重建索引</button>
+            <button type="button" id="aiDisableEmbeddingBtn">仅关键词模式</button>
+          </div>
+          <div class="ai-index-dashboard" aria-live="polite">
+            <div><span>索引模式</span><strong id="aiIndexMode">关键词模式</strong></div>
+            <div><span>索引规模</span><strong id="aiIndexCount">0 段</strong></div>
+            <div><span>本地占用</span><strong id="aiIndexStorage">--</strong></div>
+            <div class="ai-index-progress-wrap">
+              <div class="ai-index-progress"><span id="aiIndexProgressBar"></span></div>
+              <small id="aiIndexProgressText">等待索引状态</small>
+            </div>
           </div>
           <p id="aiSettingsStatus" class="muted">尚未读取索引状态</p>
         </section>
@@ -247,6 +279,29 @@
           </div>
           <p id="agentPolicyStatus" class="muted">尚未读取规则状态</p>
         </section>
+        <details class="settings-section shortcut-settings-section">
+          <summary><strong>快捷键说明</strong><span class="muted">点击展开查看全部编辑快捷键</span></summary>
+          <strong>快捷键</strong>
+          <p class="muted">编辑器内快捷键与使用方式，统一放在这里，便于查看和快速上手。</p>
+          <div class="shortcut-grid">
+            <div><code>Ctrl/Cmd + S</code><span>手动保存</span></div>
+            <div><code>Ctrl/Cmd + B</code><span>加粗</span></div>
+            <div><code>Ctrl/Cmd + I</code><span>斜体</span></div>
+            <div><code>Ctrl/Cmd + K</code><span>插入链接</span></div>
+            <div><code>Ctrl/Cmd + 1/2/3</code><span>H1 / H2 / H3</span></div>
+            <div><code>Ctrl/Cmd + Shift + 7/8</code><span>有序 / 无序列表</span></div>
+            <div><code>Alt + Shift + ↑/↓</code><span>整行上移 / 下移</span></div>
+            <div><code>Ctrl/Cmd + D</code><span>复制当前行</span></div>
+            <div><code>Ctrl/Cmd + M</code><span>删除当前行</span></div>
+            <div><code>Ctrl/Cmd + ;</code><span>插入日期</span></div>
+            <div><code>Ctrl/Cmd + '</code><span>插入时间</span></div>
+            <div><code>Ctrl/Cmd + Shift + F</code><span>切换沉浸编辑</span></div>
+            <div><code>Escape</code><span>退出沉浸或多光标状态</span></div>
+            <div><code>F3 / Ctrl/Cmd + G</code><span>查找下一个匹配</span></div>
+            <div><code>Ctrl/Cmd + Alt + ↑/↓</code><span>在相邻行添加多处光标</span></div>
+            <div><code>Ctrl/Cmd + Shift + L</code><span>选中当前词的全部匹配项</span></div>
+          </div>
+        </details>
         <section class="settings-section community-settings-section">
           <strong>沟通交流群</strong>
           <p class="muted">查看官方沟通群介绍与入群二维码。</p>
@@ -262,10 +317,6 @@
             <span>关于文档知识库</span>
           </button>
         </section>
-
-        <div class="modal-actions">
-          <button type="button" id="closeSettingsBtn">&#20851;&#38381;</button>
-        </div>
       </div>
     </div>
     <div id="communityModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="communityTitle">
@@ -415,6 +466,7 @@
       </header>
       <div class="ai-scope-row">
         <label><span>范围</span><select id="aiScope"><option value="all">全知识库</option><option value="current">当前文档</option></select></label>
+        <span class="ai-local-note">仅保存在本机</span>
         <button type="button" id="aiClearBtn">清空</button>
       </div>
       <div id="aiMessages" class="ai-messages" aria-live="polite">
@@ -425,6 +477,37 @@
         <div><span id="aiQuestionHint">Enter 发送，Shift+Enter 换行</span><button type="submit" id="aiSendBtn" class="primary">提问</button></div>
       </form>
     </aside>
+    <div id="aiSelectionMenu" class="ai-selection-menu hidden" role="toolbar" aria-label="AI 处理选中文本">
+      <span>AI 处理选中内容</span>
+      <button type="button" data-ai-transform="summary">摘要</button>
+      <button type="button" data-ai-transform="keypoints">要点</button>
+      <button type="button" data-ai-transform="terms">术语</button>
+    </div>
+    <div id="aiTransformModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="aiTransformTitle">
+      <div class="modal-dialog ai-transform-dialog">
+        <header class="modal-head">
+          <div>
+            <span class="settings-kicker">AI ASSIST</span>
+            <h2 id="aiTransformTitle">处理选中文本</h2>
+          </div>
+          <button type="button" id="aiTransformCloseBtn" class="settings-close" aria-label="关闭">×</button>
+        </header>
+        <p id="aiTransformSource" class="muted"></p>
+        <label class="setting-field ai-transform-result-field">
+          <span>生成结果（可编辑）</span>
+          <textarea id="aiTransformResult" rows="10"></textarea>
+        </label>
+        <label class="setting-field">
+          <span>新建文档名称</span>
+          <input id="aiTransformDocName" maxlength="80" />
+        </label>
+        <div class="modal-actions">
+          <button type="button" id="aiTransformCancelBtn">取消</button>
+          <button type="button" id="aiTransformInsertBtn">插入当前位置</button>
+          <button type="button" id="aiTransformCreateBtn" class="primary">新建摘要文档</button>
+        </div>
+      </div>
+    </div>
     <div id="frontmatterModal" class="modal hidden" role="dialog" aria-modal="true">
       <div class="modal-dialog frontmatter-dialog">
         <h2>确认 Frontmatter 标准化</h2>
@@ -467,7 +550,7 @@
         </button>
         <div class="about-header">
           <div class="about-logo">
-            <div class="brand-mark">MD</div>
+            <div class="brand-mark" aria-label="MyTemple Knowledge logo"><img src="/logo1.png" alt="" width="36" height="36" decoding="async" /></div>
           </div>
           <h2>文档知识库</h2>
           <div class="about-version">版本 <span id="aboutVersion">--</span></div>
@@ -556,6 +639,6 @@
       </div>
     </div>
     <div id="toast" class="toast hidden"></div>
-    <script src="/app.js?v=20260722-p0-rag" type="module"></script>
+    <script src="/app.js?v=20260731-stability-13" type="module"></script>
   </body>
 </html>

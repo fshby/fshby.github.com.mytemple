@@ -1,14 +1,28 @@
 {
   "name": "mytemple-knowledge",
-  "version": "1.1.6",
+  "version": "1.1.7",
   "private": true,
   "type": "module",
   "scripts": {
     "start": "node server.js",
     "test": "node --test tests/p0.test.js",
-    "check": "node --check server.js && node --check public/app.js"
+    "check": "node --check server.js && node --check public/app.js",
+    "build:editor": "esbuild frontend/editor-core.js --bundle --format=esm --target=es2020 --minify --outfile=public/editor-core.js"
   },
   "engines": {
     "node": ">=18"
+  },
+  "dependencies": {
+    "@codemirror/autocomplete": "^6.20.3",
+    "@codemirror/commands": "^6.10.4",
+    "@codemirror/lang-markdown": "^6.5.1",
+    "@codemirror/language": "^6.12.4",
+    "@codemirror/search": "^6.7.1",
+    "@codemirror/state": "^6.7.1",
+    "@codemirror/view": "^6.43.7",
+    "@lezer/highlight": "^1.2.3"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.1"
   }
 }

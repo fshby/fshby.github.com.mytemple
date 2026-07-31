@@ -1,11 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { createDocumentTemplate, frontmatterSummary, normalizeFrontmatter } from "../server/frontmatter.js";
 import { defaultAgentRules, loadAgentPolicy, policyAllows } from "../server/agent-policy.js";
-import { RagService, chunkMarkdown } from "../server/rag.js";
+import { RagService, chunkMarkdown, fallbackTransformSelection } from "../server/rag.js";
 
 test("Frontmatter template contains the P0 schema and remains parseable", () => {
   const template = createDocumentTemplate("测试文档", "2026-07-22");
@@ -72,6 +73,76 @@ test("Agent policy defaults to confirm mode and supports scoped rules", async ()
     assert.equal(policyAllows(policy, ".git/config.md"), false);
     assert.equal(policyAllows(policy, "secret.env"), false);
   } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("Selection transforms keep an offline fallback for all P1 modes", () => {
+  const source = "Docker 内存溢出时先检查容器限制。随后查看应用日志并确认异常请求。";
+  assert.match(fallbackTransformSelection(source, "summary"), /Docker/);
+  assert.match(fallbackTransformSelection(source, "keypoints"), /- /);
+  assert.match(fallbackTransformSelection(source, "terms"), /解析|术语|docker/);
+});
+
+test("AI settings reject unsafe service protocols", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "mytemple-rag-settings-"));
+  try {
+    const rag = new RagService(root);
+    await assert.rejects(() => rag.updateSettings({ baseUrl: "file:///secret" }), /HTTP/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("Embedding capability check rejects chat-only models with a clear remedy", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "mytemple-rag-capability-"));
+  const server = createServer((req, res) => {
+    res.writeHead(400, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "This server does not support embeddings" }));
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const address = server.address();
+    const rag = new RagService(root);
+    await assert.rejects(
+      () => rag.testEmbeddingModel(`http://127.0.0.1:${address.port}`, "gemma4:12b"),
+      /qwen3-embedding/,
+    );
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("Failed embedding jobs are recorded and not scheduled forever", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "mytemple-rag-retry-"));
+  const server = createServer((req, res) => {
+    res.writeHead(400, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "This server does not support embeddings" }));
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const address = server.address();
+    const rag = new RagService(root);
+    await rag.updateSettings({
+      baseUrl: `http://127.0.0.1:${address.port}`,
+      embeddingModel: "gemma4:12b",
+      chatModel: "gemma4:12b",
+    });
+    const files = [{
+      path: "default:test.md",
+      workspaceId: "default",
+      title: "测试",
+      contentSha256: "failed-embed-v1",
+      content: "# 测试\n\n这是一段用于验证失败索引状态的文档内容。",
+    }];
+    await rag.rebuild(files, "failed-version");
+    assert.equal(rag.manifest.requestedEmbeddingModel, "gemma4:12b");
+    assert.equal(rag.status().mode, "keyword");
+    rag.schedule(files, "failed-version");
+    assert.equal(rag.pending, null);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
     await rm(root, { recursive: true, force: true });
   }
 });

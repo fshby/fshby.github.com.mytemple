@@ -1,3 +1,5 @@
+import { createMarkdownEditor } from "/editor-core.js?v=20260731-shortcuts-5";
+
 const text = {
   emptyResult: "\u6ca1\u6709\u5339\u914d\u7ed3\u679c",
   retryKeyword: "\u6362\u4e00\u4e2a\u5173\u952e\u8bcd\u8bd5\u8bd5",
@@ -11,6 +13,9 @@ const text = {
 const LARGE_PREVIEW_BYTES = 100 * 1024;
 const LARGE_PREVIEW_DELAY = 700;
 const GRAPH_WORKER_URL = "/graph-worker.js?v=20260722-worker-1";
+const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20260731-worker-3";
+const AI_HISTORY_KEY = "mytemple.ai.history.v1";
+const AI_TRANSFORM_LABELS = { summary: "摘要", keypoints: "要点", terms: "术语解释" };
 
 const state = {
   tree: [],
@@ -28,6 +33,7 @@ const state = {
   graphWorkerSeq: 0,
   graphWorkerPending: new Map(),
   graphReady: false,
+  currentVersion: "",
   graphView: {
     visibleNodes: [],
     visibleEdges: [],
@@ -68,7 +74,7 @@ const state = {
   expandedFolders: new Set(),
   expandedWorkspaceRoots: new Set(),
   graphDrag: null,
-  undo: { stack: [], index: -1, applying: false },
+  undo: { stack: [], index: -1, applying: false, lastRecordedAt: 0 },
   deleteTarget: "",
   dragItem: null,
   clipboardItem: null,
@@ -86,10 +92,23 @@ const state = {
   previewBeforeImmersive: true,
   previewTimer: 0,
   previewLastContent: "",
+  previewRenderSeq: 0,
   currentContentBytes: 0,
   largeDocument: false,
   previewAutoHidden: false,
+  markdownWorker: null,
+  markdownWorkerSeq: 0,
+  markdownWorkerPending: new Map(),
+  markdownWorkerFailed: false,
   taskSaveQueue: Promise.resolve(),
+  autoSave: {
+    idleTimer: 0,
+    idleCallback: 0,
+    maxTimer: 0,
+    inFlight: false,
+    pending: false,
+    composing: false,
+  },
   semanticTagPreview: null,
   ai: {
     open: false,
@@ -97,6 +116,9 @@ const state = {
     status: null,
     messages: [],
     preview: null,
+    selection: null,
+    transform: null,
+    configDirty: false,
     statusTimer: 0,
   },
 };
@@ -237,7 +259,23 @@ const els = {
   aiTestBtn: document.querySelector("#aiTestBtn"),
   aiSaveBtn: document.querySelector("#aiSaveBtn"),
   aiReindexBtn: document.querySelector("#aiReindexBtn"),
+  aiDisableEmbeddingBtn: document.querySelector("#aiDisableEmbeddingBtn"),
   aiSettingsStatus: document.querySelector("#aiSettingsStatus"),
+  aiIndexMode: document.querySelector("#aiIndexMode"),
+  aiIndexCount: document.querySelector("#aiIndexCount"),
+  aiIndexStorage: document.querySelector("#aiIndexStorage"),
+  aiIndexProgressBar: document.querySelector("#aiIndexProgressBar"),
+  aiIndexProgressText: document.querySelector("#aiIndexProgressText"),
+  aiSelectionMenu: document.querySelector("#aiSelectionMenu"),
+  aiTransformModal: document.querySelector("#aiTransformModal"),
+  aiTransformTitle: document.querySelector("#aiTransformTitle"),
+  aiTransformSource: document.querySelector("#aiTransformSource"),
+  aiTransformResult: document.querySelector("#aiTransformResult"),
+  aiTransformDocName: document.querySelector("#aiTransformDocName"),
+  aiTransformCloseBtn: document.querySelector("#aiTransformCloseBtn"),
+  aiTransformCancelBtn: document.querySelector("#aiTransformCancelBtn"),
+  aiTransformInsertBtn: document.querySelector("#aiTransformInsertBtn"),
+  aiTransformCreateBtn: document.querySelector("#aiTransformCreateBtn"),
   standardizeFrontmatterBtn: document.querySelector("#standardizeFrontmatterBtn"),
   createAgentPolicyBtn: document.querySelector("#createAgentPolicyBtn"),
   agentPolicyStatus: document.querySelector("#agentPolicyStatus"),
@@ -247,6 +285,8 @@ const els = {
   cancelFrontmatterBtn: document.querySelector("#cancelFrontmatterBtn"),
   applyFrontmatterBtn: document.querySelector("#applyFrontmatterBtn"),
 };
+
+els.editor = createMarkdownEditor(els.editor);
 
 if (els.graphDynamic) els.graphDynamic.checked = state.graphView.dynamic;
 
@@ -594,6 +634,10 @@ function formatDocument(source) {
 
 function renderOutline(source) {
   const outline = extractOutline(source);
+  renderOutlineItems(outline);
+}
+
+function renderOutlineItems(outline) {
   els.readerPanel.classList.toggle("has-outline", outline.length > 0);
   els.readerOutline.classList.toggle("hidden", outline.length === 0);
   if (!outline.length) {
@@ -629,6 +673,67 @@ function renderOutline(source) {
     index = cursor - 1;
   }
   els.readerOutline.innerHTML = `<p class="reader-outline-title">\u672c\u6587\u76ee\u5f55</p>${rows.join("")}`;
+}
+
+function ensureMarkdownWorker() {
+  if (state.markdownWorker || state.markdownWorkerFailed) return state.markdownWorker;
+  try {
+    state.markdownWorker = new Worker(MARKDOWN_WORKER_URL);
+    state.markdownWorker.addEventListener("message", (event) => {
+      const { seq, html, outline } = event.data || {};
+      const pending = state.markdownWorkerPending.get(seq);
+      if (!pending) return;
+      state.markdownWorkerPending.delete(seq);
+      pending.resolve({ html, outline });
+    });
+    state.markdownWorker.addEventListener("error", (event) => {
+      state.markdownWorkerFailed = true;
+      const error = event?.error || new Error("Markdown worker failed");
+      for (const pending of state.markdownWorkerPending.values()) pending.reject(error);
+      state.markdownWorkerPending.clear();
+      if (state.markdownWorker) state.markdownWorker.terminate();
+      state.markdownWorker = null;
+    });
+  } catch (error) {
+    state.markdownWorkerFailed = true;
+    console.error(error);
+  }
+  return state.markdownWorker;
+}
+
+function requestMarkdownRender({ source = "", searchTerm = "", includeHtml = true, includeOutline = false } = {}) {
+  const worker = ensureMarkdownWorker();
+  if (!worker) {
+    return Promise.resolve({
+      html: includeHtml ? renderMarkdown(source, { searchTerm }) : null,
+      outline: includeOutline ? extractOutline(source) : null,
+    });
+  }
+  const seq = ++state.markdownWorkerSeq;
+  return new Promise((resolve, reject) => {
+    state.markdownWorkerPending.set(seq, { resolve, reject });
+    worker.postMessage({ seq, source, searchTerm, includeHtml, includeOutline });
+  });
+}
+
+async function renderReaderContent(source, options = {}) {
+  const content = String(source || "");
+  const searchTerm = options.searchTerm || "";
+  try {
+    const { html, outline } = await requestMarkdownRender({
+      source: content,
+      searchTerm,
+      includeHtml: true,
+      includeOutline: true,
+    });
+    if (state.currentContent !== content && !searchTerm) return;
+    els.markdownView.innerHTML = html ?? renderMarkdown(content, { searchTerm });
+    renderOutlineItems(outline || extractOutline(content));
+  } catch (error) {
+    console.error(error);
+    els.markdownView.innerHTML = renderMarkdown(content, { searchTerm });
+    renderOutline(content);
+  }
 }
 
 function inlineMarkdown(value, searchTerm = "") {
@@ -671,6 +776,57 @@ function safeMarkdownUrl(value) {
   return url;
 }
 
+function splitMarkdownTableRow(line) {
+  let value = String(line || "").trim();
+  if (value.startsWith("|")) value = value.slice(1);
+  if (value.endsWith("|") && !value.endsWith("\\|")) value = value.slice(0, -1);
+  const cells = [];
+  let cell = "";
+  let escaped = false;
+  let inCode = false;
+  for (const char of value) {
+    if (escaped) {
+      cell += char;
+      escaped = false;
+    } else if (char === "\\") {
+      escaped = true;
+      cell += char;
+    } else if (char === "`") {
+      inCode = !inCode;
+      cell += char;
+    } else if (char === "|" && !inCode) {
+      cells.push(cell.trim().replace(/\\\|/g, "|"));
+      cell = "";
+    } else {
+      cell += char;
+    }
+  }
+  cells.push(cell.trim().replace(/\\\|/g, "|"));
+  return cells;
+}
+
+function markdownTableAlignment(cell) {
+  const value = String(cell || "").trim();
+  if (!/^:?-{3,}:?$/.test(value)) return null;
+  if (value.startsWith(":") && value.endsWith(":")) return "center";
+  if (value.endsWith(":")) return "right";
+  return "left";
+}
+
+function normalizeCodeLanguage(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  const aliases = {
+    js: "javascript", jsx: "javascript", mjs: "javascript", cjs: "javascript",
+    ts: "typescript", tsx: "typescript", py: "python", rb: "ruby",
+    sh: "bash", shell: "bash", zsh: "bash", ps: "powershell", ps1: "powershell",
+    yml: "yaml", md: "markdown", c: "c", h: "c", cc: "cpp", cxx: "cpp",
+    "c++": "cpp", cs: "csharp", "c#": "csharp", rs: "rust", golang: "go",
+    txt: "text", plain: "text", "text/plain": "text",
+  };
+  const normalized = aliases[raw] || raw;
+  return /^[a-z0-9_+-]{1,24}$/.test(normalized) ? normalized : "text";
+}
+
 function renderMarkdown(source, options = {}) {
   const searchTerm = options.searchTerm || "";
   const lines = source.replace(/\r\n/g, "\n").split("\n");
@@ -681,6 +837,7 @@ function renderMarkdown(source, options = {}) {
   let h4Index = 0;
   let inCode = false;
   let code = [];
+  let codeLanguage = "text";
   let list = null;
   let table = [];
 
@@ -694,10 +851,13 @@ function renderMarkdown(source, options = {}) {
   };
   const flushTable = () => {
     if (!table.length) return;
-    const rows = table.map((row) => row.split("|").map((cell) => cell.trim()).filter(Boolean));
+    const rows = table.map(splitMarkdownTableRow);
     if (rows.length > 1) {
-      const [head, , ...body] = rows;
-      html.push(`<table><thead><tr>${head.map((cell) => `<th>${inlineMarkdown(cell, searchTerm)}</th>`).join("")}</tr></thead><tbody>${body.map((row) => `<tr>${row.map((cell) => `<td>${inlineMarkdown(cell, searchTerm)}</td>`).join("")}</tr>`).join("")}</tbody></table>`);
+      const [head, divider, ...body] = rows;
+      const alignments = divider.map(markdownTableAlignment);
+      const columnCount = head.length;
+      const cell = (tag, value, index) => `<${tag} style="text-align:${alignments[index] || "left"}">${inlineMarkdown(value || "", searchTerm)}</${tag}>`;
+      html.push(`<div class="markdown-table-wrap"><table><thead><tr>${head.map((value, index) => cell("th", value, index)).join("")}</tr></thead><tbody>${body.map((row) => `<tr>${Array.from({ length: columnCount }, (_, index) => cell("td", row[index], index)).join("")}</tr>`).join("")}</tbody></table></div>`);
     }
     table = [];
   };
@@ -709,8 +869,11 @@ function renderMarkdown(source, options = {}) {
       flushTable();
       if (inCode) {
         const raw = code.join("\n");
-        html.push(`<div class="code-block"><button class="code-copy" type="button">\u590d\u5236</button><pre><code>${escapeHtml(raw)}</code></pre></div>`);
+        html.push(`<div class="code-block" data-language="${codeLanguage}"><span class="code-language">${escapeHtml(codeLanguage)}</span><button class="code-copy" type="button">\u590d\u5236</button><pre><code class="language-${codeLanguage}">${escapeHtml(raw)}</code></pre></div>`);
         code = [];
+        codeLanguage = "text";
+      } else {
+        codeLanguage = normalizeCodeLanguage(line.slice(3).trim().split(/\s+/)[0]);
       }
       inCode = !inCode;
       continue;
@@ -725,8 +888,17 @@ function renderMarkdown(source, options = {}) {
       html.push("<hr />");
       continue;
     }
-    if (/^\|.+\|$/.test(line)) {
+    const row = line.includes("|") ? splitMarkdownTableRow(line) : [];
+    const nextRow = lines[i + 1]?.includes("|") ? splitMarkdownTableRow(lines[i + 1]) : [];
+    const startsTable = !table.length && row.length >= 2 && nextRow.length === row.length
+      && nextRow.every((cell) => markdownTableAlignment(cell));
+    if (startsTable) {
       flushList();
+      table.push(line, lines[i + 1]);
+      i += 1;
+      continue;
+    }
+    if (table.length && row.length >= 2) {
       table.push(line);
       continue;
     }
@@ -847,7 +1019,7 @@ function renderMarkdown(source, options = {}) {
   flushTable();
   if (inCode) {
     const raw = code.join("\n");
-    html.push(`<div class="code-block"><button class="code-copy" type="button">\u590d\u5236</button><pre><code>${escapeHtml(raw)}</code></pre></div>`);
+    html.push(`<div class="code-block" data-language="${codeLanguage}"><span class="code-language">${escapeHtml(codeLanguage)}</span><button class="code-copy" type="button">\u590d\u5236</button><pre><code class="language-${codeLanguage}">${escapeHtml(raw)}</code></pre></div>`);
   }
   return html.join("\n");
 }
@@ -888,12 +1060,13 @@ async function toggleMarkdownTask(input) {
 
   const saveJob = state.taskSaveQueue
     .catch(() => {})
-    .then(() => api.post("/api/save", { path: taskPath, content: nextContent }));
+    .then(() => api.post("/api/save", { path: taskPath, content: nextContent, baseHash: state.currentVersion || "" }));
   state.taskSaveQueue = saveJob;
   try {
-    await saveJob;
+    const result = await saveJob;
     if (state.currentPath === taskPath && state.currentContent === nextContent) {
       state.lastSavedContent = nextContent;
+      state.currentVersion = result.contentSha256 || state.currentVersion;
       setSaveStatus("已保存", false);
     }
     state.graphReady = false;
@@ -1564,14 +1737,17 @@ function setMode(mode) {
   updateMultiCursorDisplay();
   if (mode === "edit") {
     syncPreviewToEditor();
+    renderCurrentPreviewNow(state.currentContent);
     requestAnimationFrame(() => {
       const editorMax = Math.max(1, els.editor.scrollHeight - els.editor.clientHeight);
       els.editor.scrollTop = Math.round(editorMax * (state.readerScrollRatio || 0));
     });
+    if (state.previewVisible && !state.largeDocument) {
+      requestAnimationFrame(() => schedulePreviewUpdate({ immediate: true, forceContent: state.currentContent }));
+    }
   }
   if (mode === "view") {
-    els.markdownView.innerHTML = renderMarkdown(state.currentContent);
-    renderOutline(state.currentContent);
+    void renderReaderContent(state.currentContent);
   }
   if (mode !== "graph") stopGraphSimulation();
   if (mode === "graph") requestAnimationFrame(() => initGraph());
@@ -1581,6 +1757,7 @@ function resetUndo(content) {
   state.undo.stack = [content];
   state.undo.index = 0;
   state.undo.applying = false;
+  state.undo.lastRecordedAt = 0;
 }
 
 function contentByteLength(content) {
@@ -1598,13 +1775,20 @@ function updateLargeDocumentState(content, exact = false) {
   return state.largeDocument;
 }
 
-function recordUndo(value) {
+function recordUndo(value, { force = false } = {}) {
   if (state.undo.applying) return;
   if (state.undo.stack[state.undo.index] === value) return;
+  const now = Date.now();
+  if (!force && state.undo.lastRecordedAt && now - state.undo.lastRecordedAt < 450 && state.undo.index >= 0) {
+    state.undo.stack[state.undo.index] = value;
+    state.undo.lastRecordedAt = now;
+    return;
+  }
   state.undo.stack = state.undo.stack.slice(0, state.undo.index + 1);
   state.undo.stack.push(value);
   if (state.undo.stack.length > 80) state.undo.stack.shift();
   state.undo.index = state.undo.stack.length - 1;
+  state.undo.lastRecordedAt = now;
 }
 
 function applyEditorValue(value) {
@@ -1646,6 +1830,7 @@ async function openDoc(docPath, options = {}) {
   state.activeWorkspaceId = item.workspaceId || doc.path.split(":", 1)[0] || state.activeWorkspaceId;
   state.currentPath = doc.path;
   state.currentContent = doc.content;
+  state.currentVersion = doc.contentSha256 || "";
   updateLargeDocumentState(doc.content, true);
   state.lastSavedContent = doc.content;
   state.selectedNode = doc.path;
@@ -1656,8 +1841,7 @@ async function openDoc(docPath, options = {}) {
   els.docTitle.textContent = displayName(item);
   els.docTitle.title = doc.title || displayName(item);
   els.markdownView.classList.remove("empty-state");
-  els.markdownView.innerHTML = renderMarkdown(doc.content, { searchTerm: options.searchTerm || "" });
-  renderOutline(doc.content);
+  await renderReaderContent(doc.content, { searchTerm: options.searchTerm || "" });
   els.editor.value = doc.content;
   els.preview.classList.remove("preview-pending");
   if (state.largeDocument) {
@@ -1668,8 +1852,8 @@ async function openDoc(docPath, options = {}) {
   } else {
     if (state.previewAutoHidden) setPreviewVisible(true, { automatic: true });
     if (state.previewVisible) {
-      els.preview.innerHTML = renderMarkdown(doc.content);
-      state.previewLastContent = doc.content;
+      renderCurrentPreviewNow(doc.content);
+      schedulePreviewUpdate({ immediate: true, forceContent: doc.content });
     } else {
       els.preview.replaceChildren();
       state.previewLastContent = "";
@@ -1703,20 +1887,72 @@ function setSaveStatus(label, active = false) {
   els.saveBtn.classList.toggle("active", active);
 }
 
+function friendlyAiError(value, embeddingModel = "") {
+  const message = String(value || "").trim();
+  if (!message) return "";
+  if (/does not support embeddings|不支持 embeddings/i.test(message)) {
+    return `向量模型“${embeddingModel || "当前模型"}”不支持 Embeddings，请改用 qwen3-embedding 或 nomic-embed-text。`;
+  }
+  if (/fetch failed|ECONNREFUSED|无法连接.*Ollama/i.test(message)) {
+    return "无法连接本地 Ollama 服务，请先启动 Ollama，再点击“检测连接”。";
+  }
+  return message.replace(/\s+/g, " ").slice(0, 320);
+}
+
 function setAiStatus(status) {
   state.ai.status = status;
   if (!els.aiStatusBadge) return;
   const indexing = status?.indexing;
-  const hasError = status?.lastError;
+  const hasError = friendlyAiError(status?.lastError, status?.embeddingModel);
   els.aiStatusBadge.classList.toggle("ready", !indexing && !hasError && status?.mode === "hybrid");
   els.aiStatusBadge.classList.toggle("warn", Boolean(hasError) || status?.mode === "keyword");
   if (indexing) els.aiStatusBadge.textContent = `正在建立索引 ${status.progress?.done || 0}/${status.progress?.total || 0}`;
   else if (hasError) els.aiStatusBadge.textContent = "关键词降级";
   else if (status?.mode === "hybrid") els.aiStatusBadge.textContent = `语义索引 · ${status.chunkCount || 0} 段`;
   else els.aiStatusBadge.textContent = `关键词模式 · ${status?.chunkCount || 0} 段`;
+  if (els.aiIndexMode) els.aiIndexMode.textContent = status?.mode === "hybrid" ? "混合语义" : "关键词";
+  if (els.aiIndexCount) els.aiIndexCount.textContent = `${status?.chunkCount || 0} 段`;
+  if (els.aiIndexStorage) {
+    const bytes = Number(status?.storageBytes || 0);
+    els.aiIndexStorage.textContent = bytes >= 1024 * 1024
+      ? `${(bytes / 1024 / 1024).toFixed(1)} MB`
+      : `${Math.max(0, Math.round(bytes / 1024))} KB`;
+  }
+  if (els.aiIndexProgressBar) {
+    const done = Number(status?.progress?.done || 0);
+    const total = Number(status?.progress?.total || 0);
+    els.aiIndexProgressBar.style.width = total ? `${Math.min(100, Math.round(done / total * 100))}%` : (status?.indexing ? "35%" : "0%");
+  }
+  if (els.aiIndexProgressText) {
+    const done = Number(status?.progress?.done || 0);
+    const total = Number(status?.progress?.total || 0);
+    els.aiIndexProgressText.textContent = status?.indexing
+      ? `正在更新索引 · ${done}/${total || "待计算"}`
+      : `最近更新：${status?.indexedAt ? new Date(status.indexedAt).toLocaleString() : "尚未建立"}`;
+  }
   if (els.aiSettingsStatus) {
     const model = status?.embeddingModel || "未设置向量模型";
     els.aiSettingsStatus.textContent = `${els.aiStatusBadge.textContent} · ${model}${hasError ? ` · ${hasError}` : ""}`;
+  }
+}
+
+function saveAiHistory() {
+  try {
+    const compact = state.ai.messages.slice(-40).map((message) => ({
+      role: message.role,
+      content: String(message.content || "").slice(0, 12000),
+      sources: (message.sources || []).slice(0, 8),
+    }));
+    localStorage.setItem(AI_HISTORY_KEY, JSON.stringify(compact));
+  } catch {}
+}
+
+function loadAiHistory() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(AI_HISTORY_KEY) || "[]");
+    if (Array.isArray(parsed)) state.ai.messages = parsed.filter((item) => item && ["user", "assistant"].includes(item.role) && item.content);
+  } catch {
+    state.ai.messages = [];
   }
 }
 
@@ -1725,9 +1961,11 @@ async function loadAiStatus() {
     const status = await api.get("/api/ai/status");
     setAiStatus(status);
     state.ai.settings = status;
-    if (els.aiBaseUrl) els.aiBaseUrl.value = status.baseUrl || "http://127.0.0.1:11434";
-    if (els.aiEmbeddingModel) els.aiEmbeddingModel.value = status.embeddingModel || "";
-    if (els.aiChatModel) els.aiChatModel.value = status.chatModel || "";
+    if (!state.ai.configDirty) {
+      if (els.aiBaseUrl) els.aiBaseUrl.value = status.baseUrl || "http://127.0.0.1:11434";
+      if (els.aiEmbeddingModel) els.aiEmbeddingModel.value = status.embeddingModel || "";
+      if (els.aiChatModel) els.aiChatModel.value = status.chatModel || "";
+    }
     clearTimeout(state.ai.statusTimer);
     if (status.indexing && (state.ai.open || !els.settingsModal.classList.contains("hidden"))) {
       state.ai.statusTimer = setTimeout(loadAiStatus, 900);
@@ -1739,6 +1977,7 @@ async function loadAiStatus() {
 
 function renderAiMessages() {
   if (!els.aiMessages) return;
+  saveAiHistory();
   els.aiMessages.replaceChildren();
   if (!state.ai.messages.length) {
     const empty = document.createElement("div");
@@ -1810,6 +2049,7 @@ async function submitAiQuestion(event) {
   const question = els.aiQuestion?.value.trim();
   if (!question || els.aiSendBtn?.disabled) return;
   state.ai.messages.push({ role: "user", content: question });
+  saveAiHistory();
   els.aiQuestion.value = "";
   renderAiMessages();
   els.aiSendBtn.disabled = true;
@@ -1821,14 +2061,126 @@ async function submitAiQuestion(event) {
       path: state.currentPath,
     });
     state.ai.messages.push({ role: "assistant", content: result.answer || "没有返回内容", sources: result.sources || [] });
+    saveAiHistory();
     if (result.warning) showToast(result.warning);
     setAiStatus({ ...(state.ai.status || {}), mode: result.retrievalMode === "hybrid" ? "hybrid" : "keyword", lastError: result.warning || "" });
   } catch (error) {
     state.ai.messages.push({ role: "assistant", content: `检索失败：${error.message || "未知错误"}` });
+    saveAiHistory();
   } finally {
     els.aiSendBtn.disabled = false;
     els.aiSendBtn.textContent = "提问";
     renderAiMessages();
+  }
+}
+
+function selectionNodeElement(node) {
+  if (!node) return null;
+  return node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+}
+
+function getAiSelection() {
+  if (!state.currentPath) return null;
+  if (state.mode === "edit" && els.editor.hasFocus) {
+    const start = els.editor.selectionStart ?? 0;
+    const end = els.editor.selectionEnd ?? 0;
+    if (end > start) return { text: els.editor.value.slice(start, end), start, end, source: "editor", path: state.currentPath };
+  }
+  const selection = window.getSelection?.();
+  if (!selection || selection.isCollapsed || !selection.toString().trim()) return null;
+  const anchor = selectionNodeElement(selection.anchorNode);
+  const focus = selectionNodeElement(selection.focusNode);
+  const root = state.mode === "view" ? els.markdownView : els.preview;
+  if (!root?.contains(anchor) || !root.contains(focus)) return null;
+  return { text: selection.toString().trim(), source: "reader", path: state.currentPath };
+}
+
+function refreshAiSelectionMenu() {
+  const selection = getAiSelection();
+  state.ai.selection = selection;
+  if (!els.aiSelectionMenu) return;
+  if (!selection || selection.text.length < 8) {
+    els.aiSelectionMenu.classList.add("hidden");
+    return;
+  }
+  els.aiSelectionMenu.classList.remove("hidden");
+  if (selection.source === "editor") {
+    els.aiSelectionMenu.style.left = "50%";
+    els.aiSelectionMenu.style.top = "72px";
+    els.aiSelectionMenu.style.transform = "translateX(-50%)";
+  } else {
+    const range = window.getSelection().getRangeAt(0);
+    const rect = range.getBoundingClientRect();
+    els.aiSelectionMenu.style.left = `${Math.max(12, Math.min(window.innerWidth - 300, rect.left + rect.width / 2 - 120))}px`;
+    els.aiSelectionMenu.style.top = `${Math.max(12, rect.top - 52)}px`;
+    els.aiSelectionMenu.style.transform = "";
+  }
+}
+
+function closeAiTransformModal() {
+  els.aiTransformModal?.classList.add("hidden");
+  state.ai.transform = null;
+}
+
+async function runAiTransform(mode) {
+  const selection = state.ai.selection || getAiSelection();
+  if (!selection?.text) return showToast("请先选中一段文本");
+  state.ai.selection = selection;
+  els.aiSelectionMenu?.classList.add("hidden");
+  els.aiTransformModal?.classList.remove("hidden");
+  els.aiTransformTitle.textContent = `生成${AI_TRANSFORM_LABELS[mode] || "结果"}`;
+  els.aiTransformSource.textContent = `${selection.source === "editor" ? "编辑器选区" : "阅读器选区"} · ${selection.text.length} 字`;
+  els.aiTransformResult.value = "正在处理选中文本…";
+  els.aiTransformResult.disabled = true;
+  els.aiTransformInsertBtn.disabled = selection.source !== "editor";
+  els.aiTransformCreateBtn.disabled = true;
+  try {
+    const result = await api.post("/api/ai/transform", { text: selection.text, mode });
+    els.aiTransformResult.value = result.content || "";
+    state.ai.transform = { ...selection, mode, result: result.content || "" };
+    els.aiTransformCreateBtn.disabled = !result.content;
+    if (result.warning) showToast(result.warning);
+  } catch (error) {
+    els.aiTransformResult.value = "";
+    showToast(error.message || "文本处理失败");
+    closeAiTransformModal();
+  } finally {
+    els.aiTransformResult.disabled = false;
+  }
+}
+
+async function insertAiTransform() {
+  const transform = state.ai.transform;
+  const content = els.aiTransformResult.value.trim();
+  if (!transform || transform.source !== "editor" || !content) return;
+  els.editor.focus();
+  els.editor.setRangeText(content, transform.start, transform.end, "end");
+  els.editor.dispatchEvent(new Event("input", { bubbles: true }));
+  closeAiTransformModal();
+  showToast("AI 结果已插入当前位置");
+}
+
+async function createAiTransformDocument() {
+  const transform = state.ai.transform;
+  const content = els.aiTransformResult.value.trim();
+  if (!transform || !content) return;
+  const baseName = String(splitPathRef(transform.path).relative.split("/").pop() || "文档").replace(/\.md$/i, "");
+  const name = (els.aiTransformDocName.value.trim() || `${baseName}-${AI_TRANSFORM_LABELS[transform.mode] || "整理"}`).slice(0, 80);
+  const parent = parentPathRef(transform.path);
+  els.aiTransformCreateBtn.disabled = true;
+  try {
+    const created = await api.post("/api/create-doc", { parent, name });
+    const body = `# ${name}\n\n> 来源：${transform.path}\n> 处理方式：${AI_TRANSFORM_LABELS[transform.mode] || "AI"}\n\n${content}\n`;
+    await api.post("/api/save", { path: created.path, content: body });
+    closeAiTransformModal();
+    await bootstrap(true);
+    await openDoc(created.path);
+    setMode("edit");
+    showToast("已新建 AI 整理文档");
+  } catch (error) {
+    showToast(error.message || "新建文档失败");
+  } finally {
+    els.aiTransformCreateBtn.disabled = false;
   }
 }
 
@@ -1935,34 +2287,125 @@ function syncPreviewToEditor() {
   if (state.mode !== "edit") return;
   cancelAnimationFrame(state.syncPreviewScroll.frame);
   state.syncPreviewScroll.frame = requestAnimationFrame(() => {
-    const editorMax = Math.max(1, els.editor.scrollHeight - els.editor.clientHeight);
     const previewMax = Math.max(0, els.preview.scrollHeight - els.preview.clientHeight);
-    const ratio = clamp(els.editor.scrollTop / editorMax, 0, 1);
+    if (!previewMax) {
+      els.preview.scrollTop = 0;
+      return;
+    }
+    // CodeMirror 内容区带有底部留白（用于舒适编辑），不能直接用
+    // scrollHeight 比例映射，否则编辑到中后段时预览会明显错位。
+    const editorDom = els.editor.host || document.querySelector("#editor");
+    const firstLine = editorDom?.querySelector(".cm-line");
+    const lineHeight = Number.parseFloat(firstLine ? getComputedStyle(firstLine).lineHeight : "") || 27;
+    const topPadding = Number.parseFloat(getComputedStyle(editorDom?.querySelector(".cm-content") || editorDom).paddingTop) || 26;
+    const totalLines = Math.max(1, String(state.currentContent || els.editor.value || "").split(/\r?\n/).length);
+    const visibleLines = Math.max(1, Math.floor(els.editor.clientHeight / lineHeight));
+    const currentLine = clamp(Math.floor(Math.max(0, els.editor.scrollTop - topPadding) / lineHeight), 0, Math.max(0, totalLines - 1));
+    const anchors = [...els.preview.children]
+      .map((element) => ({ element, line: Number(element.dataset.sourceLine) }))
+      .filter((item) => Number.isFinite(item.line))
+      .sort((a, b) => a.line - b.line);
+    if (anchors.length >= 2) {
+      let previous = anchors[0];
+      let next = anchors[anchors.length - 1];
+      for (let index = 1; index < anchors.length; index += 1) {
+        if (anchors[index].line >= currentLine) {
+          next = anchors[index];
+          previous = anchors[index - 1];
+          break;
+        }
+        previous = anchors[index];
+      }
+      const previousTop = previous.element.offsetTop;
+      const nextTop = next.element.offsetTop;
+      const span = Math.max(1, next.line - previous.line);
+      const localRatio = clamp((currentLine - previous.line) / span, 0, 1);
+      const anchoredTop = previousTop + (nextTop - previousTop) * localRatio;
+      els.preview.scrollTop = Math.round(clamp(anchoredTop - els.preview.clientHeight * 0.12, 0, previewMax));
+      state.syncPreviewScroll.ratio = clamp(els.preview.scrollTop / previewMax, 0, 1);
+      return;
+    }
+    const ratio = clamp(currentLine / Math.max(1, totalLines - visibleLines), 0, 1);
     state.syncPreviewScroll.ratio = ratio;
     els.preview.scrollTop = Math.round(previewMax * ratio);
   });
 }
 
+function syncPreviewSourceAnchors(source) {
+  const lines = String(source || "").replace(/\r\n/g, "\n").split("\n");
+  const normalize = (value) => String(value || "")
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/[\s`*_~#>|{}()[\]]+/g, "")
+    .toLowerCase();
+  let cursor = 0;
+  [...els.preview.children].forEach((element) => {
+    const text = normalize(element.textContent).slice(0, 180);
+    if (!text) return;
+    let found = -1;
+    for (let index = cursor; index < lines.length; index += 1) {
+      const line = normalize(lines[index]);
+      if (line && (line.includes(text.slice(0, Math.min(80, text.length))) || text.includes(line.slice(0, Math.min(80, line.length))))) {
+        found = index;
+        break;
+      }
+    }
+    if (found >= 0) {
+      element.dataset.sourceLine = String(found);
+      cursor = found + 1;
+    }
+  });
+}
+
 function renderCurrentPreview() {
+  return renderCurrentPreviewAsync();
+}
+
+function renderCurrentPreviewNow(content = state.currentContent) {
   if (!state.previewVisible || state.mode !== "edit") return;
-  if (state.previewLastContent === state.currentContent) {
+  const nextContent = String(content || els.editor.value || state.currentContent || "");
+  els.preview.innerHTML = renderMarkdown(nextContent);
+  syncPreviewSourceAnchors(nextContent);
+  els.preview.classList.remove("preview-pending");
+  state.previewLastContent = nextContent;
+  syncPreviewToEditor();
+}
+
+async function renderCurrentPreviewAsync(content = state.currentContent, seq = ++state.previewRenderSeq) {
+  if (!state.previewVisible || state.mode !== "edit") return;
+  content = String(content || els.editor.value || state.currentContent || "");
+  if (state.previewLastContent === content) {
     els.preview.classList.remove("preview-pending");
     syncPreviewToEditor();
     return;
   }
-  els.preview.innerHTML = renderMarkdown(state.currentContent);
+  try {
+    const html = renderMarkdown(content);
+    if (seq !== state.previewRenderSeq || content !== state.currentContent) return;
+    els.preview.innerHTML = html;
+    syncPreviewSourceAnchors(content);
+  } catch (error) {
+    console.error(error);
+    if (seq !== state.previewRenderSeq || content !== state.currentContent) return;
+    els.preview.innerHTML = renderMarkdown(content);
+    syncPreviewSourceAnchors(content);
+  }
   els.preview.classList.remove("preview-pending");
-  state.previewLastContent = state.currentContent;
+  state.previewLastContent = content;
   syncPreviewToEditor();
 }
 
-function schedulePreviewUpdate() {
+function schedulePreviewUpdate({ immediate = false, forceContent = state.currentContent } = {}) {
   clearTimeout(state.previewTimer);
   if (!state.previewVisible || state.mode !== "edit") return;
-  const length = state.currentContent.length;
-  const wait = state.largeDocument ? LARGE_PREVIEW_DELAY : length > 500000 ? 420 : length > 100000 ? 240 : 120;
-  els.preview.classList.toggle("preview-pending", state.largeDocument && state.previewLastContent !== state.currentContent);
-  state.previewTimer = setTimeout(renderCurrentPreview, wait);
+  const content = String(forceContent || els.editor.value || state.currentContent || "");
+  const length = content.length;
+  const wait = immediate ? 0 : state.largeDocument ? LARGE_PREVIEW_DELAY : length > 500000 ? 420 : length > 100000 ? 240 : 120;
+  const nextSeq = ++state.previewRenderSeq;
+  els.preview.classList.toggle("preview-pending", state.previewLastContent !== content);
+  state.previewTimer = setTimeout(() => {
+    renderCurrentPreviewAsync(content, nextSeq);
+  }, wait);
 }
 
 function setPreviewVisible(visible, { automatic = false } = {}) {
@@ -1977,7 +2420,7 @@ function setPreviewVisible(visible, { automatic = false } = {}) {
     : state.largeDocument ? "\u663e\u793a\u9884\u89c8\uff08\u5927\u6587\u6863\uff09" : "\u663e\u793a\u9884\u89c8";
   if (state.previewVisible) {
     if (state.largeDocument) schedulePreviewUpdate();
-    else requestAnimationFrame(renderCurrentPreview);
+    else requestAnimationFrame(() => schedulePreviewUpdate({ immediate: true }));
   } else {
     clearTimeout(state.previewTimer);
     els.preview.classList.remove("preview-pending");
@@ -2002,7 +2445,7 @@ function setImmersiveEditing(enabled) {
   }
 }
 
-async function saveCurrentDoc({ refreshTree = false, keepEditorState = true } = {}) {
+async function saveCurrentDoc({ refreshTree = false, keepEditorState = true, renderAfterSave = true } = {}) {
   if (!state.currentPath) return false;
   const content = els.editor.value;
   if (!refreshTree && content === state.lastSavedContent) return true;
@@ -2014,7 +2457,8 @@ async function saveCurrentDoc({ refreshTree = false, keepEditorState = true } = 
   const seq = ++state.saveSeq;
   setSaveStatus("\u4fdd\u5b58\u4e2d", true);
   try {
-    await api.post("/api/save", { path: state.currentPath, content });
+    const result = await api.post("/api/save", { path: state.currentPath, content, baseHash: state.currentVersion || "" });
+    state.currentVersion = result.contentSha256 || state.currentVersion;
   } catch (e) {
     const errorMessage = e?.response?.data?.error || e?.message || "保存失败";
     setSaveStatus("保存失败", false);
@@ -2022,17 +2466,16 @@ async function saveCurrentDoc({ refreshTree = false, keepEditorState = true } = 
     return false;
   }
   if (seq !== state.saveSeq) return true;
-  state.currentContent = content;
-  updateLargeDocumentState(content);
+  const editorUnchanged = els.editor.value === content;
+  const latestContent = els.editor.value;
+  state.currentContent = editorUnchanged ? content : latestContent;
+  updateLargeDocumentState(state.currentContent);
   state.lastSavedContent = content;
-  if (state.mode === "read") {
-    els.markdownView.innerHTML = renderMarkdown(content);
-    renderOutline(content);
-  } else if (state.previewVisible) {
-    els.preview.innerHTML = renderMarkdown(content);
-    els.preview.classList.remove("preview-pending");
-    state.previewLastContent = content;
-  } else {
+  if (renderAfterSave && editorUnchanged && state.mode === "read") {
+    await renderReaderContent(content);
+  } else if (renderAfterSave && editorUnchanged && state.previewVisible) {
+    schedulePreviewUpdate({ immediate: true, forceContent: content });
+  } else if (editorUnchanged) {
     state.previewLastContent = "";
   }
   state.graphReady = false;
@@ -2040,11 +2483,12 @@ async function saveCurrentDoc({ refreshTree = false, keepEditorState = true } = 
   if (refreshTree) {
     const path = state.currentPath;
     await bootstrap(true);
-    await openDoc(path);
-    setMode("edit");
+    // Refresh the tree metadata without reopening the document. Reopening
+    // rebuilt the editor content and caused caret/scroll jumps after Ctrl+S.
+    if (state.currentPath === path) syncTreeSelectionState();
   }
   
-  if (keepEditorState) {
+  if (keepEditorState && editorUnchanged) {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         els.editor.focus();
@@ -2057,16 +2501,69 @@ async function saveCurrentDoc({ refreshTree = false, keepEditorState = true } = 
   return true;
 }
 
-const autoSaveCurrentDoc = debounce(async () => {
-  if (state.mode !== "edit" || !state.currentPath) return;
-  if (document.activeElement !== els.editor) return;
+function clearAutoSaveTimers() {
+  clearTimeout(state.autoSave.idleTimer);
+  clearTimeout(state.autoSave.maxTimer);
+  if (state.autoSave.idleCallback && typeof cancelIdleCallback === "function") {
+    cancelIdleCallback(state.autoSave.idleCallback);
+  }
+  state.autoSave.idleTimer = 0;
+  state.autoSave.maxTimer = 0;
+  state.autoSave.idleCallback = 0;
+}
+
+function getAutoSaveDelays(content = els.editor.value || "") {
+  const length = String(content || "").length;
+  if (length > 500000) return { idle: 6500, max: 26000 };
+  if (length > 120000) return { idle: 4800, max: 22000 };
+  if (length > 40000) return { idle: 3600, max: 18000 };
+  return { idle: 2600, max: 14000 };
+}
+
+function requestAutoSaveRun(timeout = 3000) {
+  if (typeof requestIdleCallback === "function") {
+    state.autoSave.idleCallback = requestIdleCallback(() => {
+      state.autoSave.idleCallback = 0;
+      void runAutoSave();
+    }, { timeout });
+    return;
+  }
+  void runAutoSave();
+}
+
+async function runAutoSave() {
+  clearAutoSaveTimers();
+  if (state.autoSave.composing || state.mode !== "edit" || !state.currentPath) return;
+  if (state.autoSave.inFlight) {
+    state.autoSave.pending = true;
+    return;
+  }
+  if (els.editor.value === state.lastSavedContent) return;
+  state.autoSave.inFlight = true;
   try {
-    await saveCurrentDoc({ keepEditorState: false });
+    await saveCurrentDoc({ keepEditorState: false, renderAfterSave: false });
   } catch (error) {
     setSaveStatus("\u4fdd\u5b58\u5931\u8d25", true);
     console.error(error);
+  } finally {
+    state.autoSave.inFlight = false;
+    if (state.autoSave.pending || els.editor.value !== state.lastSavedContent) {
+      state.autoSave.pending = false;
+      scheduleAutoSave();
+    }
   }
-}, 900);
+}
+
+function scheduleAutoSave() {
+  clearTimeout(state.autoSave.idleTimer);
+  if (state.autoSave.idleCallback && typeof cancelIdleCallback === "function") {
+    cancelIdleCallback(state.autoSave.idleCallback);
+    state.autoSave.idleCallback = 0;
+  }
+  const { idle, max } = getAutoSaveDelays(els.editor.value);
+  state.autoSave.idleTimer = setTimeout(() => requestAutoSaveRun(2800), idle);
+  if (!state.autoSave.maxTimer) state.autoSave.maxTimer = setTimeout(() => requestAutoSaveRun(1200), max);
+}
 
 async function normalizeAllToMarkdown() {
   els.normalizeProgress.classList.remove("hidden");
@@ -3538,7 +4035,7 @@ function numberToChinese(num) {
 }
 
 function expandSequenceOnEnter(event) {
-  if (event.key !== "Enter" || event.shiftKey) return false;
+  if (event.key !== "Enter" || event.shiftKey || event.defaultPrevented) return false;
   const start = els.editor.selectionStart ?? 0;
   const end = els.editor.selectionEnd ?? start;
   if (start !== end) return false;
@@ -3567,6 +4064,9 @@ function expandSequenceOnEnter(event) {
   }
   if (!marker) return false;
   event.preventDefault();
+  // 仅延续当前行的序号，避免全篇重排造成小标题后光标跳回首行。
+  insertAtCursor(`\n${marker}`);
+  return true;
 
   // 扫描整个文档，找出同类型、同级缩进、同分隔符的序号行，进行重新编号
   let newValue = value;
@@ -3798,6 +4298,34 @@ function shouldWrapPastedCode(text) {
   return /[{};=<>]|\b(function|const|let|var|class|import|export|return|SELECT|FROM|WHERE|def|public|private)\b/.test(text);
 }
 
+function detectPastedCodeLanguage(source) {
+  const text = String(source || "").trim();
+  const lower = text.toLowerCase();
+  if (!text) return "text";
+  if (/^\s*(```|~~~)/.test(text)) return "text";
+  if (/^\s*<!doctype\s+html|<html[\s>]|<\/(?:div|body|html)>/i.test(text)) return "html";
+  if (/^\s*FROM\s+\S+\s+AS\s+\S+|^\s*RUN\s+|^\s*CMD\s+\[|^\s*EXPOSE\s+\d+/im.test(text)) return "dockerfile";
+  if (/^\s*#\s*!\/bin\/(?:ba)?sh\b|\b(?:echo|printf)\s+['\"]?\$?[A-Z_]+/im.test(text)) return "bash";
+  if (/\b(?:SELECT|INSERT\s+INTO|UPDATE\s+\w+\s+SET|CREATE\s+TABLE|ALTER\s+TABLE)\b[\s\S]*\b(?:FROM|VALUES|WHERE|PRIMARY\s+KEY)\b/i.test(text)) return "sql";
+  if (/^\s*(?:interface|type)\s+\w+\s*[{=]|\b(?:string|number|boolean)\[\]|:\s*(?:string|number|boolean)\b/.test(text)) return "typescript";
+  if (/\b(?:const|let|var)\s+\w+\s*=|=>|\bconsole\.(?:log|error|warn)\s*\(|\b(?:function|async)\s+\w+\s*\(/.test(text)) return "javascript";
+  if (/^\s*(?:def\s+\w+\s*\(|class\s+\w+\s*[:(]|from\s+\w+\s+import\s+|import\s+\w+|if\s+__name__\s*==|print\s*\()/m.test(text)) return "python";
+  if (/\b(?:public\s+class|private\s+(?:static\s+)?(?:void|int|String)|System\.out\.|@Override)\b/.test(text)) return "java";
+  if (/\b(?:using\s+System|namespace\s+\w+|Console\.WriteLine|public\s+partial\s+class)\b/.test(text)) return "csharp";
+  if (/^\s*#include\s*[<\"]|\b(?:std::|printf\s*\(|int\s+main\s*\()/m.test(text)) return "cpp";
+  if (/^\s*package\s+\w+|\bfunc\s+\w+\s*\(/m.test(text)) return "go";
+  if (/\bfn\s+main\s*\(|\blet\s+mut\s+|\buse\s+std::/.test(text)) return "rust";
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed && typeof parsed === "object") return "json";
+  } catch { /* not JSON */ }
+  if (/[.#]?[a-z][\w-]*(?:\s+[.#:]?[\w*-]+)*\s*\{/.test(text) && /\b[a-z-]+\s*:\s*[^;{}]+;/.test(text)) return "css";
+  if (/^\s*(?:[-*]\s+|\w[\w -]*:\s+|---\s*$)/m.test(text) && /:\s+[^\n]+/.test(text)) return "yaml";
+  if (/^\s*#{1,6}\s+|\[[^\]]+\]\(https?:\/\//m.test(text)) return "markdown";
+  if (/\b(?:SELECT|FROM|WHERE)\b/i.test(lower)) return "sql";
+  return "text";
+}
+
 function wrapSelection(before, after = before, placeholder = "text") {
   let start = els.editor.selectionStart ?? els.editor.value.length;
   let end = els.editor.selectionEnd ?? start;
@@ -3833,15 +4361,105 @@ function insertDivider() {
   els.editor.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
+function selectedLineRange() {
+  const value = els.editor.value;
+  const start = els.editor.selectionStart ?? 0;
+  const end = els.editor.selectionEnd ?? start;
+  const lineStart = value.lastIndexOf("\n", Math.max(0, start - 1)) + 1;
+  const effectiveEnd = end > start && value[end - 1] === "\n" ? end - 1 : end;
+  const nextBreak = value.indexOf("\n", effectiveEnd);
+  const lineEnd = nextBreak === -1 ? value.length : nextBreak;
+  return { value, start, end, lineStart, lineEnd };
+}
+
+function prefixSelectedLines(prefix) {
+  const range = selectedLineRange();
+  const selected = range.value.slice(range.lineStart, range.lineEnd);
+  const lines = selected.split("\n");
+  const next = lines.map((line, index) => {
+    const value = typeof prefix === "function" ? prefix(line, index) : prefix;
+    return `${value}${line}`;
+  }).join("\n");
+  els.editor.setRangeText(next, range.lineStart, range.lineEnd, "select");
+  els.editor.focus();
+  els.editor.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+function insertMarkdownLink() {
+  const start = els.editor.selectionStart ?? 0;
+  const end = els.editor.selectionEnd ?? start;
+  const label = els.editor.value.slice(start, end) || "链接文字";
+  const markdown = `[${label}](https://)`;
+  els.editor.setRangeText(markdown, start, end, "end");
+  els.editor.focus();
+  const urlStart = start + label.length + 3;
+  els.editor.setSelectionRange(urlStart, urlStart + 8);
+  els.editor.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+function insertMarkdownTable() {
+  const cursor = els.editor.selectionEnd ?? els.editor.value.length;
+  const prefix = cursor > 0 && els.editor.value[cursor - 1] !== "\n" ? "\n\n" : "";
+  const table = `${prefix}| 列 1 | 列 2 | 列 3 |\n| :--- | :---: | ---: |\n| 内容 | 内容 | 内容 |\n`;
+  els.editor.setRangeText(table, cursor, cursor, "end");
+  els.editor.focus();
+  els.editor.setSelectionRange(cursor + prefix.length + 2, cursor + prefix.length + 5);
+  els.editor.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+function moveSelectedLines(direction) {
+  const range = selectedLineRange();
+  const scrollTop = els.editor.scrollTop;
+  const scrollLeft = els.editor.scrollLeft;
+  const lines = range.value.split("\n");
+  const startLine = range.value.slice(0, range.lineStart).split("\n").length - 1;
+  const endLine = startLine + range.value.slice(range.lineStart, range.lineEnd).split("\n").length - 1;
+  if ((direction < 0 && startLine === 0) || (direction > 0 && endLine >= lines.length - 1)) return false;
+  const blockStart = lines.slice(0, startLine).reduce((total, line) => total + line.length + 1, 0);
+  const relativeStart = range.start - blockStart;
+  const relativeEnd = range.end - blockStart;
+  const block = lines.splice(startLine, endLine - startLine + 1);
+  const insertLine = direction < 0 ? startLine - 1 : startLine + 1;
+  lines.splice(insertLine, 0, ...block);
+  const nextValue = lines.join("\n");
+  const nextBlockStart = lines.slice(0, insertLine).reduce((total, line) => total + line.length + 1, 0);
+  els.editor.value = nextValue;
+  els.editor.focus();
+  els.editor.setSelectionRange(
+    Math.max(0, nextBlockStart + relativeStart),
+    Math.min(nextValue.length, nextBlockStart + relativeEnd),
+  );
+  els.editor.scrollTop = scrollTop;
+  els.editor.scrollLeft = scrollLeft;
+  requestAnimationFrame(() => {
+    els.editor.scrollTop = scrollTop;
+    els.editor.scrollLeft = scrollLeft;
+  });
+  state.secondaryCursors = [];
+  els.editor.dispatchEvent(new Event("input", { bubbles: true }));
+  return true;
+}
+
 function applyFormat(format) {
   const color = els.textColor.value;
   const bg = els.bgColor.value;
   const size = els.fontSize.value;
   const actions = {
+    h1: () => prefixSelectedLines("# "),
+    h2: () => prefixSelectedLines("## "),
+    h3: () => prefixSelectedLines("### "),
     bold: () => wrapSelection("**", "**"),
+    italic: () => wrapSelection("*", "*"),
     underline: () => wrapSelection("++", "++"),
     strike: () => wrapSelection("~~", "~~"),
     highlight: () => wrapSelection("==", "=="),
+    code: () => wrapSelection("`", "`", "code"),
+    link: () => insertMarkdownLink(),
+    quote: () => prefixSelectedLines("> "),
+    ul: () => prefixSelectedLines("- "),
+    ol: () => prefixSelectedLines((line, index) => `${index + 1}. `),
+    task: () => prefixSelectedLines("- [ ] "),
+    table: () => insertMarkdownTable(),
     color: () => wrapSelection(`{color:${color}|`, "}"),
     bg: () => wrapSelection(`{bg:${bg}|`, "}"),
     size: () => wrapSelection(`{size:${size}|`, "}"),
@@ -3892,7 +4510,8 @@ async function handleEditorPaste(event) {
   const cursor = els.editor.selectionStart ?? 0;
   if (shouldWrapPastedCode(textValue) && !cursorInsideFence(els.editor.value, cursor)) {
     event.preventDefault();
-    insertAtCursor(`\n\`\`\`\n${textValue.trim()}\n\`\`\`\n`);
+    const language = detectPastedCodeLanguage(textValue);
+    insertAtCursor(`\n\`\`\`${language}\n${textValue.trim()}\n\`\`\`\n`);
   }
 }
 
@@ -3924,7 +4543,7 @@ function handleTreeMultiSelect(path, event) {
 }
 
 function keyboardCopy(event) {
-  if (event.target === els.editor) {
+  if (els.editor.contains(event.target)) {
     const selected = els.editor.value.substring(els.editor.selectionStart, els.editor.selectionEnd);
     if (selected.trim()) {
       navigator.clipboard.writeText(selected).then(() => {
@@ -3977,14 +4596,20 @@ function keyboardDelete(event) {
 
 // 全局键盘快捷键
 document.addEventListener("keydown", (event) => {
+  const target = event.target;
+  const editableTarget = target && typeof target.closest === "function"
+    && (target.closest(".cm-editor") || target.closest("input, textarea, select, [contenteditable='true']"));
   if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "f") {
+    if (editableTarget) return;
     event.preventDefault();
     return setImmersiveEditing(!state.immersive);
   }
   if (event.key === "Escape" && state.immersive) {
+    if (editableTarget) return;
     event.preventDefault();
     return setImmersiveEditing(false);
   }
+  if (editableTarget) return;
   if ((event.ctrlKey || event.metaKey) && event.key && event.key.toLowerCase() === "c") return keyboardCopy(event);
   if ((event.ctrlKey || event.metaKey) && event.key && event.key.toLowerCase() === "v") return keyboardPaste(event);
   if ((event.ctrlKey || event.metaKey) && event.key && event.key.toLowerCase() === "d") return keyboardDelete(event);
@@ -4140,10 +4765,78 @@ els.editor.addEventListener("input", () => {
   recordUndo(state.currentContent);
   setSaveStatus("\u672a\u4fdd\u5b58", true);
   schedulePreviewUpdate();
-  autoSaveCurrentDoc();
+  scheduleAutoSave();
+});
+els.editor.addEventListener("compositionstart", () => {
+  state.autoSave.composing = true;
+});
+els.editor.addEventListener("compositionend", () => {
+  state.autoSave.composing = false;
+  scheduleAutoSave();
 });
 els.editor.addEventListener("scroll", syncPreviewToEditor, { passive: true });
+els.editor.addEventListener("select", syncPreviewToEditor, { passive: true });
+
+function addLineCursor(direction) {
+  const value = els.editor.value;
+  const start = els.editor.selectionStart ?? 0;
+  const lineStart = value.lastIndexOf("\n", Math.max(0, start - 1)) + 1;
+  const column = start - lineStart;
+  const targetStart = direction < 0 ? lineStart - 1 : value.indexOf("\n", start);
+  if (targetStart < 0 || targetStart > value.length) return false;
+  const nextLineStart = direction < 0
+    ? value.lastIndexOf("\n", Math.max(0, targetStart - 1)) + 1
+    : targetStart + 1;
+  const nextLineEnd = value.indexOf("\n", nextLineStart);
+  const target = Math.min(nextLineStart + column, nextLineEnd < 0 ? value.length : nextLineEnd);
+  if (target === start || state.secondaryCursors.includes(target)) return false;
+  state.secondaryCursors = [...new Set([...state.secondaryCursors, target])].sort((a, b) => a - b);
+  lastInputLength = value.length;
+  lastInputValue = value;
+  updateMultiCursorDisplay();
+  return true;
+}
+
+function selectAllMatchingWords() {
+  const value = els.editor.value;
+  let start = els.editor.selectionStart ?? 0;
+  let end = els.editor.selectionEnd ?? start;
+  if (start === end) {
+    const match = value.slice(0, start).match(/[\\p{L}\\p{N}_-]+$/u);
+    const right = value.slice(start).match(/^[\\p{L}\\p{N}_-]+/u);
+    start -= match?.[0].length || 0;
+    end += right?.[0].length || 0;
+  }
+  const word = value.slice(start, end);
+  if (!word.trim()) return false;
+  const positions = [];
+  let cursor = 0;
+  while (true) {
+    const found = value.indexOf(word, cursor);
+    if (found < 0) break;
+    if (found !== start) positions.push(found);
+    cursor = found + Math.max(1, word.length);
+  }
+  els.editor.setSelectionRange(start, end);
+  state.secondaryCursors = positions;
+  lastInputLength = value.length;
+  lastInputValue = value;
+  updateMultiCursorDisplay();
+  return true;
+}
+
 els.editor.addEventListener("keydown", (event) => {
+  event.stopPropagation();
+  if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "f") {
+    event.preventDefault();
+    setImmersiveEditing(!state.immersive);
+    return;
+  }
+  if (event.key === "Escape" && state.immersive) {
+    event.preventDefault();
+    setImmersiveEditing(false);
+    return;
+  }
   if (expandSequenceOnEnter(event)) return;
   if (event.key === "Tab") {
     event.preventDefault();
@@ -4165,6 +4858,49 @@ els.editor.addEventListener("keydown", (event) => {
     return;
   }
   const mod = event.ctrlKey || event.metaKey;
+  if (mod && event.altKey && ["ArrowUp", "ArrowDown"].includes(event.key)) {
+    event.preventDefault();
+    addLineCursor(event.key === "ArrowUp" ? -1 : 1);
+    return;
+  }
+  // Ctrl/Cmd+Shift+L 已由 CodeMirror 原生多选 keymap 提供，避免页面层覆盖其多选区。
+  if (false && mod && event.shiftKey && event.key.toLowerCase() === "l") {
+    event.preventDefault();
+    selectAllMatchingWords();
+    return;
+  }
+  // CodeMirror owns Alt+Shift+Arrow: it moves the current line. Do not run
+  // the legacy DOM handler as well, or one keypress would move twice/copy.
+  if (event.defaultPrevented && event.altKey && event.shiftKey && ["ArrowUp", "ArrowDown"].includes(event.key)) {
+    return;
+  }
+  if (mod && !event.altKey) {
+    const key = event.key.toLowerCase();
+    const format = {
+      b: "bold",
+      i: "italic",
+      k: "link",
+      "`": "code",
+      "1": "h1",
+      "2": "h2",
+      "3": "h3",
+    }[key];
+    if (format && !event.shiftKey) {
+      event.preventDefault();
+      applyFormat(format);
+      return;
+    }
+    if (event.shiftKey && key === "7") {
+      event.preventDefault();
+      applyFormat("ol");
+      return;
+    }
+    if (event.shiftKey && key === "8") {
+      event.preventDefault();
+      applyFormat("ul");
+      return;
+    }
+  }
   if (mod && event.key === ";") {
     event.preventDefault();
     const now = new Date();
@@ -4184,11 +4920,15 @@ els.editor.addEventListener("keydown", (event) => {
     saveCurrentDoc({ refreshTree: true });
     return;
   }
-  if (mod && event.key.toLowerCase() === "d") {
+  // Ctrl/Cmd+D 由 CodeMirror 的单一 keymap 处理，避免 DOM 层再次复制。
+  if (false && mod && event.key.toLowerCase() === "d") {
+    if (event.repeat) return;
     event.preventDefault();
     const value = els.editor.value;
     const start = els.editor.selectionStart;
     const end = els.editor.selectionEnd;
+    const scrollTop = els.editor.scrollTop;
+    const scrollLeft = els.editor.scrollLeft;
     
     const lineStart = value.lastIndexOf("\n", start - 1) + 1;
     const lineEnd = value.indexOf("\n", start);
@@ -4211,6 +4951,12 @@ els.editor.addEventListener("keydown", (event) => {
     const newCursorPos = selectedEnd + newText.length;
     els.editor.selectionStart = newCursorPos;
     els.editor.selectionEnd = newCursorPos;
+    els.editor.scrollTop = scrollTop;
+    els.editor.scrollLeft = scrollLeft;
+    requestAnimationFrame(() => {
+      els.editor.scrollTop = scrollTop;
+      els.editor.scrollLeft = scrollLeft;
+    });
     
     els.editor.dispatchEvent(new Event("input", { bubbles: true }));
     return;
@@ -4236,7 +4982,7 @@ els.editor.addEventListener("keydown", (event) => {
     els.editor.dispatchEvent(new Event("input", { bubbles: true }));
     return;
   }
-  if (event.altKey && event.shiftKey) {
+  if (event.altKey && event.shiftKey && !["ArrowUp", "ArrowDown"].includes(event.key)) {
     event.preventDefault();
     const value = els.editor.value;
     const start = els.editor.selectionStart;
@@ -4315,6 +5061,17 @@ els.editor.addEventListener("input", () => {
   }
   
   const newValue = els.editor.value;
+  const oldValue = lastInputValue;
+  let changeStart = 0;
+  while (changeStart < oldValue.length && changeStart < newValue.length && oldValue[changeStart] === newValue[changeStart]) changeStart += 1;
+  let oldTail = oldValue.length;
+  let newTail = newValue.length;
+  while (oldTail > changeStart && newTail > changeStart && oldValue[oldTail - 1] === newValue[newTail - 1]) {
+    oldTail -= 1;
+    newTail -= 1;
+  }
+  const removedText = oldValue.slice(changeStart, oldTail);
+  const insertedText = newValue.slice(changeStart, newTail);
   const diff = newValue.length - lastInputLength;
   
   if (diff !== 0) {
@@ -4322,28 +5079,14 @@ els.editor.addEventListener("input", () => {
     
     const primaryStart = els.editor.selectionStart;
     const primaryEnd = els.editor.selectionEnd;
-    
-    const char = diff > 0 ? newValue[primaryStart - 1] : null;
-    const deleteCount = diff < 0 ? -diff : 0;
-    
-    let offset = 0;
-    state.secondaryCursors.forEach((cursorPos) => {
-      let targetPos = cursorPos + offset;
-      
-      if (diff > 0 && char) {
-        els.editor.value = els.editor.value.substring(0, targetPos) + char + els.editor.value.substring(targetPos);
-        offset += 1;
-      } else if (diff < 0) {
-        const start = Math.max(0, targetPos - deleteCount);
-        els.editor.value = els.editor.value.substring(0, start) + els.editor.value.substring(targetPos);
-        offset -= deleteCount;
-      }
+    const primaryDelta = insertedText.length - removedText.length;
+    [...state.secondaryCursors].sort((a, b) => b - a).forEach((cursorPos) => {
+      const targetPos = cursorPos + (cursorPos >= changeStart ? primaryDelta : 0);
+      els.editor.value = els.editor.value.slice(0, targetPos) + insertedText + els.editor.value.slice(targetPos + removedText.length);
     });
-    
-    els.editor.selectionStart = primaryStart + offset;
-    els.editor.selectionEnd = primaryEnd + offset;
-    
-    state.secondaryCursors = state.secondaryCursors.map(pos => pos + offset);
+    els.editor.selectionStart = primaryStart;
+    els.editor.selectionEnd = primaryEnd;
+    state.secondaryCursors = state.secondaryCursors.map(pos => pos + (pos >= changeStart ? primaryDelta : 0));
     
     isMultiCursorEditing = false;
   }
@@ -4365,10 +5108,10 @@ function updateMultiCursorDisplay() {
     overlay.style.display = "none";
     return;
   }
-  
-  const editorRect = els.editor.getBoundingClientRect();
+  const editorHost = els.editor.host || els.editor;
+  const editorRect = editorHost.getBoundingClientRect();
   const panelRect = els.editorPanel.getBoundingClientRect();
-  const computedStyle = window.getComputedStyle(els.editor);
+  const computedStyle = window.getComputedStyle(editorHost);
   const lineHeight = parseInt(computedStyle.lineHeight) || 20;
   const fontSize = parseInt(computedStyle.fontSize) || 14;
   const charWidth = fontSize * 0.6;
@@ -4398,7 +5141,9 @@ function updateMultiCursorDisplay() {
 
 els.editor.addEventListener("scroll", updateMultiCursorDisplay);
 window.addEventListener("resize", updateMultiCursorDisplay);
-els.editor.addEventListener("paste", handleEditorPaste);
+// Capture before CodeMirror's native paste handler so auto-wrapping replaces
+// the paste instead of inserting a second, unwrapped copy afterwards.
+els.editor.addEventListener("paste", handleEditorPaste, { capture: true });
 els.sidebarResizer.addEventListener("pointerdown", startSidebarResize);
 els.sidebarResizer.addEventListener("pointermove", moveSidebarResize);
 els.sidebarResizer.addEventListener("pointerup", endSidebarResize);
@@ -4409,7 +5154,9 @@ els.aiBtn?.addEventListener("click", () => toggleAiDrawer());
 els.aiCloseBtn?.addEventListener("click", () => toggleAiDrawer(false));
 els.aiClearBtn?.addEventListener("click", () => {
   state.ai.messages = [];
+  saveAiHistory();
   renderAiMessages();
+  showToast("本地对话已清理");
 });
 els.aiForm?.addEventListener("submit", submitAiQuestion);
 els.aiQuestion?.addEventListener("keydown", (event) => {
@@ -4422,6 +5169,22 @@ els.aiMessages?.addEventListener("click", (event) => {
   const button = event.target.closest(".ai-source");
   if (button) jumpToAiSource({ path: button.dataset.path, heading: button.dataset.heading });
 });
+els.aiSelectionMenu?.addEventListener("pointerdown", (event) => event.preventDefault());
+els.aiSelectionMenu?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-ai-transform]");
+  if (button) runAiTransform(button.dataset.aiTransform);
+});
+els.aiTransformCloseBtn?.addEventListener("click", closeAiTransformModal);
+els.aiTransformCancelBtn?.addEventListener("click", closeAiTransformModal);
+els.aiTransformModal?.addEventListener("click", (event) => {
+  if (event.target === els.aiTransformModal) closeAiTransformModal();
+});
+els.aiTransformInsertBtn?.addEventListener("click", insertAiTransform);
+els.aiTransformCreateBtn?.addEventListener("click", createAiTransformDocument);
+document.addEventListener("selectionchange", debounce(refreshAiSelectionMenu, 80));
+els.editor?.addEventListener("select", refreshAiSelectionMenu);
+els.editor?.addEventListener("mouseup", refreshAiSelectionMenu);
+els.editor?.addEventListener("keyup", refreshAiSelectionMenu);
 els.settingsBtn.addEventListener("click", async () => {
   applySettings();
   renderDefaultWorkspaceChoices();
@@ -4429,15 +5192,49 @@ els.settingsBtn.addEventListener("click", async () => {
   await Promise.all([loadAiStatus(), loadAgentPolicyStatus()]);
 });
 
+[els.aiBaseUrl, els.aiEmbeddingModel, els.aiChatModel].filter(Boolean).forEach((input) => {
+  input.addEventListener("input", () => {
+    state.ai.configDirty = true;
+  });
+});
+
 els.aiTestBtn?.addEventListener("click", async () => {
   els.aiTestBtn.disabled = true;
   els.aiSettingsStatus.textContent = "正在检测 Ollama...";
   try {
-    const result = await api.post("/api/ai/test", { baseUrl: els.aiBaseUrl.value });
+    const requestedEmbeddingModel = els.aiEmbeddingModel.value.trim();
+    const result = await api.post("/api/ai/test", {
+      baseUrl: els.aiBaseUrl.value,
+      embeddingModel: requestedEmbeddingModel,
+      chatModel: els.aiChatModel.value.trim(),
+    });
     els.aiModelChoices.innerHTML = result.models.map((model) => `<option value="${escapeHtml(model.name)}"></option>`).join("");
-    if (!els.aiEmbeddingModel.value) els.aiEmbeddingModel.value = result.models.find((model) => /embed/i.test(model.name))?.name || "";
+    if (!els.aiEmbeddingModel.value) els.aiEmbeddingModel.value = result.recommendedEmbeddingModel || "";
     if (!els.aiChatModel.value) els.aiChatModel.value = result.models.find((model) => !/embed/i.test(model.name))?.name || "";
-    els.aiSettingsStatus.textContent = `连接正常，发现 ${result.models.length} 个本地模型`;
+    if (result.embeddingCheck?.ok === false) {
+      const recommendation = result.recommendedEmbeddingModel;
+      if (recommendation && recommendation !== requestedEmbeddingModel) {
+        els.aiEmbeddingModel.value = recommendation;
+        state.ai.configDirty = true;
+      }
+      els.aiSettingsStatus.textContent = recommendation
+        ? `${result.embeddingCheck.error} 已在输入框中建议本机可用模型“${recommendation}”，确认后保存配置。`
+        : `${result.embeddingCheck.error} 本机未发现专用向量模型，可执行：ollama pull qwen3-embedding`;
+      showToast("当前向量模型不可用，已给出修复建议");
+      return;
+    }
+    if (result.chatCheck?.ok === false) {
+      els.aiSettingsStatus.textContent = result.chatCheck.error;
+      showToast("当前对话模型未安装或不可用");
+      return;
+    }
+    const dimension = result.embeddingCheck?.dimension ? `，向量维度 ${result.embeddingCheck.dimension}` : "";
+    const resolvedEmbedding = result.compatibility?.embedding?.resolvedName;
+    const resolvedChat = result.compatibility?.chat?.resolvedName;
+    const resolved = resolvedEmbedding || resolvedChat
+      ? `；已匹配 ${[resolvedEmbedding, resolvedChat].filter(Boolean).join(" / ")}`
+      : "";
+    els.aiSettingsStatus.textContent = `连接正常，发现 ${result.models.length} 个本地模型${dimension}${resolved}`;
   } catch (error) { els.aiSettingsStatus.textContent = error.message || "连接失败"; }
   finally { els.aiTestBtn.disabled = false; }
 });
@@ -4451,10 +5248,37 @@ els.aiSaveBtn?.addEventListener("click", async () => {
       chatModel: els.aiChatModel.value,
       enabled: true,
     });
+    state.ai.configDirty = false;
     setAiStatus(result.status);
     showToast(result.rebuildRequired ? "配置已保存，正在重建语义索引" : "AI 配置已保存");
-  } catch (error) { showToast(error.message || "保存失败"); }
+  } catch (error) {
+    els.aiSettingsStatus.textContent = error.message || "保存失败";
+    showToast(error.message || "保存失败");
+  }
   finally { els.aiSaveBtn.disabled = false; }
+});
+
+els.aiDisableEmbeddingBtn?.addEventListener("click", async () => {
+  els.aiDisableEmbeddingBtn.disabled = true;
+  els.aiEmbeddingModel.value = "";
+  state.ai.configDirty = true;
+  els.aiSettingsStatus.textContent = "正在关闭向量索引并保留关键词检索…";
+  try {
+    const result = await api.post("/api/ai/config", {
+      baseUrl: els.aiBaseUrl.value,
+      embeddingModel: "",
+      chatModel: els.aiChatModel.value,
+      enabled: true,
+    });
+    state.ai.configDirty = false;
+    setAiStatus(result.status);
+    showToast("已切换为仅关键词模式，可继续使用知识问答");
+  } catch (error) {
+    els.aiSettingsStatus.textContent = error.message || "切换失败";
+    showToast(error.message || "切换失败");
+  } finally {
+    els.aiDisableEmbeddingBtn.disabled = false;
+  }
 });
 
 els.aiReindexBtn?.addEventListener("click", async () => {
@@ -4651,6 +5475,14 @@ if (els.semanticTagsModal) {
 els.editorToolbar.addEventListener("mousedown", (event) => {
   if (event.target.closest("[data-format]")) event.preventDefault();
 });
+els.editorToolbar.addEventListener("wheel", (event) => {
+  const toolbar = els.editorToolbar;
+  if (toolbar.scrollWidth <= toolbar.clientWidth) return;
+  const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+  if (!delta) return;
+  toolbar.scrollLeft += delta;
+  event.preventDefault();
+}, { passive: false });
 els.editorToolbar.addEventListener("click", (event) => {
   const button = event.target.closest("[data-format]");
   if (button) applyFormat(button.dataset.format);
@@ -4908,6 +5740,8 @@ async function bootstrap(refresh = false) {
 applySettings();
 restoreSidebarWidth();
 restoreSidebarCollapsed();
+loadAiHistory();
+renderAiMessages();
 loadRecentDocs();
 renderRecentDocs();
 bootstrap();

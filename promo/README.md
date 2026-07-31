@@ -18,4 +18,4 @@ python -m http.server 4555 -d promo
 - 图谱动画使用 IntersectionObserver 和 Page Visibility API：离开视口或切换标签页时暂停。
 - `prefers-reduced-motion` 开启后自动关闭运动与滚动入场动画。
 - 移动端减少节点数量，Canvas DPR 上限为 1.5，避免高分屏放大绘制成本。
-- 文案中的正式安装包指向 GitHub Releases v1.1.5；v1.1.6 P0 明确标记为 `other` 源码预览，避免把开发分支误作稳定下载。
+- 文案中的正式版本更新为 v1.1.7；安装入口统一指向 GitHub Releases，避免在尚未发布具体 Release 资产时产生失效直链。

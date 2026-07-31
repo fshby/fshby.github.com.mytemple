@@ -17,6 +17,7 @@ const APP_DATA_DIR = path.join(process.env.LOCALAPPDATA || path.join(process.env
 const DATA_ROOT = process.env.MYTEMPLE_DATA_ROOT || APP_DATA_DIR;
 const WORKSPACE_CONFIG = path.join(DATA_ROOT, "workspaces.json");
 const PORT = Number(process.env.PORT || 4173);
+const HOST = process.env.HOST || "127.0.0.1";
 const KNOWLEDGE_INDEX_FILENAME = "知识库主清单.json";
 const KNOWLEDGE_INDEX_SCHEMA_VERSION = 1;
 const ragService = new RagService(DATA_ROOT, log);
@@ -39,10 +40,12 @@ let structureDirty = true;
 let structureGeneration = 1;
 const dirtyPaths = new Set();
 const dirtyVersions = new Map();
+const pendingSavedDocuments = new Map();
 let dirtyVersion = 0;
 let watcherSignature = "";
 let workspaceWatchers = new Map();
 let watcherRefreshTimer = 0;
+let savedDocumentRefreshTimer = 0;
 let knowledgeIndexSyncPromise = Promise.resolve();
 let knowledgeIndexSyncTimer = 0;
 let knowledgeIndexVersion = "";
@@ -74,6 +77,8 @@ const mimeTypes = {
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
   ".webp": "image/webp",
+  ".ico": "image/x-icon",
+  ".webmanifest": "application/manifest+json",
 };
 
 function send(res, status, body, type = "application/json; charset=utf-8", headers = {}) {
@@ -997,6 +1002,11 @@ async function writeKnowledgeIndex(data) {
   const tempPath = path.join(DOCS_ROOT, `.${KNOWLEDGE_INDEX_FILENAME}.${process.pid}.${randomUUID()}.tmp`);
   try {
     await writeFile(tempPath, `${JSON.stringify(index, null, 2)}\n`, "utf8");
+    const existing = cache.documentCache.get(ref) || cache.files.find((file) => file.path === ref);
+    const baseHash = String(payload.baseHash || "").trim();
+    if (baseHash && existing?.contentSha256 && baseHash !== existing.contentSha256) {
+      return json(res, 409, { error: "文档已被其他变更更新，请重新打开或刷新后再保存", contentSha256: existing.contentSha256 });
+    }
     try {
       await rename(tempPath, indexPath);
     } catch (error) {
@@ -1363,6 +1373,37 @@ async function updateCachedDocument(normalized, content) {
   return true;
 }
 
+function queueSavedDocumentRefresh(normalized, content) {
+  pendingSavedDocuments.set(normalized.ref, { normalized, content });
+  if (savedDocumentRefreshTimer) return;
+  savedDocumentRefreshTimer = setTimeout(() => {
+    savedDocumentRefreshTimer = 0;
+    flushSavedDocumentRefreshes().catch((error) => {
+      log("warn", `后台文档缓存刷新失败: ${error.message}`);
+    });
+  }, 0);
+}
+
+async function flushSavedDocumentRefreshes() {
+  if (!pendingSavedDocuments.size) return;
+  const jobs = [...pendingSavedDocuments.values()];
+  pendingSavedDocuments.clear();
+  let requiresFullRefresh = false;
+  for (const job of jobs) {
+    try {
+      const updated = await updateCachedDocument(job.normalized, job.content);
+      if (!updated) requiresFullRefresh = true;
+    } catch (error) {
+      requiresFullRefresh = true;
+      log("warn", `文档缓存增量刷新失败: ${job.normalized.ref} ${error.message}`);
+    }
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  if (requiresFullRefresh) {
+    await refreshCache(true);
+  }
+}
+
 function search(files, query) {
   const q = query.trim().toLowerCase();
   if (!q) return [];
@@ -1708,13 +1749,38 @@ async function handleApi(req, res, url) {
   if (url.pathname === "/api/ai/status") {
     await ragService.initialize();
     ragService.schedule(data.files, currentKnowledgeVersion);
-    return json(res, 200, ragService.status());
+    return json(res, 200, await ragService.statusWithStorage());
   }
   if (url.pathname === "/api/ai/test" && req.method === "POST") {
     try {
       const payload = await readJson(req);
-      const result = await ragService.discoverModels(payload.baseUrl);
-      return json(res, 200, result);
+      const result = await ragService.configuredModelCompatibility(payload.baseUrl, payload.embeddingModel, payload.chatModel);
+      let embeddingCheck = { ok: true, skipped: true, model: "" };
+      if (String(payload.embeddingModel || "").trim()) {
+        if (!result.compatibility.embedding.installed) {
+          embeddingCheck = {
+            ok: false,
+            skipped: false,
+            model: String(payload.embeddingModel || "").trim(),
+            error: `本机未安装向量模型“${payload.embeddingModel}”，请先执行 ollama pull ${payload.embeddingModel}`,
+          };
+        } else if (!result.compatibility.embedding.capable) {
+          embeddingCheck = {
+            ok: false,
+            skipped: false,
+            model: String(payload.embeddingModel || "").trim(),
+            error: `模型“${payload.embeddingModel}”不是 Embeddings 模型，请改用专用向量模型`,
+          };
+        } else try {
+          embeddingCheck = await ragService.testEmbeddingModel(payload.baseUrl, payload.embeddingModel);
+        } catch (error) {
+          embeddingCheck = { ok: false, skipped: false, model: String(payload.embeddingModel || "").trim(), error: error.message };
+        }
+      }
+      const chatCheck = payload.chatModel && !result.compatibility.chat.installed
+        ? { ok: false, error: `本机未安装对话模型“${payload.chatModel}”，请先执行 ollama pull ${payload.chatModel}` }
+        : { ok: true };
+      return json(res, 200, { ...result, embeddingCheck, chatCheck });
     } catch (error) {
       return json(res, 503, { error: `无法连接本地 AI 服务：${error.message}` });
     }
@@ -1722,17 +1788,33 @@ async function handleApi(req, res, url) {
   if (url.pathname === "/api/ai/config" && req.method === "POST") {
     const payload = await readJson(req);
     try {
+      const compatibility = await ragService.configuredModelCompatibility(payload.baseUrl, payload.embeddingModel, payload.chatModel);
+      if (payload.embeddingModel && !compatibility.compatibility.embedding.installed) {
+        throw new Error(`本机未安装向量模型“${payload.embeddingModel}”，请先执行 ollama pull ${payload.embeddingModel}`);
+      }
+      if (payload.embeddingModel && !compatibility.compatibility.embedding.capable) {
+        throw new Error(`模型“${payload.embeddingModel}”不支持 Embeddings，请选择 nomic-embed-text 或其他专用向量模型`);
+      }
+      if (!compatibility.compatibility.chat.installed) {
+        throw new Error(`本机未安装对话模型“${payload.chatModel}”，请先执行 ollama pull ${payload.chatModel}`);
+      }
+      await ragService.testEmbeddingModel(payload.baseUrl, payload.embeddingModel);
       const result = await ragService.updateSettings(payload);
       if (result.rebuildRequired) ragService.schedule(data.files, currentKnowledgeVersion, { force: true });
-      return json(res, 200, { ok: true, ...result, status: ragService.status() });
+      return json(res, 200, { ok: true, ...result, status: await ragService.statusWithStorage() });
     } catch (error) {
       return json(res, 400, { error: error.message });
     }
   }
   if (url.pathname === "/api/ai/reindex" && req.method === "POST") {
-    await ragService.initialize();
-    ragService.schedule(data.files, currentKnowledgeVersion, { force: true });
-    return json(res, 202, { ok: true, status: ragService.status() });
+    try {
+      await ragService.initialize();
+      await ragService.testEmbeddingModel(undefined, ragService.publicSettings().embeddingModel);
+      ragService.schedule(data.files, currentKnowledgeVersion, { force: true });
+      return json(res, 202, { ok: true, status: await ragService.statusWithStorage() });
+    } catch (error) {
+      return json(res, 400, { error: error.message });
+    }
   }
   if (url.pathname === "/api/ai/query" && req.method === "POST") {
     const payload = await readJson(req);
@@ -1748,6 +1830,15 @@ async function handleApi(req, res, url) {
         path: scopedFile?.path || "",
         policyInstructions: policies.filter(Boolean).map((policy) => policy.instructions).filter(Boolean).join("\n\n"),
       });
+      return json(res, 200, result);
+    } catch (error) {
+      return json(res, 400, { error: error.message });
+    }
+  }
+  if (url.pathname === "/api/ai/transform" && req.method === "POST") {
+    const payload = await readJson(req);
+    try {
+      const result = await ragService.transformSelection(payload.text, payload.mode);
       return json(res, 200, result);
     } catch (error) {
       return json(res, 400, { error: error.message });
@@ -1899,12 +1990,12 @@ async function handleApi(req, res, url) {
         const normalized = await normalizeDocPath(docPath, true);
         const content = await readFile(normalized.absolute, "utf8");
         const title = extractTitle(content, path.basename(normalized.absolute));
-        return json(res, 200, { path: normalized.ref, title, content, tags: [], terms: [] });
+        return json(res, 200, { path: normalized.ref, title, content, tags: [], terms: [], contentSha256: createHash("sha256").update(Buffer.from(content, "utf8")).digest("hex") });
       } catch (e) {
         return json(res, 404, { error: "Document not found" });
       }
     }
-    return json(res, 200, { path: target.path, title: target.title, content: target.content, tags: target.tags, terms: target.terms });
+    return json(res, 200, { path: target.path, title: target.title, content: target.content, tags: target.tags, terms: target.terms, contentSha256: target.contentSha256 || "" });
   }
   if (url.pathname === "/api/save" && req.method === "POST") {
     const payload = await readJson(req);
@@ -1937,12 +2028,7 @@ async function handleApi(req, res, url) {
       log("error", `Failed to save document: ${absolute}, error: ${e.message}`);
       return json(res, 500, { error: `保存文件失败: ${e.message}` });
     }
-    try {
-      const updated = await updateCachedDocument(normalized, String(payload.content ?? ""));
-      if (!updated) await refreshCache(true);
-    } catch (e) {
-      log("error", `Failed to refresh cache after save: ${e.message}`);
-    }
+    queueSavedDocumentRefresh(normalized, String(payload.content ?? ""));
     return json(res, 200, { ok: true, path: ref });
   }
   if (url.pathname === "/api/browse-folder" && req.method === "POST") {
@@ -2060,7 +2146,8 @@ async function handleApi(req, res, url) {
     await mkdir(path.dirname(absolute), { recursive: true });
     await writeFile(absolute, documentTemplate(name), "utf8");
     await refreshCache(true);
-    return json(res, 200, { ok: true, path: ref });
+    const saved = cache.documentCache.get(ref) || cache.files.find((file) => file.path === ref);
+    return json(res, 200, { ok: true, path: ref, contentSha256: saved?.contentSha256 || "" });
   }
   if (url.pathname === "/api/semantic-tags" && req.method === "POST") {
     const payload = await readJson(req);
@@ -2232,6 +2319,6 @@ createServer(async (req, res) => {
   } finally {
     clearTimeout(timeoutId);
   }
-}).listen(PORT, () => {
-  console.log(`Markdown knowledge app running at http://localhost:${PORT}`);
+}).listen(PORT, HOST, () => {
+  console.log(`Markdown knowledge app running at http://${HOST}:${PORT}`);
 });
