@@ -140,11 +140,13 @@ try {
     Invoke-Compiler $cscPath @(
         "/target:winexe",
         "/out:$launcherOutput",
-        "/win32icon:$(Join-Path $packagingDir 'logo.ico')",
+        "/win32icon:$(Join-Path $packagingDir 'logo1.ico')",
         "/platform:x64",
         "/nologo",
         "/reference:System.Windows.Forms.dll",
         "/reference:System.Drawing.dll",
+        "/reference:$(Join-Path $packagingDir 'webview2\Microsoft.Web.WebView2.Core.dll')",
+        "/reference:$(Join-Path $packagingDir 'webview2\Microsoft.Web.WebView2.WinForms.dll')",
         (Join-Path $packagingDir "Launcher.cs")
     ) "Launcher"
 
@@ -157,6 +159,10 @@ try {
     Copy-PayloadItem "docs"
     Copy-PayloadItem "source"
     Copy-Item -LiteralPath (Join-Path $packagingDir "logo.ico") -Destination $payloadDir -Force
+    Copy-Item -LiteralPath (Join-Path $packagingDir "logo1.ico") -Destination $payloadDir -Force
+    Copy-Item -LiteralPath (Join-Path $packagingDir "webview2\Microsoft.Web.WebView2.Core.dll") -Destination $payloadDir -Force
+    Copy-Item -LiteralPath (Join-Path $packagingDir "webview2\Microsoft.Web.WebView2.WinForms.dll") -Destination $payloadDir -Force
+    Copy-Item -LiteralPath (Join-Path $packagingDir "webview2\WebView2Loader.dll") -Destination $payloadDir -Force
     Copy-Item -LiteralPath $launcherOutput -Destination (Join-Path $payloadDir "MyTempleKnowledge.exe") -Force
     Compress-Archive -Path (Join-Path $payloadDir "*") -DestinationPath $payloadZip -CompressionLevel Optimal -Force
 
@@ -172,6 +178,10 @@ try {
             "server/agent-policy.js",
             "version.json",
             "MyTempleKnowledge.exe",
+            "logo1.ico",
+            "Microsoft.Web.WebView2.Core.dll",
+            "Microsoft.Web.WebView2.WinForms.dll",
+            "WebView2Loader.dll",
             "public/index.html",
             "public/app.js",
             "public/qqqun.webp",
@@ -195,7 +205,7 @@ try {
         "/target:exe",
         "/out:$installerOutput",
         "/resource:$payloadZip,payload.zip",
-        "/win32icon:$(Join-Path $packagingDir 'logo.ico')",
+        "/win32icon:$(Join-Path $packagingDir 'logo1.ico')",
         "/platform:x64",
         "/nologo",
         "/reference:System.IO.Compression.dll",
