@@ -429,11 +429,12 @@ class SelfExtractInstaller
 
     static void CreateShortcut(string shortcutPath, string targetPath, string workingDir, string description)
     {
-        string iconPath = Path.Combine(workingDir, "logo.ico");
+        string iconPath = Path.Combine(workingDir, "logo1.ico");
         if (!File.Exists(iconPath))
         {
-            iconPath = targetPath;
+            iconPath = Path.Combine(workingDir, "logo.ico");
         }
+        if (!File.Exists(iconPath)) iconPath = targetPath;
 
         string psScript = string.Format(
             "$shell = New-Object -ComObject WScript.Shell; " +

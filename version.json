@@ -1,6 +1,6 @@
 {
-  "version": "1.1.6",
-  "downloadUrl": "https://github.com/fshby/fshby.github.com.mytemple/releases/download/v1.1.6/MyTempleKnowledge_Setup_v1.1.6.exe",
-  "releaseNotes": "1.1.6 P0：\n- 新增本地 RAG 语义检索与来源溯源，支持点击来源跳转原文。\n- 增量生成 Markdown 分块索引，Ollama 不可用时自动降级关键词检索。\n- 新增 Ollama 连接检测、模型配置、索引状态和后台重建。\n- 新增 mytemple/v1 Frontmatter 标准化预览、确认、备份和审计。\n- 新增 .mytemple/AGENTS.md 规则文件基础，默认确认写入模式。\n- 保持现有阅读、编辑、图谱、工作区和安装包流程不变。",
-  "releaseDate": "2026-07-22"
+  "version": "1.1.7",
+  "downloadUrl": "https://github.com/fshby/fshby.github.com.mytemple/releases/download/v1.1.7/MyTempleKnowledge_Setup_v1.1.7.exe",
+  "releaseNotes": "1.1.7 P0:\n- CodeMirror 6 editor core with incremental parsing and virtualized rendering.\n- Markdown preview and outline rendering moved to a Web Worker.\n- Save flow now checks document version hashes to avoid stale writes.\n- Large-document preview updates are delayed and deduplicated.\n- Existing read/edit/graph/workspace flows remain intact.",
+  "releaseDate": "2026-07-31"
 }
