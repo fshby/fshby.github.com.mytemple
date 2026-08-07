@@ -7,32 +7,184 @@
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     <title>&#25991;&#26723;&#30693;&#35782;&#24211;</title>
-    <meta name="theme-color" content="#0f172a" />
+    <meta name="theme-color" content="#fafafa" />
     <meta name="application-name" content="MyTemple Knowledge" />
     <link rel="icon" href="/favicon.ico" type="image/x-icon" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="stylesheet" href="/styles.css?v=20260731-settings-14" />
+    <link rel="stylesheet" href="/styles.css?v=20260807-v2" />
+    <link rel="modulepreload" href="/editor-core.js?v=20260807-v1" />
+    <link rel="modulepreload" href="/app.js?v=20260807-v2" />
   </head>
   <body>
+    <div id="appSplash" class="app-splash">
+      <div class="splash-content">
+        <div class="splash-brand">
+          <img src="/logo1.png" alt="" class="splash-logo" width="48" height="48" />
+        </div>
+        <div class="splash-title">文档知识库</div>
+        <div class="splash-progress">
+          <div class="splash-progress-bar">
+            <div id="splashProgressFill" class="splash-progress-fill" style="width: 0%"></div>
+          </div>
+          <div class="splash-progress-info">
+            <span id="splashProgressText">正在初始化…</span>
+            <span id="splashProgressPct">0%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="welcomeOverlay" class="welcome-overlay hidden">
+      <div class="welcome-dialog">
+        <div class="welcome-brand">
+          <img src="/logo1.png" alt="" class="welcome-logo" width="56" height="56" />
+          <h2>欢迎使用 文档知识库</h2>
+          <p class="welcome-sub">企业级 Markdown 知识管理平台</p>
+        </div>
+        <div class="welcome-tabs">
+          <button class="welcome-tab active" data-welcome-tab="0">快速开始</button>
+          <button class="welcome-tab" data-welcome-tab="1">核心功能</button>
+          <button class="welcome-tab" data-welcome-tab="2">快捷键</button>
+        </div>
+        <div class="welcome-panel active" data-welcome-panel="0">
+          <div class="welcome-feature-grid">
+            <div class="welcome-feature">
+              <div class="welcome-feature-icon">📁</div>
+              <div>
+                <strong>文档管理</strong>
+                <p>在左侧目录中创建、组织和分类 Markdown 文档</p>
+              </div>
+            </div>
+            <div class="welcome-feature">
+              <div class="welcome-feature-icon">🔍</div>
+              <div>
+                <strong>全文搜索</strong>
+                <p>实时检索所有文档内容，快速定位知识</p>
+              </div>
+            </div>
+            <div class="welcome-feature">
+              <div class="welcome-feature-icon">✏️</div>
+              <div>
+                <strong>所见即所得</strong>
+                <p>编辑模式实时预览，支持 Markdown 全套语法</p>
+              </div>
+            </div>
+            <div class="welcome-feature">
+              <div class="welcome-feature-icon">🕸️</div>
+              <div>
+                <strong>知识图谱</strong>
+                <p>自动构建文档关联网络，可视化知识体系</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="welcome-panel" data-welcome-panel="1">
+          <div class="welcome-feature-grid">
+            <div class="welcome-feature">
+              <div class="welcome-feature-icon">🤖</div>
+              <div>
+                <strong>AI 智能助手</strong>
+                <p>内置 AI 对话，辅助写作、摘要与翻译</p>
+              </div>
+            </div>
+            <div class="welcome-feature">
+              <div class="welcome-feature-icon">📤</div>
+              <div>
+                <strong>多格式导出</strong>
+                <p>支持 PDF、公众号发布等多种输出方式</p>
+              </div>
+            </div>
+            <div class="welcome-feature">
+              <div class="welcome-feature-icon">🎨</div>
+              <div>
+                <strong>主题定制</strong>
+                <p>明亮、护眼、沉浸模式随心切换</p>
+              </div>
+            </div>
+            <div class="welcome-feature">
+              <div class="welcome-feature-icon">🔒</div>
+              <div>
+                <strong>本地安全</strong>
+                <p>所有数据本地存储，隐私完全可控</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="welcome-panel" data-welcome-panel="2">
+          <div class="welcome-shortcuts">
+            <div class="welcome-shortcut-row"><span class="welcome-key">Ctrl</span> + <span class="welcome-key">S</span><span class="welcome-shortcut-desc">保存当前文档</span></div>
+            <div class="welcome-shortcut-row"><span class="welcome-key">Ctrl</span> + <span class="welcome-key">P</span><span class="welcome-shortcut-desc">快速打开文档</span></div>
+            <div class="welcome-shortcut-row"><span class="welcome-key">Ctrl</span> + <span class="welcome-key">K</span><span class="welcome-shortcut-desc">聚焦搜索框</span></div>
+            <div class="welcome-shortcut-row"><span class="welcome-key">Ctrl</span> + <span class="welcome-key">E</span><span class="welcome-shortcut-desc">切换阅读/修改模式</span></div>
+            <div class="welcome-shortcut-row"><span class="welcome-key">Ctrl</span> + <span class="welcome-key">\\</span><span class="welcome-shortcut-desc">插入表格</span></div>
+            <div class="welcome-shortcut-row"><span class="welcome-key">Ctrl</span> + <span class="welcome-key">Shift</span> + <span class="welcome-key">F</span><span class="welcome-shortcut-desc">文档内查找</span></div>
+          </div>
+        </div>
+        <div class="welcome-actions">
+          <label class="welcome-dont-show"><input type="checkbox" id="welcomeDontShow" /> 不再显示此欢迎页</label>
+          <button id="welcomeStartBtn" class="welcome-start-btn">开始使用</button>
+        </div>
+      </div>
+    </div>
     <div class="app-shell">
       <aside class="sidebar">
         <div class="brand">
+          <nav class="menu-bar" role="menubar" aria-label="菜单栏">
+            <button class="menu-item" data-menu="file" role="menuitem" aria-haspopup="true">文件<span class="menu-accel">F</span></button>
+            <button class="menu-item" data-menu="edit" role="menuitem" aria-haspopup="true">编辑<span class="menu-accel">E</span></button>
+            <button class="menu-item" data-menu="view" role="menuitem" aria-haspopup="true">查看<span class="menu-accel">V</span></button>
+            <button class="menu-item" data-menu="go" role="menuitem" aria-haspopup="true">转到<span class="menu-accel">G</span></button>
+          </nav>
           <div class="brand-mark" aria-label="MyTemple Knowledge logo"><img src="/logo1.png" alt="" width="42" height="42" decoding="async" /></div>
-          <div>
+          <div class="brand-text">
             <h1>&#25991;&#26723;&#30693;&#35782;&#24211;</h1>
             <p id="docCount">&#27491;&#22312;&#25195;&#25551;</p>
           </div>
           <button id="sidebarHideBtn" class="icon-button sidebar-hide" title="&#38544;&#34255;&#30446;&#24405;" aria-label="&#38544;&#34255;&#30446;&#24405;">&lt;</button>
         </div>
+
+        <div class="menu-dropdowns" id="menuDropdowns">
+          <div class="menu-dropdown hidden" data-dropdown="file" role="menu">
+            <button class="menu-option" data-action="new-doc"><span class="menu-option-icon">📄</span>新建文档<kbd>Ctrl+N</kbd></button>
+            <button class="menu-option" data-action="new-folder"><span class="menu-option-icon">📁</span>新建文件夹</button>
+            <button class="menu-option" data-action="save"><span class="menu-option-icon">💾</span>保存<kbd>Ctrl+S</kbd></button>
+            <div class="menu-separator"></div>
+            <button class="menu-option" data-action="workspace"><span class="menu-option-icon">🗂️</span>工作路径<kbd>Ctrl+Shift+P</kbd></button>
+            <button class="menu-option" data-action="export-pdf"><span class="menu-option-icon">📕</span>导出 PDF<kbd>Ctrl+Shift+E</kbd></button>
+            <button class="menu-option" data-action="export-wechat"><span class="menu-option-icon">📢</span>复制为公众号</button>
+            <div class="menu-separator"></div>
+            <button class="menu-option" data-action="settings"><span class="menu-option-icon">⚙️</span>设置<kbd>Ctrl+,</kbd></button>
+          </div>
+          <div class="menu-dropdown hidden" data-dropdown="edit" role="menu">
+            <button class="menu-option" data-action="undo"><span class="menu-option-icon">↩️</span>撤销<kbd>Ctrl+Z</kbd></button>
+            <button class="menu-option" data-action="redo"><span class="menu-option-icon">↪️</span>重做<kbd>Ctrl+Shift+Z</kbd></button>
+            <div class="menu-separator"></div>
+            <button class="menu-option" data-action="find"><span class="menu-option-icon">🔍</span>查找<kbd>Ctrl+F</kbd></button>
+            <button class="menu-option" data-action="replace"><span class="menu-option-icon">🔄</span>替换<kbd>Ctrl+H</kbd></button>
+          </div>
+          <div class="menu-dropdown hidden" data-dropdown="view" role="menu">
+            <button class="menu-option" data-action="toggle-edit"><span class="menu-option-icon">✏️</span>编辑模式<kbd>Ctrl+E</kbd></button>
+            <button class="menu-option" data-action="toggle-reading"><span class="menu-option-icon">📖</span>阅读模式</button>
+            <div class="menu-separator"></div>
+            <button class="menu-option" data-action="toggle-sidebar"><span class="menu-option-icon">◧</span>切换侧边栏<kbd>Ctrl+B</kbd></button>
+            <button class="menu-option" data-action="toggle-outline"><span class="menu-option-icon">📑</span>切换大纲</button>
+            <div class="menu-separator"></div>
+            <button class="menu-option" data-action="zoom-in"><span class="menu-option-icon">🔍+</span>放大字体<kbd>Ctrl++</kbd></button>
+            <button class="menu-option" data-action="zoom-out"><span class="menu-option-icon">🔍−</span>缩小字体<kbd>Ctrl+−</kbd></button>
+            <button class="menu-option" data-action="zoom-reset"><span class="menu-option-icon">1:1</span>重置缩放<kbd>Ctrl+0</kbd></button>
+          </div>
+          <div class="menu-dropdown hidden" data-dropdown="go" role="menu">
+            <button class="menu-option" data-action="go-doc"><span class="menu-option-icon">📄</span>转到文档<kbd>Ctrl+P</kbd></button>
+            <button class="menu-option" data-action="go-symbol"><span class="menu-option-icon">#</span>转到标题<kbd>Ctrl+G</kbd></button>
+            <div class="menu-separator"></div>
+            <button class="menu-option" data-action="go-back"><span class="menu-option-icon">⬅️</span>后退<kbd>Alt+←</kbd></button>
+            <button class="menu-option" data-action="go-forward"><span class="menu-option-icon">➡️</span>前进<kbd>Alt+→</kbd></button>
+          </div>
+        </div>
         <label class="search-box">
           <span aria-hidden="true">S</span>
           <input id="searchInput" placeholder="&#20840;&#23616;&#26816;&#32034;&#20851;&#38190;&#23383;" autocomplete="off" />
         </label>
-        <div class="sidebar-actions">
-          <button id="newFolderBtn" title="new folder">+ &#25991;&#20214;&#22841;</button>
-          <button id="newDocBtn" title="new markdown">+ MD</button>
-          <button id="workspaceBtn" title="workspaces">&#9673; &#24037;&#20316;&#36335;&#24452;</button>
-        </div>
         <div id="workspaceSummary" class="workspace-summary"></div>
         <div id="searchResults" class="search-results hidden"></div>
         <nav id="tree" class="tree"></nav>
@@ -48,14 +200,15 @@
           <div id="recentDocs" class="recent-docs" aria-label="最近打开文档"></div>
           <div class="toolbar" role="group" aria-label="document actions">
             <button id="sidebarShowBtn" title="toggle catalog">&#30446;&#24405;</button>
-            <button id="viewBtn" class="active" title="view">&#38405;&#35835;</button>
-            <button id="editBtn" title="edit">&#20462;&#25913;</button>
-            <button id="graphBtn" title="graph">&#22270;&#35889;</button>
+            <div class="view-mode-switch" role="group" aria-label="文档模式">
+              <button id="modeToggleBtn" class="active" title="切换阅读/修改模式">修改</button>
+            </div>
+            <button id="graphBtn" title="图谱">图谱</button>
             <button id="aiBtn" title="本地知识库问答" aria-pressed="false">AI</button>
+            <button id="exportPdfBtn" title="将当前文档导出为 PDF">PDF</button>
+            <button id="copyWechatBtn" title="复制为公众号文章格式">公众号</button>
             <button id="settingsBtn" title="settings">&#35774;&#32622;</button>
             <button id="deleteBtn" class="danger" title="delete (Ctrl+D)">&#21024;&#38500;</button>
-            <button id="focusModeBtn" title="沉浸编辑 (Ctrl+Shift+F)" aria-pressed="false">沉浸</button>
-            <button id="saveBtn" class="primary hidden" title="save">&#20445;&#23384;</button>
           </div>
         </header>
 
@@ -104,10 +257,19 @@
             <button data-format="bg" title="apply background">&#32972;&#26223;</button>
             <button data-format="size" title="apply size">&#23383;&#21495;</button>
             <button id="formatBtn" title="format document" class="format-btn">Fmt</button>
+            <button id="outlineToggleBtn" title="切换目录大纲" aria-pressed="false">大纲</button>
             <button id="previewToggleBtn" title="切换实时预览" aria-pressed="true">隐藏预览</button>
+            <span class="toolbar-separator" aria-hidden="true"></span>
+            <button id="focusModeBtn" title="沉浸编辑 (Ctrl+Shift+F)" aria-pressed="false">沉浸</button>
+            <button id="saveBtn" class="primary hidden" title="save">&#20445;&#23384;</button>
           </div>
-          <div id="editor" role="textbox" aria-multiline="true"></div>
-          <article id="preview" class="markdown-body"></article>
+          <div class="editor-body">
+            <aside id="editorOutline" class="editor-outline hidden" aria-label="editor outline"></aside>
+            <div id="outlineSplitter" class="editor-splitter" role="separator" aria-label="resize outline" aria-orientation="vertical"></div>
+            <div id="editor" role="textbox" aria-multiline="true"></div>
+            <div id="previewSplitter" class="editor-splitter" role="separator" aria-label="resize preview" aria-orientation="vertical"></div>
+            <article id="preview" class="markdown-body"></article>
+          </div>
         </section>
 
         <section id="graphPanel" class="graph-panel hidden">
@@ -183,140 +345,330 @@
         </div>
       </div>
     </div>
+    <div id="licenseModal" class="modal hidden" role="dialog" aria-modal="true">
+      <div class="modal-dialog license-dialog">
+        <header class="license-header">
+          <h2>软件授权</h2>
+        </header>
+        <div class="license-body">
+          <div class="license-section">
+            <div class="license-info" style="text-align:center; padding:20px 0;">
+              <div style="font-size:48px; margin-bottom:16px;">🔐</div>
+              <p style="font-size:16px; font-weight:600; margin-bottom:8px;">软件需要授权才能使用</p>
+              <p class="muted">请前往「设置 → 许可」页面完成激活</p>
+            </div>
+            <div style="text-align:center; margin-top:20px;">
+              <button type="button" id="goToLicenseBtn" class="primary license-activate-btn">前往设置激活</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
     <div id="settingsModal" class="modal hidden" role="dialog" aria-modal="true">
       <div class="modal-dialog settings-dialog">
         <header class="settings-header">
           <div>
             <span class="settings-kicker">PREFERENCES</span>
-            <h2>简易设置</h2>
-            <p>外观、编辑、索引与 AI 行为</p>
+            <h2>设置</h2>
+            <p class="settings-subtitle">外观、编辑、索引与 AI 行为</p>
           </div>
           <button type="button" id="closeSettingsBtn" class="settings-close" aria-label="关闭设置">×</button>
         </header>
-        <section class="settings-section appearance-settings-section">
-          <strong>&#20027;&#39064;</strong>
-          <div class="segmented" id="themeChoices">
-            <button type="button" data-theme="light">&#26126;&#20142;</button>
-            <button type="button" data-theme="dark">&#26263;&#33394;</button>
-            <button type="button" data-theme="eye">&#25252;&#30524;</button>
-            <button type="button" data-theme="image">&#22270;&#29255;</button>
+        <div class="settings-body">
+          <nav class="settings-nav" aria-label="设置分类">
+            <button type="button" class="settings-nav-item active" data-settings-tab="appearance">
+              <span class="settings-nav-icon" aria-hidden="true">◐</span>
+              <span class="settings-nav-label">外观</span>
+            </button>
+            <button type="button" class="settings-nav-item" data-settings-tab="editor">
+              <span class="settings-nav-icon" aria-hidden="true">⌘</span>
+              <span class="settings-nav-label">编辑器</span>
+            </button>
+            <button type="button" class="settings-nav-item" data-settings-tab="workspace">
+              <span class="settings-nav-icon" aria-hidden="true">▣</span>
+              <span class="settings-nav-label">工作区</span>
+            </button>
+            <button type="button" class="settings-nav-item" data-settings-tab="export">
+              <span class="settings-nav-icon" aria-hidden="true">↥</span>
+              <span class="settings-nav-label">导出</span>
+            </button>
+            <button type="button" class="settings-nav-item" data-settings-tab="ai">
+              <span class="settings-nav-icon" aria-hidden="true">✦</span>
+              <span class="settings-nav-label">AI 与索引</span>
+            </button>
+            <button type="button" class="settings-nav-item" data-settings-tab="tools">
+              <span class="settings-nav-icon" aria-hidden="true">⚒</span>
+              <span class="settings-nav-label">工具</span>
+            </button>
+            <button type="button" class="settings-nav-item" data-settings-tab="shortcuts">
+              <span class="settings-nav-icon" aria-hidden="true">⌨</span>
+              <span class="settings-nav-label">快捷键</span>
+            </button>
+            <button type="button" class="settings-nav-item" data-settings-tab="about">
+              <span class="settings-nav-icon" aria-hidden="true">ⓘ</span>
+              <span class="settings-nav-label">关于</span>
+            </button>
+            <button type="button" class="settings-nav-item" data-settings-tab="license">
+              <span class="settings-nav-icon" aria-hidden="true">✇</span>
+              <span class="settings-nav-label">许可</span>
+            </button>
+          </nav>
+          <div class="settings-content">
+            <section class="settings-panel active" data-settings-panel="appearance">
+              <div class="settings-panel-header">
+                <h3>外观</h3>
+                <p class="muted">主题色调、背景与字体显示偏好。</p>
+              </div>
+              <section class="settings-section appearance-settings-section">
+                <strong>主题</strong>
+                <div class="segmented" id="themeChoices">
+                  <button type="button" data-theme="light">明亮</button>
+                  <button type="button" data-theme="dark">暗色</button>
+                  <button type="button" data-theme="eye">护眼</button>
+                  <button type="button" data-theme="image">图片</button>
+                </div>
+                <label class="setting-row">
+                  <span>自定义背景</span>
+                  <input id="bgImageInput" type="file" accept="image/*" />
+                </label>
+              </section>
+              <section class="settings-section typography-settings-section">
+                <strong>文字显示</strong>
+                <label class="setting-row">
+                  <span>界面字号</span>
+                  <input id="globalFontSize" type="range" min="13" max="20" step="1" />
+                  <output id="globalFontSizeValue">16px</output>
+                </label>
+                <label class="setting-row">
+                  <span>文档字号</span>
+                  <input id="docFontSize" type="range" min="14" max="24" step="1" />
+                  <output id="docFontSizeValue">16px</output>
+                </label>
+                <label class="setting-row">
+                  <span>界面缩放</span>
+                  <input id="windowZoom" type="range" min="80" max="120" step="5" />
+                  <output id="windowZoomValue">100%</output>
+                </label>
+                <label class="setting-row">
+                  <span>字体</span>
+                  <select id="globalFontFamily">
+                    <option value='Inter, "Segoe UI", "Microsoft YaHei", Arial, sans-serif'>现代默认</option>
+                    <option value='"Microsoft YaHei", "Segoe UI", Arial, sans-serif'>雅黑</option>
+                    <option value='"SimSun", "Microsoft YaHei", serif'>宋体</option>
+                    <option value='"Cascadia Code", Consolas, "Microsoft YaHei", monospace'>等宽</option>
+                  </select>
+                </label>
+              </section>
+            </section>
+
+            <section class="settings-panel" data-settings-panel="editor">
+              <div class="settings-panel-header">
+                <h3>编辑器</h3>
+                <p class="muted">编辑器行为、自动保存与编辑体验。</p>
+              </div>
+              <section class="settings-section editor-behavior-section">
+                <strong>编辑体验</strong>
+                <p class="muted">编辑模式提供目录大纲、三栏可拖拽布局、撤销/重做稳定性等企业级特性，相关按钮已集成在编辑器工具栏。</p>
+                <p class="muted">如需重置编辑器面板布局，可清除本地布局缓存：</p>
+                <div class="inline-actions">
+                  <button type="button" id="resetEditorLayoutBtn">重置编辑器布局</button>
+                </div>
+              </section>
+              <section class="settings-section screenshot-settings-section">
+                <strong>截图保存位置</strong>
+                <p class="muted">在编辑器中粘贴截图时，图片优先保存到所选工作区的 source 目录（不存在则自动创建）。</p>
+                <div id="screenshotSaveChoices" class="segmented screenshot-options">
+                  <button type="button" data-save="workspace">文档所属工作区</button>
+                  <button type="button" data-save="default">默认工作路径</button>
+                </div>
+              </section>
+            </section>
+
+            <section class="settings-panel" data-settings-panel="workspace">
+              <div class="settings-panel-header">
+                <h3>工作区</h3>
+                <p class="muted">默认工作路径与文档管理偏好。</p>
+              </div>
+              <section class="settings-section workspace-settings-section">
+                <strong>默认工作路径</strong>
+                <p class="muted">创建新文档和文件夹时，若未选择具体文件夹，则保存到该路径下。</p>
+                <div id="defaultWorkspaceChoices" class="segmented workspace-options"></div>
+              </section>
+            </section>
+
+            <section class="settings-panel" data-settings-panel="export">
+              <div class="settings-panel-header">
+                <h3>导出</h3>
+                <p class="muted">PDF 与公众号文章导出选项。</p>
+              </div>
+              <section class="settings-section pdf-settings-section">
+                <strong>PDF 导出设置</strong>
+                <p class="muted">控制 PDF 导出时包含的元信息。导出时浏览器可能在页面底部显示 URL，可在打印对话框中取消「页眉与页脚」。</p>
+                <label class="setting-row">
+                  <span>显示导出时间</span>
+                  <input type="checkbox" id="pdfShowDate" checked />
+                </label>
+                <label class="setting-row">
+                  <span>显示作者署名</span>
+                  <input type="checkbox" id="pdfShowAuthor" checked />
+                </label>
+                <label class="setting-row">
+                  <span>显示页脚说明</span>
+                  <input type="checkbox" id="pdfShowFooter" checked />
+                </label>
+                <p class="muted" id="pdfSettingsStatus">已保存</p>
+              </section>
+            </section>
+
+            <section class="settings-panel" data-settings-panel="ai">
+              <div class="settings-panel-header">
+                <h3>AI 与索引</h3>
+                <p class="muted">本地 AI 模型、语义索引与文档规则。</p>
+              </div>
+              <section class="settings-section ai-settings-section">
+                <strong>本地 AI 与语义索引</strong>
+                <p class="muted">通过 Ollama 在本机完成向量化与问答；未配置时自动使用关键词检索。</p>
+                <label class="setting-field"><span>服务地址</span><input id="aiBaseUrl" value="http://127.0.0.1:11434" /></label>
+                <label class="setting-field"><span>向量模型</span><input id="aiEmbeddingModel" list="aiModelChoices" placeholder="例如 qwen3-embedding" /></label>
+                <label class="setting-field"><span>对话模型</span><input id="aiChatModel" list="aiModelChoices" placeholder="选择本机已有模型" /></label>
+                <datalist id="aiModelChoices"></datalist>
+                <div class="inline-actions">
+                  <button type="button" id="aiTestBtn">检测连接</button>
+                  <button type="button" id="aiSaveBtn" class="primary">保存配置</button>
+                  <button type="button" id="aiReindexBtn">重建索引</button>
+                  <button type="button" id="aiDisableEmbeddingBtn">仅关键词模式</button>
+                </div>
+                <div class="ai-index-dashboard" aria-live="polite">
+                  <div><span>索引模式</span><strong id="aiIndexMode">关键词模式</strong></div>
+                  <div><span>索引规模</span><strong id="aiIndexCount">0 段</strong></div>
+                  <div><span>本地占用</span><strong id="aiIndexStorage">--</strong></div>
+                  <div class="ai-index-progress-wrap">
+                    <div class="ai-index-progress"><span id="aiIndexProgressBar"></span></div>
+                    <small id="aiIndexProgressText">等待索引状态</small>
+                  </div>
+                </div>
+                <p id="aiSettingsStatus" class="muted">尚未读取索引状态</p>
+              </section>
+              <section class="settings-section ai-governance-section">
+                <strong>文档标准与 AI 规则</strong>
+                <p class="muted">标准化当前文档的 YAML 元数据；规则文件约束 AI 的读写范围，任何写入仍需确认。</p>
+                <div class="inline-actions">
+                  <button type="button" id="standardizeFrontmatterBtn" class="primary">标准化当前文档</button>
+                  <button type="button" id="createAgentPolicyBtn">创建规则文件</button>
+                </div>
+                <p id="agentPolicyStatus" class="muted">尚未读取规则状态</p>
+              </section>
+              <section class="settings-section semantic-settings-section">
+                <strong>知识标签</strong>
+                <p class="muted">根据全库语义权重为旧文档补充标签，保留已有标签并移除“待分类”。</p>
+                <button type="button" id="semanticTagsBtn" class="primary">智能适配标签</button>
+                <p id="semanticTagsStatus" class="muted"></p>
+              </section>
+            </section>
+
+            <section class="settings-panel" data-settings-panel="tools">
+              <div class="settings-panel-header">
+                <h3>工具</h3>
+                <p class="muted">批量文档处理与维护工具。</p>
+              </div>
+              <section class="settings-section markdown-settings-section">
+                <strong>Markdown 工具</strong>
+                <p class="muted">将非 .md 文件批量重命名为 .md。可选择目标工作路径与文件扩展名。</p>
+                <button type="button" id="normalizeMdBtn" class="primary">一键 MD 化</button>
+                <div class="progress hidden" id="normalizeProgress"><span></span></div>
+                <p id="normalizeStatus" class="muted"></p>
+              </section>
+              <section class="settings-section community-settings-section">
+                <strong>沟通交流群</strong>
+                <p class="muted">查看官方沟通群介绍与入群二维码。</p>
+                <button type="button" id="communityBtn">查看沟通群</button>
+              </section>
+            </section>
+
+            <section class="settings-panel" data-settings-panel="shortcuts">
+              <div class="settings-panel-header">
+                <h3>快捷键</h3>
+                <p class="muted">编辑器内快捷键与使用方式。</p>
+              </div>
+              <details class="settings-section shortcut-settings-section" open>
+                <summary><strong>快捷键说明</strong><span class="muted">点击折叠/展开全部编辑快捷键</span></summary>
+                <div class="shortcut-grid">
+                  <div><code>Ctrl/Cmd + S</code><span>手动保存</span></div>
+                  <div><code>Ctrl/Cmd + Z</code><span>撤销（原生增量回放）</span></div>
+                  <div><code>Ctrl/Cmd + Y / Shift+Z</code><span>重做</span></div>
+                  <div><code>Ctrl/Cmd + B</code><span>加粗</span></div>
+                  <div><code>Ctrl/Cmd + I</code><span>斜体</span></div>
+                  <div><code>Ctrl/Cmd + K</code><span>插入链接</span></div>
+                  <div><code>Ctrl/Cmd + 1/2/3</code><span>H1 / H2 / H3</span></div>
+                  <div><code>Ctrl/Cmd + Shift + 7/8</code><span>有序 / 无序列表</span></div>
+                  <div><code>Alt + S</code><span>删除线（VSCode 风格）</span></div>
+                  <div><code>Alt + C</code><span>任务清单勾选切换</span></div>
+                  <div><code>Alt + Shift + ↑/↓</code><span>整行上移 / 下移</span></div>
+                  <div><code>Ctrl/Cmd + D</code><span>复制当前行</span></div>
+                  <div><code>Ctrl/Cmd + Shift + K</code><span>删除当前行（VSCode 风格）</span></div>
+                  <div><code>Ctrl/Cmd + ;</code><span>插入日期</span></div>
+                  <div><code>Ctrl/Cmd + '</code><span>插入时间</span></div>
+                  <div><code>Ctrl/Cmd + Shift + F</code><span>切换沉浸编辑</span></div>
+                  <div><code>Escape</code><span>退出沉浸或多光标状态</span></div>
+                  <div><code>F3 / Ctrl/Cmd + G</code><span>查找下一个匹配</span></div>
+                  <div><code>Ctrl/Cmd + Alt + ↑/↓</code><span>在相邻行添加多处光标</span></div>
+                  <div><code>Ctrl/Cmd + Shift + L</code><span>选中当前词的全部匹配项</span></div>
+                </div>
+              </details>
+            </section>
+
+            <section class="settings-panel" data-settings-panel="about">
+              <div class="settings-panel-header">
+                <h3>关于</h3>
+                <p class="muted">软件信息与作者署名。</p>
+              </div>
+              <section class="settings-section about-section">
+                <button type="button" id="aboutBtn" class="about-btn">
+                  <svg viewBox="0 0 24  24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <circle cx="12" cy="12" r="4"/>
+                    <line x1="12" y1="16" x2="12.01" y2="16"/>
+                  </svg>
+                  <span>关于文档知识库</span>
+                </button>
+              </section>
+            </section>
+            <section class="settings-panel" data-settings-panel="license">
+              <div class="settings-panel-header">
+                <h3>软件许可</h3>
+                <p class="muted">查看激活状态并管理本机授权。</p>
+              </div>
+              <div id="licenseUnactivated" class="license-section">
+                <div class="license-info">
+                  <p class="license-label">本机机器码</p>
+                  <div class="license-machine-code">
+                    <code id="machineCodeDisplay">加载中...</code>
+                    <button type="button" id="copyMachineCodeBtn" class="license-copy-btn">复制</button>
+                  </div>
+                  <p class="muted">请将此机器码发送给管理员，获取授权码后填入下方激活。</p>
+                </div>
+                <div class="license-form">
+                  <label for="licenseKeyInput" class="license-label">授权码</label>
+                  <textarea id="licenseKeyInput" rows="4" placeholder="在此粘贴授权码..." autocomplete="off"></textarea>
+                  <button type="button" id="activateLicenseBtn" class="primary license-activate-btn">激活授权</button>
+                  <p id="licenseStatus" class="license-status"></p>
+                </div>
+              </div>
+              <div id="licenseActivated" class="license-section hidden">
+                <div class="license-success">
+                  <div class="license-success-icon">✓</div>
+                  <p class="license-success-text">软件已授权</p>
+                  <div class="license-details">
+                    <div><span>机器码</span><code id="activatedMachineCode"></code></div>
+                    <div id="licenseExpiryRow"><span>有效期至</span><strong id="licenseExpiry"></strong></div>
+                    <div id="licenseWarning" class="license-warning hidden"></div>
+                  </div>
+                  <button type="button" id="deactivateLicenseBtn" class="license-deactivate-btn">解除授权</button>
+                </div>
+              </div>
+            </section>
           </div>
-          <label class="setting-row">
-            <span>&#33258;&#23450;&#20041;&#32972;&#26223;</span>
-            <input id="bgImageInput" type="file" accept="image/*" />
-          </label>
-        </section>
-        <section class="settings-section typography-settings-section">
-          <strong>&#25991;&#23383;&#26174;&#31034;</strong>
-          <label class="setting-row">
-            <span>&#30028;&#38754;&#23383;&#21495;</span>
-            <input id="globalFontSize" type="range" min="13" max="20" step="1" />
-            <output id="globalFontSizeValue">16px</output>
-          </label>
-          <label class="setting-row">
-            <span>&#25991;&#26723;&#23383;&#21495;</span>
-            <input id="docFontSize" type="range" min="14" max="24" step="1" />
-            <output id="docFontSizeValue">16px</output>
-          </label>
-          <label class="setting-row">
-            <span>&#23383;&#20307;</span>
-            <select id="globalFontFamily">
-              <option value='Inter, "Segoe UI", "Microsoft YaHei", Arial, sans-serif'>&#29616;&#20195;&#40664;&#35748;</option>
-              <option value='"Microsoft YaHei", "Segoe UI", Arial, sans-serif'>&#38597;&#40657;</option>
-              <option value='"SimSun", "Microsoft YaHei", serif'>&#23435;&#20307;</option>
-              <option value='"Cascadia Code", Consolas, "Microsoft YaHei", monospace'>&#31561;&#23485;</option>
-            </select>
-          </label>
-        </section>
-        <section class="settings-section workspace-settings-section">
-          <strong>默认工作路径</strong>
-          <p class="muted">创建新文档和文件夹时，若未选择具体文件夹，则保存到该路径下。</p>
-          <div id="defaultWorkspaceChoices" class="segmented workspace-options"></div>
-        </section>
-        <section class="settings-section markdown-settings-section">
-          <strong>Markdown 工具</strong>
-          <p class="muted">将非 .md 文件批量重命名为 .md。可选择目标工作路径与文件扩展名。</p>
-          <button type="button" id="normalizeMdBtn" class="primary">一键 MD 化</button>
-          <div class="progress hidden" id="normalizeProgress"><span></span></div>
-          <p id="normalizeStatus" class="muted"></p>
-        </section>
-        <section class="settings-section semantic-settings-section">
-          <strong>知识标签</strong>
-          <p class="muted">根据全库语义权重为旧文档补充标签，保留已有标签并移除“待分类”。</p>
-          <button type="button" id="semanticTagsBtn" class="primary">智能适配标签</button>
-          <p id="semanticTagsStatus" class="muted"></p>
-        </section>
-        <section class="settings-section ai-settings-section">
-          <strong>本地 AI 与语义索引</strong>
-          <p class="muted">通过 Ollama 在本机完成向量化与问答；未配置时自动使用关键词检索。</p>
-          <label class="setting-field"><span>服务地址</span><input id="aiBaseUrl" value="http://127.0.0.1:11434" /></label>
-          <label class="setting-field"><span>向量模型</span><input id="aiEmbeddingModel" list="aiModelChoices" placeholder="例如 qwen3-embedding" /></label>
-          <label class="setting-field"><span>对话模型</span><input id="aiChatModel" list="aiModelChoices" placeholder="选择本机已有模型" /></label>
-          <datalist id="aiModelChoices"></datalist>
-          <div class="inline-actions">
-            <button type="button" id="aiTestBtn">检测连接</button>
-            <button type="button" id="aiSaveBtn" class="primary">保存配置</button>
-            <button type="button" id="aiReindexBtn">重建索引</button>
-            <button type="button" id="aiDisableEmbeddingBtn">仅关键词模式</button>
-          </div>
-          <div class="ai-index-dashboard" aria-live="polite">
-            <div><span>索引模式</span><strong id="aiIndexMode">关键词模式</strong></div>
-            <div><span>索引规模</span><strong id="aiIndexCount">0 段</strong></div>
-            <div><span>本地占用</span><strong id="aiIndexStorage">--</strong></div>
-            <div class="ai-index-progress-wrap">
-              <div class="ai-index-progress"><span id="aiIndexProgressBar"></span></div>
-              <small id="aiIndexProgressText">等待索引状态</small>
-            </div>
-          </div>
-          <p id="aiSettingsStatus" class="muted">尚未读取索引状态</p>
-        </section>
-        <section class="settings-section ai-governance-section">
-          <strong>文档标准与 AI 规则</strong>
-          <p class="muted">标准化当前文档的 YAML 元数据；规则文件约束 AI 的读写范围，任何写入仍需确认。</p>
-          <div class="inline-actions">
-            <button type="button" id="standardizeFrontmatterBtn" class="primary">标准化当前文档</button>
-            <button type="button" id="createAgentPolicyBtn">创建规则文件</button>
-          </div>
-          <p id="agentPolicyStatus" class="muted">尚未读取规则状态</p>
-        </section>
-        <details class="settings-section shortcut-settings-section">
-          <summary><strong>快捷键说明</strong><span class="muted">点击展开查看全部编辑快捷键</span></summary>
-          <strong>快捷键</strong>
-          <p class="muted">编辑器内快捷键与使用方式，统一放在这里，便于查看和快速上手。</p>
-          <div class="shortcut-grid">
-            <div><code>Ctrl/Cmd + S</code><span>手动保存</span></div>
-            <div><code>Ctrl/Cmd + B</code><span>加粗</span></div>
-            <div><code>Ctrl/Cmd + I</code><span>斜体</span></div>
-            <div><code>Ctrl/Cmd + K</code><span>插入链接</span></div>
-            <div><code>Ctrl/Cmd + 1/2/3</code><span>H1 / H2 / H3</span></div>
-            <div><code>Ctrl/Cmd + Shift + 7/8</code><span>有序 / 无序列表</span></div>
-            <div><code>Alt + Shift + ↑/↓</code><span>整行上移 / 下移</span></div>
-            <div><code>Ctrl/Cmd + D</code><span>复制当前行</span></div>
-            <div><code>Ctrl/Cmd + M</code><span>删除当前行</span></div>
-            <div><code>Ctrl/Cmd + ;</code><span>插入日期</span></div>
-            <div><code>Ctrl/Cmd + '</code><span>插入时间</span></div>
-            <div><code>Ctrl/Cmd + Shift + F</code><span>切换沉浸编辑</span></div>
-            <div><code>Escape</code><span>退出沉浸或多光标状态</span></div>
-            <div><code>F3 / Ctrl/Cmd + G</code><span>查找下一个匹配</span></div>
-            <div><code>Ctrl/Cmd + Alt + ↑/↓</code><span>在相邻行添加多处光标</span></div>
-            <div><code>Ctrl/Cmd + Shift + L</code><span>选中当前词的全部匹配项</span></div>
-          </div>
-        </details>
-        <section class="settings-section community-settings-section">
-          <strong>沟通交流群</strong>
-          <p class="muted">查看官方沟通群介绍与入群二维码。</p>
-          <button type="button" id="communityBtn">查看沟通群</button>
-        </section>
-        <section class="settings-section about-section">
-          <button type="button" id="aboutBtn" class="about-btn">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10"/>
-              <circle cx="12" cy="12" r="4"/>
-              <line x1="12" y1="16" x2="12.01" y2="16"/>
-            </svg>
-            <span>关于文档知识库</span>
-          </button>
-        </section>
+        </div>
       </div>
     </div>
     <div id="communityModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="communityTitle">
@@ -560,6 +912,12 @@
           <strong>更新日志</strong>
           <div id="aboutReleaseNotes"></div>
         </div>
+        <div class="about-credits">
+          <strong>关于作者</strong>
+          <div class="about-credit-row"><span class="about-credit-label">作者</span><span class="about-credit-value">郑堃逢</span></div>
+          <div class="about-credit-row"><span class="about-credit-label">联系方式</span><span class="about-credit-value">QQ：1101139736</span></div>
+          <p class="muted">MyTemple Knowledge · 本地 Markdown 文档知识库与知识神经网络</p>
+        </div>
         <div class="about-actions">
           <button type="button" id="checkUpdateBtn" class="primary">检查更新</button>
         </div>
@@ -639,6 +997,49 @@
       </div>
     </div>
     <div id="toast" class="toast hidden"></div>
-    <script src="/app.js?v=20260731-stability-13" type="module"></script>
+    <div id="printRoot" class="print-root hidden" aria-hidden="true"></div>
+    <script>
+      // 全局错误捕获：防止模块加载失败时卡在 0%
+      (function () {
+        var splash = document.getElementById("appSplash");
+        var fill = document.getElementById("splashProgressFill");
+        var pct = document.getElementById("splashProgressPct");
+        var txt = document.getElementById("splashProgressText");
+        var errShown = false;
+
+        function showStartupError(msg) {
+          if (errShown) return;
+          errShown = true;
+          if (fill) fill.style.width = "100%";
+          if (fill) fill.style.background = "#dc2626";
+          if (pct) pct.textContent = "!";
+          if (txt) {
+            txt.textContent = "启动失败：" + msg;
+            txt.style.color = "#dc2626";
+          }
+          // 10 秒后自动刷新页面
+          setTimeout(function () { window.location.reload(); }, 10000);
+        }
+
+        // 捕获模块脚本加载失败
+        window.addEventListener("error", function (e) {
+          var msg = e.message || "未知错误";
+          if (e.filename) msg += " (" + e.filename + ":" + (e.lineno || 0) + ")";
+          showStartupError(msg);
+        });
+        window.addEventListener("unhandledrejection", function (e) {
+          var msg = (e.reason && e.reason.message) || String(e.reason || "未知错误");
+          showStartupError(msg);
+        });
+
+        // 15 秒超时：如果进度仍为 0，说明 app.js 未成功执行
+        setTimeout(function () {
+          if (fill && fill.style.width === "0%") {
+            showStartupError("应用加载超时，正在自动刷新…");
+          }
+        }, 15000);
+      })();
+    </script>
+    <script src="/app.js?v=20260807-v2" type="module"></script>
   </body>
 </html>

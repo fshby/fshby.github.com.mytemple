@@ -115,6 +115,7 @@ internal static class MyTempleLauncher
             Directory.CreateDirectory(Path.Combine(dataDir, WindowProfileFolder));
             EnsureSeedData();
             LoadCurrentVersion();
+            ClearWebView2CacheIfVersionChanged();
 
             WriteLog("info", "Launcher starting. version=" + currentVersion);
 
@@ -219,6 +220,43 @@ internal static class MyTempleLauncher
             {
                 WriteLog("warn", "Failed to load version metadata: " + ex.Message);
             }
+        }
+
+        private void ClearWebView2CacheIfVersionChanged()
+        {
+            try
+            {
+                string versionStampPath = Path.Combine(dataDir, ".webview-version");
+                string storedVersion = File.Exists(versionStampPath)
+                    ? File.ReadAllText(versionStampPath).Trim()
+                    : "";
+                if (storedVersion == currentVersion) return;
+
+                string webviewCacheDir = Path.Combine(dataDir, WindowProfileFolder, "webview2");
+                if (Directory.Exists(webviewCacheDir))
+                {
+                    WriteLog("info", "Clearing WebView2 cache due to version change (" + storedVersion + " -> " + currentVersion + ").");
+                    DeleteDirectorySafe(webviewCacheDir);
+                }
+                File.WriteAllText(versionStampPath, currentVersion ?? "");
+            }
+            catch (Exception ex)
+            {
+                WriteLog("warn", "Failed to clear WebView2 cache: " + ex.Message);
+            }
+        }
+
+        private void DeleteDirectorySafe(string path)
+        {
+            try
+            {
+                foreach (string file in Directory.GetFiles(path, "*", SearchOption.AllDirectories))
+                {
+                    try { File.SetAttributes(file, FileAttributes.Normal); File.Delete(file); } catch { }
+                }
+                Directory.Delete(path, true);
+            }
+            catch { }
         }
 
         private void EnsureSeedData()
@@ -415,15 +453,24 @@ internal static class MyTempleLauncher
                     mainWindow.BringToFront();
                     return;
                 }
-                mainWindow = new Form
+
+                Rectangle screenRect = Screen.PrimaryScreen.WorkingArea;
+                int winW = Math.Min(1280, screenRect.Width - 40);
+                int winH = Math.Min(860, screenRect.Height - 40);
+                int winX = screenRect.X + (screenRect.Width - winW) / 2;
+                int winY = screenRect.Y + (screenRect.Height - winH) / 2;
+
+                mainWindow = new AppForm
                 {
                     Text = AppTitle,
                     Icon = ExtractIcon(),
-                    StartPosition = FormStartPosition.CenterScreen,
-                    Width = 1280,
-                    Height = 860,
+                    StartPosition = FormStartPosition.Manual,
+                    Location = new Point(winX, winY),
+                    Size = new Size(winW, winH),
                     MinimumSize = new Size(960, 640),
                     BackColor = Color.FromArgb(15, 23, 42),
+                    FormBorderStyle = FormBorderStyle.Sizable,
+                    ShowInTaskbar = true,
                 };
                 webView = new WebView2 { Dock = DockStyle.Fill, CreationProperties = null };
                 mainWindow.Controls.Add(webView);
@@ -433,6 +480,14 @@ internal static class MyTempleLauncher
                     {
                         args.Cancel = true;
                         mainWindow.Hide();
+                    }
+                };
+                mainWindow.Resize += delegate
+                {
+                    if (webView != null && !webView.IsDisposed)
+                    {
+                        webView.Width = mainWindow.ClientSize.Width;
+                        webView.Height = mainWindow.ClientSize.Height;
                     }
                 };
                 mainWindow.Show();
@@ -684,6 +739,14 @@ internal static class MyTempleLauncher
                 File.AppendAllText(Path.Combine(root, "launcher.log"), line);
             }
             catch { }
+        }
+    }
+
+    private sealed class AppForm : Form
+    {
+        public AppForm()
+        {
+            SetStyle(ControlStyles.ResizeRedraw | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
         }
     }
 }
