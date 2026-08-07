@@ -11,7 +11,7 @@ import {
   lineNumbers,
   rectangularSelection,
 } from "@codemirror/view";
-import { defaultKeymap, deleteLine, history } from "@codemirror/commands";
+import { defaultKeymap, deleteLine, history, undo, redo } from "@codemirror/commands";
 import {
   bracketMatching,
   foldGutter,
@@ -135,11 +135,70 @@ const professionalKeymap = [
     run: (view) => moveCurrentLine(view, 1),
   },
   { key: "Mod-Shift-k", run: deleteLine },
+  // Native undo/redo: replaying transactions incrementally avoids the
+  // full-document re-render flicker that a whole-doc replace would cause.
+  { key: "Mod-z", run: undo, preventDefault: true },
+  { key: "Mod-y", run: redo, preventDefault: true },
+  { key: "Mod-Shift-z", run: redo, preventDefault: true },
+  { key: "Shift-Mod-z", run: redo, preventDefault: true },
+  // VSCode Markdown All-in-One style toggles.
+  { key: "Alt-s", run: toggleStrikethrough, preventDefault: true },
+  { key: "Alt-c", run: toggleTaskLine, preventDefault: true },
   ...closeBracketsKeymap,
   ...foldKeymap,
   ...searchKeymap,
-  ...defaultKeymap.filter((binding) => !/^(Mod-z|Mod-y|Mod-Shift-z|Tab)$/.test(binding.key || "")),
+  ...defaultKeymap.filter((binding) => !/^(Mod-z|Mod-y|Mod-Shift-z|Tab|Mod-b|Mod-i)$/.test(binding.key || "")),
 ];
+
+function wrapSelectionWith(view, marker) {
+  const { state, dispatch } = view;
+  const changes = state.changeByRange((range) => {
+    const selected = state.sliceDoc(range.from, range.to);
+    const wrapped = `${marker}${selected || "文本"}${marker}`;
+    return {
+      changes: { from: range.from, to: range.to, insert: wrapped },
+      range: selected
+        ? EditorSelection.range(range.from + marker.length, range.to + marker.length)
+        : EditorSelection.range(range.from + marker.length, range.from + marker.length + 2),
+    };
+  });
+  dispatch(changes, { scrollIntoView: true });
+  return true;
+}
+
+function toggleStrikethrough(view) {
+  return wrapSelectionWith(view, "~~");
+}
+
+function toggleTaskLine(view) {
+  const { state, dispatch } = view;
+  const doc = state.doc;
+  const changes = state.changeByRange((range) => {
+    const line = doc.lineAt(range.from);
+    const text = line.text;
+    const taskMatch = text.match(/^(\s*(?:[-*]|\d+[.)])\s+)\[([ xX])\]/);
+    if (taskMatch) {
+      const checked = taskMatch[2] !== " " && taskMatch[2].toLowerCase() !== " ";
+      const replacement = text.replace(taskMatch[0], `${taskMatch[1]}[${checked ? " " : "x"}]`);
+      return {
+        changes: { from: line.from, to: line.to, insert: replacement },
+        range: EditorSelection.range(line.from + range.from - line.from, line.from + range.to - line.from),
+      };
+    }
+    const listMatch = text.match(/^(\s*(?:[-*]|\d+[.)])\s+)(.*)$/);
+    if (listMatch) {
+      const replacement = `${listMatch[1]}[ ] ${listMatch[2]}`;
+      return {
+        changes: { from: line.from, to: line.to, insert: replacement },
+        range,
+      };
+    }
+    return { range };
+  });
+  if (changes.changes.empty) return false;
+  dispatch(changes, { scrollIntoView: true });
+  return true;
+}
 
 function moveCurrentLine(view, direction) {
   const selection = view.state.selection.main;
@@ -363,6 +422,25 @@ class MarkdownEditorAdapter {
       changes: { from, to, insert },
       selection: EditorSelection.single(anchor, head),
     });
+  }
+
+  undo() {
+    undo({ state: this.view.state, dispatch: this.view.dispatch.bind(this.view) });
+  }
+
+  redo() {
+    redo({ state: this.view.state, dispatch: this.view.dispatch.bind(this.view) });
+  }
+
+  scrollToLine(lineNumber) {
+    const doc = this.view.state.doc;
+    const target = Math.max(1, Math.min(doc.lines, Number(lineNumber) || 1));
+    const line = doc.line(target);
+    this.view.dispatch({
+      selection: EditorSelection.single(line.from),
+      scrollIntoView: true,
+    });
+    this.view.focus();
   }
 
   addEventListener(type, listener, options) {
