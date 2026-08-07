@@ -58,7 +58,30 @@ function Invoke-Compiler([string]$Compiler, [string[]]$Arguments, [string]$Targe
 
 function Copy-PayloadItem([string]$RelativePath) {
     $source = Join-Path $projectRoot $RelativePath
-    Copy-Item -LiteralPath $source -Destination $payloadDir -Recurse -Force
+    $dest = Join-Path $payloadDir $RelativePath
+    if ([IO.Directory]::Exists($source)) {
+        if (-not [IO.Directory]::Exists($dest)) { [void][IO.Directory]::CreateDirectory($dest) }
+        $sourceLen = $source.Length
+        if (-not $source.EndsWith("\")) { $sourceLen++ }
+        foreach ($file in [IO.Directory]::GetFiles($source, "*", [IO.SearchOption]::AllDirectories)) {
+            $rel = $file.Substring($sourceLen)
+            $target = Join-Path $dest $rel
+            $targetParent = [IO.Path]::GetDirectoryName($target)
+            if (-not [IO.Directory]::Exists($targetParent)) { [void][IO.Directory]::CreateDirectory($targetParent) }
+            [IO.File]::Copy($file, $target, $true)
+        }
+    } else {
+        [IO.File]::Copy($source, (Join-Path $payloadDir (Split-Path $source -Leaf)), $true)
+    }
+}
+
+function Copy-FileSafe([string]$Source, [string]$Destination) {
+    $destParent = [IO.Path]::GetDirectoryName($Destination)
+    if (-not [IO.Directory]::Exists($destParent)) { [void][IO.Directory]::CreateDirectory($destParent) }
+    $sourcePath = $Source -replace '/', '\'
+    $destPath = $Destination -replace '/', '\'
+    cmd /c "copy /y `"$sourcePath`" `"$destPath`"" | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "cmd copy failed with exit code $LASTEXITCODE" }
 }
 
 try {
@@ -117,6 +140,7 @@ try {
                 "server\rag.js",
                 "server\frontmatter.js",
                 "server\agent-policy.js",
+                "server\license.js",
                 "public\app.js",
                 "public\graph-worker.js"
             )
@@ -158,12 +182,12 @@ try {
     Copy-PayloadItem "public"
     Copy-PayloadItem "docs"
     Copy-PayloadItem "source"
-    Copy-Item -LiteralPath (Join-Path $packagingDir "logo.ico") -Destination $payloadDir -Force
-    Copy-Item -LiteralPath (Join-Path $packagingDir "logo1.ico") -Destination $payloadDir -Force
-    Copy-Item -LiteralPath (Join-Path $packagingDir "webview2\Microsoft.Web.WebView2.Core.dll") -Destination $payloadDir -Force
-    Copy-Item -LiteralPath (Join-Path $packagingDir "webview2\Microsoft.Web.WebView2.WinForms.dll") -Destination $payloadDir -Force
-    Copy-Item -LiteralPath (Join-Path $packagingDir "webview2\WebView2Loader.dll") -Destination $payloadDir -Force
-    Copy-Item -LiteralPath $launcherOutput -Destination (Join-Path $payloadDir "MyTempleKnowledge.exe") -Force
+    Copy-FileSafe (Join-Path $packagingDir "logo.ico") (Join-Path $payloadDir "logo.ico")
+    Copy-FileSafe (Join-Path $packagingDir "logo1.ico") (Join-Path $payloadDir "logo1.ico")
+    Copy-FileSafe (Join-Path $packagingDir "webview2\Microsoft.Web.WebView2.Core.dll") (Join-Path $payloadDir "Microsoft.Web.WebView2.Core.dll")
+    Copy-FileSafe (Join-Path $packagingDir "webview2\Microsoft.Web.WebView2.WinForms.dll") (Join-Path $payloadDir "Microsoft.Web.WebView2.WinForms.dll")
+    Copy-FileSafe (Join-Path $packagingDir "webview2\WebView2Loader.dll") (Join-Path $payloadDir "WebView2Loader.dll")
+    Copy-FileSafe $launcherOutput (Join-Path $payloadDir "MyTempleKnowledge.exe")
     Compress-Archive -Path (Join-Path $payloadDir "*") -DestinationPath $payloadZip -CompressionLevel Optimal -Force
 
     Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -176,6 +200,7 @@ try {
             "server/rag.js",
             "server/frontmatter.js",
             "server/agent-policy.js",
+            "server/license.js",
             "version.json",
             "MyTempleKnowledge.exe",
             "logo1.ico",
@@ -199,8 +224,7 @@ try {
     $versionPattern = 'const\s+string\s+APP_VERSION\s*=\s*"[^"]*";'
     if ($installerSource -notmatch $versionPattern) { throw "APP_VERSION was not found in the installer source." }
     $installerSource = [regex]::Replace($installerSource, $versionPattern, "const string APP_VERSION = `"$version`";", 1)
-    Set-Content -LiteralPath $generatedInstallerSource -Value $installerSource -Encoding UTF8
-
+    [IO.File]::WriteAllText($generatedInstallerSource, $installerSource, [System.Text.Encoding]::UTF8)
     Invoke-Compiler $cscPath @(
         "/target:exe",
         "/out:$installerOutput",
@@ -212,8 +236,9 @@ try {
         "/reference:System.IO.Compression.FileSystem.dll",
         $generatedInstallerSource
     ) "Installer"
-
-    if ((Get-Item -LiteralPath $installerOutput).Length -le (Get-Item -LiteralPath $payloadZip).Length) {
+    $installerSize = [IO.File]::ReadAllBytes($installerOutput).Length
+    $payloadSize = [IO.File]::ReadAllBytes($payloadZip).Length
+    if ($installerSize -le $payloadSize) {
         throw "Installer size is invalid; payload.zip may not have been embedded."
     }
 
@@ -221,16 +246,16 @@ try {
     $genericInstaller = Join-Path $distDir "MyTempleKnowledge_Setup.exe"
     $versionedInstaller = Join-Path $distDir "MyTempleKnowledge_Setup_v$version.exe"
     $publishedLauncher = Join-Path $distDir "MyTempleKnowledge.exe"
-    Copy-Item -LiteralPath $launcherOutput -Destination $publishedLauncher -Force
-    Copy-Item -LiteralPath $payloadZip -Destination (Join-Path $packagingDir "payload.zip") -Force
-    Copy-Item -LiteralPath $installerOutput -Destination $genericInstaller -Force
-    Copy-Item -LiteralPath $installerOutput -Destination $versionedInstaller -Force
+    Copy-FileSafe $launcherOutput $publishedLauncher
+    Copy-FileSafe $payloadZip (Join-Path $packagingDir "payload.zip")
+    Copy-FileSafe $installerOutput $genericInstaller
+    Copy-FileSafe $installerOutput $versionedInstaller
 
     $publishedFiles = @($publishedLauncher, $genericInstaller, $versionedInstaller)
     $manifestFiles = foreach ($file in $publishedFiles) {
-        $item = Get-Item -LiteralPath $file
+        $fileBytes = [IO.File]::ReadAllBytes($file)
         $hash = Get-FileHash -LiteralPath $file -Algorithm SHA256
-        [ordered]@{ name = $item.Name; bytes = $item.Length; sha256 = $hash.Hash.ToLowerInvariant() }
+        [ordered]@{ name = [IO.Path]::GetFileName($file); bytes = $fileBytes.Length; sha256 = $hash.Hash.ToLowerInvariant() }
     }
     $manifest = [ordered]@{
         product = "MyTemple Knowledge"
@@ -238,8 +263,10 @@ try {
         builtAt = (Get-Date).ToUniversalTime().ToString("o")
         files = @($manifestFiles)
     }
-    $manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $distDir "build-manifest.json") -Encoding UTF8
-    $manifestFiles | ForEach-Object { "$($_.sha256)  $($_.name)" } | Set-Content -LiteralPath (Join-Path $distDir "checksums.sha256") -Encoding ASCII
+    $manifestJson = $manifest | ConvertTo-Json -Depth 5
+    [IO.File]::WriteAllText((Join-Path $distDir "build-manifest.json"), $manifestJson, [System.Text.Encoding]::UTF8)
+    $checksums = ($manifestFiles | ForEach-Object { "$($_.sha256)  $($_.name)" }) -join "`n"
+    [IO.File]::WriteAllText((Join-Path $distDir "checksums.sha256"), $checksums, [System.Text.Encoding]::ASCII)
 
     Write-Host "`nBuild completed successfully." -ForegroundColor Green
     Write-Host "Generic installer: $genericInstaller"

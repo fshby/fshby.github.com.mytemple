@@ -1,4 +1,4 @@
-import { createMarkdownEditor } from "/editor-core.js?v=20260731-shortcuts-5";
+import { createMarkdownEditor } from "/editor-core.js?v=20260807-v1";
 
 const text = {
   emptyResult: "\u6ca1\u6709\u5339\u914d\u7ed3\u679c",
@@ -93,6 +93,9 @@ const state = {
   previewTimer: 0,
   previewLastContent: "",
   previewRenderSeq: 0,
+  editorOutlineVisible: localStorage.getItem("editorOutlineVisible") !== "0",
+  editorOutlineTimer: 0,
+  editorOutlineSeq: 0,
   currentContentBytes: 0,
   largeDocument: false,
   previewAutoHidden: false,
@@ -133,14 +136,18 @@ const els = {
   docTitle: document.querySelector("#docTitle"),
   readerPanel: document.querySelector("#readerPanel"),
   editorPanel: document.querySelector("#editorPanel"),
+  editorBody: document.querySelector(".editor-body"),
+  outlineSplitter: document.querySelector("#outlineSplitter"),
+  previewSplitter: document.querySelector("#previewSplitter"),
   graphPanel: document.querySelector("#graphPanel"),
   markdownView: document.querySelector("#markdownView"),
   readerOutline: document.querySelector("#readerOutline"),
   editor: document.querySelector("#editor"),
   preview: document.querySelector("#preview"),
-  viewBtn: document.querySelector("#viewBtn"),
-  editBtn: document.querySelector("#editBtn"),
+  modeToggleBtn: document.querySelector("#modeToggleBtn"),
   graphBtn: document.querySelector("#graphBtn"),
+  exportPdfBtn: document.querySelector("#exportPdfBtn"),
+  copyWechatBtn: document.querySelector("#copyWechatBtn"),
   deleteBtn: document.querySelector("#deleteBtn"),
   saveBtn: document.querySelector("#saveBtn"),
   focusModeBtn: document.querySelector("#focusModeBtn"),
@@ -183,6 +190,8 @@ const els = {
   cancelDeleteBtn: document.querySelector("#cancelDeleteBtn"),
   confirmDeleteBtn: document.querySelector("#confirmDeleteBtn"),
   editorToolbar: document.querySelector("#editorToolbar"),
+  editorOutline: document.querySelector("#editorOutline"),
+  outlineToggleBtn: document.querySelector("#outlineToggleBtn"),
   textColor: document.querySelector("#textColor"),
   bgColor: document.querySelector("#bgColor"),
   fontSize: document.querySelector("#fontSize"),
@@ -192,6 +201,20 @@ const els = {
   settingsBtn: document.querySelector("#settingsBtn"),
   settingsModal: document.querySelector("#settingsModal"),
   closeSettingsBtn: document.querySelector("#closeSettingsBtn"),
+  licenseModal: document.querySelector("#licenseModal"),
+  goToLicenseBtn: document.querySelector("#goToLicenseBtn"),
+  machineCodeDisplay: document.querySelector("#machineCodeDisplay"),
+  copyMachineCodeBtn: document.querySelector("#copyMachineCodeBtn"),
+  licenseKeyInput: document.querySelector("#licenseKeyInput"),
+  activateLicenseBtn: document.querySelector("#activateLicenseBtn"),
+  licenseStatus: document.querySelector("#licenseStatus"),
+  licenseUnactivated: document.querySelector("#licenseUnactivated"),
+  licenseActivated: document.querySelector("#licenseActivated"),
+  activatedMachineCode: document.querySelector("#activatedMachineCode"),
+  licenseExpiry: document.querySelector("#licenseExpiry"),
+  licenseExpiryRow: document.querySelector("#licenseExpiryRow"),
+  licenseWarning: document.querySelector("#licenseWarning"),
+  deactivateLicenseBtn: document.querySelector("#deactivateLicenseBtn"),
   communityBtn: document.querySelector("#communityBtn"),
   communityModal: document.querySelector("#communityModal"),
   closeCommunityBtn: document.querySelector("#closeCommunityBtn"),
@@ -209,8 +232,15 @@ const els = {
   globalFontSizeValue: document.querySelector("#globalFontSizeValue"),
   docFontSize: document.querySelector("#docFontSize"),
   docFontSizeValue: document.querySelector("#docFontSizeValue"),
+  windowZoom: document.querySelector("#windowZoom"),
+  windowZoomValue: document.querySelector("#windowZoomValue"),
   globalFontFamily: document.querySelector("#globalFontFamily"),
   defaultWorkspaceChoices: document.querySelector("#defaultWorkspaceChoices"),
+  screenshotSaveChoices: document.querySelector("#screenshotSaveChoices"),
+  pdfShowDate: document.querySelector("#pdfShowDate"),
+  pdfShowAuthor: document.querySelector("#pdfShowAuthor"),
+  pdfShowFooter: document.querySelector("#pdfShowFooter"),
+  pdfSettingsStatus: document.querySelector("#pdfSettingsStatus"),
   browseFolderBtn: document.querySelector("#browseFolderBtn"),
   fileBrowser: document.querySelector("#fileBrowser"),
   browserFullPath: document.querySelector("#browserFullPath"),
@@ -241,6 +271,7 @@ const els = {
   cancelSemanticTagsBtn: document.querySelector("#cancelSemanticTagsBtn"),
   applySemanticTagsBtn: document.querySelector("#applySemanticTagsBtn"),
   toast: document.querySelector("#toast"),
+  printRoot: document.querySelector("#printRoot"),
   recentDocs: document.querySelector("#recentDocs"),
   aiBtn: document.querySelector("#aiBtn"),
   aiDrawer: document.querySelector("#aiDrawer"),
@@ -321,19 +352,71 @@ function showToast(message) {
 }
 
 function loadSettings() {
+  const savedFontSize = localStorage.getItem("docFontSize");
+  const savedContentFontSize = localStorage.getItem("docContentFontSize");
   return {
     theme: localStorage.getItem("docTheme") || "light",
     bg: localStorage.getItem("docBgImage") || "",
-    fontSize: Number(localStorage.getItem("docFontSize") || 16),
-    contentFontSize: Number(localStorage.getItem("docContentFontSize") || 16),
+    fontSize: Number(savedFontSize || computeOptimalFontSize()),
+    contentFontSize: Number(savedContentFontSize || computeOptimalContentFontSize()),
     fontFamily: localStorage.getItem("docFontFamily") || els.globalFontFamily.value,
   };
 }
 
+function computeOptimalZoom() {
+  const w = window.innerWidth;
+  if (w < 1000) return 85;
+  if (w < 1280) return 90;
+  if (w < 1600) return 100;
+  if (w < 1920) return 105;
+  return 110;
+}
+
+function computeOptimalFontSize() {
+  const w = window.innerWidth;
+  if (w < 1000) return 14;
+  if (w < 1280) return 15;
+  return 16;
+}
+
+function computeOptimalContentFontSize() {
+  const w = window.innerWidth;
+  if (w < 1000) return 15;
+  if (w < 1280) return 16;
+  return 16;
+}
+
+function applyWindowZoom(zoom) {
+  const z = clamp(Number(zoom) || 100, 80, 120);
+  const scale = z / 100;
+  document.documentElement.style.setProperty("--app-scale", scale);
+  const settings = loadSettings();
+  document.documentElement.style.setProperty("--app-font-size", `${Math.round(settings.fontSize * scale)}px`);
+  document.documentElement.style.setProperty("--doc-font-size", `${Math.round(settings.contentFontSize * scale)}px`);
+  if (els.windowZoom) els.windowZoom.value = z;
+  if (els.windowZoomValue) els.windowZoomValue.textContent = `${z}%`;
+}
+
+function restoreWindowZoom() {
+  const saved = localStorage.getItem("windowZoom");
+  if (saved) {
+    applyWindowZoom(Number(saved));
+  } else {
+    applyWindowZoom(computeOptimalZoom());
+  }
+}
+
 function applySettings(settings = loadSettings()) {
   document.body.dataset.theme = settings.theme;
-  document.documentElement.style.setProperty("--app-font-size", `${settings.fontSize}px`);
-  document.documentElement.style.setProperty("--doc-font-size", `${settings.contentFontSize}px`);
+  const themeColorMap = { dark: "#1e1e1e", eye: "#fdf6e3", image: "#1a1a2e" };
+  const themeBgMap = { dark: "#1e1e1e", eye: "#fdf6e3", image: "#1a1a2e" };
+  const metaThemeColor = document.querySelector('meta[name="theme-color"]');
+  if (metaThemeColor) {
+    metaThemeColor.content = themeColorMap[settings.theme] || "#fafafa";
+  }
+  const currentScale = parseFloat(document.documentElement.style.getPropertyValue("--app-scale")) || 1;
+  document.documentElement.style.setProperty("--app-font-size", `${Math.round(settings.fontSize * currentScale)}px`);
+  document.documentElement.style.setProperty("--doc-font-size", `${Math.round(settings.contentFontSize * currentScale)}px`);
   document.documentElement.style.setProperty("--app-font-family", settings.fontFamily);
   if (settings.bg) document.documentElement.style.setProperty("--custom-bg", `url("${settings.bg}")`);
   else document.documentElement.style.removeProperty("--custom-bg");
@@ -675,6 +758,259 @@ function renderOutlineItems(outline) {
   els.readerOutline.innerHTML = `<p class="reader-outline-title">\u672c\u6587\u76ee\u5f55</p>${rows.join("")}`;
 }
 
+function scheduleEditorOutlineUpdate(content = els.editor.value) {
+  if (!state.editorOutlineVisible || state.mode !== "edit") return;
+  clearTimeout(state.editorOutlineTimer);
+  const value = String(content || "");
+  const wait = value.length > 100000 ? 600 : value.length > 20000 ? 260 : 120;
+  state.editorOutlineTimer = setTimeout(() => {
+    renderEditorOutline(value);
+  }, wait);
+}
+
+function renderEditorOutline(content) {
+  if (!els.editorOutline) return;
+  const outline = extractOutline(content);
+  if (!outline.length) {
+    els.editorOutline.innerHTML = '<p class="editor-outline-empty">暂无标题</p>';
+    return;
+  }
+  const items = outline.map((item) => {
+    const indent = Math.max(0, item.level - 1) * 14;
+    return `<button class="editor-outline-item level-${item.level}" data-heading-text="${escapeHtml(item.title)}" style="margin-left:${indent}px" title="${escapeHtml(item.title)}">${escapeHtml(compactName(item.title, 15))}</button>`;
+  });
+  els.editorOutline.innerHTML = `<p class="editor-outline-title">目录大纲</p>${items.join("")}`;
+}
+
+function setEditorOutlineVisible(visible) {
+  state.editorOutlineVisible = Boolean(visible);
+  localStorage.setItem("editorOutlineVisible", state.editorOutlineVisible ? "1" : "0");
+  els.editorBody.classList.toggle("outline-hidden", !state.editorOutlineVisible);
+  els.editorOutline.classList.toggle("hidden", !state.editorOutlineVisible);
+  if (els.outlineToggleBtn) {
+    els.outlineToggleBtn.setAttribute("aria-pressed", String(state.editorOutlineVisible));
+    els.outlineToggleBtn.textContent = state.editorOutlineVisible ? "隐藏大纲" : "大纲";
+  }
+  if (state.editorOutlineVisible && state.mode === "edit") {
+    scheduleEditorOutlineUpdate();
+  }
+  if (state.mode === "edit") {
+    requestAnimationFrame(() => {
+      els.editor.view?.requestMeasure?.();
+      syncPreviewToEditor();
+    });
+  }
+}
+
+function findHeadingLineInEditor(headingText) {
+  const value = els.editor.value;
+  if (!headingText) return -1;
+  const lines = value.split("\n");
+  const target = plainText(headingText).toLowerCase();
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = lines[index].match(/^(\s*)(#{1,6})\s+(.+)$/);
+    if (match && plainText(match[3]).toLowerCase() === target) return index;
+    const autoMatch = lines[index].match(/^(\s*)([一二三四五六七八九十]{1,4}[、.．]\s*.+)$/);
+    if (autoMatch && plainText(autoMatch[2]).toLowerCase() === target) return index;
+  }
+  return -1;
+}
+
+function scrollEditorToHeading(headingText) {
+  const lineIndex = findHeadingLineInEditor(headingText);
+  if (lineIndex < 0) return;
+  els.editor.scrollToLine?.(lineIndex + 1);
+}
+
+function stripFrontmatter(markdown) {
+  const source = String(markdown || "");
+  const match = source.match(/^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/);
+  if (!match) return source;
+  const before = source.slice(0, match.index).trimEnd();
+  const after = source.slice(match.index + match[0].length).trimStart();
+  return (before ? before + "\n\n" : "") + after;
+}
+
+function normalizeAssetUrlsToRelative(html) {
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = html;
+  wrapper.querySelectorAll("[src], [href]").forEach((el) => {
+    const attr = el.hasAttribute("src") ? "src" : "href";
+    const value = el.getAttribute(attr) || "";
+    if (/^https?:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?/i.test(value)) {
+      try {
+        const url = new URL(value, window.location.origin);
+        if (url.pathname) el.setAttribute(attr, url.pathname + url.search + url.hash);
+      } catch (_) { /* keep original */ }
+    }
+  });
+  return wrapper.innerHTML;
+}
+
+function buildDocumentPrintHtml() {
+  const title = els.docTitle?.textContent || state.currentDoc?.title || "MyTemple 文档";
+  const rawContent = String(state.currentContent || els.editor.value || "");
+  const content = stripFrontmatter(rawContent);
+  const body = normalizeAssetUrlsToRelative(renderMarkdown(content));
+  const pdfSettings = JSON.parse(localStorage.getItem("pdfExportSettings") || "{}");
+  const showDate = pdfSettings.showDate !== false;
+  const showAuthor = pdfSettings.showAuthor !== false;
+  const showFooter = pdfSettings.showFooter !== false;
+  const updated = state.currentDoc?.updated || state.currentDoc?.modified;
+  const dateLabel = showDate && updated ? new Date(updated).toLocaleString() : "";
+  const exportNote = showAuthor ? '<p class="print-author">由 MyTemple Knowledge 导出 · 郑堃逢</p>' : "";
+  const footer = showFooter ? '<footer class="print-footer"><span>MyTemple Knowledge · 本地 Markdown 知识库</span></footer>' : "";
+  return `<article class="print-article">
+    <header class="print-header">
+      <h1 class="print-title">${escapeHtml(title)}</h1>
+      ${dateLabel ? `<p class="print-meta">${escapeHtml(dateLabel)}</p>` : ""}
+      ${exportNote}
+    </header>
+    <div class="print-body">${body}</div>
+    ${footer}
+  </article>`;
+}
+
+async function inlinePrintImages(html) {
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = html;
+  const images = [...wrapper.querySelectorAll("img")];
+  await Promise.all(images.map(async (img) => {
+    const src = img.getAttribute("src") || "";
+    if (!src || src.startsWith("data:") || /^https?:/i.test(src)) {
+      img.removeAttribute("loading");
+      return;
+    }
+    img.removeAttribute("loading");
+    try {
+      const response = await fetch(src, { credentials: "include" });
+      if (!response.ok) return;
+      const blob = await response.blob();
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      img.setAttribute("src", dataUrl);
+    } catch (_) { /* keep original */ }
+  }));
+  return wrapper.innerHTML;
+}
+
+async function exportCurrentDocToPdf() {
+  if (!state.currentPath && !state.currentContent) {
+    showToast("请先打开一个文档");
+    return;
+  }
+  showToast("正在准备 PDF 导出...");
+  let html = buildDocumentPrintHtml();
+  html = await inlinePrintImages(html);
+  els.printRoot.innerHTML = html;
+  els.printRoot.classList.remove("hidden");
+  document.body.classList.add("printing");
+  const images = els.printRoot.querySelectorAll("img");
+  if (images.length) {
+    await Promise.all(Array.from(images).map((img) => {
+      if (img.complete) return Promise.resolve();
+      return new Promise((resolve) => {
+        img.onload = img.onerror = () => resolve();
+        setTimeout(resolve, 3000);
+      });
+    }));
+  }
+  showToast("提示：若不需要浏览器页眉页脚，请在打印对话框中取消勾选「页眉与页脚」");
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  await new Promise((resolve) => setTimeout(resolve, 120));
+  try {
+    window.print();
+  } catch (error) {
+    console.error(error);
+    showToast("无法调起打印对话框，请检查浏览器设置");
+  }
+  const cleanup = () => {
+    els.printRoot.classList.add("hidden");
+    els.printRoot.innerHTML = "";
+    document.body.classList.remove("printing");
+    window.removeEventListener("afterprint", cleanup);
+  };
+  window.addEventListener("afterprint", cleanup);
+  setTimeout(cleanup, 60000);
+}
+
+async function buildWechatArticleHtml() {
+  const title = els.docTitle?.textContent || state.currentDoc?.title || "MyTemple 文档";
+  const rawContent = String(state.currentContent || els.editor.value || "");
+  const content = stripFrontmatter(rawContent);
+  const body = renderMarkdown(content);
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = body;
+  // 公众号编辑器无法访问本地相对路径，将本地图片转为 data URL 内联，
+  // 粘贴后图片随内容一起进入公众号素材库。
+  const images = [...wrapper.querySelectorAll("img")];
+  await Promise.all(images.map(async (img) => {
+    const src = img.getAttribute("src") || "";
+    if (!src || src.startsWith("data:") || /^https?:/i.test(src)) return;
+    try {
+      const response = await fetch(src, { credentials: "include" });
+      if (!response.ok) return;
+      const blob = await response.blob();
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      img.setAttribute("src", dataUrl);
+    } catch (error) {
+      console.warn("公众号图片内联失败", src, error);
+    }
+  }));
+  return `<section class="wechat-article" style="max-width:677px;margin:0 auto;padding:8px 0;color:#3f3f3f;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;font-size:16px;line-height:1.75;letter-spacing:0.05em;word-break:break-word;">
+    <h1 style="font-size:24px;font-weight:600;color:#1a1a1a;text-align:center;margin:0 0 8px;line-height:1.4;">${escapeHtml(title)}</h1>
+    ${wrapper.innerHTML}
+  </section>`;
+}
+
+async function copyCurrentDocAsWechat() {
+  if (!state.currentPath && !state.currentContent) {
+    showToast("请先打开一个文档");
+    return;
+  }
+  showToast("正在准备公众号格式…");
+  const html = await buildWechatArticleHtml();
+  const tempContainer = document.createElement("div");
+  tempContainer.style.position = "fixed";
+  tempContainer.style.left = "-9999px";
+  tempContainer.style.top = "0";
+  tempContainer.style.width = "677px";
+  tempContainer.innerHTML = html;
+  document.body.appendChild(tempContainer);
+  const selection = window.getSelection();
+  const range = document.createRange();
+  range.selectNodeContents(tempContainer);
+  selection.removeAllRanges();
+  selection.addRange(range);
+  let ok = false;
+  try {
+    if (navigator.clipboard && navigator.clipboard.write) {
+      const blob = new Blob([html], { type: "text/html" });
+      const textBlob = new Blob([plainText(html)], { type: "text/plain" });
+      const item = new ClipboardItem({ "text/html": blob, "text/plain": textBlob });
+      await navigator.clipboard.write([item]);
+      ok = true;
+    } else {
+      ok = document.execCommand("copy");
+    }
+  } catch (error) {
+    console.error(error);
+    ok = document.execCommand("copy");
+  }
+  selection.removeAllRanges();
+  document.body.removeChild(tempContainer);
+  showToast(ok ? "已复制，可在公众号编辑器中粘贴" : "复制失败，请重试");
+}
+
 function ensureMarkdownWorker() {
   if (state.markdownWorker || state.markdownWorkerFailed) return state.markdownWorker;
   try {
@@ -827,6 +1163,79 @@ function normalizeCodeLanguage(value) {
   return /^[a-z0-9_+-]{1,24}$/.test(normalized) ? normalized : "text";
 }
 
+const CODE_KEYWORDS = {
+  javascript: /\b(?:const|let|var|function|return|if|else|for|while|do|switch|case|break|continue|new|class|extends|super|this|typeof|instanceof|in|of|delete|void|yield|async|await|try|catch|finally|throw|import|export|from|default|as|static|get|set|null|undefined|true|false|NaN|Infinity)\b/g,
+  typescript: /\b(?:const|let|var|function|return|if|else|for|while|do|switch|case|break|continue|new|class|extends|super|this|typeof|instanceof|in|of|delete|void|yield|async|await|try|catch|finally|throw|import|export|from|default|as|static|get|set|null|undefined|true|false|NaN|Infinity|interface|type|enum|namespace|declare|abstract|readonly|public|private|protected|implements|keyof|infer|is)\b/g,
+  python: /\b(?:def|class|return|if|elif|else|for|while|break|continue|pass|import|from|as|try|except|finally|raise|with|lambda|yield|global|nonlocal|assert|del|in|not|and|or|is|None|True|False|self|cls|async|await)\b/g,
+  go: /\b(?:func|return|if|else|for|range|switch|case|default|break|continue|var|const|type|struct|interface|map|chan|package|import|defer|go|select|fallthrough|goto|nil|true|false)\b/g,
+  rust: /\b(?:fn|let|mut|const|static|struct|enum|trait|impl|pub|use|mod|return|if|else|match|for|while|loop|break|continue|as|in|ref|move|async|await|unsafe|extern|crate|self|Self|super|type|where|dyn|union)\b/g,
+  java: /\b(?:public|private|protected|static|final|void|class|interface|extends|implements|return|if|else|for|while|do|switch|case|break|continue|new|this|super|try|catch|finally|throw|throws|import|package|instanceof|synchronized|abstract|enum|null|true|false|int|long|double|float|boolean|char|byte|short|String)\b/g,
+  c: /\b(?:int|long|short|char|float|double|void|unsigned|signed|const|static|extern|register|volatile|auto|struct|union|enum|typedef|return|if|else|for|while|do|switch|case|break|continue|default|goto|sizeof|NULL|true|false|include|define|ifdef|ifndef|endif)\b/g,
+  cpp: /\b(?:int|long|short|char|float|double|void|unsigned|signed|const|static|extern|register|volatile|auto|struct|union|enum|class|namespace|template|typename|public|private|protected|virtual|override|return|if|else|for|while|do|switch|case|break|continue|default|goto|sizeof|new|delete|this|nullptr|true|false|include|define|ifdef|ifndef|endif|using|operator)\b/g,
+  csharp: /\b(?:public|private|protected|static|readonly|const|void|class|interface|struct|enum|extends|implements|return|if|else|for|while|do|switch|case|break|continue|new|this|base|try|catch|finally|throw|using|namespace|var|dynamic|async|await|get|set|value|null|true|false|int|long|double|float|bool|char|string|byte|object|override|virtual|abstract|sealed)\b/g,
+  ruby: /\b(?:def|end|class|module|return|if|elsif|else|unless|case|when|while|until|for|break|next|redo|retry|yield|begin|rescue|ensure|raise|require|require_relative|include|extend|attr_accessor|attr_reader|attr_writer|self|super|nil|true|false|lambda|do|then)\b/g,
+  bash: /\b(?:if|then|else|elif|fi|for|while|do|done|case|esac|in|function|return|break|continue|exit|local|export|unset|read|echo|printf|source|alias|unalias|trap|set|unset|shift|cd|pwd|ls|cat|grep|sed|awk|find|chmod|chown|mkdir|rmdir|rm|cp|mv|touch|head|tail|wc|sort|uniq|cut|tr|tee|xargs)\b/g,
+  powershell: /\b(?:param|function|return|if|else|elseif|switch|for|foreach|while|do|break|continue|try|catch|finally|throw|using|namespace|class|enum|var|Write-Output|Write-Host|Write-Error|Get-ChildItem|Set-Location|Get-Content|New-Item|Remove-Item|Copy-Item|Move-Item|Select-Object|Where-Object|ForEach-Object|Sort-Object|Format-Table|Out-String|Invoke-WebRequest)\b/g,
+  sql: /\b(?:SELECT|FROM|WHERE|INSERT|INTO|VALUES|UPDATE|SET|DELETE|CREATE|TABLE|ALTER|DROP|INDEX|VIEW|JOIN|INNER|LEFT|RIGHT|FULL|OUTER|ON|GROUP|BY|HAVING|ORDER|ASC|DESC|LIMIT|OFFSET|UNION|ALL|DISTINCT|AS|AND|OR|NOT|IN|EXISTS|BETWEEN|LIKE|IS|NULL|COUNT|SUM|AVG|MIN|MAX|CASE|WHEN|THEN|ELSE|END|PRIMARY|KEY|FOREIGN|REFERENCES|DEFAULT|CONSTRAINT|UNIQUE|CHECK|CASCADE|TRIGGER|PROCEDURE|FUNCTION|RETURNS|DECLARE|BEGIN|COMMIT|ROLLBACK|TRANSACTION)\b/gi,
+  json: /\b(?:true|false|null)\b/g,
+  yaml: /\b(?:true|false|null|yes|no|on|off)\b/g,
+  html: /\b(?:html|head|body|div|span|p|a|img|ul|ol|li|table|tr|td|th|thead|tbody|form|input|button|label|select|option|textarea|h1|h2|h3|h4|h5|h6|br|hr|meta|link|script|style|title|nav|header|footer|main|section|article|aside|figure|figcaption|code|pre|blockquote)\b/gi,
+};
+
+const BUILTIN_TYPES = /\b(?:string|number|boolean|object|array|Promise|Date|RegExp|Error|Map|Set|Symbol|BigInt|Uint8Array|ArrayBuffer|JSON|Math|console|window|document|process|Buffer|require|module|exports|global|window|setTimeout|setInterval|clearTimeout|clearInterval|fetch|console)\b/g;
+
+function highlightCode(raw, language) {
+  let code = escapeHtml(raw);
+  const lang = String(language || "text").toLowerCase();
+
+  // 1. Comments (highest priority - protect from further matching)
+  const commentSpans = [];
+  code = code.replace(/(\/\/[^\n]*|\/\*[\s\S]*?\*\/|#[^\n]*)/g, (match) => {
+    const idx = commentSpans.length;
+    commentSpans.push(`<span class="tok-comment">${match}</span>`);
+    return `\x00C${idx}\x00`;
+  });
+
+  // 2. Strings
+  const stringSpans = [];
+  code = code.replace(/("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)/g, (match) => {
+    const idx = stringSpans.length;
+    stringSpans.push(`<span class="tok-string">${match}</span>`);
+    return `\x00S${idx}\x00`;
+  });
+
+  // 3. Numbers
+  code = code.replace(/\b(\d+\.?\d*(?:e[+-]?\d+)?|0x[0-9a-fA-F]+|0b[01]+)\b/g, '<span class="tok-number">$1</span>');
+
+  // 4. Keywords
+  const kwPattern = CODE_KEYWORDS[lang] || CODE_KEYWORDS.javascript;
+  code = code.replace(kwPattern, (match) => `<span class="tok-keyword">${match}</span>`);
+
+  // 5. Built-in types & globals (only for JS/TS family)
+  if (["javascript", "typescript", "json"].includes(lang)) {
+    code = code.replace(BUILTIN_TYPES, (match) => `<span class="tok-builtin">${match}</span>`);
+  }
+
+  // 6. Function calls: word followed by (
+  code = code.replace(/\b([a-zA-Z_$][\w$]*)(\s*\()/g, (match, name, paren) => {
+    if (match.includes("span class=")) return match;
+    return `<span class="tok-function">${name}</span>${paren}`;
+  });
+
+  // 7. HTML/XML tags (for html, xml, markdown)
+  if (["html", "xml", "markdown"].includes(lang)) {
+    code = code.replace(/(&lt;\/?)([\w-]+)/g, '$1<span class="tok-tag">$2</span>');
+    code = code.replace(/\s([\w-]+)(=)/g, ' <span class="tok-attr">$1</span>$2');
+  }
+
+  // Restore strings
+  code = code.replace(/\x00S(\d+)\x00/g, (_, idx) => stringSpans[Number(idx)] || "");
+  // Restore comments
+  code = code.replace(/\x00C(\d+)\x00/g, (_, idx) => commentSpans[Number(idx)] || "");
+
+  return code;
+}
+
 function renderMarkdown(source, options = {}) {
   const searchTerm = options.searchTerm || "";
   const lines = source.replace(/\r\n/g, "\n").split("\n");
@@ -869,7 +1278,7 @@ function renderMarkdown(source, options = {}) {
       flushTable();
       if (inCode) {
         const raw = code.join("\n");
-        html.push(`<div class="code-block" data-language="${codeLanguage}"><span class="code-language">${escapeHtml(codeLanguage)}</span><button class="code-copy" type="button">\u590d\u5236</button><pre><code class="language-${codeLanguage}">${escapeHtml(raw)}</code></pre></div>`);
+        html.push(`<div class="code-block" data-language="${codeLanguage}"><span class="code-language">${escapeHtml(codeLanguage)}</span><button class="code-copy" type="button">\u590d\u5236</button><pre><code class="language-${codeLanguage}">${highlightCode(raw, codeLanguage)}</code></pre></div>`);
         code = [];
         codeLanguage = "text";
       } else {
@@ -1019,7 +1428,7 @@ function renderMarkdown(source, options = {}) {
   flushTable();
   if (inCode) {
     const raw = code.join("\n");
-    html.push(`<div class="code-block" data-language="${codeLanguage}"><span class="code-language">${escapeHtml(codeLanguage)}</span><button class="code-copy" type="button">\u590d\u5236</button><pre><code class="language-${codeLanguage}">${escapeHtml(raw)}</code></pre></div>`);
+    html.push(`<div class="code-block" data-language="${codeLanguage}"><span class="code-language">${escapeHtml(codeLanguage)}</span><button class="code-copy" type="button">\u590d\u5236</button><pre><code class="language-${codeLanguage}">${highlightCode(raw, codeLanguage)}</code></pre></div>`);
   }
   return html.join("\n");
 }
@@ -1136,6 +1545,10 @@ function renderTree(nodes, container = els.tree) {
         <span class="ws-dot" aria-hidden="true"></span>
         <strong class="ws-name" title="${escapeHtml(node.root || node.name)}">${escapeHtml(compactName(workspace.name || node.name, 28))}</strong>
         <span class="ws-meta" title="${escapeHtml(node.root || "")}">${escapeHtml(compactName(node.root || "", 36))}</span>
+        <span class="ws-actions-inline">
+          <button class="ws-new" title="新建文件 (Ctrl+N)" data-action="new-file">+</button>
+          <button class="ws-new-folder" title="新建文件夹" data-action="new-folder">&#128194;</button>
+        </span>
         <button class="ws-open-folder" title="在文件管理器中打开"></button>
       `;
       head.addEventListener("click", (e) => {
@@ -1143,6 +1556,18 @@ function renderTree(nodes, container = els.tree) {
           if (node.root) {
             api.post("/api/open-folder", { path: node.root }).catch(() => showToast("无法打开文件夹"));
           }
+          return;
+        }
+        if (e.target.closest("[data-action='new-file']")) {
+          state.activeWorkspaceId = node.workspaceId;
+          state.selectedFolder = node.path;
+          openCreateModal("file");
+          return;
+        }
+        if (e.target.closest("[data-action='new-folder']")) {
+          state.activeWorkspaceId = node.workspaceId;
+          state.selectedFolder = node.path;
+          openCreateModal("folder");
           return;
         }
         state.activeWorkspaceId = node.workspaceId;
@@ -1275,9 +1700,16 @@ function renderTree(nodes, container = els.tree) {
       title.draggable = true;
       title.setAttribute("aria-expanded", String(expanded));
       title.title = node.path + "（按住 Ctrl 点击可多选）";
-      title.innerHTML = `<span class="folder-icon">v</span><span>${escapeHtml(compactName(node.name))}</span>`;
+      title.innerHTML = `<span class="folder-icon">v</span><span>${escapeHtml(compactName(node.name))}</span><span class="folder-actions-inline"><span class="folder-new" title="在此处新建文件" data-action="new-file" role="button" tabindex="0">+</span></span>`;
       title.addEventListener("click", (event) => {
         event.stopPropagation();
+        if (event.target.closest("[data-action='new-file']")) {
+          state.activeWorkspaceId = node.workspaceId;
+          state.selectedFolder = node.path;
+          state.folderExplicit = true;
+          openCreateModal("file");
+          return;
+        }
         state.activeWorkspaceId = node.workspaceId;
         state.selectedFolder = node.path;
         state.folderExplicit = true;
@@ -1731,16 +2163,27 @@ function setMode(mode) {
   els.graphPanel.classList.toggle("hidden", mode !== "graph");
   els.saveBtn.classList.toggle("hidden", mode !== "edit" || !state.currentPath);
   els.formatBtn.classList.toggle("hidden", mode !== "edit" || !state.currentPath);
-  els.viewBtn.classList.toggle("active", mode === "view");
-  els.editBtn.classList.toggle("active", mode === "edit");
+  if (mode === "view") {
+    els.modeToggleBtn.textContent = "修改";
+    els.modeToggleBtn.classList.remove("active");
+  } else if (mode === "edit") {
+    els.modeToggleBtn.textContent = "阅读";
+    els.modeToggleBtn.classList.add("active");
+  } else if (mode === "graph") {
+    els.modeToggleBtn.textContent = state.currentPath ? "阅读" : "修改";
+    els.modeToggleBtn.classList.remove("active");
+  }
   els.graphBtn.classList.toggle("active", mode === "graph");
   updateMultiCursorDisplay();
   if (mode === "edit") {
     syncPreviewToEditor();
     renderCurrentPreviewNow(state.currentContent);
+    setEditorOutlineVisible(state.editorOutlineVisible);
+    setPreviewVisible(state.previewVisible);
     requestAnimationFrame(() => {
       const editorMax = Math.max(1, els.editor.scrollHeight - els.editor.clientHeight);
       els.editor.scrollTop = Math.round(editorMax * (state.readerScrollRatio || 0));
+      if (typeof applyEditorSplitterLayout === "function") applyEditorSplitterLayout();
     });
     if (state.previewVisible && !state.largeDocument) {
       requestAnimationFrame(() => schedulePreviewUpdate({ immediate: true, forceContent: state.currentContent }));
@@ -1776,19 +2219,10 @@ function updateLargeDocumentState(content, exact = false) {
 }
 
 function recordUndo(value, { force = false } = {}) {
-  if (state.undo.applying) return;
-  if (state.undo.stack[state.undo.index] === value) return;
-  const now = Date.now();
-  if (!force && state.undo.lastRecordedAt && now - state.undo.lastRecordedAt < 450 && state.undo.index >= 0) {
-    state.undo.stack[state.undo.index] = value;
-    state.undo.lastRecordedAt = now;
-    return;
-  }
-  state.undo.stack = state.undo.stack.slice(0, state.undo.index + 1);
-  state.undo.stack.push(value);
-  if (state.undo.stack.length > 80) state.undo.stack.shift();
-  state.undo.index = state.undo.stack.length - 1;
-  state.undo.lastRecordedAt = now;
+  // Undo/redo history is owned by CodeMirror's native history() extension.
+  // Keeping a parallel snapshot stack would cause double-undo and flicker.
+  void value;
+  void force;
 }
 
 function applyEditorValue(value) {
@@ -1802,15 +2236,13 @@ function applyEditorValue(value) {
 }
 
 function undoEditor() {
-  if (state.undo.index <= 0) return;
-  state.undo.index -= 1;
-  applyEditorValue(state.undo.stack[state.undo.index]);
+  // Use CodeMirror's native history so transactions replay incrementally
+  // instead of replacing the whole document (which caused flicker).
+  els.editor.undo?.();
 }
 
 function redoEditor() {
-  if (state.undo.index >= state.undo.stack.length - 1) return;
-  state.undo.index += 1;
-  applyEditorValue(state.undo.stack[state.undo.index]);
+  els.editor.redo?.();
 }
 
 function scrollReaderToElement(target, behavior = "auto") {
@@ -2357,6 +2789,58 @@ function syncPreviewSourceAnchors(source) {
   });
 }
 
+function attachImageDeleteButtons(root = els.preview) {
+  if (!root) return;
+  const images = root.querySelectorAll("img");
+  images.forEach((img) => {
+    if (img.dataset.deleteAttached) return;
+    const src = img.getAttribute("src") || "";
+    if (!src || src.startsWith("data:") || !src.includes("/source/")) return;
+    img.dataset.deleteAttached = "1";
+    const parent = img.parentElement;
+    if (!parent) return;
+    parent.classList.add("image-delete-wrapper");
+    if (parent.querySelector(".image-delete-btn")) return;
+    const btn = document.createElement("button");
+    btn.className = "image-delete-btn";
+    btn.type = "button";
+    btn.title = "删除该图片（同时清理磁盘文件）";
+    btn.setAttribute("aria-label", "删除图片");
+    btn.textContent = "×";
+    btn.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      await deleteImageFromDoc(src);
+    });
+    parent.appendChild(btn);
+  });
+}
+
+async function deleteImageFromDoc(imageSrc) {
+  if (!imageSrc) return;
+  const confirmed = window.confirm("确定删除该图片吗？\n\n将同时执行：\n1. 移除文档中的图片引用\n2. 删除磁盘上的图片文件以释放空间");
+  if (!confirmed) return;
+  const content = els.editor.value;
+  const escapedSrc = imageSrc.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`\\s*!\\[[^\\]]*\\]\\(${escapedSrc}\\)\\s*\\n?`, "g");
+  const newContent = content.replace(pattern, "\n").replace(/\n{3,}/g, "\n\n");
+  if (newContent !== content) {
+    els.editor.value = newContent;
+    state.currentContent = newContent;
+    recordUndo(newContent);
+    setSaveStatus("\u672a\u4fdd\u5b58", true);
+    schedulePreviewUpdate({ immediate: true, forceContent: newContent });
+    scheduleAutoSave();
+  }
+  try {
+    await api.post("/api/asset/delete", { path: imageSrc });
+    showToast("图片已删除，磁盘文件已清理");
+  } catch (error) {
+    console.error(error);
+    showToast("图片引用已移除，磁盘文件清理失败");
+  }
+}
+
 function renderCurrentPreview() {
   return renderCurrentPreviewAsync();
 }
@@ -2366,6 +2850,7 @@ function renderCurrentPreviewNow(content = state.currentContent) {
   const nextContent = String(content || els.editor.value || state.currentContent || "");
   els.preview.innerHTML = renderMarkdown(nextContent);
   syncPreviewSourceAnchors(nextContent);
+  attachImageDeleteButtons();
   els.preview.classList.remove("preview-pending");
   state.previewLastContent = nextContent;
   syncPreviewToEditor();
@@ -2384,17 +2869,20 @@ async function renderCurrentPreviewAsync(content = state.currentContent, seq = +
     if (seq !== state.previewRenderSeq || content !== state.currentContent) return;
     els.preview.innerHTML = html;
     syncPreviewSourceAnchors(content);
+    attachImageDeleteButtons();
   } catch (error) {
     console.error(error);
     if (seq !== state.previewRenderSeq || content !== state.currentContent) return;
     els.preview.innerHTML = renderMarkdown(content);
     syncPreviewSourceAnchors(content);
+    attachImageDeleteButtons();
   }
   els.preview.classList.remove("preview-pending");
   state.previewLastContent = content;
   syncPreviewToEditor();
 }
 
+let previewRafScheduled = false;
 function schedulePreviewUpdate({ immediate = false, forceContent = state.currentContent } = {}) {
   clearTimeout(state.previewTimer);
   if (!state.previewVisible || state.mode !== "edit") return;
@@ -2403,21 +2891,38 @@ function schedulePreviewUpdate({ immediate = false, forceContent = state.current
   const wait = immediate ? 0 : state.largeDocument ? LARGE_PREVIEW_DELAY : length > 500000 ? 420 : length > 100000 ? 240 : 120;
   const nextSeq = ++state.previewRenderSeq;
   els.preview.classList.toggle("preview-pending", state.previewLastContent !== content);
-  state.previewTimer = setTimeout(() => {
-    renderCurrentPreviewAsync(content, nextSeq);
-  }, wait);
+  if (wait === 0) {
+    if (!previewRafScheduled) {
+      previewRafScheduled = true;
+      requestAnimationFrame(() => {
+        previewRafScheduled = false;
+        renderCurrentPreviewAsync(content, nextSeq);
+      });
+    }
+  } else {
+    state.previewTimer = setTimeout(() => {
+      if (!previewRafScheduled) {
+        previewRafScheduled = true;
+        requestAnimationFrame(() => {
+          previewRafScheduled = false;
+          renderCurrentPreviewAsync(content, nextSeq);
+        });
+      }
+    }, wait);
+  }
+  scheduleEditorOutlineUpdate(content);
 }
 
 function setPreviewVisible(visible, { automatic = false } = {}) {
   state.previewVisible = Boolean(visible);
   if (!automatic) state.previewAutoHidden = false;
   else state.previewAutoHidden = !state.previewVisible;
+  els.editorBody.classList.toggle("preview-hidden", !state.previewVisible);
   els.editorPanel.classList.toggle("preview-hidden", !state.previewVisible);
-  els.previewToggleBtn.textContent = state.previewVisible ? "隐藏预览" : "显示预览";
-  els.previewToggleBtn.setAttribute("aria-pressed", String(state.previewVisible));
   els.previewToggleBtn.textContent = state.previewVisible
     ? "\u9690\u85cf\u9884\u89c8"
     : state.largeDocument ? "\u663e\u793a\u9884\u89c8\uff08\u5927\u6587\u6863\uff09" : "\u663e\u793a\u9884\u89c8";
+  els.previewToggleBtn.setAttribute("aria-pressed", String(state.previewVisible));
   if (state.previewVisible) {
     if (state.largeDocument) schedulePreviewUpdate();
     else requestAnimationFrame(() => schedulePreviewUpdate({ immediate: true }));
@@ -2809,6 +3314,39 @@ async function confirmDeleteSelected() {
     showToast(message);
     closeDeleteModal();
   }
+}
+
+function deleteTreeItem(path) {
+  if (!path) return;
+  state.deleteTarget = path;
+  els.deleteTarget.textContent = path;
+  els.deleteModal.classList.remove("hidden");
+}
+
+async function renameTreeItem(path) {
+  if (!path) return;
+  const currentName = displayNameFromPath(path);
+  const newName = prompt("重命名为：", currentName);
+  if (!newName || newName.trim() === currentName) return;
+  try {
+    const response = await api.post("/api/rename", {
+      path,
+      newName: newName.trim()
+    });
+    state.graphReady = false;
+    await bootstrap(true);
+    if (response?.newPath) {
+      openDoc(response.newPath);
+    }
+    showToast("重命名成功");
+  } catch (error) {
+    showToast(error.message || "重命名失败");
+  }
+}
+
+function displayNameFromPath(path) {
+  const parts = (path || "").split(/[\\/]/);
+  return parts[parts.length - 1] || "";
 }
 
 function closeSearchWhenIdle(event) {
@@ -3980,10 +4518,9 @@ async function activateGraphNode(node) {
 function insertAtCursor(value) {
   const start = els.editor.selectionStart ?? els.editor.value.length;
   const end = els.editor.selectionEnd ?? start;
-  els.editor.value = `${els.editor.value.slice(0, start)}${value}${els.editor.value.slice(end)}`;
+  els.editor.setRangeText(value, start, end);
   const next = start + value.length;
-  els.editor.selectionStart = next;
-  els.editor.selectionEnd = next;
+  els.editor.setSelectionRange(next, next);
   els.editor.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
@@ -4044,246 +4581,117 @@ function expandSequenceOnEnter(event) {
   const line = value.slice(lineStart, start);
   const arabic = line.match(/^(\s*)(?:##\s*)?(\d+)([.)、])(\s*)(.*)$/);
   const chinese = line.match(/^(\s*)(##\s*)?([一二三四五六七八九十百千]{1,6})([.)、])(\s*)(.*)$/);
-  let marker = "";
-  let separator = "";
-  let indent = "";
-  let hasMd = false;
-  let numberType = null;
-  if (arabic) {
-    numberType = "arabic";
-    separator = arabic[3];
-    indent = arabic[1];
-    marker = `${indent}${Number(arabic[2]) + 1}${separator}${arabic[4] || " "}`;
-  } else if (chinese) {
-    numberType = "chinese";
-    separator = chinese[4];
-    indent = chinese[1];
-    hasMd = !!chinese[2];
-    const next = nextChineseNumber(chinese[3]);
-    if (next) marker = `${indent}${hasMd ? "## " : ""}${next}${separator}${chinese[5] || " "}`;
-  }
-  if (!marker) return false;
+  if (!arabic && !chinese) return false;
+
   event.preventDefault();
-  // 仅延续当前行的序号，避免全篇重排造成小标题后光标跳回首行。
-  insertAtCursor(`\n${marker}`);
-  return true;
 
-  // 扫描整个文档，找出同类型、同级缩进、同分隔符的序号行，进行重新编号
-  let newValue = value;
-  let positionOffset = 0;
-  const lines = newValue.split("\n");
-  const headerLineIdx = lines.findIndex((l, idx) => {
-    const lineStartIdx = lines.slice(0, idx).reduce((acc, ll) => acc + ll.length + 1, 0);
-    return lineStartIdx === lineStart;
-  });
+  const isArabic = !!arabic;
+  const separator = isArabic ? arabic[3] : chinese[4];
+  const indent = isArabic ? arabic[1] : chinese[1];
+  const hasMd = isArabic ? (line.includes("##") ? "## " : "") : (chinese[2] || "");
+  const currentNum = isArabic ? Number(arabic[2]) : parseChineseNumber(chinese[3]);
 
-  // 向上扫描找到最近的父级标题（更高层级的标题）
-  let parentHeadingLevel = 0;
+  if (!currentNum || currentNum <= 0) {
+    const marker = isArabic ? `${indent}1${separator} ` : `${indent}${hasMd}一${separator} `;
+    insertAtCursor(`\n${marker}`);
+    return true;
+  }
+
+  const lines = value.split("\n");
+  let headerLineIdx = 0;
+  for (let idx = 0; idx < lines.length; idx++) {
+    const ls = lines.slice(0, idx).reduce((acc, ll) => acc + ll.length + 1, 0);
+    if (ls === lineStart) { headerLineIdx = idx; break; }
+  }
+
   let parentHeadingLine = -1;
   for (let i = headerLineIdx - 1; i >= 0; i--) {
-    const cnMatch = lines[i].match(/^(\s*)(##\s*)?([一二三四五六七八九十]{1,4}[、.．]\s*.+)$/);
-    if (cnMatch) {
-      const cnIndent = cnMatch[1].length;
-      const hasMdPrefix = !!cnMatch[2];
-      const currentIndent = indent.length;
-      if (hasMdPrefix && cnIndent <= currentIndent) {
-        parentHeadingLevel = 2;
-        parentHeadingLine = i;
-        break;
-      }
-    }
     const hMatch = lines[i].match(/^(\s*)(#{1,6})\s+(.+)$/);
-    if (hMatch) {
-      const hLevel = hMatch[2].length;
-      const hIndent = hMatch[1].length;
-      const currentIndent = indent.length;
-      if (hLevel <= 3 && hIndent <= currentIndent) {
-        parentHeadingLevel = hLevel;
-        parentHeadingLine = i;
-        break;
-      }
+    if (hMatch && hMatch[2].length <= 3 && hMatch[1].length <= indent.length) {
+      parentHeadingLine = i; break;
     }
-    const numMatch = lines[i].match(/^(\d{1,3})[、.．]\s*(.+)$/);
+    const cnMatch = lines[i].match(/^(\s*)(##\s*)?([一二三四五六七八九十]{1,4}[、.．]\s*.+)$/);
+    if (cnMatch && cnMatch[2] && cnMatch[1].length <= indent.length) {
+      parentHeadingLine = i; break;
+    }
+    const numMatch = lines[i].match(/^(\s*)(\d{1,3})[、.．]\s*(.+)$/);
     if (numMatch) {
-      const numLevel = Math.min(6, Math.max(3, numMatch[1].length + 2));
-      const numIndent = lines[i].match(/^(\s*)/)?.[1].length || 0;
-      const currentIndent = indent.length;
-      if (numLevel < 6 && numIndent < currentIndent) {
-        parentHeadingLevel = numLevel;
-        parentHeadingLine = i;
-        break;
+      const numLevel = Math.min(6, Math.max(3, numMatch[2].length + 2));
+      if (numLevel < 6 && numMatch[1].length < indent.length) {
+        parentHeadingLine = i; break;
       }
     }
   }
 
-  // 收集所有同级序号行（在同一个父级标题下）
-  const patternType = numberType;
   const rows = [];
   for (let i = (parentHeadingLine >= 0 ? parentHeadingLine + 1 : 0); i < lines.length; i++) {
-    const currentLine = lines[i];
-    
-    let match;
-    if (patternType === "arabic") {
-      match = currentLine.match(/^(\s*)(?:##\s*)?(\d+)([.)、])(.*)$/);
-      if (match && match[1] === indent && match[3] === separator) {
-        rows.push({ lineIndex: i, lineStart: lines.slice(0, i).reduce((acc, ll) => acc + ll.length + 1, 0), number: Number(match[2]), prefix: match[1], sep: match[3], rest: match[4], original: currentLine, mdPrefix: currentLine.includes("##") ? "## " : "" });
+    const cl = lines[i];
+    let m;
+    if (isArabic) {
+      m = cl.match(/^(\s*)(?:##\s*)?(\d+)([.)、])(.*)$/);
+      if (m && m[1] === indent && m[3] === separator) {
+        rows.push({ lineIndex: i, number: Number(m[2]), prefix: m[1], sep: m[3], rest: m[4], mdPrefix: cl.includes("##") ? "## " : "" });
       } else {
-        // 检查是否遇到更高层级的标题（表示新的段落开始）
-        const hMatch = currentLine.match(/^(\s*)(#{1,6})\s+(.+)$/);
-        if (hMatch) {
-          const hLevel = hMatch[2].length;
-          const hIndent = hMatch[1].length;
-          const currentIndent = indent.length;
-          if (hLevel <= 3 && hIndent <= currentIndent) {
-            break;
-          }
-        }
-        const cnMatch = currentLine.match(/^(\s*)(##\s*)?([一二三四五六七八九十]{1,4}[、.．]\s*.+)$/);
-        if (cnMatch) {
-          const cnIndent = cnMatch[1].length;
-          const hasMdPrefix = !!cnMatch[2];
-          const currentIndent = indent.length;
-          if (hasMdPrefix && cnIndent <= currentIndent) {
-            break;
-          }
-        }
-        const numMatch = currentLine.match(/^(\s*)(\d{1,3})[、.．]\s*(.+)$/);
-        if (numMatch) {
-          const numLevel = Math.min(6, Math.max(3, numMatch[2].length + 2));
-          const numIndent = numMatch[1].length;
-          const currentIndent = indent.length;
-          if (numLevel < 6 && numIndent < currentIndent) {
-            break;
-          }
-        }
+        const stop =
+          (cl.match(/^(\s*)(#{1,6})\s/) && RegExp.$2.length <= 3 && RegExp.$1.length <= indent.length) ||
+          (cl.match(/^(\s*)(##\s*)?[一二三四五六七八九十]{1,4}[、.．]/) && RegExp.$2 && RegExp.$1.length <= indent.length) ||
+          (cl.match(/^(\s*)(\d{1,3})[、.．]/) && RegExp.$1.length < indent.length);
+        if (stop) break;
       }
-    } else if (patternType === "chinese") {
-      match = currentLine.match(/^(\s*)(##\s*)?([一二三四五六七八九十百千]{1,6})([.)、])(.*)$/);
-      if (match && match[1] === indent && match[4] === separator) {
-        const num = parseChineseNumber(match[3]);
-        if (num > 0) {
-          rows.push({ lineIndex: i, lineStart: lines.slice(0, i).reduce((acc, ll) => acc + ll.length + 1, 0), number: num, prefix: match[1], sep: match[4], rest: match[5], original: currentLine, mdPrefix: match[2] || "" });
-        }
+    } else {
+      m = cl.match(/^(\s*)(##\s*)?([一二三四五六七八九十百千]{1,6})([.)、])(.*)$/);
+      if (m && m[1] === indent && m[4] === separator) {
+        const num = parseChineseNumber(m[3]);
+        if (num > 0) rows.push({ lineIndex: i, number: num, prefix: m[1], sep: m[4], rest: m[5], mdPrefix: m[2] || "" });
       } else {
-        // 检查是否遇到更高层级的标题（表示新的段落开始）
-        const cnMatch = currentLine.match(/^(\s*)(##\s*)?([一二三四五六七八九十]{1,4}[、.．]\s*.+)$/);
-        if (cnMatch) {
-          const cnIndent = cnMatch[1].length;
-          const hasMdPrefix = !!cnMatch[2];
-          const currentIndent = indent.length;
-          if (hasMdPrefix && cnIndent <= currentIndent) {
-            break;
-          }
-        }
-        const hMatch = currentLine.match(/^(\s*)(#{1,6})\s+(.+)$/);
-        if (hMatch) {
-          const hLevel = hMatch[2].length;
-          const hIndent = hMatch[1].length;
-          const currentIndent = indent.length;
-          if (hLevel <= 3 && hIndent <= currentIndent) {
-            break;
-          }
-        }
-        const numMatch = currentLine.match(/^(\s*)(\d{1,3})[、.．]\s*(.+)$/);
-        if (numMatch) {
-          const numLevel = Math.min(6, Math.max(3, numMatch[2].length + 2));
-          const numIndent = numMatch[1].length;
-          const currentIndent = indent.length;
-          if (numLevel < 6 && numIndent < currentIndent) {
-            break;
-          }
-        }
+        const stop =
+          (cl.match(/^(\s*)(##\s*)?[一二三四五六七八九十]{1,4}[、.．]/) && RegExp.$2 && RegExp.$1.length <= indent.length) ||
+          (cl.match(/^(\s*)(#{1,6})\s/) && RegExp.$2.length <= 3 && RegExp.$1.length <= indent.length) ||
+          (cl.match(/^(\s*)(\d{1,3})[、.．]/) && RegExp.$1.length < indent.length);
+        if (stop) break;
       }
     }
   }
 
-  // 检查是否需要重新编号（序号不是从1开始，或序号不是连续的 1,2,3...）
   let needRenumber = false;
   if (rows.length >= 1) {
     if (rows[0].number !== 1) {
       needRenumber = true;
     } else {
       for (let i = 0; i < rows.length; i++) {
-        if (rows[i].number !== i + 1) {
-          needRenumber = true;
-          break;
-        }
+        if (rows[i].number !== i + 1) { needRenumber = true; break; }
       }
     }
   }
 
-  // 如果需要重新编号，从前往后替换这些行
-  let currentLineIdx = headerLineIdx;
   if (needRenumber && rows.length > 0) {
-    // 检查同一组中是否有任何一行带有 ##，如果有则给所有行添加 ##
-    const hasAnyMdPrefix = rows.some(r => r.mdPrefix);
-    const targetMdPrefix = hasAnyMdPrefix ? "## " : "";
-    
-    // 从第一行开始，按照顺序重新编号，处理行号映射
+    const targetMdPrefix = rows.some(r => r.mdPrefix) ? "## " : "";
     const newLines = lines.slice();
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
-      const newNum = i + 1;
-      const newNumStr = patternType === "arabic" ? String(newNum) : numberToChinese(newNum);
+      const newNumStr = isArabic ? String(i + 1) : numberToChinese(i + 1);
       const restTrimmed = row.rest.replace(/^\s+/, "");
-      newLines[row.lineIndex] = `${row.prefix}${targetMdPrefix}${newNumStr}${row.sep}${restTrimmed.length ? (restTrimmed.startsWith(" ") ? restTrimmed : " " + restTrimmed) : " "}`.trimEnd();
+      const sepSpace = restTrimmed.length ? (restTrimmed.startsWith(" ") ? restTrimmed : " " + restTrimmed) : " ";
+      newLines[row.lineIndex] = `${row.prefix}${targetMdPrefix}${newNumStr}${row.sep}${sepSpace}`.trimEnd();
     }
-    newValue = newLines.join("\n");
-    // 计算光标位置的偏移
-    let originalPos = start;
-    let newPos = 0;
-    for (let i = 0; i <= Math.min(currentLineIdx, lines.length - 1); i++) {
-      if (i < currentLineIdx) newPos += (newLines[i].length) + 1;
-      else {
-        // 光标在当前行内
-        newPos += Math.min(start - lineStart, newLines[i].length);
-        break;
-      }
-    }
-    // 更稳健的方式：按行重建位置
+    const newValue = newLines.join("\n");
     let offset = 0;
-    for (let i = 0; i < currentLineIdx; i++) {
-      offset += newLines[i].length + 1;
-    }
-    offset += Math.min(start - lineStart, newLines[currentLineIdx].length);
+    for (let i = 0; i < headerLineIdx; i++) offset += newLines[i].length + 1;
+    offset += Math.min(start - lineStart, newLines[headerLineIdx].length);
     els.editor.value = newValue;
     els.editor.selectionStart = offset;
     els.editor.selectionEnd = offset;
     els.editor.dispatchEvent(new Event("input", { bubbles: true }));
-    // 插入下一个序号行
-    const afterMarker = patternType === "arabic" ? `${indent}${rows.length + 1}${separator} ` : `${indent}${targetMdPrefix}${numberToChinese(rows.length + 1)}${separator} `;
-    insertAtCursor(`\n${afterMarker}`);
+    const nextMarker = isArabic ? `${indent}${rows.length + 1}${separator} ` : `${indent}${targetMdPrefix}${numberToChinese(rows.length + 1)}${separator} `;
+    insertAtCursor(`\n${nextMarker}`);
     return true;
   }
 
-  if (rows.length > 0) {
-    const hasAnyMdPrefix = rows.some(r => r.mdPrefix);
-    const targetMdPrefix = hasAnyMdPrefix ? "## " : "";
-    
-    if (chinese && !chinese[2] && targetMdPrefix) {
-      const fixedLine = `${chinese[1]}## ${chinese[3]}${chinese[4]}${chinese[5]}${chinese[6]}`;
-      els.editor.value = `${value.slice(0, lineStart)}${fixedLine}${value.slice(start)}`;
-      const fixedStart = lineStart + fixedLine.length;
-      els.editor.selectionStart = fixedStart;
-      els.editor.selectionEnd = fixedStart;
-      els.editor.dispatchEvent(new Event("input", { bubbles: true }));
-    }
-    
-    const afterMarker = patternType === "arabic" ? `${indent}${rows.length + 1}${separator} ` : `${indent}${targetMdPrefix}${numberToChinese(rows.length + 1)}${separator} `;
-    insertAtCursor(`\n${afterMarker}`);
-  } else {
-    if (chinese && !chinese[2]) {
-      const fixedLine = `${chinese[1]}## ${chinese[3]}${chinese[4]}${chinese[5]}${chinese[6]}`;
-      els.editor.value = `${value.slice(0, lineStart)}${fixedLine}${value.slice(start)}`;
-      const fixedStart = lineStart + fixedLine.length;
-      els.editor.selectionStart = fixedStart;
-      els.editor.selectionEnd = fixedStart;
-      els.editor.dispatchEvent(new Event("input", { bubbles: true }));
-      const next = nextChineseNumber(chinese[3]);
-      if (next) marker = `${indent}## ${next}${separator}${chinese[5] || " "}`;
-    }
-    insertAtCursor(`\n${marker}`);
-  }
+  const nextNum = rows.length > 0 ? rows.length + 1 : (isArabic ? currentNum + 1 : (currentNum + 1));
+  const nextMarker = isArabic
+    ? `${indent}${nextNum}${separator} `
+    : `${indent}${hasMd}${numberToChinese(nextNum)}${separator} `;
+  insertAtCursor(`\n${nextMarker}`);
   return true;
 }
 
@@ -4339,11 +4747,9 @@ function wrapSelection(before, after = before, placeholder = "text") {
     }
   }
   const selected = els.editor.value.slice(start, end) || placeholder;
-  const nextValue = `${els.editor.value.slice(0, start)}${before}${selected}${after}${els.editor.value.slice(end)}`;
-  els.editor.value = nextValue;
+  els.editor.setRangeText(before + selected + after, start, end);
   els.editor.focus();
-  els.editor.selectionStart = start + before.length;
-  els.editor.selectionEnd = start + before.length + selected.length;
+  els.editor.setSelectionRange(start + before.length, start + before.length + selected.length);
   els.editor.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
@@ -4353,11 +4759,10 @@ function insertDivider() {
   const insertAt = nextLine === -1 ? els.editor.value.length : nextLine;
   const prefix = els.editor.value.slice(0, insertAt).endsWith("\n") ? "" : "\n";
   const value = `${prefix}---\n`;
-  els.editor.value = `${els.editor.value.slice(0, insertAt)}${value}${els.editor.value.slice(insertAt)}`;
+  els.editor.setRangeText(value, insertAt, insertAt);
   const next = insertAt + value.length;
   els.editor.focus();
-  els.editor.selectionStart = next;
-  els.editor.selectionEnd = next;
+  els.editor.setSelectionRange(next, next);
   els.editor.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
@@ -4499,11 +4904,15 @@ async function handleEditorPaste(event) {
     event.preventDefault();
     const compressed = await compressImage(image);
     const dataUrl = await blobToDataUrl(compressed);
+    const targetWorkspaceId = resolveScreenshotWorkspaceId();
     const uploaded = await api.post("/api/asset", {
       dataUrl,
       name: `screenshot-${Date.now()}.webp`,
+      workspaceId: targetWorkspaceId || undefined,
     });
     insertAtCursor(`\n${uploaded.markdown}\n`);
+    if (!state.previewVisible) setPreviewVisible(true, { automatic: true });
+    schedulePreviewUpdate({ immediate: true });
     return;
   }
   const textValue = event.clipboardData?.getData("text/plain") || "";
@@ -4515,10 +4924,116 @@ async function handleEditorPaste(event) {
   }
 }
 
+function resolveScreenshotWorkspaceId() {
+  const mode = localStorage.getItem("screenshotSaveLocation") || "workspace";
+  if (mode === "default") {
+    return state.defaultWorkspaceId && state.defaultWorkspaceId !== "default"
+      ? state.defaultWorkspaceId
+      : "";
+  }
+  const fromPath = state.currentPath ? splitWorkspaceRef(state.currentPath).id : "";
+  if (fromPath && /^ws_[a-f0-9]{10}$/i.test(fromPath)) return fromPath;
+  if (state.activeWorkspaceId && /^ws_[a-f0-9]{10}$/i.test(state.activeWorkspaceId)) return state.activeWorkspaceId;
+  if (state.defaultWorkspaceId && /^ws_[a-f0-9]{10}$/i.test(state.defaultWorkspaceId)) return state.defaultWorkspaceId;
+  return "";
+}
+
 els.searchInput.addEventListener("input", debounce(runSearch, 160));
 els.tree.addEventListener("dragover", allowRootDrop);
 els.tree.addEventListener("dragleave", clearRootDrop);
 els.tree.addEventListener("drop", dropOnRoot);
+
+let treeContextMenu = null;
+function showTreeContextMenu(x, y, items) {
+  hideTreeContextMenu();
+  const menu = document.createElement("div");
+  menu.className = "tree-context-menu";
+  menu.style.left = `${x}px`;
+  menu.style.top = `${y}px`;
+  items.forEach((item) => {
+    if (item.separator) {
+      const sep = document.createElement("div");
+      sep.className = "context-menu-separator";
+      menu.append(sep);
+      return;
+    }
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = item.label;
+    if (item.disabled) btn.disabled = true;
+    btn.addEventListener("click", () => {
+      hideTreeContextMenu();
+      item.action();
+    });
+    menu.append(btn);
+  });
+  document.body.append(menu);
+  treeContextMenu = menu;
+  requestAnimationFrame(() => {
+    const rect = menu.getBoundingClientRect();
+    if (rect.right > window.innerWidth) menu.style.left = `${x - rect.width}px`;
+    if (rect.bottom > window.innerHeight) menu.style.top = `${y - rect.height}px`;
+  });
+}
+function hideTreeContextMenu() {
+  if (treeContextMenu) {
+    treeContextMenu.remove();
+    treeContextMenu = null;
+  }
+}
+document.addEventListener("click", hideTreeContextMenu);
+document.addEventListener("contextmenu", hideTreeContextMenu);
+els.tree.addEventListener("contextmenu", (e) => {
+  const folderItem = e.target.closest(".folder-title");
+  const workspaceHead = e.target.closest(".tree-workspace-head");
+  const fileItem = e.target.closest(".file-item");
+  if (!folderItem && !workspaceHead && !fileItem) return;
+  e.preventDefault();
+  e.stopPropagation();
+  let path = "";
+  let workspaceId = "";
+  let isFolder = false;
+  let isWorkspace = false;
+  if (folderItem) {
+    path = folderItem.dataset.treePath;
+    workspaceId = folderItem.closest(".tree-workspace")?.dataset.workspaceId || "";
+    isFolder = true;
+  } else if (fileItem) {
+    path = fileItem.dataset.treePath;
+    workspaceId = fileItem.closest(".tree-workspace")?.dataset.workspaceId || "";
+  } else if (workspaceHead) {
+    const panel = workspaceHead.closest(".tree-workspace");
+    workspaceId = panel?.dataset.workspaceId || "";
+    const node = state.tree.find((n) => n.type === "workspace" && n.workspaceId === workspaceId);
+    path = node?.path || "";
+    isWorkspace = true;
+  }
+  if (!path && !isWorkspace) return;
+  state.activeWorkspaceId = workspaceId;
+  state.selectedFolder = path;
+  state.folderExplicit = isFolder;
+  const items = [];
+  if (isFolder || isWorkspace) {
+    items.push({ label: "新建文件", action: () => openCreateModal("file") });
+    items.push({ label: "新建文件夹", action: () => openCreateModal("folder") });
+    items.push({ separator: true });
+  }
+  if (fileItem) {
+    items.push({ label: "打开", action: () => openDoc(path) });
+    items.push({ separator: true });
+  }
+  if (isFolder) {
+    items.push({ label: "重命名", action: () => renameTreeItem(path) });
+    items.push({ label: "删除", action: () => deleteTreeItem(path) });
+    items.push({ separator: true });
+    items.push({ label: "复制路径", action: () => { navigator.clipboard.writeText(path); showToast("已复制路径"); } });
+  }
+  if (fileItem) {
+    items.push({ label: "复制路径", action: () => { navigator.clipboard.writeText(path); showToast("已复制路径"); } });
+  }
+  if (items.length === 0) return;
+  showTreeContextMenu(e.clientX, e.clientY, items);
+});
 
 function pickClipboardSource() {
   // 多选优先
@@ -4619,6 +5134,95 @@ document.addEventListener("keydown", (event) => {
 if (els.workspaceBtn) {
   els.workspaceBtn.addEventListener("click", openWorkspaceModal);
 }
+
+(function initMenuBar() {
+  const menuItems = document.querySelectorAll(".menu-item");
+  const dropdowns = document.querySelectorAll(".menu-dropdown");
+  const menuDropdowns = document.getElementById("menuDropdowns");
+  if (!menuItems.length || !menuDropdowns) return;
+
+  function closeAllMenus() {
+    menuItems.forEach((m) => m.classList.remove("active"));
+    dropdowns.forEach((d) => d.classList.add("hidden"));
+  }
+
+  function positionDropdown(item, dropdown) {
+    const itemRect = item.getBoundingClientRect();
+    dropdown.style.left = Math.round(itemRect.left) + "px";
+    dropdown.style.top = Math.round(itemRect.bottom + 4) + "px";
+  }
+
+  menuItems.forEach((item) => {
+    item.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const name = item.dataset.menu;
+      const dropdown = menuDropdowns.querySelector(`.menu-dropdown[data-dropdown="${name}"]`);
+      const isActive = item.classList.contains("active");
+      closeAllMenus();
+      if (!isActive && dropdown) {
+        item.classList.add("active");
+        dropdown.classList.remove("hidden");
+        positionDropdown(item, dropdown);
+      }
+    });
+
+    item.addEventListener("mouseenter", () => {
+      if (menuDropdowns.querySelector(".menu-item.active")) {
+        closeAllMenus();
+        item.classList.add("active");
+        const dropdown = menuDropdowns.querySelector(`.menu-dropdown[data-dropdown="${item.dataset.menu}"]`);
+        if (dropdown) {
+          dropdown.classList.remove("hidden");
+          positionDropdown(item, dropdown);
+        }
+      }
+    });
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".menu-item") && !e.target.closest(".menu-dropdown")) {
+      closeAllMenus();
+    }
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeAllMenus();
+  });
+
+  const actions = {
+    "new-doc": () => openCreateModal("doc"),
+    "new-folder": () => openCreateModal("folder"),
+    save: () => saveCurrentDoc(),
+    workspace: () => openWorkspaceModal(),
+    "export-pdf": () => exportCurrentDocToPdf(),
+    "export-wechat": () => copyCurrentDocAsWechat(),
+    settings: () => els.settingsBtn?.click(),
+    "toggle-edit": () => state.currentPath && setMode("edit"),
+    "toggle-reading": () => state.currentPath && setMode("view"),
+    "toggle-sidebar": () => setSidebarCollapsed(!state.sidebarCollapsed),
+    "toggle-outline": () => state.currentPath && setEditorOutlineVisible(!state.editorOutlineVisible),
+    "zoom-in": () => applyWindowZoom((parseInt(els.windowZoom?.value) || 100) + 10),
+    "zoom-out": () => applyWindowZoom((parseInt(els.windowZoom?.value) || 100) - 10),
+    "zoom-reset": () => applyWindowZoom(100),
+    undo: () => { const ed = els.editor; if (ed) document.execCommand("undo"); },
+    redo: () => { const ed = els.editor; if (ed) document.execCommand("redo"); },
+    find: () => els.searchInput?.focus(),
+    replace: () => els.searchInput?.focus(),
+    "go-doc": () => els.searchInput?.focus(),
+    "go-symbol": () => showToast("进入知识库标题导航模式"),
+    "go-back": () => history.back(),
+    "go-forward": () => history.forward(),
+  };
+
+  document.querySelectorAll(".menu-option").forEach((option) => {
+    option.addEventListener("click", () => {
+      const action = option.dataset.action;
+      const fn = actions[action];
+      if (fn) fn();
+      closeAllMenus();
+    });
+  });
+})();
 if (els.cancelWorkspaceBtn) {
   els.cancelWorkspaceBtn.addEventListener("click", closeWorkspaceModal);
 }
@@ -4826,226 +5430,181 @@ function selectAllMatchingWords() {
 }
 
 els.editor.addEventListener("keydown", (event) => {
-  event.stopPropagation();
-  if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "f") {
-    event.preventDefault();
-    setImmersiveEditing(!state.immersive);
-    return;
-  }
-  if (event.key === "Escape" && state.immersive) {
-    event.preventDefault();
-    setImmersiveEditing(false);
-    return;
-  }
-  if (expandSequenceOnEnter(event)) return;
-  if (event.key === "Tab") {
-    event.preventDefault();
-    const start = els.editor.selectionStart;
-    const lineStart = els.editor.value.lastIndexOf("\n", start - 1) + 1;
-    const lineEnd = els.editor.value.indexOf("\n", start);
-    const line = els.editor.value.substring(lineStart, lineEnd === -1 ? els.editor.value.length : lineEnd);
-    
-    const headingMatch = line.match(/^(#+)\s+(.+)$/);
-    const imageMatch = line.match(/^!\[([^\]]*)\]\(([^)]+)\)/);
-    
-    if (headingMatch) {
-      insertAtCursor("    ");
-    } else if (imageMatch) {
-      insertAtCursor("    ");
-    } else {
-      insertAtCursor("    ");
-    }
-    return;
-  }
   const mod = event.ctrlKey || event.metaKey;
-  if (mod && event.altKey && ["ArrowUp", "ArrowDown"].includes(event.key)) {
-    event.preventDefault();
-    addLineCursor(event.key === "ArrowUp" ? -1 : 1);
-    return;
-  }
-  // Ctrl/Cmd+Shift+L 已由 CodeMirror 原生多选 keymap 提供，避免页面层覆盖其多选区。
-  if (false && mod && event.shiftKey && event.key.toLowerCase() === "l") {
-    event.preventDefault();
-    selectAllMatchingWords();
-    return;
-  }
-  // CodeMirror owns Alt+Shift+Arrow: it moves the current line. Do not run
-  // the legacy DOM handler as well, or one keypress would move twice/copy.
-  if (event.defaultPrevented && event.altKey && event.shiftKey && ["ArrowUp", "ArrowDown"].includes(event.key)) {
-    return;
-  }
-  if (mod && !event.altKey) {
-    const key = event.key.toLowerCase();
-    const format = {
-      b: "bold",
-      i: "italic",
-      k: "link",
-      "`": "code",
-      "1": "h1",
-      "2": "h2",
-      "3": "h3",
-    }[key];
-    if (format && !event.shiftKey) {
+  const handled = (() => {
+    if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "f") {
       event.preventDefault();
-      applyFormat(format);
-      return;
+      event.stopPropagation();
+      setImmersiveEditing(!state.immersive);
+      return true;
     }
-    if (event.shiftKey && key === "7") {
+    if (event.key === "Escape" && state.immersive) {
       event.preventDefault();
-      applyFormat("ol");
-      return;
+      event.stopPropagation();
+      setImmersiveEditing(false);
+      return true;
     }
-    if (event.shiftKey && key === "8") {
+    if (expandSequenceOnEnter(event)) {
+      event.stopPropagation();
+      return true;
+    }
+    if (event.key === "Tab") {
       event.preventDefault();
-      applyFormat("ul");
-      return;
-    }
-  }
-  if (mod && event.key === ";") {
-    event.preventDefault();
-    const now = new Date();
-    const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-    insertAtCursor(dateStr);
-    return;
-  }
-  if (mod && event.key === "'") {
-    event.preventDefault();
-    const now = new Date();
-    const timeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
-    insertAtCursor(timeStr);
-    return;
-  }
-  if (mod && event.key.toLowerCase() === "s") {
-    event.preventDefault();
-    saveCurrentDoc({ refreshTree: true });
-    return;
-  }
-  // Ctrl/Cmd+D 由 CodeMirror 的单一 keymap 处理，避免 DOM 层再次复制。
-  if (false && mod && event.key.toLowerCase() === "d") {
-    if (event.repeat) return;
-    event.preventDefault();
-    const value = els.editor.value;
-    const start = els.editor.selectionStart;
-    const end = els.editor.selectionEnd;
-    const scrollTop = els.editor.scrollTop;
-    const scrollLeft = els.editor.scrollLeft;
+      event.stopPropagation();
+      const start = els.editor.selectionStart;
+      const lineStart = els.editor.value.lastIndexOf("\n", start - 1) + 1;
+      const lineEnd = els.editor.value.indexOf("\n", start);
+      const line = els.editor.value.substring(lineStart, lineEnd === -1 ? els.editor.value.length : lineEnd);
     
-    const lineStart = value.lastIndexOf("\n", start - 1) + 1;
-    const lineEnd = value.indexOf("\n", start);
+      const headingMatch = line.match(/^(#+)\s+(.+)$/);
+      const imageMatch = line.match(/^!\[([^\]]*)\]\(([^)]+)\)/);
     
-    let selectedStart = lineStart;
-    let selectedEnd = lineEnd === -1 ? value.length : lineEnd;
-    
-    if (start !== end) {
-      const selLineStart = value.lastIndexOf("\n", start - 1) + 1;
-      const selLineEnd = value.indexOf("\n", end - 1);
-      selectedStart = selLineStart;
-      selectedEnd = selLineEnd === -1 ? value.length : selLineEnd + 1;
-    }
-    
-    const textToCopy = value.substring(selectedStart, selectedEnd);
-    const newText = "\n" + textToCopy;
-    
-    els.editor.value = value.substring(0, selectedEnd) + newText + value.substring(selectedEnd);
-    
-    const newCursorPos = selectedEnd + newText.length;
-    els.editor.selectionStart = newCursorPos;
-    els.editor.selectionEnd = newCursorPos;
-    els.editor.scrollTop = scrollTop;
-    els.editor.scrollLeft = scrollLeft;
-    requestAnimationFrame(() => {
-      els.editor.scrollTop = scrollTop;
-      els.editor.scrollLeft = scrollLeft;
-    });
-    
-    els.editor.dispatchEvent(new Event("input", { bubbles: true }));
-    return;
-  }
-  if (mod && event.key.toLowerCase() === "m") {
-    event.preventDefault();
-    const value = els.editor.value;
-    const start = els.editor.selectionStart;
-    const end = els.editor.selectionEnd;
-    
-    const lineStart = value.lastIndexOf("\n", start - 1) + 1;
-    const lineEnd = value.indexOf("\n", end);
-    
-    const before = value.substring(0, lineStart);
-    const after = lineEnd === -1 ? "" : value.substring(lineEnd + 1);
-    
-    els.editor.value = before + after;
-    
-    const newCursorPos = Math.max(0, before.length);
-    els.editor.selectionStart = newCursorPos;
-    els.editor.selectionEnd = newCursorPos;
-    
-    els.editor.dispatchEvent(new Event("input", { bubbles: true }));
-    return;
-  }
-  if (event.altKey && event.shiftKey && !["ArrowUp", "ArrowDown"].includes(event.key)) {
-    event.preventDefault();
-    const value = els.editor.value;
-    const start = els.editor.selectionStart;
-    
-    const lineNum = (pos) => {
-      return value.substring(0, pos).split("\n").length;
-    };
-    
-    const posFromLine = (line) => {
-      const lines = value.split("\n");
-      if (line <= 1) return 0;
-      if (line > lines.length) return value.length;
-      return lines.slice(0, line - 1).reduce((acc, l) => acc + l.length + 1, 0);
-    };
-    
-    const currentLine = lineNum(start);
-    
-    if (event.key === "ArrowDown") {
-      if (currentLine < value.split("\n").length) {
-        const targetLine = currentLine + 1;
-        const targetPos = posFromLine(targetLine);
-        if (!state.secondaryCursors.includes(targetPos)) {
-          state.secondaryCursors.push(targetPos);
-          state.secondaryCursors.sort((a, b) => a - b);
-        }
+      if (headingMatch) {
+        insertAtCursor("    ");
+      } else if (imageMatch) {
+        insertAtCursor("    ");
+      } else {
+        insertAtCursor("    ");
       }
-    } else if (event.key === "ArrowUp") {
-      if (currentLine > 1) {
-        const targetLine = currentLine - 1;
-        const targetPos = posFromLine(targetLine);
-        if (!state.secondaryCursors.includes(targetPos)) {
-          state.secondaryCursors.push(targetPos);
-          state.secondaryCursors.sort((a, b) => a - b);
-        }
+      return true;
+    }
+    if (mod && event.altKey && ["ArrowUp", "ArrowDown"].includes(event.key)) {
+      event.preventDefault();
+      event.stopPropagation();
+      addLineCursor(event.key === "ArrowUp" ? -1 : 1);
+      return true;
+    }
+    if (mod && !event.altKey) {
+      const key = event.key.toLowerCase();
+      const format = {
+        b: "bold",
+        i: "italic",
+        k: "link",
+        "`": "code",
+        "1": "h1",
+        "2": "h2",
+        "3": "h3",
+      }[key];
+      if (format && !event.shiftKey) {
+        event.preventDefault();
+        event.stopPropagation();
+        applyFormat(format);
+        return true;
       }
-    } else if (event.key >= "1" && event.key <= "9") {
-      const count = parseInt(event.key);
-      for (let i = 1; i <= count; i++) {
-        const targetLine = currentLine + i;
-        if (targetLine <= value.split("\n").length) {
-          const targetPos = posFromLine(targetLine);
+      if (event.shiftKey && key === "7") {
+        event.preventDefault();
+        event.stopPropagation();
+        applyFormat("ol");
+        return true;
+      }
+      if (event.shiftKey && key === "8") {
+        event.preventDefault();
+        event.stopPropagation();
+        applyFormat("ul");
+        return true;
+      }
+    }
+    if (mod && event.key === ";") {
+      event.preventDefault();
+      event.stopPropagation();
+      const now = new Date();
+      const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+      insertAtCursor(dateStr);
+      return true;
+    }
+    if (mod && event.key === "'") {
+      event.preventDefault();
+      event.stopPropagation();
+      const now = new Date();
+      const timeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
+      insertAtCursor(timeStr);
+      return true;
+    }
+    if (mod && event.key.toLowerCase() === "s") {
+      event.preventDefault();
+      event.stopPropagation();
+      saveCurrentDoc({ refreshTree: true });
+      return true;
+    }
+    if (mod && event.key.toLowerCase() === "m") {
+      event.preventDefault();
+      event.stopPropagation();
+      const value = els.editor.value;
+      const start = els.editor.selectionStart;
+      const end = els.editor.selectionEnd;
+      const lineStart = value.lastIndexOf("\n", start - 1) + 1;
+      const lineEnd = value.indexOf("\n", end);
+      const before = value.substring(0, lineStart);
+      const after = lineEnd === -1 ? "" : value.substring(lineEnd + 1);
+      els.editor.value = before + after;
+      const newCursorPos = Math.max(0, before.length);
+      els.editor.selectionStart = newCursorPos;
+      els.editor.selectionEnd = newCursorPos;
+      els.editor.dispatchEvent(new Event("input", { bubbles: true }));
+      return true;
+    }
+    if (event.altKey && event.shiftKey && !["ArrowUp", "ArrowDown"].includes(event.key)) {
+      event.preventDefault();
+      event.stopPropagation();
+      const value = els.editor.value;
+      const start = els.editor.selectionStart;
+      const lineNum = (pos) => value.substring(0, pos).split("\n").length;
+      const posFromLine = (line) => {
+        const lines = value.split("\n");
+        if (line <= 1) return 0;
+        if (line > lines.length) return value.length;
+        return lines.slice(0, line - 1).reduce((acc, l) => acc + l.length + 1, 0);
+      };
+      const currentLine = lineNum(start);
+      if (event.key === "ArrowDown") {
+        if (currentLine < value.split("\n").length) {
+          const targetPos = posFromLine(currentLine + 1);
           if (!state.secondaryCursors.includes(targetPos)) {
             state.secondaryCursors.push(targetPos);
+            state.secondaryCursors.sort((a, b) => a - b);
           }
         }
+      } else if (event.key === "ArrowUp") {
+        if (currentLine > 1) {
+          const targetPos = posFromLine(currentLine - 1);
+          if (!state.secondaryCursors.includes(targetPos)) {
+            state.secondaryCursors.push(targetPos);
+            state.secondaryCursors.sort((a, b) => a - b);
+          }
+        }
+      } else if (event.key >= "1" && event.key <= "9") {
+        const count = parseInt(event.key);
+        for (let i = 1; i <= count; i++) {
+          const targetLine = currentLine + i;
+          if (targetLine <= value.split("\n").length) {
+            const targetPos = posFromLine(targetLine);
+            if (!state.secondaryCursors.includes(targetPos)) {
+              state.secondaryCursors.push(targetPos);
+            }
+          }
+        }
+        state.secondaryCursors.sort((a, b) => a - b);
+      } else if (event.key === "Escape") {
+        state.secondaryCursors = [];
       }
-      state.secondaryCursors.sort((a, b) => a - b);
-    } else if (event.key === "Escape") {
-      state.secondaryCursors = [];
+      updateMultiCursorDisplay();
+      return true;
     }
-    
-    updateMultiCursorDisplay();
-    return;
-  }
-  if (!mod) return;
-  if (event.key.toLowerCase() === "z" && !event.shiftKey) {
-    event.preventDefault();
-    undoEditor();
-  } else if (event.key.toLowerCase() === "y" || (event.key.toLowerCase() === "z" && event.shiftKey)) {
-    event.preventDefault();
-    redoEditor();
-  }
-});
+    if (mod && !event.altKey && !event.shiftKey && (event.key.toLowerCase() === "z" || event.key.toLowerCase() === "y")) {
+      if (event.defaultPrevented) return false;
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.key.toLowerCase() === "z" && !event.shiftKey) {
+        undoEditor();
+      } else {
+        redoEditor();
+      }
+      return true;
+    }
+    return false;
+  })();
+  if (handled) return;
+}, true);
 
 let lastInputLength = 0;
 let lastInputValue = "";
@@ -5188,9 +5747,135 @@ els.editor?.addEventListener("keyup", refreshAiSelectionMenu);
 els.settingsBtn.addEventListener("click", async () => {
   applySettings();
   renderDefaultWorkspaceChoices();
+  renderScreenshotSaveChoices();
   els.settingsModal.classList.remove("hidden");
+  await checkLicenseStatus();
   await Promise.all([loadAiStatus(), loadAgentPolicyStatus()]);
 });
+
+els.goToLicenseBtn?.addEventListener("click", () => {
+  els.licenseModal.classList.add("hidden");
+  els.settingsModal.classList.remove("hidden");
+  document.querySelectorAll(".settings-nav-item").forEach((t) => {
+    t.classList.toggle("active", t.dataset.settingsTab === "license");
+  });
+  document.querySelectorAll(".settings-panel").forEach((p) => {
+    p.classList.toggle("active", p.dataset.settingsPanel === "license");
+  });
+  checkLicenseStatus();
+});
+
+// 授权管理
+async function checkLicenseStatus() {
+  try {
+    const result = await api.get("/api/license/check");
+    if (result.activated) {
+      els.licenseUnactivated.classList.add("hidden");
+      els.licenseActivated.classList.remove("hidden");
+      if (els.activatedMachineCode) els.activatedMachineCode.textContent = result.machineCode || "";
+      if (els.licenseExpiry) {
+        if (result.expiry > 0) {
+          els.licenseExpiry.textContent = new Date(result.expiry).toLocaleDateString("zh-CN");
+          els.licenseExpiryRow.classList.remove("hidden");
+        } else {
+          els.licenseExpiry.textContent = "永久";
+          els.licenseExpiryRow.classList.remove("hidden");
+        }
+      }
+      if (result.timeRolledBack && els.licenseWarning) {
+        els.licenseWarning.textContent = "⚠️ 检测到系统时间曾回拨，当前授权仍有效。请勿再次回拨时间。";
+        els.licenseWarning.classList.remove("hidden");
+      } else if (els.licenseWarning) {
+        els.licenseWarning.classList.add("hidden");
+      }
+    } else {
+      els.licenseUnactivated.classList.remove("hidden");
+      els.licenseActivated.classList.add("hidden");
+      if (els.machineCodeDisplay) els.machineCodeDisplay.textContent = result.machineCode || "获取失败";
+      if (els.licenseWarning && result.error && result.error.includes("时间回拨")) {
+        els.licenseWarning.textContent = `⚠️ ${result.error}`;
+        els.licenseWarning.classList.remove("hidden");
+      } else if (els.licenseWarning) {
+        els.licenseWarning.classList.add("hidden");
+      }
+    }
+    return result;
+  } catch (err) {
+    console.error("License check failed:", err);
+    return { activated: false };
+  }
+}
+
+async function openLicenseModal() {
+  els.settingsModal.classList.remove("hidden");
+  document.querySelectorAll(".settings-nav-item").forEach((t) => {
+    t.classList.toggle("active", t.dataset.settingsTab === "license");
+  });
+  document.querySelectorAll(".settings-panel").forEach((p) => {
+    p.classList.toggle("active", p.dataset.settingsPanel === "license");
+  });
+  await checkLicenseStatus();
+}
+
+if (els.licenseModal) {
+  els.licenseModal.addEventListener("click", (event) => {
+    if (startupLicensePending) return;
+    if (event.target === els.licenseModal) els.licenseModal.classList.add("hidden");
+  });
+}
+if (els.copyMachineCodeBtn) {
+  els.copyMachineCodeBtn.addEventListener("click", async () => {
+    const code = els.machineCodeDisplay?.textContent || "";
+    if (!code || code === "加载中...") return;
+    try {
+      await navigator.clipboard.writeText(code);
+      els.copyMachineCodeBtn.textContent = "已复制";
+      setTimeout(() => { els.copyMachineCodeBtn.textContent = "复制"; }, 2000);
+    } catch (_) {
+      els.machineCodeDisplay?.select?.();
+      document.execCommand?.("copy");
+    }
+  });
+}
+if (els.activateLicenseBtn) {
+  els.activateLicenseBtn.addEventListener("click", async () => {
+    const licenseKey = els.licenseKeyInput?.value?.trim();
+    if (!licenseKey) {
+      els.licenseStatus.textContent = "请输入授权码";
+      els.licenseStatus.className = "license-status error";
+      return;
+    }
+    els.activateLicenseBtn.disabled = true;
+    els.activateLicenseBtn.textContent = "验证中...";
+    try {
+      const result = await api.post("/api/license/activate", { licenseKey });
+      if (result.valid) {
+        els.licenseStatus.textContent = "激活成功！";
+        els.licenseStatus.className = "license-status success";
+        setTimeout(() => checkLicenseStatus(), 800);
+      } else {
+        els.licenseStatus.textContent = result.error || "激活失败";
+        els.licenseStatus.className = "license-status error";
+      }
+    } catch (err) {
+      els.licenseStatus.textContent = `激活失败: ${err.message}`;
+      els.licenseStatus.className = "license-status error";
+    } finally {
+      els.activateLicenseBtn.disabled = false;
+      els.activateLicenseBtn.textContent = "激活授权";
+    }
+  });
+}
+if (els.deactivateLicenseBtn) {
+  els.deactivateLicenseBtn.addEventListener("click", async () => {
+    if (!confirm("确定要解除当前设备的授权吗？")) return;
+    try {
+      // 通过删除 .license 文件解除授权（通过 API）
+      await api.post("/api/license/activate", { licenseKey: "" });
+    } catch (_) { /* ignore */ }
+    checkLicenseStatus();
+  });
+}
 
 [els.aiBaseUrl, els.aiEmbeddingModel, els.aiChatModel].filter(Boolean).forEach((input) => {
   input.addEventListener("input", () => {
@@ -5329,6 +6014,14 @@ function renderDefaultWorkspaceChoices() {
   });
 }
 
+function renderScreenshotSaveChoices() {
+  if (!els.screenshotSaveChoices) return;
+  const current = localStorage.getItem("screenshotSaveLocation") || "workspace";
+  els.screenshotSaveChoices.querySelectorAll("button").forEach((button) => {
+    button.classList.toggle("active", button.dataset.save === current);
+  });
+}
+
 async function loadAboutInfo() {
   try {
     const result = await api.get("/api/version");
@@ -5352,6 +6045,25 @@ els.closeSettingsBtn.addEventListener("click", () => els.settingsModal.classList
 els.settingsModal.addEventListener("click", (event) => {
   if (event.target === els.settingsModal) els.settingsModal.classList.add("hidden");
 });
+
+document.querySelectorAll(".settings-nav-item").forEach((tab) => {
+  tab.addEventListener("click", () => {
+    const target = tab.dataset.settingsTab;
+    document.querySelectorAll(".settings-nav-item").forEach((t) => t.classList.toggle("active", t === tab));
+    document.querySelectorAll(".settings-panel").forEach((p) => {
+      p.classList.toggle("active", p.dataset.settingsPanel === target);
+    });
+  });
+});
+
+const resetEditorLayoutBtn = document.querySelector("#resetEditorLayoutBtn");
+if (resetEditorLayoutBtn) {
+  resetEditorLayoutBtn.addEventListener("click", () => {
+    localStorage.removeItem("editorPaneLayout");
+    if (typeof applyEditorSplitterLayout === "function") applyEditorSplitterLayout();
+    showToast("编辑器布局已重置");
+  });
+}
 
 function openCommunityModal() {
   els.settingsModal.classList.add("hidden");
@@ -5428,6 +6140,175 @@ els.themeChoices.addEventListener("click", (event) => {
   localStorage.setItem("docTheme", button.dataset.theme);
   applySettings();
 });
+els.screenshotSaveChoices?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-save]");
+  if (!button) return;
+  localStorage.setItem("screenshotSaveLocation", button.dataset.save);
+  renderScreenshotSaveChoices();
+  showToast(button.dataset.save === "workspace" ? "截图将保存到文档所属工作区" : "截图将保存到默认工作路径");
+});
+
+function initPdfExportSettings() {
+  const saved = JSON.parse(localStorage.getItem("pdfExportSettings") || "{}");
+  els.pdfShowDate.checked = saved.showDate !== false;
+  els.pdfShowAuthor.checked = saved.showAuthor !== false;
+  els.pdfShowFooter.checked = saved.showFooter !== false;
+  const persist = () => {
+    const next = {
+      showDate: els.pdfShowDate.checked,
+      showAuthor: els.pdfShowAuthor.checked,
+      showFooter: els.pdfShowFooter.checked,
+    };
+    localStorage.setItem("pdfExportSettings", JSON.stringify(next));
+    if (els.pdfSettingsStatus) {
+      els.pdfSettingsStatus.textContent = "已保存 · 下次导出生效";
+      setTimeout(() => { if (els.pdfSettingsStatus) els.pdfSettingsStatus.textContent = ""; }, 2000);
+    }
+  };
+  els.pdfShowDate.addEventListener("change", persist);
+  els.pdfShowAuthor.addEventListener("change", persist);
+  els.pdfShowFooter.addEventListener("change", persist);
+}
+
+initPdfExportSettings();
+
+function initEditorSplitters() {
+  if (!els.editorBody) return;
+
+  const MIN_OUTLINE = 140;
+  const MAX_OUTLINE = 400;
+  const MIN_EDITOR = 280;
+  const MIN_PREVIEW = 220;
+
+  function loadLayout() {
+    try {
+      const saved = JSON.parse(localStorage.getItem("editorPaneLayout") || "{}");
+      return {
+        outlineWidth: saved.outlineWidth || 224,
+        editorRatio: saved.editorRatio || 0.5,
+      };
+    } catch (_) {
+      return { outlineWidth: 224, editorRatio: 0.5 };
+    }
+  }
+
+  function saveLayout(layout) {
+    localStorage.setItem("editorPaneLayout", JSON.stringify(layout));
+  }
+
+  function applyLayout() {
+    const layout = loadLayout();
+    const bodyWidth = els.editorBody.getBoundingClientRect().width;
+    const outlineVisible = !els.editorBody.classList.contains("outline-hidden");
+    const previewVisible = !els.editorBody.classList.contains("preview-hidden");
+
+    if (outlineVisible) {
+      const w = Math.max(MIN_OUTLINE, Math.min(MAX_OUTLINE, layout.outlineWidth));
+      els.editorBody.style.gridTemplateColumns = `${w}px 3px minmax(0, 1fr)`;
+      if (previewVisible) {
+        els.editorBody.style.gridTemplateColumns += ` 3px minmax(0, 1fr)`;
+        const editorFlex = layout.editorRatio;
+        const remaining = bodyWidth - w - 6;
+        const editorW = Math.max(MIN_EDITOR, Math.floor(remaining * editorFlex));
+        const previewW = Math.max(MIN_PREVIEW, remaining - editorW);
+        els.editorBody.style.gridTemplateColumns = `${w}px 3px ${editorW}px 3px ${previewW}px`;
+      } else {
+        els.editorBody.style.gridTemplateColumns = `${w}px 3px minmax(0, 1fr) 0 0`;
+      }
+    } else {
+      if (previewVisible) {
+        const remaining = bodyWidth - 3;
+        const editorFlex = layout.editorRatio;
+        const editorW = Math.max(MIN_EDITOR, Math.floor(remaining * editorFlex));
+        const previewW = Math.max(MIN_PREVIEW, remaining - editorW);
+        els.editorBody.style.gridTemplateColumns = `0 0 ${editorW}px 3px ${previewW}px`;
+      } else {
+        els.editorBody.style.gridTemplateColumns = `0 0 minmax(0, 1fr) 0 0`;
+      }
+    }
+  }
+
+  applyLayout();
+  window.addEventListener("resize", () => requestAnimationFrame(applyLayout));
+
+  function startOutlineDrag(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const startX = event.clientX;
+    const layout = loadLayout();
+    const startOutlineWidth = layout.outlineWidth;
+    els.outlineSplitter.classList.add("dragging");
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    function onMove(e) {
+      const delta = e.clientX - startX;
+      const newWidth = Math.max(MIN_OUTLINE, Math.min(MAX_OUTLINE, startOutlineWidth + delta));
+      const bodyWidth = els.editorBody.getBoundingClientRect().width;
+      const rest = bodyWidth - newWidth - (els.editorBody.classList.contains("preview-hidden") ? 3 : 6);
+      const minEditor = els.editorBody.classList.contains("preview-hidden") ? MIN_EDITOR : MIN_EDITOR + MIN_PREVIEW;
+      if (rest < minEditor) return;
+      layout.outlineWidth = newWidth;
+      saveLayout(layout);
+      applyLayout();
+    }
+
+    function onUp() {
+      els.outlineSplitter.classList.remove("dragging");
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    }
+
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }
+
+  function startPreviewDrag(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const bodyWidth = els.editorBody.getBoundingClientRect().width;
+    const startX = event.clientX;
+    const layout = loadLayout();
+    const isOutlineVisible = !els.editorBody.classList.contains("outline-hidden");
+    const outlineWidth = isOutlineVisible ? layout.outlineWidth : 0;
+    const splitterCount = isOutlineVisible ? 2 : 1;
+    const available = bodyWidth - outlineWidth - splitterCount * 3;
+    const startEditorWidth = Math.floor(available * layout.editorRatio);
+    els.previewSplitter.classList.add("dragging");
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    function onMove(e) {
+      const delta = e.clientX - startX;
+      let newEditorWidth = startEditorWidth + delta;
+      const maxEditorWidth = available - MIN_PREVIEW;
+      newEditorWidth = Math.max(MIN_EDITOR, Math.min(maxEditorWidth, newEditorWidth));
+      layout.editorRatio = newEditorWidth / available;
+      saveLayout(layout);
+      applyLayout();
+    }
+
+    function onUp() {
+      els.previewSplitter.classList.remove("dragging");
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    }
+
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }
+
+  els.outlineSplitter?.addEventListener("mousedown", startOutlineDrag);
+  els.previewSplitter?.addEventListener("mousedown", startPreviewDrag);
+
+  window.applyEditorSplitterLayout = applyLayout;
+}
+
+initEditorSplitters();
 els.bgImageInput.addEventListener("change", () => {
   const file = els.bgImageInput.files?.[0];
   if (!file) return;
@@ -5447,6 +6328,13 @@ els.docFontSize.addEventListener("input", () => {
   localStorage.setItem("docContentFontSize", els.docFontSize.value);
   applySettings();
 });
+if (els.windowZoom) {
+  els.windowZoom.addEventListener("input", () => {
+    const z = Number(els.windowZoom.value);
+    localStorage.setItem("windowZoom", String(z));
+    applyWindowZoom(z);
+  });
+}
 els.globalFontFamily.addEventListener("change", () => {
   localStorage.setItem("docFontFamily", els.globalFontFamily.value);
   applySettings();
@@ -5487,8 +6375,8 @@ els.editorToolbar.addEventListener("click", (event) => {
   const button = event.target.closest("[data-format]");
   if (button) applyFormat(button.dataset.format);
 });
-els.newFolderBtn.addEventListener("click", () => openCreateModal("folder"));
-els.newDocBtn.addEventListener("click", () => openCreateModal("doc"));
+els.newFolderBtn?.addEventListener("click", () => openCreateModal("folder"));
+els.newDocBtn?.addEventListener("click", () => openCreateModal("doc"));
 els.createForm.addEventListener("submit", submitCreate);
 els.cancelCreateBtn.addEventListener("click", closeCreateModal);
 els.createModal.addEventListener("click", (event) => {
@@ -5499,17 +6387,31 @@ els.confirmDeleteBtn.addEventListener("click", confirmDeleteSelected);
 els.deleteModal.addEventListener("click", (event) => {
   if (event.target === els.deleteModal) closeDeleteModal();
 });
-els.viewBtn.addEventListener("click", async () => {
-  if (state.mode === "edit" && state.currentPath) {
-    await saveCurrentDoc({ keepEditorState: false });
+els.modeToggleBtn.addEventListener("click", async () => {
+  if (state.mode === "view") {
+    if (state.currentPath) setMode("edit");
+  } else if (state.mode === "edit") {
+    if (state.currentPath) {
+      await saveCurrentDoc({ keepEditorState: false });
+    }
+    setMode("view");
+  } else if (state.mode === "graph") {
+    if (state.currentPath) setMode("view");
+    else setMode("edit");
   }
-  setMode("view");
 });
-els.editBtn.addEventListener("click", () => state.currentPath && setMode("edit"));
 els.graphBtn.addEventListener("click", () => setMode("graph"));
 els.focusModeBtn.addEventListener("click", () => setImmersiveEditing(!state.immersive));
 els.previewToggleBtn.addEventListener("click", () => setPreviewVisible(!state.previewVisible));
+els.outlineToggleBtn?.addEventListener("click", () => setEditorOutlineVisible(!state.editorOutlineVisible));
+els.editorOutline?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-heading-text]");
+  if (!button) return;
+  scrollEditorToHeading(button.dataset.headingText);
+});
 els.deleteBtn.addEventListener("click", deleteSelected);
+els.exportPdfBtn?.addEventListener("click", exportCurrentDocToPdf);
+els.copyWechatBtn?.addEventListener("click", copyCurrentDocAsWechat);
 els.saveBtn.addEventListener("click", async () => {
   try {
     await saveCurrentDoc({ refreshTree: true });
@@ -5727,21 +6629,132 @@ if (els.recentDocs) {
 }
 
 async function bootstrap(refresh = false) {
-  const data = await api.get(`/api/tree${refresh ? "?refresh=1" : ""}`);
-  state.tree = data.tree;
-  state.flatFiles = flatten(state.tree, []);
-  if (data.workspaces && data.workspaces.length) state.workspaces = data.workspaces;
-  if (data.defaultWorkspaceId) state.defaultWorkspaceId = data.defaultWorkspaceId;
-  els.docCount.textContent = `${data.count || 0} ${text.docsUnit} / ${state.workspaces.filter((ws) => ws.visible).length} 个工作路径`;
-  renderWorkspaceSummary();
-  renderTree(state.tree);
+  try {
+    const data = await api.get(`/api/tree${refresh ? "?refresh=1" : ""}`);
+    state.tree = data.tree;
+    state.flatFiles = flatten(state.tree, []);
+    if (data.workspaces && data.workspaces.length) state.workspaces = data.workspaces;
+    if (data.defaultWorkspaceId) state.defaultWorkspaceId = data.defaultWorkspaceId;
+    els.docCount.textContent = `${data.count || 0} ${text.docsUnit} / ${state.workspaces.filter((ws) => ws.visible).length} 个工作路径`;
+    renderWorkspaceSummary();
+    renderTree(state.tree);
+  } catch (err) {
+    console.error("Bootstrap failed:", err);
+    els.docCount.textContent = "加载失败";
+  }
 }
 
-applySettings();
-restoreSidebarWidth();
-restoreSidebarCollapsed();
-loadAiHistory();
-renderAiMessages();
-loadRecentDocs();
-renderRecentDocs();
-bootstrap();
+// 启动初始化——先启动 splash 进度，再执行其他可能抛错的初始化
+let startupLicensePending = false;
+const appSplash = document.querySelector("#appSplash");
+const splashProgressFill = document.querySelector("#splashProgressFill");
+const splashProgressPct = document.querySelector("#splashProgressPct");
+const splashProgressText = document.querySelector("#splashProgressText");
+
+let _splashProgress = 0;
+function setSplashProgress(pct, text) {
+  _splashProgress = pct;
+  if (splashProgressFill) splashProgressFill.style.width = pct + "%";
+  if (splashProgressPct) splashProgressPct.textContent = pct + "%";
+  if (text && splashProgressText) splashProgressText.textContent = text;
+}
+
+// 尽早启动 license 检查和 bootstrap，避免后续初始化抛错时卡在 0%
+startupLicenseCheck();
+
+try { applySettings(); } catch (e) { console.error("applySettings failed:", e); }
+try { restoreWindowZoom(); } catch (e) { console.error("restoreWindowZoom failed:", e); }
+try { restoreSidebarWidth(); } catch (e) { console.error("restoreSidebarWidth failed:", e); }
+try { restoreSidebarCollapsed(); } catch (e) { console.error("restoreSidebarCollapsed failed:", e); }
+
+const _deferIdle = window.requestIdleCallback || ((fn) => setTimeout(fn, 50));
+_deferIdle(() => {
+  try { loadAiHistory(); } catch (e) { console.error("loadAiHistory failed:", e); }
+  try { renderAiMessages(); } catch (e) { console.error("renderAiMessages failed:", e); }
+  try { loadRecentDocs(); } catch (e) { console.error("loadRecentDocs failed:", e); }
+  try { renderRecentDocs(); } catch (e) { console.error("renderRecentDocs failed:", e); }
+});
+
+function hideSplash() {
+  if (appSplash && !appSplash.classList.contains("hidden")) {
+    setSplashProgress(100, "加载完成");
+    setTimeout(() => {
+      appSplash.classList.add("hidden");
+      setTimeout(() => appSplash.remove(), 400);
+      showWelcomeIfNeeded();
+    }, 300);
+  } else {
+    showWelcomeIfNeeded();
+  }
+}
+
+function showWelcomeIfNeeded() {
+  const dontShow = localStorage.getItem("welcomeDontShow");
+  if (dontShow === "1") return;
+  const overlay = document.getElementById("welcomeOverlay");
+  if (!overlay) return;
+  const startBtn = document.getElementById("welcomeStartBtn");
+  const dontShowCb = document.getElementById("welcomeDontShow");
+  const tabs = overlay.querySelectorAll(".welcome-tab");
+  const panels = overlay.querySelectorAll(".welcome-panel");
+
+  tabs.forEach(tab => {
+    tab.addEventListener("click", () => {
+      const idx = tab.dataset.welcomeTab;
+      tabs.forEach(t => t.classList.toggle("active", t === tab));
+      panels.forEach(p => p.classList.toggle("active", p.dataset.welcomePanel === idx));
+    });
+  });
+
+  if (startBtn) {
+    startBtn.addEventListener("click", () => {
+      if (dontShowCb && dontShowCb.checked) {
+        localStorage.setItem("welcomeDontShow", "1");
+      }
+      overlay.classList.add("hidden");
+      setTimeout(() => overlay.remove(), 400);
+    });
+  }
+
+  overlay.classList.remove("hidden");
+}
+
+async function startupLicenseCheck() {
+  setSplashProgress(15, "正在初始化…");
+
+  const licensePromise = checkLicenseStatus();
+  const bootstrapPromise = bootstrap();
+
+  const result = await licensePromise;
+  setSplashProgress(55, result.activated ? "正在加载文档库…" : "等待授权…");
+
+  if (result.activated) {
+    await bootstrapPromise;
+    setSplashProgress(85, "正在完成初始化…");
+    await Promise.resolve();
+    setSplashProgress(100, "加载完成");
+    setTimeout(() => hideSplash(), 200);
+  } else {
+    await bootstrapPromise;
+    state.tree = [];
+    state.flatFiles = [];
+    renderTree([]);
+    startupLicensePending = true;
+    els.licenseModal.classList.remove("hidden");
+    els.licenseModal.classList.add("startup-block");
+    hideSplash();
+    await new Promise((resolve) => {
+      const check = setInterval(async () => {
+        const r = await checkLicenseStatus();
+        if (r.activated) {
+          clearInterval(check);
+          startupLicensePending = false;
+          els.licenseModal.classList.remove("startup-block");
+          els.licenseModal.classList.add("hidden");
+          resolve();
+        }
+      }, 1500);
+    });
+    await bootstrap();
+  }
+}

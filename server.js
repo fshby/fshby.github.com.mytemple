@@ -1,12 +1,13 @@
 import { createServer } from "node:http";
 import { createHash, randomUUID } from "node:crypto";
-import { cp, readFile, writeFile, readdir, stat, mkdir, rm, rename } from "node:fs/promises";
+import { cp, readFile, writeFile, readdir, stat, mkdir, rm, rename, unlink } from "node:fs/promises";
 import { existsSync, readFileSync, watch } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createDocumentTemplate, frontmatterSummary, normalizeFrontmatter } from "./server/frontmatter.js";
 import { agentPolicyPath, appendAuditRecord, defaultAgentRules, loadAgentPolicy, policyAllows } from "./server/agent-policy.js";
 import { RagService } from "./server/rag.js";
+import { getMachineCode, verifyLicense, getLicenseStatus } from "./server/license.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DOCS_ROOT = process.env.MYTEMPLE_DOCS_ROOT || path.join(__dirname, "docs");
@@ -82,8 +83,9 @@ const mimeTypes = {
 };
 
 function send(res, status, body, type = "application/json; charset=utf-8", headers = {}) {
-  res.writeHead(status, { "Content-Type": type, "Cache-Control": "no-store", ...headers });
-  res.end(body);
+  const buf = typeof body === "string" ? Buffer.from(body, "utf8") : body;
+  res.writeHead(status, { "Content-Type": type, "Cache-Control": "no-store", "Content-Length": buf.length, ...headers });
+  res.end(buf);
 }
 
 function json(res, status, payload) {
@@ -227,6 +229,25 @@ function normalizeSourcePath(input) {
     throw new Error("Invalid source path");
   }
   return { relative: clean, absolute };
+}
+
+const WORKSPACE_SOURCE_PREFIX = /^ws_[a-f0-9]{10}$/i;
+
+async function resolveSourceAsset(input) {
+  const decoded = decodeURIComponent(input || "").replace(/\\/g, "/");
+  const segments = decoded.split("/").filter(Boolean);
+  if (segments.length >= 2 && WORKSPACE_SOURCE_PREFIX.test(segments[0])) {
+    const { workspaces } = await loadWorkspaces();
+    const workspace = workspaces.find((item) => item.id === segments[0]);
+    if (!workspace) throw new Error("工作区不存在");
+    const rest = segments.slice(1).join("/");
+    const clean = path.posix.normalize(rest).replace(/^(\.\.\/)+/, "").replace(/^\.$/, "");
+    const sourceRoot = path.join(workspace.root, "source");
+    const absolute = path.resolve(sourceRoot, clean);
+    if (!isInside(workspace.root, absolute)) throw new Error("Invalid source path");
+    return { relative: `${segments[0]}/${clean}`, absolute, workspace };
+  }
+  return { relative: normalizeSourcePath(decoded).relative, absolute: normalizeSourcePath(decoded).absolute };
 }
 
 function sanitizeEntryName(input) {
@@ -1538,6 +1559,40 @@ async function readJson(req) {
 }
 
 async function handleApi(req, res, url) {
+  // 授权管理 API
+  if (url.pathname === "/api/license/status" && req.method === "GET") {
+    const status = await getLicenseStatus();
+    return json(res, 200, status);
+  }
+
+  if (url.pathname === "/api/license/activate" && req.method === "POST") {
+    const payload = await readJson(req);
+    const licenseKey = String(payload.licenseKey || "").trim();
+    if (!licenseKey) return json(res, 400, { error: "请输入授权码" });
+    const result = await verifyLicense(licenseKey);
+    if (result.valid) {
+      // 保存授权码到本地
+      const licenseFile = path.join(DATA_ROOT, ".license");
+      await mkdir(path.dirname(licenseFile), { recursive: true }).catch(() => {});
+      await writeFile(licenseFile, licenseKey, "utf8").catch(() => {});
+    }
+    return json(res, 200, result);
+  }
+
+  if (url.pathname === "/api/license/check" && req.method === "GET") {
+    const licenseFile = path.join(DATA_ROOT, ".license");
+    if (!existsSync(licenseFile)) {
+      return json(res, 200, { activated: false, machineCode: getMachineCode() });
+    }
+    try {
+      const licenseKey = await readFile(licenseFile, "utf8");
+      const result = await verifyLicense(licenseKey);
+      return json(res, 200, { activated: result.valid, ...result });
+    } catch (err) {
+      return json(res, 200, { activated: false, error: err.message, machineCode: getMachineCode() });
+    }
+  }
+
   if (url.pathname === "/api/asset" && req.method === "POST") {
     await ensureDocs();
     const payload = await readJson(req);
@@ -1551,10 +1606,45 @@ async function handleApi(req, res, url) {
       .replace(/[^\w.-]+/g, "-")
       .replace(/^-+|-+$/g, "");
     const fileName = safeName.toLowerCase().endsWith(ext) ? safeName : `${safeName}${ext}`;
-    const { relative, absolute } = normalizeSourcePath(fileName);
+    const requestedWorkspaceId = String(payload.workspaceId || "").trim();
+    let targetRoot = SOURCE_ROOT;
+    let relative = fileName;
+    let baseUrlPath = `/source/${relative}`;
+    if (requestedWorkspaceId && WORKSPACE_SOURCE_PREFIX.test(requestedWorkspaceId)) {
+      const { workspaces } = await loadWorkspaces();
+      const workspace = workspaces.find((item) => item.id === requestedWorkspaceId);
+      if (workspace) {
+        targetRoot = path.join(workspace.root, "source");
+        relative = `${requestedWorkspaceId}/${fileName}`;
+        baseUrlPath = `/source/${relative}`;
+      }
+    }
+    const absolute = path.resolve(targetRoot, fileName);
+    if (!isInside(targetRoot, absolute)) return json(res, 400, { error: "Invalid asset path" });
     await mkdir(path.dirname(absolute), { recursive: true });
     await writeFile(absolute, imageBuffer);
-    return json(res, 200, { path: `/source/${relative}`, markdown: `![${path.basename(relative, ext)}](/source/${relative})` });
+    return json(res, 200, { path: baseUrlPath, markdown: `![${path.basename(relative, ext)}](/source/${relative})` });
+  }
+
+  if (url.pathname === "/api/asset/delete" && req.method === "POST") {
+    await ensureDocs();
+    const payload = await readJson(req);
+    const rawPath = String(payload.path || "").trim();
+    if (!rawPath) return json(res, 400, { error: "缺少图片路径" });
+    // 仅允许删除 source 目录下的资源
+    const normalized = rawPath.replace(/^\/+/, "").replace(/^source\/+/, "");
+    try {
+      const resolved = await resolveSourceAsset(normalized);
+      if (!existsSync(resolved.absolute)) {
+        return json(res, 404, { error: "图片文件不存在" });
+      }
+      await unlink(resolved.absolute);
+      log("info", `Deleted asset: ${resolved.absolute}`);
+      return json(res, 200, { ok: true, path: resolved.relative });
+    } catch (e) {
+      log("warn", `Asset delete failed: ${rawPath}, ${e.message}`);
+      return json(res, 400, { error: `无法删除图片: ${e.message}` });
+    }
   }
 
   if (url.pathname === "/api/workspaces") {
@@ -2268,13 +2358,43 @@ async function handleApi(req, res, url) {
     await refreshCache(true);
     return json(res, 200, copied);
   }
+  if (url.pathname === "/api/rename" && req.method === "POST") {
+    const payload = await readJson(req);
+    const sourcePath = String(payload.path || "").trim();
+    const newName = String(payload.newName || "").trim();
+    if (!sourcePath) return json(res, 400, { error: "Rename path is required" });
+    if (!newName) return json(res, 400, { error: "New name is required" });
+    const source = await normalizeDocPath(sourcePath);
+    if (!existsSync(source.absolute)) return json(res, 404, { error: "Source not found" });
+    if (!source.relative) return json(res, 400, { error: "Workspace root cannot be renamed" });
+    const sourceStat = await stat(source.absolute);
+    const isDir = sourceStat.isDirectory();
+    let safeName = newName;
+    if (!isDir) {
+      if (!safeName.toLowerCase().endsWith(".md")) safeName = safeName + ".md";
+    }
+    safeName = safeName.replace(/[\\/]/g, "").trim();
+    if (!safeName || safeName === "." || safeName === "..") {
+      return json(res, 400, { error: "Invalid name" });
+    }
+    const dir = path.dirname(source.absolute);
+    const destAbsolute = path.join(dir, safeName);
+    if (destAbsolute === source.absolute) {
+      return json(res, 200, { ok: true, newPath: source.ref });
+    }
+    if (existsSync(destAbsolute)) return json(res, 409, { error: "Target already exists" });
+    await rename(source.absolute, destAbsolute);
+    await refreshCache(true);
+    const newRef = workspaceRef(source.workspace.id, path.posix.join(path.posix.dirname(source.relative), safeName));
+    return json(res, 200, { ok: true, newPath: newRef });
+  }
   return json(res, 404, { error: "Unknown API route" });
 }
 
 async function serveStatic(res, pathname) {
   if (pathname.startsWith("/source/")) {
-    const { absolute } = normalizeSourcePath(pathname.slice("/source/".length));
     try {
+      const { absolute } = await resolveSourceAsset(pathname.slice("/source/".length));
       const body = await readFile(absolute);
       return send(res, 200, body, mimeTypes[path.extname(absolute).toLowerCase()] || "application/octet-stream", {
         "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
@@ -2321,4 +2441,15 @@ createServer(async (req, res) => {
   }
 }).listen(PORT, HOST, () => {
   console.log(`Markdown knowledge app running at http://${HOST}:${PORT}`);
+  // 启动时打印机器码，方便用户获取
+  try {
+    const machineCode = getMachineCode();
+    console.log(`Machine Code: ${machineCode}`);
+  } catch (_) { /* ignore */ }
+  // 预热缓存，避免首次请求时阻塞
+  refreshCache().then(() => {
+    log("info", `Cache preloaded: ${cache.files.length} documents.`);
+  }).catch((error) => {
+    log("warn", `Cache preload failed: ${error.message}`);
+  });
 });
