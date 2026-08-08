@@ -82,6 +82,7 @@ const mimeTypes = {
   ".webp": "image/webp",
   ".ico": "image/x-icon",
   ".webmanifest": "application/manifest+json",
+  ".mp4": "video/mp4",
 };
 
 function send(res, status, body, type = "application/json; charset=utf-8", headers = {}) {
@@ -2521,7 +2522,7 @@ async function serveStatic(res, pathname) {
   try {
     const body = await readFile(absolute);
     const extension = path.extname(absolute).toLowerCase();
-    const cacheable = [".css", ".js", ".webp"].includes(extension);
+    const cacheable = [".css", ".js", ".webp", ".mp4"].includes(extension);
     send(res, 200, body, mimeTypes[extension] || "application/octet-stream", cacheable ? {
       "Cache-Control": "public, max-age=31536000, immutable",
     } : undefined);
