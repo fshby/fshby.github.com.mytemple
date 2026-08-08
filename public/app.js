@@ -123,6 +123,7 @@ const state = {
     transform: null,
     configDirty: false,
     statusTimer: 0,
+    chatProvider: "ollama",
   },
 };
 
@@ -215,17 +216,22 @@ const els = {
   licenseExpiryRow: document.querySelector("#licenseExpiryRow"),
   licenseWarning: document.querySelector("#licenseWarning"),
   deactivateLicenseBtn: document.querySelector("#deactivateLicenseBtn"),
-  communityBtn: document.querySelector("#communityBtn"),
-  communityModal: document.querySelector("#communityModal"),
-  closeCommunityBtn: document.querySelector("#closeCommunityBtn"),
-  backCommunityBtn: document.querySelector("#backCommunityBtn"),
-  aboutBtn: document.querySelector("#aboutBtn"),
-  aboutModal: document.querySelector("#aboutModal"),
-  closeAboutBtn: document.querySelector("#closeAboutBtn"),
   aboutVersion: document.querySelector("#aboutVersion"),
   aboutDate: document.querySelector("#aboutDate"),
   aboutReleaseNotes: document.querySelector("#aboutReleaseNotes"),
   checkUpdateBtn: document.querySelector("#checkUpdateBtn"),
+  kmReviewDays: document.querySelector("#kmReviewDays"),
+  kmEnableReminder: document.querySelector("#kmEnableReminder"),
+  kmRefreshBtn: document.querySelector("#kmRefreshBtn"),
+  kmStatus: document.querySelector("#kmStatus"),
+  kmStats: document.querySelector("#kmStats"),
+  kmHealthScore: document.querySelector("#kmHealthScore"),
+  kmMissingTagsCount: document.querySelector("#kmMissingTagsCount"),
+  kmMissingTagsList: document.querySelector("#kmMissingTagsList"),
+  kmMissingLinksCount: document.querySelector("#kmMissingLinksCount"),
+  kmMissingLinksList: document.querySelector("#kmMissingLinksList"),
+  kmStaleCount: document.querySelector("#kmStaleCount"),
+  kmStaleList: document.querySelector("#kmStaleList"),
   themeChoices: document.querySelector("#themeChoices"),
   bgImageInput: document.querySelector("#bgImageInput"),
   globalFontSize: document.querySelector("#globalFontSize"),
@@ -286,6 +292,10 @@ const els = {
   aiBaseUrl: document.querySelector("#aiBaseUrl"),
   aiEmbeddingModel: document.querySelector("#aiEmbeddingModel"),
   aiChatModel: document.querySelector("#aiChatModel"),
+  aiProviderChoices: document.querySelector("#aiProviderChoices"),
+  aiDeepseekApiKey: document.querySelector("#aiDeepseekApiKey"),
+  aiDeepseekBaseUrl: document.querySelector("#aiDeepseekBaseUrl"),
+  aiDeepseekChatModel: document.querySelector("#aiDeepseekChatModel"),
   aiModelChoices: document.querySelector("#aiModelChoices"),
   aiTestBtn: document.querySelector("#aiTestBtn"),
   aiSaveBtn: document.querySelector("#aiSaveBtn"),
@@ -343,6 +353,323 @@ const api = {
     return response.json();
   },
 };
+
+// === 周期性 Perlin 噪声：确保纹理无缝平铺 ===
+// gridSize: 网格单元数（2 的幂次），tileSize: 瓦片像素尺寸
+function createPeriodicPerlin(gridSize, tileSize, seed) {
+  const N = gridSize;
+  const hashLen = N * N;
+  const perm = new Int32Array(hashLen * 2);
+  const gradX = new Float32Array(hashLen);
+  const gradY = new Float32Array(hashLen);
+  let s = seed | 0;
+  function lcg() {
+    s = (Math.imul(s, 1103515245) + 12345) & 0x7fffffff;
+    return s / 0x7fffffff;
+  }
+  for (let i = 0; i < hashLen; i += 1) {
+    perm[i] = i;
+  }
+  for (let i = hashLen - 1; i > 0; i -= 1) {
+    const j = Math.floor(lcg() * (i + 1));
+    const tmp = perm[i];
+    perm[i] = perm[j];
+    perm[j] = tmp;
+  }
+  for (let i = 0; i < hashLen; i += 1) {
+    const angle = lcg() * Math.PI * 2;
+    gradX[i] = Math.cos(angle);
+    gradY[i] = Math.sin(angle);
+  }
+  const t = 1 / tileSize;
+  function fade(x) { return x * x * x * (x * (x * 6 - 15) + 10); }
+  function lerp(a, b, t2) { return a + (b - a) * t2; }
+  function noise(px, py) {
+    const fx = px * t * N;
+    const fy = py * t * N;
+    const x0 = ((fx | 0) % N + N) % N;
+    const y0 = ((fy | 0) % N + N) % N;
+    const x1 = (x0 + 1) % N;
+    const y1 = (y0 + 1) % N;
+    const u = fade(fx - (fx | 0));
+    const v = fade(fy - (fy | 0));
+    const dx = fx - (fx | 0);
+    const dy = fy - (fy | 0);
+    const i00 = perm[y0 * N + x0];
+    const i10 = perm[y0 * N + x1];
+    const i01 = perm[y1 * N + x0];
+    const i11 = perm[y1 * N + x1];
+    const n00 = gradX[i00] * dx + gradY[i00] * dy;
+    const n10 = gradX[i10] * (dx - 1) + gradY[i10] * dy;
+    const n01 = gradX[i01] * dx + gradY[i01] * (dy - 1);
+    const n11 = gradX[i11] * (dx - 1) + gradY[i11] * (dy - 1);
+    const nx0 = lerp(n00, n10, u);
+    const nx1 = lerp(n01, n11, u);
+    return lerp(nx0, nx1, v);
+  }
+  // 多八度分形布朗运动 (fBm)
+  function fbm(px, py, octaves) {
+    let value = 0;
+    let amplitude = 1;
+    let frequency = 1;
+    let maxValue = 0;
+    for (let i = 0; i < octaves; i += 1) {
+      value += noise(px * frequency, py * frequency) * amplitude;
+      maxValue += amplitude;
+      amplitude *= 0.5;
+      frequency *= 2;
+    }
+    return value / maxValue;
+  }
+  return { noise, fbm };
+}
+
+// === 生成无缝平铺纸张纹理 ===
+function generateSeamlessPaperTextureDataUrl(size, seed) {
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return "";
+
+  // 8x8 网格单元 → 无缝平铺
+  const { fbm } = createPeriodicPerlin(8, size, seed);
+
+  // 基准底色：燕麦纸
+  const baseR = 232, baseG = 220, baseB = 196;
+
+  // 使用 fBm 生成有机流动的纤维纹理
+  const imgData = ctx.createImageData(size, size);
+  const data = imgData.data;
+
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      const idx = (y * size + x) * 4;
+
+      // 多八度 fBm → 自然的纸张纤维感
+      const fiber = fbm(x, y, 4);  // [-1, 1]
+      const coarse = fbm(x * 0.5, y * 0.5, 3);  // 大尺度斑块
+      const fine = fbm(x * 2, y * 2, 3);  // 细微纤维
+
+      // 组合三层噪声：大尺度明暗 + 中尺度纤维 + 细微颗粒
+      const combined = coarse * 0.6 + fiber * 0.3 + fine * 0.1;
+      // 归一化到 [0, 255]，以底色为中心
+      const intensity = (combined + 1) * 0.5;  // [0, 1]
+
+      // 颜色映射：暖黄油墨色调
+      // 明区：偏亮黄；暗区：偏棕灰
+      const shade = 0.85 + intensity * 0.30;  // [0.85, 1.15]
+      const tintR = 1.0;
+      const tintG = 0.94 + intensity * 0.04;  // 轻微黄调
+      const tintB = 0.82 + intensity * 0.06;  // 蓝调稍弱
+
+      let r = baseR * shade * tintR;
+      let g = baseG * shade * tintG;
+      let b = baseB * shade * tintB;
+
+      // 细微颗粒噪点增强（但受 fBm 控制，不会出现雪花感）
+      const grain = (Math.sin(x * 12.9898 + y * 78.233) * 43758.5453) % 1;
+      const grainN = (grain - 0.5) * 8;
+      r += grainN;
+      g += grainN * 0.6;
+      b += grainN * 0.15;
+
+      data[idx] = Math.max(0, Math.min(255, r));
+      data[idx + 1] = Math.max(0, Math.min(255, g));
+      data[idx + 2] = Math.max(0, Math.min(255, b));
+      data[idx + 3] = 255;
+    }
+  }
+
+  ctx.putImageData(imgData, 0, 0);
+  return canvas.toDataURL("image/png");
+}
+
+// === 生成大型视口纸张纹理（非重复） ===
+let _paperLargeCanvas = null;
+function generateLargePaperTextureDataUrl(w, h, seed) {
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return "";
+
+  const baseR = 232, baseG = 220, baseB = 196;
+
+  // 高质量值噪声：每个网格点独立哈希，确保连续性
+  function makeValueNoise(seed3) {
+    // 预计算哈希表：256x256 网格
+    const SIZE = 256;
+    const grid = new Float32Array(SIZE * SIZE);
+    let s = seed3 | 0;
+    function lcg() {
+      s = (Math.imul(s, 1103515245) + 12345) & 0x7fffffff;
+      return s / 0x7fffffff;
+    }
+    for (let i = 0; i < grid.length; i++) {
+      grid[i] = lcg() * 2 - 1;  // [-1, 1]
+    }
+    function smoothstep(t) { return t * t * (3 - 2 * t); }
+    function noise(x, y) {
+      const x0 = Math.floor(x);
+      const y0 = Math.floor(y);
+      const xf = x - x0;
+      const yf = y - y0;
+      const x0m = ((x0 % SIZE) + SIZE) % SIZE;
+      const x1m = ((x0 + 1) % SIZE + SIZE) % SIZE;
+      const y0m = ((y0 % SIZE) + SIZE) % SIZE;
+      const y1m = ((y0 + 1) % SIZE + SIZE) % SIZE;
+      const v00 = grid[y0m * SIZE + x0m];
+      const v10 = grid[y0m * SIZE + x1m];
+      const v01 = grid[y1m * SIZE + x0m];
+      const v11 = grid[y1m * SIZE + x1m];
+      const u = smoothstep(xf);
+      const v = smoothstep(yf);
+      const nx0 = v00 + (v10 - v00) * u;
+      const nx1 = v01 + (v11 - v01) * u;
+      return nx0 + (nx1 - nx0) * v;
+    }
+    function fbm(x, y, octaves) {
+      let val = 0, amp = 1, freq = 1, maxV = 0;
+      for (let i = 0; i < octaves; i++) {
+        val += noise(x * freq, y * freq) * amp;
+        maxV += amp;
+        amp *= 0.5;
+        freq *= 2;
+      }
+      return val / maxV;
+    }
+    return { noise, fbm };
+  }
+
+  const coarseNoise = makeValueNoise(seed);
+  const mediumNoise = makeValueNoise(seed + 100);
+  const fineNoise = makeValueNoise(seed + 200);
+
+  const imgData = ctx.createImageData(w, h);
+  const data = imgData.data;
+
+  const step = 2;
+  for (let y2 = 0; y2 < h; y2 += step) {
+    for (let x2 = 0; x2 < w; x2 += step) {
+      // 多尺度 fBm：大尺度斑块 + 中尺度纤维 + 细微颗粒
+      const nx = x2 * 0.003;
+      const ny = y2 * 0.003;
+      const coarse = coarseNoise.fbm(nx, ny, 4);
+      const medium = mediumNoise.fbm(x2 * 0.008, y2 * 0.008, 3);
+      const fine = fineNoise.fbm(x2 * 0.025, y2 * 0.025, 3);
+
+      const combined = coarse * 0.55 + medium * 0.30 + fine * 0.15;
+      const intensity = (combined + 1) * 0.5;
+
+      const shade = 0.82 + intensity * 0.32;
+      const tintR = 1.0;
+      const tintG = 0.94 + intensity * 0.04;
+      const tintB = 0.82 + intensity * 0.07;
+
+      let r = baseR * shade * tintR;
+      let g = baseG * shade * tintG;
+      let b = baseB * shade * tintB;
+
+      // 细微颗粒（使用确定性 hash，不受 fBm 影响）
+      const ghash = ((x2 * 374761393) ^ (y2 * 668265263)) & 0xff;
+      const grainN = (ghash / 255 - 0.5) * 6;
+
+      for (let dy = 0; dy < step; dy += 1) {
+        for (let dx = 0; dx < step; dx += 1) {
+          const i = ((y2 + dy) * w + (x2 + dx)) * 4;
+          data[i] = Math.max(0, Math.min(255, r + grainN));
+          data[i + 1] = Math.max(0, Math.min(255, g + grainN * 0.55));
+          data[i + 2] = Math.max(0, Math.min(255, b + grainN * 0.12));
+          data[i + 3] = 255;
+        }
+      }
+    }
+  }
+
+  ctx.putImageData(imgData, 0, 0);
+  return canvas.toDataURL("image/png");
+}
+
+let _paperBgCache = "";
+let _paperBgCacheKey = "";
+function getPaperBackgroundUrl() {
+  const vw = window.innerWidth || 1920;
+  const vh = window.innerHeight || 1080;
+  const w = Math.min(vw, 2000);
+  const h = Math.min(vh + 200, 2000);
+  const key = `${w}x${h}`;
+  if (_paperBgCacheKey === key && _paperBgCache) return _paperBgCache;
+  try {
+    _paperBgCache = generateLargePaperTextureDataUrl(w, h, 54321);
+    _paperBgCacheKey = key;
+    return _paperBgCache;
+  } catch (_) {
+    return "";
+  }
+}
+
+function applyPaperTexture() {
+  const url = getPaperBackgroundUrl();
+  if (!url) return;
+  const ruleId = "paper-texture-style";
+  let styleEl = document.getElementById(ruleId);
+  if (!styleEl) {
+    styleEl = document.createElement("style");
+    styleEl.id = ruleId;
+    document.head.appendChild(styleEl);
+  }
+  // 方案：面板透明，直接透出 body 的大型纹理 → 彻底消除纹理错位和接缝
+  // 同时使用无缝平铺纹理作为底纹，提供更细腻的纤维层次
+  let _panelTex = "";
+  try { _panelTex = generateSeamlessPaperTextureDataUrl(512, 67890); } catch (_) {}
+  const panelVal = _panelTex ? `url("${_panelTex}")` : "none";
+  styleEl.textContent = `
+    body[data-theme="eye"] {
+      --paper-bg: url("${url}");
+      --paper-panel: ${panelVal};
+      background-color: #efebe6;
+      background-image:
+        var(--paper-bg),
+        radial-gradient(ellipse at 20% 12%, rgba(255, 250, 230, 0.18), transparent 50%),
+        radial-gradient(ellipse at 88% 88%, rgba(85, 58, 20, 0.06), transparent 55%),
+        radial-gradient(ellipse at 50% 50%, rgba(232, 220, 196, 0.35), transparent 70%);
+      background-size: 100% 100%, cover, cover, cover;
+      background-repeat: no-repeat, no-repeat, no-repeat, no-repeat;
+      background-attachment: fixed, fixed, fixed, fixed;
+    }
+    /* 面板透明，透出 body 大型纹理 → 消除错位和接缝 */
+    body[data-theme="eye"] .app-shell,
+    body[data-theme="eye"] .sidebar,
+    body[data-theme="eye"] .topbar,
+    body[data-theme="eye"] .editor-body,
+    body[data-theme="eye"] .reader-panel,
+    body[data-theme="eye"] .welcome-dialog,
+    body[data-theme="eye"] .modal-dialog,
+    body[data-theme="eye"] .graph-panel,
+    body[data-theme="eye"] .settings-shell,
+    body[data-theme="eye"] #editor,
+    body[data-theme="eye"] #preview {
+      background-color: transparent !important;
+      background-image: none !important;
+      border-right: none !important;
+      box-shadow: none !important;
+    }
+    /* 编辑器工具栏等微面板也透明化 */
+    body[data-theme="eye"] .editor-toolbar,
+    body[data-theme="eye"] .graph-tools {
+      background-color: transparent !important;
+      background-image: none !important;
+    }
+    /* 滚动条、边框线弱化 */
+    body[data-theme="eye"] ::-webkit-scrollbar-thumb {
+      background: rgba(110, 88, 55, 0.20);
+    }
+    body[data-theme="eye"] ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+  `;
+}
 
 function showToast(message) {
   clearTimeout(state.toastTimer);
@@ -408,11 +735,14 @@ function restoreWindowZoom() {
 
 function applySettings(settings = loadSettings()) {
   document.body.dataset.theme = settings.theme;
-  const themeColorMap = { dark: "#1e1e1e", eye: "#fdf6e3", image: "#1a1a2e" };
-  const themeBgMap = { dark: "#1e1e1e", eye: "#fdf6e3", image: "#1a1a2e" };
+  const themeColorMap = { dark: "#1e1e1e", eye: "#e8dcc4", image: "#1a1a2e" };
+  const themeBgMap = { dark: "#1e1e1e", eye: "#e8dcc4", image: "#1a1a2e" };
   const metaThemeColor = document.querySelector('meta[name="theme-color"]');
   if (metaThemeColor) {
     metaThemeColor.content = themeColorMap[settings.theme] || "#fafafa";
+  }
+  if (settings.theme === "eye") {
+    applyPaperTexture();
   }
   const currentScale = parseFloat(document.documentElement.style.getPropertyValue("--app-scale")) || 1;
   document.documentElement.style.setProperty("--app-font-size", `${Math.round(settings.fontSize * currentScale)}px`);
@@ -775,11 +1105,36 @@ function renderEditorOutline(content) {
     els.editorOutline.innerHTML = '<p class="editor-outline-empty">暂无标题</p>';
     return;
   }
-  const items = outline.map((item) => {
+  const itemButton = (item) => {
     const indent = Math.max(0, item.level - 1) * 14;
     return `<button class="editor-outline-item level-${item.level}" data-heading-text="${escapeHtml(item.title)}" style="margin-left:${indent}px" title="${escapeHtml(item.title)}">${escapeHtml(compactName(item.title, 15))}</button>`;
-  });
-  els.editorOutline.innerHTML = `<p class="editor-outline-title">目录大纲</p>${items.join("")}`;
+  };
+  // level <= 2 的标题作为可折叠分组父级，其后紧跟的 level > 2 子标题收进折叠区。
+  const rows = [];
+  for (let index = 0; index < outline.length; index += 1) {
+    const item = outline[index];
+    if (item.level > 2) continue;
+    const children = [];
+    let cursor = index + 1;
+    while (cursor < outline.length && outline[cursor].level > 2) {
+      children.push(outline[cursor]);
+      cursor += 1;
+    }
+    if (!children.length) {
+      rows.push(itemButton(item));
+      continue;
+    }
+    const groupId = `editor-outline-group-${index}`;
+    rows.push(`<section class="editor-outline-group">
+      <div class="editor-outline-group-head">
+        ${itemButton(item)}
+        <button type="button" class="editor-outline-toggle" data-editor-outline-toggle="${groupId}" aria-controls="${groupId}" aria-expanded="true" title="折叠/展开子标题"><span aria-hidden="true">&#8250;</span></button>
+      </div>
+      <div id="${groupId}" class="editor-outline-children">${children.map((child) => itemButton(child)).join("")}</div>
+    </section>`);
+    index = cursor - 1;
+  }
+  els.editorOutline.innerHTML = `<p class="editor-outline-title">目录大纲</p>${rows.join("")}`;
 }
 
 function setEditorOutlineVisible(visible) {
@@ -794,12 +1149,15 @@ function setEditorOutlineVisible(visible) {
   if (state.editorOutlineVisible && state.mode === "edit") {
     scheduleEditorOutlineUpdate();
   }
-  if (state.mode === "edit") {
-    requestAnimationFrame(() => {
+  // 切换大纲可见性后必须重算 editor-body 的 grid 列宽，
+  // 否则内联 gridTemplateColumns 会保留旧宽度，导致编辑/预览栏留白或未均分。
+  requestAnimationFrame(() => {
+    if (typeof applyEditorSplitterLayout === "function") applyEditorSplitterLayout();
+    if (state.mode === "edit") {
       els.editor.view?.requestMeasure?.();
       syncPreviewToEditor();
-    });
-  }
+    }
+  });
 }
 
 function findHeadingLineInEditor(headingText) {
@@ -898,6 +1256,119 @@ async function inlinePrintImages(html) {
   return wrapper.innerHTML;
 }
 
+// 自定义对话框：替代原生 confirm/prompt/alert。
+// 浏览器原生对话框会显示来源站点（如 127.0.0.1:4173），造成地址与端口外泄，
+// 自定义对话框不暴露来源信息，兼顾安全防护与一致体验。
+function buildCustomDialog({ title, message, input, confirmText = "确定", cancelText = "取消", danger = false }) {
+  const overlay = document.createElement("div");
+  overlay.className = "modal";
+  overlay.setAttribute("role", "dialog");
+  overlay.setAttribute("aria-modal", "true");
+  overlay.innerHTML = `<div class="modal-dialog custom-dialog">
+    <div class="modal-head"><h2>${escapeHtml(title)}</h2></div>
+    <p class="custom-dialog-message">${escapeHtml(message).replaceAll("\n", "<br />")}</p>
+    ${input ? `<input class="custom-dialog-input" type="text" />` : ""}
+    <div class="modal-actions">
+      <button type="button" class="custom-dialog-cancel">${escapeHtml(cancelText)}</button>
+      <button type="button" class="primary custom-dialog-confirm ${danger ? "danger" : ""}">${escapeHtml(confirmText)}</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+  return overlay;
+}
+
+function customConfirm(message, options = {}) {
+  return new Promise((resolve) => {
+    const { title = "确认操作", confirmText = "确定", cancelText = "取消", danger = false } = options;
+    const overlay = buildCustomDialog({ title, message, confirmText, cancelText, danger });
+    const done = (result) => { overlay.remove(); resolve(result); };
+    overlay.querySelector(".custom-dialog-cancel").addEventListener("click", () => done(false));
+    overlay.querySelector(".custom-dialog-confirm").addEventListener("click", () => done(true));
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) done(false); });
+    const onKey = (e) => {
+      if (e.key === "Escape") { document.removeEventListener("keydown", onKey); done(false); }
+      else if (e.key === "Enter") { document.removeEventListener("keydown", onKey); done(true); }
+    };
+    document.addEventListener("keydown", onKey);
+    requestAnimationFrame(() => overlay.querySelector(".custom-dialog-confirm")?.focus());
+  });
+}
+
+function customPrompt(message, defaultValue = "", options = {}) {
+  return new Promise((resolve) => {
+    const { title = "请输入", confirmText = "确定", cancelText = "取消" } = options;
+    const overlay = buildCustomDialog({ title, message, input: true, confirmText, cancelText });
+    const inputEl = overlay.querySelector(".custom-dialog-input");
+    if (inputEl) inputEl.value = String(defaultValue || "");
+    const done = (result) => { overlay.remove(); resolve(result); };
+    overlay.querySelector(".custom-dialog-cancel").addEventListener("click", () => done(null));
+    overlay.querySelector(".custom-dialog-confirm").addEventListener("click", () => done(inputEl?.value ?? ""));
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) done(null); });
+    const onKey = (e) => {
+      if (e.key === "Escape") { document.removeEventListener("keydown", onKey); done(null); }
+      else if (e.key === "Enter") { document.removeEventListener("keydown", onKey); done(inputEl?.value ?? ""); }
+    };
+    document.addEventListener("keydown", onKey);
+    requestAnimationFrame(() => { inputEl?.focus(); inputEl?.select(); });
+  });
+}
+
+function customAlert(message, options = {}) {
+  return new Promise((resolve) => {
+    const { title = "提示", confirmText = "知道了" } = options;
+    const overlay = document.createElement("div");
+    overlay.className = "modal";
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.innerHTML = `<div class="modal-dialog custom-dialog">
+      <div class="modal-head"><h2>${escapeHtml(title)}</h2></div>
+      <p class="custom-dialog-message">${escapeHtml(message).replaceAll("\n", "<br />")}</p>
+      <div class="modal-actions">
+        <button type="button" class="primary custom-dialog-confirm">${escapeHtml(confirmText)}</button>
+      </div>
+    </div>`;
+    document.body.appendChild(overlay);
+    const done = () => { overlay.remove(); resolve(true); };
+    overlay.querySelector(".custom-dialog-confirm").addEventListener("click", done);
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) done(); });
+    const onKey = (e) => {
+      if (e.key === "Escape" || e.key === "Enter") { document.removeEventListener("keydown", onKey); done(); }
+    };
+    document.addEventListener("keydown", onKey);
+    requestAnimationFrame(() => overlay.querySelector(".custom-dialog-confirm")?.focus());
+  });
+}
+
+// 打印样式：注入到打印 iframe，使导出的 PDF 不依赖主页面样式，
+// 同时 iframe 来源为 about:blank，浏览器页眉页脚不会显示本机地址与端口。
+const PRINT_STYLES = `html,body{margin:0;padding:0;background:#fff;}
+.print-article{background:#ffffff;color:#1f2937;font-family:"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;font-size:14px;line-height:1.75;padding:48px 56px;max-width:820px;margin:0 auto;}
+.print-header{text-align:center;border-bottom:2px solid #1f2937;padding-bottom:18px;margin-bottom:28px;}
+.print-title{font-size:26px;font-weight:700;color:#111827;margin:0 0 8px;line-height:1.35;}
+.print-meta{font-size:12px;color:#6b7280;margin:0 0 4px;}
+.print-author{font-size:12px;color:#9ca3af;margin:0;}
+.print-body h1,.print-body h2,.print-body h3,.print-body h4{color:#111827;font-weight:600;line-height:1.4;margin-top:1.6em;margin-bottom:0.6em;}
+.print-body h1{font-size:22px;border-bottom:1px solid #e5e7eb;padding-bottom:6px;}
+.print-body h2{font-size:19px;border-bottom:1px solid #eef0f3;padding-bottom:4px;}
+.print-body h3{font-size:16px;}
+.print-body h4{font-size:14px;}
+.print-body p{margin:0.7em 0;}
+.print-body a{color:#2563eb;text-decoration:underline;word-break:break-all;}
+.print-body img{max-width:100%;height:auto;display:block;margin:14px auto;border-radius:4px;page-break-inside:avoid;}
+.print-body blockquote{margin:1em 0;padding:8px 16px;border-left:3px solid #2563eb;background:#f8fafc;color:#475569;}
+.print-body blockquote p{margin:0.4em 0;}
+.print-body pre{background:#f8fafc;border:1px solid #e5e7eb;border-radius:6px;padding:14px 16px;overflow-x:auto;font-family:"Cascadia Code",Consolas,monospace;font-size:13px;line-height:1.6;page-break-inside:avoid;}
+.print-body code{font-family:"Cascadia Code",Consolas,monospace;font-size:0.92em;background:rgba(15,23,42,0.06);padding:1px 5px;border-radius:3px;}
+.print-body pre code{background:transparent;padding:0;border-radius:0;font-size:13px;}
+.print-body table{width:100%;border-collapse:collapse;margin:1em 0;font-size:13px;page-break-inside:avoid;}
+.print-body th,.print-body td{border:1px solid #d1d5db;padding:8px 12px;text-align:left;}
+.print-body th{background:#f1f5f9;font-weight:600;}
+.print-body ul,.print-body ol{margin:0.7em 0;padding-left:1.8em;}
+.print-body li{margin:0.3em 0;}
+.print-body hr{border:0;border-top:1px solid #e5e7eb;margin:1.8em 0;}
+.print-footer{margin-top:36px;padding-top:14px;border-top:1px solid #e5e7eb;text-align:center;font-size:11px;color:#9ca3af;}
+@page{margin:18mm 16mm;}`;
+
 async function exportCurrentDocToPdf() {
   if (!state.currentPath && !state.currentContent) {
     showToast("请先打开一个文档");
@@ -906,35 +1377,41 @@ async function exportCurrentDocToPdf() {
   showToast("正在准备 PDF 导出...");
   let html = buildDocumentPrintHtml();
   html = await inlinePrintImages(html);
-  els.printRoot.innerHTML = html;
-  els.printRoot.classList.remove("hidden");
-  document.body.classList.add("printing");
-  const images = els.printRoot.querySelectorAll("img");
-  if (images.length) {
-    await Promise.all(Array.from(images).map((img) => {
-      if (img.complete) return Promise.resolve();
-      return new Promise((resolve) => {
+  const title = els.docTitle?.textContent || state.currentDoc?.title || "MyTemple 文档";
+  // 通过隐藏 iframe 打印：iframe 来源为 about:blank，浏览器打印页眉页脚不会显示本机地址与端口。
+  const iframe = document.createElement("iframe");
+  iframe.setAttribute("aria-hidden", "true");
+  iframe.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;opacity:0;pointer-events:none;";
+  document.body.appendChild(iframe);
+  let cleaned = false;
+  const cleanup = () => {
+    if (cleaned) return;
+    cleaned = true;
+    iframe.remove();
+  };
+  try {
+    const doc = iframe.contentWindow.document;
+    doc.open();
+    doc.write(`<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>${PRINT_STYLES}</style></head><body>${html}</body></html>`);
+    doc.close();
+    const images = [...doc.querySelectorAll("img")];
+    if (images.length) {
+      await Promise.all(images.map((img) => img.complete ? Promise.resolve() : new Promise((resolve) => {
         img.onload = img.onerror = () => resolve();
         setTimeout(resolve, 3000);
-      });
-    }));
-  }
-  showToast("提示：若不需要浏览器页眉页脚，请在打印对话框中取消勾选「页眉与页脚」");
-  await new Promise((resolve) => requestAnimationFrame(resolve));
-  await new Promise((resolve) => setTimeout(resolve, 120));
-  try {
-    window.print();
+      })));
+    }
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    iframe.contentWindow.focus();
+    showToast("提示：若不需要页眉页脚，请在打印对话框中取消勾选「页眉与页脚」");
+    iframe.contentWindow.addEventListener("afterprint", cleanup);
+    iframe.contentWindow.print();
   } catch (error) {
     console.error(error);
     showToast("无法调起打印对话框，请检查浏览器设置");
+    cleanup();
   }
-  const cleanup = () => {
-    els.printRoot.classList.add("hidden");
-    els.printRoot.innerHTML = "";
-    document.body.classList.remove("printing");
-    window.removeEventListener("afterprint", cleanup);
-  };
-  window.addEventListener("afterprint", cleanup);
   setTimeout(cleanup, 60000);
 }
 
@@ -1820,7 +2297,7 @@ function renderWorkspaceList(workspaces) {
         } else if (action === "remove") {
           const target = state.workspaces.find((ws) => ws.id === id);
           if (!target || target.builtin) return;
-          const ok = confirm(`确认移除工作路径「${target.name}」？\n（仅移除记录，不会删除磁盘文件）`);
+          const ok = await customConfirm(`确认移除工作路径「${target.name}」？\n（仅移除记录，不会删除磁盘文件）`, { title: "移除工作路径", danger: true });
           if (!ok) return;
           await api.post("/api/workspaces/remove", { id });
           state.graphReady = false;
@@ -1829,7 +2306,7 @@ function renderWorkspaceList(workspaces) {
         } else if (action === "rename") {
           const target = state.workspaces.find((ws) => ws.id === id);
           if (!target) return;
-          const newName = prompt("输入新的工作路径名称", target.name);
+          const newName = await customPrompt("输入新的工作路径名称", target.name, { title: "重命名工作路径" });
           if (!newName || newName === target.name) return;
           await api.post("/api/workspaces/rename", { id, name: newName });
           await bootstrap(true);
@@ -2397,6 +2874,10 @@ async function loadAiStatus() {
       if (els.aiBaseUrl) els.aiBaseUrl.value = status.baseUrl || "http://127.0.0.1:11434";
       if (els.aiEmbeddingModel) els.aiEmbeddingModel.value = status.embeddingModel || "";
       if (els.aiChatModel) els.aiChatModel.value = status.chatModel || "";
+      if (els.aiDeepseekApiKey) els.aiDeepseekApiKey.value = status.deepseekApiKey || "";
+      if (els.aiDeepseekBaseUrl) els.aiDeepseekBaseUrl.value = status.deepseekBaseUrl || "https://api.deepseek.com";
+      if (els.aiDeepseekChatModel) els.aiDeepseekChatModel.value = status.deepseekChatModel || "deepseek-chat";
+      setAiProvider(status.chatProvider === "deepseek" ? "deepseek" : "ollama");
     }
     clearTimeout(state.ai.statusTimer);
     if (status.indexing && (state.ai.open || !els.settingsModal.classList.contains("hidden"))) {
@@ -2682,6 +3163,10 @@ function setSidebarCollapsed(collapsed) {
     resizeCanvas();
     scheduleGraphDraw();
   });
+  // 目录折叠/展开改变 workspace 宽度，需重算编辑器分栏列宽，避免留白或未均分。
+  requestAnimationFrame(() => {
+    if (typeof applyEditorSplitterLayout === "function") applyEditorSplitterLayout();
+  });
 }
 
 function restoreSidebarCollapsed() {
@@ -2818,7 +3303,7 @@ function attachImageDeleteButtons(root = els.preview) {
 
 async function deleteImageFromDoc(imageSrc) {
   if (!imageSrc) return;
-  const confirmed = window.confirm("确定删除该图片吗？\n\n将同时执行：\n1. 移除文档中的图片引用\n2. 删除磁盘上的图片文件以释放空间");
+  const confirmed = await customConfirm("确定删除该图片吗？\n\n将同时执行：\n1. 移除文档中的图片引用\n2. 删除磁盘上的图片文件以释放空间", { title: "删除图片", danger: true });
   if (!confirmed) return;
   const content = els.editor.value;
   const escapedSrc = imageSrc.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -2930,6 +3415,10 @@ function setPreviewVisible(visible, { automatic = false } = {}) {
     clearTimeout(state.previewTimer);
     els.preview.classList.remove("preview-pending");
   }
+  // 切换预览可见性后重算 grid 列宽，避免编辑栏未占满或右侧留白。
+  requestAnimationFrame(() => {
+    if (typeof applyEditorSplitterLayout === "function") applyEditorSplitterLayout();
+  });
 }
 
 function setImmersiveEditing(enabled) {
@@ -3326,7 +3815,7 @@ function deleteTreeItem(path) {
 async function renameTreeItem(path) {
   if (!path) return;
   const currentName = displayNameFromPath(path);
-  const newName = prompt("重命名为：", currentName);
+  const newName = await customPrompt("重命名为：", currentName, { title: "重命名" });
   if (!newName || newName.trim() === currentName) return;
   try {
     const response = await api.post("/api/rename", {
@@ -5868,7 +6357,7 @@ if (els.activateLicenseBtn) {
 }
 if (els.deactivateLicenseBtn) {
   els.deactivateLicenseBtn.addEventListener("click", async () => {
-    if (!confirm("确定要解除当前设备的授权吗？")) return;
+    if (!await customConfirm("确定要解除当前设备的授权吗？", { title: "解除授权", danger: true })) return;
     try {
       // 通过删除 .license 文件解除授权（通过 API）
       await api.post("/api/license/activate", { licenseKey: "" });
@@ -5883,19 +6372,57 @@ if (els.deactivateLicenseBtn) {
   });
 });
 
+function aiCurrentProvider() {
+  return state.ai.chatProvider === "deepseek" ? "deepseek" : "ollama";
+}
+
+function aiConfigPayload(embeddingModel) {
+  return {
+    baseUrl: els.aiBaseUrl.value.trim(),
+    embeddingModel: embeddingModel ?? els.aiEmbeddingModel.value.trim(),
+    chatModel: els.aiChatModel.value.trim(),
+    chatProvider: aiCurrentProvider(),
+    deepseekApiKey: els.aiDeepseekApiKey?.value.trim() || "",
+    deepseekBaseUrl: els.aiDeepseekBaseUrl?.value.trim() || "https://api.deepseek.com",
+    deepseekChatModel: els.aiDeepseekChatModel?.value.trim() || "deepseek-chat",
+    enabled: true,
+  };
+}
+
+function setAiProvider(provider) {
+  const current = provider === "deepseek" ? "deepseek" : "ollama";
+  state.ai.chatProvider = current;
+  if (els.aiProviderChoices) {
+    els.aiProviderChoices.querySelectorAll("button").forEach((button) => {
+      button.classList.toggle("active", button.dataset.provider === current);
+    });
+  }
+  document.querySelectorAll(".ai-provider-fields").forEach((field) => {
+    field.classList.toggle("hidden", field.dataset.providerFields !== current);
+  });
+}
+
+if (els.aiProviderChoices) {
+  els.aiProviderChoices.addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-provider]");
+    if (!button) return;
+    setAiProvider(button.dataset.provider);
+    state.ai.configDirty = true;
+  });
+}
+
 els.aiTestBtn?.addEventListener("click", async () => {
   els.aiTestBtn.disabled = true;
-  els.aiSettingsStatus.textContent = "正在检测 Ollama...";
+  const provider = aiCurrentProvider();
+  els.aiSettingsStatus.textContent = provider === "deepseek" ? "正在检测 DeepSeek..." : "正在检测 Ollama...";
   try {
     const requestedEmbeddingModel = els.aiEmbeddingModel.value.trim();
-    const result = await api.post("/api/ai/test", {
-      baseUrl: els.aiBaseUrl.value,
-      embeddingModel: requestedEmbeddingModel,
-      chatModel: els.aiChatModel.value.trim(),
-    });
-    els.aiModelChoices.innerHTML = result.models.map((model) => `<option value="${escapeHtml(model.name)}"></option>`).join("");
+    const result = await api.post("/api/ai/test", aiConfigPayload());
+    if (Array.isArray(result.models)) {
+      els.aiModelChoices.innerHTML = result.models.map((model) => `<option value="${escapeHtml(model.name)}"></option>`).join("");
+    }
     if (!els.aiEmbeddingModel.value) els.aiEmbeddingModel.value = result.recommendedEmbeddingModel || "";
-    if (!els.aiChatModel.value) els.aiChatModel.value = result.models.find((model) => !/embed/i.test(model.name))?.name || "";
+    if (provider === "ollama" && !els.aiChatModel.value) els.aiChatModel.value = result.models?.find((model) => !/embed/i.test(model.name))?.name || "";
     if (result.embeddingCheck?.ok === false) {
       const recommendation = result.recommendedEmbeddingModel;
       if (recommendation && recommendation !== requestedEmbeddingModel) {
@@ -5910,7 +6437,7 @@ els.aiTestBtn?.addEventListener("click", async () => {
     }
     if (result.chatCheck?.ok === false) {
       els.aiSettingsStatus.textContent = result.chatCheck.error;
-      showToast("当前对话模型未安装或不可用");
+      showToast(provider === "deepseek" ? "DeepSeek 连接失败" : "当前对话模型未安装或不可用");
       return;
     }
     const dimension = result.embeddingCheck?.dimension ? `，向量维度 ${result.embeddingCheck.dimension}` : "";
@@ -5919,7 +6446,11 @@ els.aiTestBtn?.addEventListener("click", async () => {
     const resolved = resolvedEmbedding || resolvedChat
       ? `；已匹配 ${[resolvedEmbedding, resolvedChat].filter(Boolean).join(" / ")}`
       : "";
-    els.aiSettingsStatus.textContent = `连接正常，发现 ${result.models.length} 个本地模型${dimension}${resolved}`;
+    if (provider === "deepseek") {
+      els.aiSettingsStatus.textContent = `DeepSeek 连接正常，对话模型 ${result.compatibility?.chat?.resolvedName || "deepseek-chat"}${dimension ? `；${dimension}` : ""}`;
+    } else {
+      els.aiSettingsStatus.textContent = `连接正常，发现 ${result.models?.length || 0} 个本地模型${dimension}${resolved}`;
+    }
   } catch (error) { els.aiSettingsStatus.textContent = error.message || "连接失败"; }
   finally { els.aiTestBtn.disabled = false; }
 });
@@ -5927,12 +6458,7 @@ els.aiTestBtn?.addEventListener("click", async () => {
 els.aiSaveBtn?.addEventListener("click", async () => {
   els.aiSaveBtn.disabled = true;
   try {
-    const result = await api.post("/api/ai/config", {
-      baseUrl: els.aiBaseUrl.value,
-      embeddingModel: els.aiEmbeddingModel.value,
-      chatModel: els.aiChatModel.value,
-      enabled: true,
-    });
+    const result = await api.post("/api/ai/config", aiConfigPayload());
     state.ai.configDirty = false;
     setAiStatus(result.status);
     showToast(result.rebuildRequired ? "配置已保存，正在重建语义索引" : "AI 配置已保存");
@@ -5949,12 +6475,7 @@ els.aiDisableEmbeddingBtn?.addEventListener("click", async () => {
   state.ai.configDirty = true;
   els.aiSettingsStatus.textContent = "正在关闭向量索引并保留关键词检索…";
   try {
-    const result = await api.post("/api/ai/config", {
-      baseUrl: els.aiBaseUrl.value,
-      embeddingModel: "",
-      chatModel: els.aiChatModel.value,
-      enabled: true,
-    });
+    const result = await api.post("/api/ai/config", aiConfigPayload(""));
     state.ai.configDirty = false;
     setAiStatus(result.status);
     showToast("已切换为仅关键词模式，可继续使用知识问答");
@@ -5984,7 +6505,7 @@ els.frontmatterModal?.addEventListener("click", (event) => {
 });
 els.createAgentPolicyBtn?.addEventListener("click", async () => {
   const workspaceId = state.activeWorkspaceId || state.defaultWorkspaceId;
-  if (!window.confirm("将在当前工作区的 .mytemple 目录创建 AGENTS.md。AI 写入仍需逐次确认，是否继续？")) return;
+  if (!await customConfirm("将在当前工作区的 .mytemple 目录创建 AGENTS.md。\nAI 写入仍需逐次确认，是否继续？", { title: "创建 AI 规则文件" })) return;
   try {
     await api.post("/api/agent/policy/create", { workspaceId, confirmed: true });
     await loadAgentPolicyStatus();
@@ -6041,6 +6562,149 @@ async function loadAboutInfo() {
   }
 }
 
+function loadKnowledgeSettings() {
+  try {
+    const saved = JSON.parse(localStorage.getItem("knowledgeSettings") || "{}");
+    if (els.kmReviewDays) els.kmReviewDays.value = saved.reviewDays || 30;
+    if (els.kmEnableReminder) els.kmEnableReminder.checked = saved.enableReminder !== false;
+  } catch {
+    if (els.kmReviewDays) els.kmReviewDays.value = 30;
+    if (els.kmEnableReminder) els.kmEnableReminder.checked = true;
+  }
+}
+
+function persistKnowledgeSettings() {
+  const next = {
+    reviewDays: Math.max(7, Math.min(365, Number(els.kmReviewDays?.value) || 30)),
+    enableReminder: Boolean(els.kmEnableReminder?.checked),
+  };
+  localStorage.setItem("knowledgeSettings", JSON.stringify(next));
+}
+
+function renderKmDocList(listEl, docs, stale = false) {
+  if (!listEl) return;
+  listEl.replaceChildren();
+  if (!docs.length) {
+    const empty = document.createElement("li");
+    empty.className = "km-doc-empty";
+    empty.textContent = "暂无待处理文档";
+    listEl.append(empty);
+    return;
+  }
+  for (const doc of docs) {
+    const item = document.createElement("li");
+    item.className = "km-doc-item";
+    item.dataset.path = doc.path;
+    const main = document.createElement("button");
+    main.type = "button";
+    main.className = "km-doc-open";
+    const title = document.createElement("span");
+    title.className = "km-doc-title";
+    title.textContent = doc.title || doc.path;
+    main.append(title);
+    const meta = document.createElement("span");
+    meta.className = "km-doc-meta";
+    if (doc.workspace) meta.textContent += doc.workspace;
+    if (stale) {
+      const label = doc.daysSince < 0 ? "从未浏览" : `${doc.daysSince} 天未浏览`;
+      meta.textContent += (meta.textContent ? " · " : "") + label;
+    }
+    if (meta.textContent) main.append(meta);
+    main.addEventListener("click", () => {
+      els.settingsModal?.classList.add("hidden");
+      openDoc(doc.path);
+    });
+    item.append(main);
+    listEl.append(item);
+  }
+}
+
+async function loadKnowledgeHealth() {
+  loadKnowledgeSettings();
+  if (els.kmStats) els.kmStats.textContent = "正在分析知识脉络…";
+  if (els.kmStatus) els.kmStatus.textContent = "正在分析知识脉络…";
+  const days = Math.max(7, Math.min(365, Number(els.kmReviewDays?.value) || 30));
+  try {
+    const result = await api.get(`/api/knowledge/health?days=${days}`);
+    const stats = result.stats || {};
+    const reminderOn = els.kmEnableReminder?.checked !== false;
+    if (els.kmStats) {
+      els.kmStats.innerHTML = [
+        `<div><span>文档总数</span><strong>${stats.documents || 0}</strong></div>`,
+        `<div><span>缺标签</span><strong>${stats.missingTags || 0}</strong></div>`,
+        `<div><span>缺链接</span><strong>${stats.missingLinks || 0}</strong></div>`,
+        `<div><span>待温习</span><strong>${stats.staleDocs || 0}</strong></div>`,
+      ].join("");
+    }
+    renderKnowledgeHealthScore(stats);
+    if (els.kmMissingTagsCount) els.kmMissingTagsCount.textContent = String(stats.missingTags || 0);
+    if (els.kmMissingLinksCount) els.kmMissingLinksCount.textContent = String(stats.missingLinks || 0);
+    if (els.kmStaleCount) els.kmStaleCount.textContent = String(stats.staleDocs || 0);
+    renderKmDocList(els.kmMissingTagsList, result.missingTags || []);
+    renderKmDocList(els.kmMissingLinksList, result.missingLinks || []);
+    renderKmDocList(els.kmStaleList, reminderOn ? (result.staleDocs || []) : [], true);
+    if (els.kmStatus) {
+      const tip = reminderOn
+        ? `已分析 ${stats.documents || 0} 篇文档：${stats.missingTags || 0} 篇缺标签、${stats.missingLinks || 0} 篇缺链接、${stats.staleDocs || 0} 篇建议温习。`
+        : `温习提醒已关闭。已分析 ${stats.documents || 0} 篇文档。`;
+      els.kmStatus.textContent = tip;
+    }
+  } catch (error) {
+    if (els.kmStats) els.kmStats.textContent = "";
+    renderKnowledgeHealthScore(null);
+    if (els.kmStatus) els.kmStatus.textContent = error.message || "分析失败";
+  }
+}
+
+function renderKnowledgeHealthScore(stats) {
+  const root = els.kmHealthScore;
+  if (!root) return;
+  if (!stats) {
+    root.innerHTML = '<p class="muted">暂未分析</p>';
+    return;
+  }
+  const score = Math.max(0, Math.min(100, Number(stats.healthScore) || 0));
+  const breakdown = stats.scoreBreakdown || {};
+  const level = score >= 85 ? { label: "优秀", cls: "km-score-excellent" }
+    : score >= 70 ? { label: "良好", cls: "km-score-good" }
+    : score >= 50 ? { label: "一般", cls: "km-score-fair" }
+    : { label: "待改进", cls: "km-score-poor" };
+  const items = ["link", "tag", "fresh", "concept"].map((key) => {
+    const item = breakdown[key] || { score: 0, max: 0, label: "" };
+    const pct = item.max > 0 ? Math.round((item.score / item.max) * 100) : 0;
+    return `<div class="km-score-item">
+      <div class="km-score-item-head"><span>${escapeHtml(item.label)}</span><strong>${item.score}/${item.max}</strong></div>
+      <div class="km-score-bar"><span style="width:${pct}%"></span></div>
+    </div>`;
+  }).join("");
+  root.innerHTML = `
+    <div class="km-score-overview">
+      <div class="km-score-ring ${level.cls}">
+        <div class="km-score-ring-value">${score}</div>
+        <div class="km-score-ring-label">${level.label}</div>
+      </div>
+      <div class="km-score-breakdown">${items}</div>
+    </div>
+    <p class="muted km-score-tip">满分 100 分：链接密度（40 分）反映文档双向链接建立程度；标签覆盖（30 分）反映知识脉络梳理程度；知识活跃（20 分）反映近期温习覆盖；概念关联（10 分）反映语义概念关联覆盖。</p>
+  `;
+}
+
+if (els.kmRefreshBtn) {
+  els.kmRefreshBtn.addEventListener("click", () => loadKnowledgeHealth());
+}
+if (els.kmReviewDays) {
+  els.kmReviewDays.addEventListener("change", () => {
+    persistKnowledgeSettings();
+    loadKnowledgeHealth();
+  });
+}
+if (els.kmEnableReminder) {
+  els.kmEnableReminder.addEventListener("change", () => {
+    persistKnowledgeSettings();
+    loadKnowledgeHealth();
+  });
+}
+
 els.closeSettingsBtn.addEventListener("click", () => els.settingsModal.classList.add("hidden"));
 els.settingsModal.addEventListener("click", (event) => {
   if (event.target === els.settingsModal) els.settingsModal.classList.add("hidden");
@@ -6053,6 +6717,12 @@ document.querySelectorAll(".settings-nav-item").forEach((tab) => {
     document.querySelectorAll(".settings-panel").forEach((p) => {
       p.classList.toggle("active", p.dataset.settingsPanel === target);
     });
+    if (target === "about") {
+      loadAboutInfo();
+    }
+    if (target === "knowledge") {
+      loadKnowledgeHealth();
+    }
   });
 });
 
@@ -6065,37 +6735,15 @@ if (resetEditorLayoutBtn) {
   });
 }
 
-function openCommunityModal() {
-  els.settingsModal.classList.add("hidden");
-  els.communityModal.classList.remove("hidden");
-}
-
-function closeCommunityModal({ reopenSettings = true } = {}) {
-  els.communityModal.classList.add("hidden");
-  if (reopenSettings) els.settingsModal.classList.remove("hidden");
-}
-
-els.communityBtn.addEventListener("click", openCommunityModal);
-els.closeCommunityBtn.addEventListener("click", () => closeCommunityModal());
-els.backCommunityBtn.addEventListener("click", () => closeCommunityModal());
-els.communityModal.addEventListener("click", (event) => {
-  if (event.target === els.communityModal) closeCommunityModal();
-});
-
-els.aboutBtn.addEventListener("click", async () => {
-  els.settingsModal.classList.add("hidden");
-  await loadAboutInfo();
-  els.aboutModal.classList.remove("hidden");
-});
-
-els.closeAboutBtn.addEventListener("click", () => els.aboutModal.classList.add("hidden"));
-els.aboutModal.addEventListener("click", (event) => {
-  if (event.target === els.aboutModal) els.aboutModal.classList.add("hidden");
-});
-
-els.checkUpdateBtn.addEventListener("click", () => {
-  els.aboutModal.classList.add("hidden");
+// 关于内容已内联到设置「关于」面板，切换至该 Tab 时由 settings-nav-item 处理器自动加载。
+els.checkUpdateBtn?.addEventListener("click", async () => {
   showToast("正在检查更新...");
+  try {
+    await api.get("/api/version?refresh=1");
+    await loadAboutInfo();
+  } catch (error) {
+    showToast(error.message || "检查更新失败");
+  }
 });
 
 els.coffeeBtn = document.querySelector("#coffeeBtn");
@@ -6130,7 +6778,7 @@ document.querySelectorAll(".copy-btn").forEach((btn) => {
         btn.style.borderColor = "";
       }, 2000);
     }).catch(() => {
-      alert("复制失败，请手动复制");
+      customAlert("复制失败，请手动复制");
     });
   });
 });
@@ -6405,6 +7053,16 @@ els.focusModeBtn.addEventListener("click", () => setImmersiveEditing(!state.imme
 els.previewToggleBtn.addEventListener("click", () => setPreviewVisible(!state.previewVisible));
 els.outlineToggleBtn?.addEventListener("click", () => setEditorOutlineVisible(!state.editorOutlineVisible));
 els.editorOutline?.addEventListener("click", (event) => {
+  const toggle = event.target.closest("[data-editor-outline-toggle]");
+  if (toggle) {
+    const groupId = toggle.dataset.editorOutlineToggle;
+    const group = groupId && document.getElementById(groupId);
+    if (group) {
+      const collapsed = group.classList.toggle("is-collapsed");
+      toggle.setAttribute("aria-expanded", String(!collapsed));
+    }
+    return;
+  }
   const button = event.target.closest("[data-heading-text]");
   if (!button) return;
   scrollEditorToHeading(button.dataset.headingText);
@@ -6417,7 +7075,7 @@ els.saveBtn.addEventListener("click", async () => {
     await saveCurrentDoc({ refreshTree: true });
   } catch (error) {
     setSaveStatus("\u4fdd\u5b58\u5931\u8d25", true);
-    alert(error.message || "\u4fdd\u5b58\u5931\u8d25");
+    customAlert(error.message || "保存失败");
   }
 });
 els.formatBtn.addEventListener("click", () => {
@@ -6676,6 +7334,8 @@ _deferIdle(() => {
 });
 
 function hideSplash() {
+  // 标记应用启动完成：此后运行时错误不再触发自动刷新，避免打断编辑心流。
+  if (typeof window.__markAppStarted === "function") window.__markAppStarted();
   if (appSplash && !appSplash.classList.contains("hidden")) {
     setSplashProgress(100, "加载完成");
     setTimeout(() => {

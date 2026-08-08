@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { createDocumentTemplate, frontmatterSummary, normalizeFrontmatter } from "./server/frontmatter.js";
 import { agentPolicyPath, appendAuditRecord, defaultAgentRules, loadAgentPolicy, policyAllows } from "./server/agent-policy.js";
 import { RagService } from "./server/rag.js";
+import { DocViewStore } from "./server/doc-views.js";
 import { getMachineCode, verifyLicense, getLicenseStatus } from "./server/license.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -22,6 +23,7 @@ const HOST = process.env.HOST || "127.0.0.1";
 const KNOWLEDGE_INDEX_FILENAME = "知识库主清单.json";
 const KNOWLEDGE_INDEX_SCHEMA_VERSION = 1;
 const ragService = new RagService(DATA_ROOT, log);
+const docViews = new DocViewStore(DATA_ROOT);
 
 let cache = {
   stamp: 0,
@@ -1844,7 +1846,14 @@ async function handleApi(req, res, url) {
   if (url.pathname === "/api/ai/test" && req.method === "POST") {
     try {
       const payload = await readJson(req);
-      const result = await ragService.configuredModelCompatibility(payload.baseUrl, payload.embeddingModel, payload.chatModel);
+      const useDeepseek = payload.chatProvider === "deepseek";
+      const chatOptions = {
+        provider: useDeepseek ? "deepseek" : "ollama",
+        apiKey: payload.deepseekApiKey,
+        deepseekModel: payload.deepseekChatModel,
+        deepseekBaseUrl: payload.deepseekBaseUrl,
+      };
+      const result = await ragService.configuredModelCompatibility(payload.baseUrl, payload.embeddingModel, payload.chatModel, chatOptions);
       let embeddingCheck = { ok: true, skipped: true, model: "" };
       if (String(payload.embeddingModel || "").trim()) {
         if (!result.compatibility.embedding.installed) {
@@ -1867,9 +1876,18 @@ async function handleApi(req, res, url) {
           embeddingCheck = { ok: false, skipped: false, model: String(payload.embeddingModel || "").trim(), error: error.message };
         }
       }
-      const chatCheck = payload.chatModel && !result.compatibility.chat.installed
-        ? { ok: false, error: `本机未安装对话模型“${payload.chatModel}”，请先执行 ollama pull ${payload.chatModel}` }
-        : { ok: true };
+      let chatCheck;
+      if (useDeepseek) {
+        try {
+          chatCheck = await ragService.testDeepseekChat(payload.deepseekApiKey, payload.deepseekBaseUrl, payload.deepseekChatModel);
+        } catch (error) {
+          chatCheck = { ok: false, error: `DeepSeek 连接失败：${error.message}` };
+        }
+      } else {
+        chatCheck = payload.chatModel && !result.compatibility.chat.installed
+          ? { ok: false, error: `本机未安装对话模型“${payload.chatModel}”，请先执行 ollama pull ${payload.chatModel}` }
+          : { ok: true };
+      }
       return json(res, 200, { ...result, embeddingCheck, chatCheck });
     } catch (error) {
       return json(res, 503, { error: `无法连接本地 AI 服务：${error.message}` });
@@ -1878,17 +1896,33 @@ async function handleApi(req, res, url) {
   if (url.pathname === "/api/ai/config" && req.method === "POST") {
     const payload = await readJson(req);
     try {
-      const compatibility = await ragService.configuredModelCompatibility(payload.baseUrl, payload.embeddingModel, payload.chatModel);
+      const useDeepseek = payload.chatProvider === "deepseek";
+      const chatOptions = {
+        provider: useDeepseek ? "deepseek" : "ollama",
+        apiKey: payload.deepseekApiKey,
+        deepseekModel: payload.deepseekChatModel,
+        deepseekBaseUrl: payload.deepseekBaseUrl,
+      };
+      const compatibility = await ragService.configuredModelCompatibility(payload.baseUrl, payload.embeddingModel, payload.chatModel, chatOptions);
       if (payload.embeddingModel && !compatibility.compatibility.embedding.installed) {
         throw new Error(`本机未安装向量模型“${payload.embeddingModel}”，请先执行 ollama pull ${payload.embeddingModel}`);
       }
       if (payload.embeddingModel && !compatibility.compatibility.embedding.capable) {
         throw new Error(`模型“${payload.embeddingModel}”不支持 Embeddings，请选择 nomic-embed-text 或其他专用向量模型`);
       }
-      if (!compatibility.compatibility.chat.installed) {
-        throw new Error(`本机未安装对话模型“${payload.chatModel}”，请先执行 ollama pull ${payload.chatModel}`);
+      if (useDeepseek) {
+        if (!compatibility.compatibility.chat.installed) {
+          throw new Error("请填写 DeepSeek API Key 并选择对话模型");
+        }
+        await ragService.testDeepseekChat(payload.deepseekApiKey, payload.deepseekBaseUrl, payload.deepseekChatModel);
+      } else {
+        if (!compatibility.compatibility.chat.installed) {
+          throw new Error(`本机未安装对话模型“${payload.chatModel}”，请先执行 ollama pull ${payload.chatModel}`);
+        }
       }
-      await ragService.testEmbeddingModel(payload.baseUrl, payload.embeddingModel);
+      if (payload.embeddingModel) {
+        await ragService.testEmbeddingModel(payload.baseUrl, payload.embeddingModel);
+      }
       const result = await ragService.updateSettings(payload);
       if (result.rebuildRequired) ragService.schedule(data.files, currentKnowledgeVersion, { force: true });
       return json(res, 200, { ok: true, ...result, status: await ragService.statusWithStorage() });
@@ -2080,12 +2114,89 @@ async function handleApi(req, res, url) {
         const normalized = await normalizeDocPath(docPath, true);
         const content = await readFile(normalized.absolute, "utf8");
         const title = extractTitle(content, path.basename(normalized.absolute));
+        docViews.record(normalized.ref);
         return json(res, 200, { path: normalized.ref, title, content, tags: [], terms: [], contentSha256: createHash("sha256").update(Buffer.from(content, "utf8")).digest("hex") });
       } catch (e) {
         return json(res, 404, { error: "Document not found" });
       }
     }
+    docViews.record(target.path);
     return json(res, 200, { path: target.path, title: target.title, content: target.content, tags: target.tags, terms: target.terms, contentSha256: target.contentSha256 || "" });
+  }
+  if (url.pathname === "/api/knowledge/health") {
+    const days = Math.max(1, Math.min(365, Number(url.searchParams.get("days")) || 30));
+    const cutoff = Date.now() - days * 86400000;
+    if (data.graphDirty) {
+      data.graph = buildGraph(data.files);
+      data.graphDirty = false;
+      data.graphVersion = (data.graphVersion || 0) + 1;
+      data.graphProjection = null;
+    }
+    const projection = getGraphProjection(data);
+    await docViews.load();
+    const views = docViews.snapshot();
+    const missingTags = [];
+    const missingLinks = [];
+    const staleDocs = [];
+    let docsNoConcepts = 0;
+    for (const file of data.files) {
+      const docPath = file.path;
+      const title = file.title || docPath;
+      const workspace = file.workspaceName || "";
+      const tags = file.tags || [];
+      const hasOnlyPending = tags.length === 1 && tags[0] === "待分类";
+      if (!tags.length || hasOnlyPending) missingTags.push({ path: docPath, title, workspace });
+      const outgoing = projection.outgoingLinks.get(docPath);
+      const backlinks = projection.backlinks.get(docPath);
+      if (!(outgoing && outgoing.size) && !(backlinks && backlinks.size)) {
+        missingLinks.push({ path: docPath, title, workspace });
+      }
+      const concepts = projection.concepts.get(docPath);
+      if (!(concepts && concepts.size)) docsNoConcepts += 1;
+      const viewedAt = views.get(docPath)?.viewedAt || 0;
+      if (!viewedAt || viewedAt < cutoff) {
+        staleDocs.push({
+          path: docPath,
+          title,
+          workspace,
+          viewedAt,
+          daysSince: viewedAt ? Math.floor((Date.now() - viewedAt) / 86400000) : -1,
+        });
+      }
+    }
+    staleDocs.sort((a, b) => (a.viewedAt || 0) - (b.viewedAt || 0));
+    // 知识健康度评分（满分 100）：
+    //   链接密度 40 分 — 文档建立双向链接的程度
+    //   标签覆盖 30 分 — 知识脉络梳理（标签分类）程度
+    //   知识活跃 20 分 — 近期温习覆盖程度
+    //   概念关联 10 分 — 语义概念关联覆盖程度
+    const totalDocs = data.files.length;
+    const ratio = (count) => (totalDocs > 0 ? Math.max(0, Math.min(1, (totalDocs - count) / totalDocs)) : 0);
+    const linkScore = Math.round(ratio(missingLinks.length) * 40);
+    const tagScore = Math.round(ratio(missingTags.length) * 30);
+    const freshScore = Math.round(ratio(staleDocs.length) * 20);
+    const conceptScore = Math.round(ratio(docsNoConcepts) * 10);
+    const healthScore = Math.max(0, Math.min(100, linkScore + tagScore + freshScore + conceptScore));
+    return json(res, 200, {
+      days,
+      generatedAt: new Date().toISOString(),
+      stats: {
+        documents: totalDocs,
+        missingTags: missingTags.length,
+        missingLinks: missingLinks.length,
+        staleDocs: staleDocs.length,
+        healthScore,
+        scoreBreakdown: {
+          link: { score: linkScore, max: 40, label: "链接密度" },
+          tag: { score: tagScore, max: 30, label: "标签覆盖" },
+          fresh: { score: freshScore, max: 20, label: "知识活跃" },
+          concept: { score: conceptScore, max: 10, label: "概念关联" },
+        },
+      },
+      missingTags: missingTags.slice(0, 200),
+      missingLinks: missingLinks.slice(0, 200),
+      staleDocs: staleDocs.slice(0, 200),
+    });
   }
   if (url.pathname === "/api/save" && req.method === "POST") {
     const payload = await readJson(req);
