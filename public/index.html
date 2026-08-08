@@ -11,24 +11,27 @@
     <meta name="application-name" content="MyTemple Knowledge" />
     <link rel="icon" href="/favicon.ico" type="image/x-icon" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="stylesheet" href="/styles.css?v=20260808-v12" />
+    <link rel="stylesheet" href="/styles.css?v=20260808-v15" />
     <link rel="modulepreload" href="/editor-core.js?v=20260807-v1" />
-    <link rel="modulepreload" href="/app.js?v=20260808-v11" />
+    <link rel="modulepreload" href="/app.js?v=20260808-v16" />
   </head>
   <body>
     <div id="appSplash" class="app-splash">
-      <div class="splash-content">
-        <div class="splash-brand">
-          <img src="/logo1.png" alt="" class="splash-logo" width="48" height="48" />
-        </div>
-        <div class="splash-title">文档知识库</div>
-        <div class="splash-progress">
-          <div class="splash-progress-bar">
-            <div id="splashProgressFill" class="splash-progress-fill" style="width: 0%"></div>
+      <video id="splashVideo" class="splash-video" src="/startup.mp4" playsinline preload="auto"></video>
+      <div id="splashLoading" class="splash-loading hidden">
+        <div class="splash-content">
+          <div class="splash-brand">
+            <img src="/logo1.png" alt="" class="splash-logo" width="48" height="48" />
           </div>
-          <div class="splash-progress-info">
-            <span id="splashProgressText">正在初始化…</span>
-            <span id="splashProgressPct">0%</span>
+          <div class="splash-title">文档知识库</div>
+          <div class="splash-progress">
+            <div class="splash-progress-bar">
+              <div id="splashProgressFill" class="splash-progress-fill" style="width: 0%"></div>
+            </div>
+            <div class="splash-progress-info">
+              <span id="splashProgressText">正在初始化…</span>
+              <span id="splashProgressPct">0%</span>
+            </div>
           </div>
         </div>
       </div>
@@ -156,8 +159,8 @@
             <button class="menu-item" data-menu="go" role="menuitem" aria-haspopup="true">转到<span class="menu-accel">G</span></button>
           </nav>
           <div class="doc-meta">
-            <span id="docPath">docs</span>
             <strong id="docTitle">&#36873;&#25321;&#19968;&#31687; Markdown &#25991;&#26723;</strong>
+            <span id="docPath">docs</span>
           </div>
           <div id="recentDocs" class="recent-docs" aria-label="最近打开文档"></div>
           <div class="toolbar" role="group" aria-label="document actions">
@@ -167,9 +170,6 @@
             </div>
             <button id="graphBtn" title="图谱">图谱</button>
             <button id="aiBtn" title="本地知识库问答" aria-pressed="false">AI</button>
-            <button id="exportPdfBtn" title="将当前文档导出为 PDF">PDF</button>
-            <button id="copyWechatBtn" title="复制为公众号文章格式">公众号</button>
-            <button id="settingsBtn" title="settings">&#35774;&#32622;</button>
             <button id="deleteBtn" class="danger" title="delete (Ctrl+D)">&#21024;&#38500;</button>
           </div>
         </header>
@@ -997,6 +997,20 @@
         </div>
       </div>
     </div>
+    <div id="globalSearchOverlay" class="global-search-overlay hidden" role="dialog" aria-modal="true" aria-label="全局搜索">
+      <div class="global-search-dialog">
+        <div class="global-search-input-wrap">
+          <svg class="global-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <input id="globalSearchInput" type="text" placeholder="搜索全部文档内容…" autocomplete="off" spellcheck="false" />
+          <kbd class="global-search-kbd">Esc 关闭</kbd>
+        </div>
+        <div id="globalSearchResults" class="global-search-results"></div>
+        <div class="global-search-footer">
+          <span class="global-search-hint">↑↓ 选择 · Enter 打开 · Esc 关闭</span>
+          <span id="globalSearchCount" class="global-search-count"></span>
+        </div>
+      </div>
+    </div>
     <div id="toast" class="toast hidden"></div>
     <div id="printRoot" class="print-root hidden" aria-hidden="true"></div>
     <script>
@@ -1050,7 +1064,7 @@
         }, 15000);
       })();
     </script>
-    <script src="/app.js?v=20260808-v11" type="module"></script>
+    <script src="/app.js?v=20260808-v16" type="module"></script>
 
     <div class="menu-dropdowns" id="menuDropdowns">
       <div class="menu-dropdown hidden" data-dropdown="file" role="menu">
