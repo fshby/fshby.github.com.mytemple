@@ -4,8 +4,9 @@ title: 知识库编写规范与 AI 蒸馏指南
 tags:
   - 知识库管理
   - 写作规范
-  - AI蒸馏
-  - RAG
+  - ai蒸馏
+  - rag
+  - 来源
 domain: 知识库管理
 created: 2026-07-22
 updated: 2026-07-22

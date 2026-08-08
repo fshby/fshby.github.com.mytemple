@@ -11,9 +11,9 @@
     <meta name="application-name" content="MyTemple Knowledge" />
     <link rel="icon" href="/favicon.ico" type="image/x-icon" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="stylesheet" href="/styles.css?v=20260807-v2" />
+    <link rel="stylesheet" href="/styles.css?v=20260808-v12" />
     <link rel="modulepreload" href="/editor-core.js?v=20260807-v1" />
-    <link rel="modulepreload" href="/app.js?v=20260807-v2" />
+    <link rel="modulepreload" href="/app.js?v=20260808-v11" />
   </head>
   <body>
     <div id="appSplash" class="app-splash">
@@ -129,12 +129,6 @@
     <div class="app-shell">
       <aside class="sidebar">
         <div class="brand">
-          <nav class="menu-bar" role="menubar" aria-label="菜单栏">
-            <button class="menu-item" data-menu="file" role="menuitem" aria-haspopup="true">文件<span class="menu-accel">F</span></button>
-            <button class="menu-item" data-menu="edit" role="menuitem" aria-haspopup="true">编辑<span class="menu-accel">E</span></button>
-            <button class="menu-item" data-menu="view" role="menuitem" aria-haspopup="true">查看<span class="menu-accel">V</span></button>
-            <button class="menu-item" data-menu="go" role="menuitem" aria-haspopup="true">转到<span class="menu-accel">G</span></button>
-          </nav>
           <div class="brand-mark" aria-label="MyTemple Knowledge logo"><img src="/logo1.png" alt="" width="42" height="42" decoding="async" /></div>
           <div class="brand-text">
             <h1>&#25991;&#26723;&#30693;&#35782;&#24211;</h1>
@@ -143,44 +137,6 @@
           <button id="sidebarHideBtn" class="icon-button sidebar-hide" title="&#38544;&#34255;&#30446;&#24405;" aria-label="&#38544;&#34255;&#30446;&#24405;">&lt;</button>
         </div>
 
-        <div class="menu-dropdowns" id="menuDropdowns">
-          <div class="menu-dropdown hidden" data-dropdown="file" role="menu">
-            <button class="menu-option" data-action="new-doc"><span class="menu-option-icon">📄</span>新建文档<kbd>Ctrl+N</kbd></button>
-            <button class="menu-option" data-action="new-folder"><span class="menu-option-icon">📁</span>新建文件夹</button>
-            <button class="menu-option" data-action="save"><span class="menu-option-icon">💾</span>保存<kbd>Ctrl+S</kbd></button>
-            <div class="menu-separator"></div>
-            <button class="menu-option" data-action="workspace"><span class="menu-option-icon">🗂️</span>工作路径<kbd>Ctrl+Shift+P</kbd></button>
-            <button class="menu-option" data-action="export-pdf"><span class="menu-option-icon">📕</span>导出 PDF<kbd>Ctrl+Shift+E</kbd></button>
-            <button class="menu-option" data-action="export-wechat"><span class="menu-option-icon">📢</span>复制为公众号</button>
-            <div class="menu-separator"></div>
-            <button class="menu-option" data-action="settings"><span class="menu-option-icon">⚙️</span>设置<kbd>Ctrl+,</kbd></button>
-          </div>
-          <div class="menu-dropdown hidden" data-dropdown="edit" role="menu">
-            <button class="menu-option" data-action="undo"><span class="menu-option-icon">↩️</span>撤销<kbd>Ctrl+Z</kbd></button>
-            <button class="menu-option" data-action="redo"><span class="menu-option-icon">↪️</span>重做<kbd>Ctrl+Shift+Z</kbd></button>
-            <div class="menu-separator"></div>
-            <button class="menu-option" data-action="find"><span class="menu-option-icon">🔍</span>查找<kbd>Ctrl+F</kbd></button>
-            <button class="menu-option" data-action="replace"><span class="menu-option-icon">🔄</span>替换<kbd>Ctrl+H</kbd></button>
-          </div>
-          <div class="menu-dropdown hidden" data-dropdown="view" role="menu">
-            <button class="menu-option" data-action="toggle-edit"><span class="menu-option-icon">✏️</span>编辑模式<kbd>Ctrl+E</kbd></button>
-            <button class="menu-option" data-action="toggle-reading"><span class="menu-option-icon">📖</span>阅读模式</button>
-            <div class="menu-separator"></div>
-            <button class="menu-option" data-action="toggle-sidebar"><span class="menu-option-icon">◧</span>切换侧边栏<kbd>Ctrl+B</kbd></button>
-            <button class="menu-option" data-action="toggle-outline"><span class="menu-option-icon">📑</span>切换大纲</button>
-            <div class="menu-separator"></div>
-            <button class="menu-option" data-action="zoom-in"><span class="menu-option-icon">🔍+</span>放大字体<kbd>Ctrl++</kbd></button>
-            <button class="menu-option" data-action="zoom-out"><span class="menu-option-icon">🔍−</span>缩小字体<kbd>Ctrl+−</kbd></button>
-            <button class="menu-option" data-action="zoom-reset"><span class="menu-option-icon">1:1</span>重置缩放<kbd>Ctrl+0</kbd></button>
-          </div>
-          <div class="menu-dropdown hidden" data-dropdown="go" role="menu">
-            <button class="menu-option" data-action="go-doc"><span class="menu-option-icon">📄</span>转到文档<kbd>Ctrl+P</kbd></button>
-            <button class="menu-option" data-action="go-symbol"><span class="menu-option-icon">#</span>转到标题<kbd>Ctrl+G</kbd></button>
-            <div class="menu-separator"></div>
-            <button class="menu-option" data-action="go-back"><span class="menu-option-icon">⬅️</span>后退<kbd>Alt+←</kbd></button>
-            <button class="menu-option" data-action="go-forward"><span class="menu-option-icon">➡️</span>前进<kbd>Alt+→</kbd></button>
-          </div>
-        </div>
         <label class="search-box">
           <span aria-hidden="true">S</span>
           <input id="searchInput" placeholder="&#20840;&#23616;&#26816;&#32034;&#20851;&#38190;&#23383;" autocomplete="off" />
@@ -193,6 +149,12 @@
 
       <main class="workspace">
         <header class="topbar">
+          <nav class="menu-bar" role="menubar" aria-label="菜单栏">
+            <button class="menu-item" data-menu="file" role="menuitem" aria-haspopup="true">文件<span class="menu-accel">F</span></button>
+            <button class="menu-item" data-menu="edit" role="menuitem" aria-haspopup="true">编辑<span class="menu-accel">E</span></button>
+            <button class="menu-item" data-menu="view" role="menuitem" aria-haspopup="true">查看<span class="menu-accel">V</span></button>
+            <button class="menu-item" data-menu="go" role="menuitem" aria-haspopup="true">转到<span class="menu-accel">G</span></button>
+          </nav>
           <div class="doc-meta">
             <span id="docPath">docs</span>
             <strong id="docTitle">&#36873;&#25321;&#19968;&#31687; Markdown &#25991;&#26723;</strong>
@@ -396,6 +358,10 @@
               <span class="settings-nav-icon" aria-hidden="true">✦</span>
               <span class="settings-nav-label">AI 与索引</span>
             </button>
+            <button type="button" class="settings-nav-item" data-settings-tab="knowledge">
+              <span class="settings-nav-icon" aria-hidden="true">🧠</span>
+              <span class="settings-nav-label">知识管理</span>
+            </button>
             <button type="button" class="settings-nav-item" data-settings-tab="tools">
               <span class="settings-nav-icon" aria-hidden="true">⚒</span>
               <span class="settings-nav-label">工具</span>
@@ -456,6 +422,7 @@
                     <option value='"Microsoft YaHei", "Segoe UI", Arial, sans-serif'>雅黑</option>
                     <option value='"SimSun", "Microsoft YaHei", serif'>宋体</option>
                     <option value='"Cascadia Code", Consolas, "Microsoft YaHei", monospace'>等宽</option>
+                    <option value='"Source Han Serif SC", "Noto Serif SC", "Songti SC", "SimSun", "Segoe UI", serif'>纸张衬线</option>
                   </select>
                 </label>
               </section>
@@ -526,11 +493,23 @@
                 <p class="muted">本地 AI 模型、语义索引与文档规则。</p>
               </div>
               <section class="settings-section ai-settings-section">
-                <strong>本地 AI 与语义索引</strong>
-                <p class="muted">通过 Ollama 在本机完成向量化与问答；未配置时自动使用关键词检索。</p>
-                <label class="setting-field"><span>服务地址</span><input id="aiBaseUrl" value="http://127.0.0.1:11434" /></label>
-                <label class="setting-field"><span>向量模型</span><input id="aiEmbeddingModel" list="aiModelChoices" placeholder="例如 qwen3-embedding" /></label>
-                <label class="setting-field"><span>对话模型</span><input id="aiChatModel" list="aiModelChoices" placeholder="选择本机已有模型" /></label>
+                <strong>对话模型接入</strong>
+                <p class="muted">对话模型可在本地 Ollama 与云端 DeepSeek 之间切换；语义向量索引始终使用本地 Ollama 向量模型，未配置时自动使用关键词检索。</p>
+                <div class="segmented ai-provider-choices" id="aiProviderChoices">
+                  <button type="button" data-provider="ollama">本地 Ollama</button>
+                  <button type="button" data-provider="deepseek">DeepSeek 云端</button>
+                </div>
+                <label class="setting-field"><span>本地服务地址</span><input id="aiBaseUrl" value="http://127.0.0.1:11434" /></label>
+                <label class="setting-field"><span>向量模型</span><input id="aiEmbeddingModel" list="aiModelChoices" placeholder="例如 qwen3-embedding（可留空使用关键词模式）" /></label>
+                <div class="ai-provider-fields" data-provider-fields="ollama">
+                  <label class="setting-field"><span>对话模型</span><input id="aiChatModel" list="aiModelChoices" placeholder="选择本机已有模型" /></label>
+                </div>
+                <div class="ai-provider-fields hidden" data-provider-fields="deepseek">
+                  <label class="setting-field"><span>API Key</span><input id="aiDeepseekApiKey" type="password" placeholder="sk-..." autocomplete="off" /></label>
+                  <label class="setting-field"><span>服务地址</span><input id="aiDeepseekBaseUrl" value="https://api.deepseek.com" /></label>
+                  <label class="setting-field"><span>对话模型</span><input id="aiDeepseekChatModel" placeholder="deepseek-chat" /></label>
+                  <p class="muted">DeepSeek 不提供向量模型，语义索引仍使用上方本地向量模型（可留空进入关键词模式）。AI 处理选中、知识库问答均使用 DeepSeek 对话模型。</p>
+                </div>
                 <datalist id="aiModelChoices"></datalist>
                 <div class="inline-actions">
                   <button type="button" id="aiTestBtn">检测连接</button>
@@ -566,6 +545,61 @@
               </section>
             </section>
 
+            <section class="settings-panel" data-settings-panel="knowledge">
+              <div class="settings-panel-header">
+                <h3>知识库智能管理</h3>
+                <p class="muted">梳理知识脉络，补全标签与链接，定期温习加深记忆。</p>
+              </div>
+              <section class="settings-section knowledge-config-section">
+                <strong>温习提醒</strong>
+                <p class="muted">长时间未浏览的文档可能被遗忘。设置温习周期，系统会列出需要回顾的文档。</p>
+                <label class="setting-row">
+                  <span>温习周期（天）</span>
+                  <input id="kmReviewDays" type="number" min="7" max="365" step="1" value="30" />
+                </label>
+                <label class="setting-row">
+                  <span>启用温习提醒</span>
+                  <input id="kmEnableReminder" type="checkbox" checked />
+                </label>
+                <div class="inline-actions">
+                  <button type="button" id="kmRefreshBtn" class="primary">分析知识脉络</button>
+                </div>
+                <p id="kmStatus" class="muted">点击「分析知识脉络」查看待梳理文档。</p>
+              </section>
+              <section class="settings-section knowledge-health-section">
+                <strong>知识脉络健康度</strong>
+                <div class="km-health-score" id="kmHealthScore" aria-live="polite">
+                  <p class="muted">点击「分析知识脉络」查看健康度评分。</p>
+                </div>
+                <div class="km-stats" id="kmStats" aria-live="polite"></div>
+                <details class="km-group" open>
+                  <summary>缺少标签的文档（<span id="kmMissingTagsCount">0</span>）</summary>
+                  <p class="muted">为这些文档补充 #标签或 frontmatter tags，可被知识图谱与语义检索命中。</p>
+                  <ul class="km-doc-list" id="kmMissingTagsList"></ul>
+                </details>
+                <details class="km-group" open>
+                  <summary>缺少链接的文档（<span id="kmMissingLinksCount">0</span>）</summary>
+                  <p class="muted">添加 [[双向链接]] 或相对路径链接，让孤岛文档融入知识网络。</p>
+                  <ul class="km-doc-list" id="kmMissingLinksList"></ul>
+                </details>
+                <details class="km-group">
+                  <summary>建议温习的文档（<span id="kmStaleCount">0</span>）</summary>
+                  <p class="muted">这些文档较久未浏览，回顾可强化记忆与知识联结。</p>
+                  <ul class="km-doc-list" id="kmStaleList"></ul>
+                </details>
+              </section>
+              <section class="settings-section knowledge-guide-section">
+                <strong>知识脉络梳理指南</strong>
+                <p class="muted">建议按以下步骤持续完善知识网络：</p>
+                <ol class="km-guide">
+                  <li>为每篇文档补充 2-5 个 #标签，覆盖主题、对象与场景。</li>
+                  <li>在相关段落插入 [[文档名]] 双向链接，串联同类知识。</li>
+                  <li>使用「AI 与索引」中的「智能适配标签」自动补全语义标签。</li>
+                  <li>定期回到本页查看健康度，温习标记为陈旧的文档。</li>
+                </ol>
+              </section>
+            </section>
+
             <section class="settings-panel" data-settings-panel="tools">
               <div class="settings-panel-header">
                 <h3>工具</h3>
@@ -577,11 +611,6 @@
                 <button type="button" id="normalizeMdBtn" class="primary">一键 MD 化</button>
                 <div class="progress hidden" id="normalizeProgress"><span></span></div>
                 <p id="normalizeStatus" class="muted"></p>
-              </section>
-              <section class="settings-section community-settings-section">
-                <strong>沟通交流群</strong>
-                <p class="muted">查看官方沟通群介绍与入群二维码。</p>
-                <button type="button" id="communityBtn">查看沟通群</button>
               </section>
             </section>
 
@@ -623,14 +652,29 @@
                 <p class="muted">软件信息与作者署名。</p>
               </div>
               <section class="settings-section about-section">
-                <button type="button" id="aboutBtn" class="about-btn">
-                  <svg viewBox="0 0 24  24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="10"/>
-                    <circle cx="12" cy="12" r="4"/>
-                    <line x1="12" y1="16" x2="12.01" y2="16"/>
-                  </svg>
-                  <span>关于文档知识库</span>
-                </button>
+                <div class="about-inline-content">
+                  <div class="about-inline-header">
+                    <div class="brand-mark" aria-label="MyTemple Knowledge logo"><img src="/logo1.png" alt="" width="36" height="36" decoding="async" /></div>
+                    <div>
+                      <strong>文档知识库</strong>
+                      <div class="about-version">版本 <span id="aboutVersion">--</span></div>
+                      <div class="about-date" id="aboutDate"></div>
+                    </div>
+                  </div>
+                  <div class="about-release-notes">
+                    <strong>更新日志</strong>
+                    <div id="aboutReleaseNotes"></div>
+                  </div>
+                  <div class="about-credits">
+                    <strong>关于作者</strong>
+                    <div class="about-credit-row"><span class="about-credit-label">作者</span><span class="about-credit-value">郑堃逢</span></div>
+                    <div class="about-credit-row"><span class="about-credit-label">联系方式</span><span class="about-credit-value">QQ：1101139736</span></div>
+                    <p class="muted">MyTemple Knowledge · 本地 Markdown 文档知识库与知识神经网络</p>
+                  </div>
+                  <div class="about-actions">
+                    <button type="button" id="checkUpdateBtn" class="primary">检查更新</button>
+                  </div>
+                </div>
               </section>
             </section>
             <section class="settings-panel" data-settings-panel="license">
@@ -666,32 +710,20 @@
                   <button type="button" id="deactivateLicenseBtn" class="license-deactivate-btn">解除授权</button>
                 </div>
               </div>
+              <section class="settings-section community-settings-section">
+                <strong>沟通交流群</strong>
+                <div class="community-inline-body">
+                  <div class="community-description">
+                    <p>欢迎交流产品建议、使用反馈、文档管理方法和知识图谱实践。</p>
+                    <span>请使用 QQ 扫描二维码申请加入。</span>
+                  </div>
+                  <div class="community-qr-preview community-qr-static">
+                    <img src="/qqqun.webp" alt="MyTemple Knowledge QQ 沟通群二维码" />
+                  </div>
+                </div>
+              </section>
             </section>
           </div>
-        </div>
-      </div>
-    </div>
-    <div id="communityModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="communityTitle">
-      <div class="modal-dialog community-dialog community-dialog-readonly">
-        <div class="community-head">
-          <div>
-            <h2 id="communityTitle">加入沟通交流群</h2>
-            <p class="muted">交流知识库整理、Markdown 工作流和知识图谱使用经验。</p>
-          </div>
-          <button type="button" id="closeCommunityBtn" class="community-close" aria-label="关闭">&times;</button>
-        </div>
-        <div class="community-readonly-body">
-          <div class="community-description">
-            <strong>MyTemple Knowledge 沟通群</strong>
-            <p>欢迎交流产品建议、使用反馈、文档管理方法和知识图谱实践。</p>
-            <span>请使用 QQ 扫描二维码申请加入。</span>
-          </div>
-          <div class="community-qr-preview community-qr-static">
-            <img src="/qqqun.webp" alt="MyTemple Knowledge QQ 沟通群二维码" />
-          </div>
-        </div>
-        <div class="modal-actions">
-          <button type="button" id="backCommunityBtn" class="primary">返回设置</button>
         </div>
       </div>
     </div>
@@ -892,37 +924,6 @@
         <circle cx="24" cy="32" r="2.5" fill="rgba(255,255,255,0.25)"/>
       </svg>
     </button>
-    <div id="aboutModal" class="modal hidden" role="dialog" aria-modal="true">
-      <div class="modal-dialog about-dialog">
-        <button type="button" class="close-about-btn" id="closeAboutBtn">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"/>
-            <line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
-        <div class="about-header">
-          <div class="about-logo">
-            <div class="brand-mark" aria-label="MyTemple Knowledge logo"><img src="/logo1.png" alt="" width="36" height="36" decoding="async" /></div>
-          </div>
-          <h2>文档知识库</h2>
-          <div class="about-version">版本 <span id="aboutVersion">--</span></div>
-          <div class="about-date" id="aboutDate"></div>
-        </div>
-        <div class="about-release-notes">
-          <strong>更新日志</strong>
-          <div id="aboutReleaseNotes"></div>
-        </div>
-        <div class="about-credits">
-          <strong>关于作者</strong>
-          <div class="about-credit-row"><span class="about-credit-label">作者</span><span class="about-credit-value">郑堃逢</span></div>
-          <div class="about-credit-row"><span class="about-credit-label">联系方式</span><span class="about-credit-value">QQ：1101139736</span></div>
-          <p class="muted">MyTemple Knowledge · 本地 Markdown 文档知识库与知识神经网络</p>
-        </div>
-        <div class="about-actions">
-          <button type="button" id="checkUpdateBtn" class="primary">检查更新</button>
-        </div>
-      </div>
-    </div>
     <div id="donationModal" class="modal hidden" role="dialog" aria-modal="true">
       <div class="modal-dialog donation-dialog">
         <button type="button" class="close-donation-btn" id="closeDonationBtn">
@@ -1006,8 +1007,17 @@
         var pct = document.getElementById("splashProgressPct");
         var txt = document.getElementById("splashProgressText");
         var errShown = false;
+        // 应用启动完成后置为 true，启动后的运行时错误不再触发自动刷新，
+        // 避免粘贴长文、切换设置等操作中的偶发异常打断编辑心流。
+        var appStarted = false;
+        window.__markAppStarted = function () { appStarted = true; };
 
         function showStartupError(msg) {
+          // 启动完成后的运行时错误仅记录，不刷新页面、不卡启动屏。
+          if (appStarted) {
+            if (window.console) console.warn("[runtime]", msg);
+            return;
+          }
           if (errShown) return;
           errShown = true;
           if (fill) fill.style.width = "100%";
@@ -1017,7 +1027,7 @@
             txt.textContent = "启动失败：" + msg;
             txt.style.color = "#dc2626";
           }
-          // 10 秒后自动刷新页面
+          // 仅在启动阶段失败时 10 秒后自动刷新页面
           setTimeout(function () { window.location.reload(); }, 10000);
         }
 
@@ -1040,6 +1050,45 @@
         }, 15000);
       })();
     </script>
-    <script src="/app.js?v=20260807-v2" type="module"></script>
+    <script src="/app.js?v=20260808-v11" type="module"></script>
+
+    <div class="menu-dropdowns" id="menuDropdowns">
+      <div class="menu-dropdown hidden" data-dropdown="file" role="menu">
+        <button class="menu-option" data-action="new-doc"><span class="menu-option-icon">📄</span>新建文档<kbd>Ctrl+N</kbd></button>
+        <button class="menu-option" data-action="new-folder"><span class="menu-option-icon">📁</span>新建文件夹</button>
+        <button class="menu-option" data-action="save"><span class="menu-option-icon">💾</span>保存<kbd>Ctrl+S</kbd></button>
+        <div class="menu-separator"></div>
+        <button class="menu-option" data-action="workspace"><span class="menu-option-icon">🗂️</span>工作路径<kbd>Ctrl+Shift+P</kbd></button>
+        <button class="menu-option" data-action="export-pdf"><span class="menu-option-icon">📕</span>导出 PDF<kbd>Ctrl+Shift+E</kbd></button>
+        <button class="menu-option" data-action="export-wechat"><span class="menu-option-icon">📢</span>复制为公众号</button>
+        <div class="menu-separator"></div>
+        <button class="menu-option" data-action="settings"><span class="menu-option-icon">⚙️</span>设置<kbd>Ctrl+,</kbd></button>
+      </div>
+      <div class="menu-dropdown hidden" data-dropdown="edit" role="menu">
+        <button class="menu-option" data-action="undo"><span class="menu-option-icon">↩️</span>撤销<kbd>Ctrl+Z</kbd></button>
+        <button class="menu-option" data-action="redo"><span class="menu-option-icon">↪️</span>重做<kbd>Ctrl+Shift+Z</kbd></button>
+        <div class="menu-separator"></div>
+        <button class="menu-option" data-action="find"><span class="menu-option-icon">🔍</span>查找<kbd>Ctrl+F</kbd></button>
+        <button class="menu-option" data-action="replace"><span class="menu-option-icon">🔄</span>替换<kbd>Ctrl+H</kbd></button>
+      </div>
+      <div class="menu-dropdown hidden" data-dropdown="view" role="menu">
+        <button class="menu-option" data-action="toggle-edit"><span class="menu-option-icon">✏️</span>编辑模式<kbd>Ctrl+E</kbd></button>
+        <button class="menu-option" data-action="toggle-reading"><span class="menu-option-icon">📖</span>阅读模式</button>
+        <div class="menu-separator"></div>
+        <button class="menu-option" data-action="toggle-sidebar"><span class="menu-option-icon">◧</span>切换侧边栏<kbd>Ctrl+B</kbd></button>
+        <button class="menu-option" data-action="toggle-outline"><span class="menu-option-icon">📑</span>切换大纲</button>
+        <div class="menu-separator"></div>
+        <button class="menu-option" data-action="zoom-in"><span class="menu-option-icon">🔍+</span>放大字体<kbd>Ctrl++</kbd></button>
+        <button class="menu-option" data-action="zoom-out"><span class="menu-option-icon">🔍−</span>缩小字体<kbd>Ctrl+−</kbd></button>
+        <button class="menu-option" data-action="zoom-reset"><span class="menu-option-icon">1:1</span>重置缩放<kbd>Ctrl+0</kbd></button>
+      </div>
+      <div class="menu-dropdown hidden" data-dropdown="go" role="menu">
+        <button class="menu-option" data-action="go-doc"><span class="menu-option-icon">📄</span>转到文档<kbd>Ctrl+P</kbd></button>
+        <button class="menu-option" data-action="go-symbol"><span class="menu-option-icon">#</span>转到标题<kbd>Ctrl+G</kbd></button>
+        <div class="menu-separator"></div>
+        <button class="menu-option" data-action="go-back"><span class="menu-option-icon">⬅️</span>后退<kbd>Alt+←</kbd></button>
+        <button class="menu-option" data-action="go-forward"><span class="menu-option-icon">➡️</span>前进<kbd>Alt+→</kbd></button>
+      </div>
+    </div>
   </body>
 </html>
