@@ -432,47 +432,39 @@ function generateSeamlessPaperTextureDataUrl(size, seed) {
   const ctx = canvas.getContext("2d");
   if (!ctx) return "";
 
-  // 8x8 网格单元 → 无缝平铺
-  const { fbm } = createPeriodicPerlin(8, size, seed);
+  const { fbm, noise } = createPeriodicPerlin(12, size, seed);
 
-  // 基准底色：燕麦纸
-  const baseR = 232, baseG = 220, baseB = 196;
-
-  // 使用 fBm 生成有机流动的纤维纹理
   const imgData = ctx.createImageData(size, size);
   const data = imgData.data;
 
-  for (let y = 0; y < size; y += 1) {
-    for (let x = 0; x < size; x += 1) {
+  const baseR = 238, baseG = 226, baseB = 200;
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
       const idx = (y * size + x) * 4;
 
-      // 多八度 fBm → 自然的纸张纤维感
-      const fiber = fbm(x, y, 4);  // [-1, 1]
-      const coarse = fbm(x * 0.5, y * 0.5, 3);  // 大尺度斑块
-      const fine = fbm(x * 2, y * 2, 3);  // 细微纤维
+      const n1 = fbm(x * 0.8, y * 0.8, 4);
+      const n2 = fbm(x * 2.5, y * 2.5, 3);
+      const n3 = fbm(x * 5.0, y * 5.0, 2);
 
-      // 组合三层噪声：大尺度明暗 + 中尺度纤维 + 细微颗粒
-      const combined = coarse * 0.6 + fiber * 0.3 + fine * 0.1;
-      // 归一化到 [0, 255]，以底色为中心
-      const intensity = (combined + 1) * 0.5;  // [0, 1]
+      const fiber = n1 * 0.55 + n2 * 0.30 + n3 * 0.15;
+      const intensity = (fiber + 1) * 0.5;
 
-      // 颜色映射：暖黄油墨色调
-      // 明区：偏亮黄；暗区：偏棕灰
-      const shade = 0.85 + intensity * 0.30;  // [0.85, 1.15]
+      const shade = 0.88 + intensity * 0.18;
       const tintR = 1.0;
-      const tintG = 0.94 + intensity * 0.04;  // 轻微黄调
-      const tintB = 0.82 + intensity * 0.06;  // 蓝调稍弱
+      const tintG = 0.96 + intensity * 0.03;
+      const tintB = 0.86 + intensity * 0.05;
 
       let r = baseR * shade * tintR;
       let g = baseG * shade * tintG;
       let b = baseB * shade * tintB;
 
-      // 细微颗粒噪点增强（但受 fBm 控制，不会出现雪花感）
-      const grain = (Math.sin(x * 12.9898 + y * 78.233) * 43758.5453) % 1;
-      const grainN = (grain - 0.5) * 8;
+      const ghash = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
+      const grain = (ghash - Math.floor(ghash)) - 0.5;
+      const grainN = grain * 1.8;
       r += grainN;
-      g += grainN * 0.6;
-      b += grainN * 0.15;
+      g += grainN * 0.5;
+      b += grainN * 0.10;
 
       data[idx] = Math.max(0, Math.min(255, r));
       data[idx + 1] = Math.max(0, Math.min(255, g));
@@ -485,8 +477,50 @@ function generateSeamlessPaperTextureDataUrl(size, seed) {
   return canvas.toDataURL("image/png");
 }
 
-// === 生成大型视口纸张纹理（非重复） ===
-let _paperLargeCanvas = null;
+function _mkValueNoise2D(seed) {
+  const SIZE = 256;
+  const grid = new Float32Array(SIZE * SIZE);
+  let s = seed | 0;
+  function lcg() {
+    s = (Math.imul(s, 1103515245) + 12345) & 0x7fffffff;
+    return s / 0x7fffffff;
+  }
+  for (let i = 0; i < grid.length; i++) {
+    grid[i] = lcg() * 2 - 1;
+  }
+  function smoothstep(t) { return t * t * (3 - 2 * t); }
+  function noise(x, y) {
+    const x0 = Math.floor(x);
+    const y0 = Math.floor(y);
+    const xf = x - x0;
+    const yf = y - y0;
+    const x0m = ((x0 % SIZE) + SIZE) % SIZE;
+    const x1m = ((x0 + 1) % SIZE + SIZE) % SIZE;
+    const y0m = ((y0 % SIZE) + SIZE) % SIZE;
+    const y1m = ((y0 + 1) % SIZE + SIZE) % SIZE;
+    const v00 = grid[y0m * SIZE + x0m];
+    const v10 = grid[y0m * SIZE + x1m];
+    const v01 = grid[y1m * SIZE + x0m];
+    const v11 = grid[y1m * SIZE + x1m];
+    const u = smoothstep(xf);
+    const v = smoothstep(yf);
+    const nx0 = v00 + (v10 - v00) * u;
+    const nx1 = v01 + (v11 - v01) * u;
+    return nx0 + (nx1 - nx0) * v;
+  }
+  function fbm(x, y, octaves) {
+    let val = 0, amp = 1, freq = 1, maxV = 0;
+    for (let i = 0; i < octaves; i++) {
+      val += noise(x * freq, y * freq) * amp;
+      maxV += amp;
+      amp *= 0.5;
+      freq *= 2;
+    }
+    return val / maxV;
+  }
+  return { noise, fbm };
+}
+
 function generateLargePaperTextureDataUrl(w, h, seed) {
   const canvas = document.createElement("canvas");
   canvas.width = w;
@@ -494,96 +528,46 @@ function generateLargePaperTextureDataUrl(w, h, seed) {
   const ctx = canvas.getContext("2d");
   if (!ctx) return "";
 
-  const baseR = 232, baseG = 220, baseB = 196;
+  const baseR = 238, baseG = 226, baseB = 200;
 
-  // 高质量值噪声：每个网格点独立哈希，确保连续性
-  function makeValueNoise(seed3) {
-    // 预计算哈希表：256x256 网格
-    const SIZE = 256;
-    const grid = new Float32Array(SIZE * SIZE);
-    let s = seed3 | 0;
-    function lcg() {
-      s = (Math.imul(s, 1103515245) + 12345) & 0x7fffffff;
-      return s / 0x7fffffff;
-    }
-    for (let i = 0; i < grid.length; i++) {
-      grid[i] = lcg() * 2 - 1;  // [-1, 1]
-    }
-    function smoothstep(t) { return t * t * (3 - 2 * t); }
-    function noise(x, y) {
-      const x0 = Math.floor(x);
-      const y0 = Math.floor(y);
-      const xf = x - x0;
-      const yf = y - y0;
-      const x0m = ((x0 % SIZE) + SIZE) % SIZE;
-      const x1m = ((x0 + 1) % SIZE + SIZE) % SIZE;
-      const y0m = ((y0 % SIZE) + SIZE) % SIZE;
-      const y1m = ((y0 + 1) % SIZE + SIZE) % SIZE;
-      const v00 = grid[y0m * SIZE + x0m];
-      const v10 = grid[y0m * SIZE + x1m];
-      const v01 = grid[y1m * SIZE + x0m];
-      const v11 = grid[y1m * SIZE + x1m];
-      const u = smoothstep(xf);
-      const v = smoothstep(yf);
-      const nx0 = v00 + (v10 - v00) * u;
-      const nx1 = v01 + (v11 - v01) * u;
-      return nx0 + (nx1 - nx0) * v;
-    }
-    function fbm(x, y, octaves) {
-      let val = 0, amp = 1, freq = 1, maxV = 0;
-      for (let i = 0; i < octaves; i++) {
-        val += noise(x * freq, y * freq) * amp;
-        maxV += amp;
-        amp *= 0.5;
-        freq *= 2;
-      }
-      return val / maxV;
-    }
-    return { noise, fbm };
-  }
-
-  const coarseNoise = makeValueNoise(seed);
-  const mediumNoise = makeValueNoise(seed + 100);
-  const fineNoise = makeValueNoise(seed + 200);
+  const n1 = _mkValueNoise2D(seed);
+  const n2 = _mkValueNoise2D(seed + 101);
+  const n3 = _mkValueNoise2D(seed + 203);
+  const n4 = _mkValueNoise2D(seed + 307);
 
   const imgData = ctx.createImageData(w, h);
   const data = imgData.data;
 
-  const step = 2;
-  for (let y2 = 0; y2 < h; y2 += step) {
-    for (let x2 = 0; x2 < w; x2 += step) {
-      // 多尺度 fBm：大尺度斑块 + 中尺度纤维 + 细微颗粒
-      const nx = x2 * 0.003;
-      const ny = y2 * 0.003;
-      const coarse = coarseNoise.fbm(nx, ny, 4);
-      const medium = mediumNoise.fbm(x2 * 0.008, y2 * 0.008, 3);
-      const fine = fineNoise.fbm(x2 * 0.025, y2 * 0.025, 3);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const idx = (y * w + x) * 4;
 
-      const combined = coarse * 0.55 + medium * 0.30 + fine * 0.15;
+      const nx = x * 0.0025;
+      const ny = y * 0.0025;
+      const coarse = n1.fbm(nx, ny, 4);
+      const medium = n2.fbm(x * 0.007, y * 0.007, 3);
+      const fine = n3.fbm(x * 0.020, y * 0.020, 3);
+      const micro = n4.fbm(x * 0.050, y * 0.050, 2);
+
+      const combined = coarse * 0.48 + medium * 0.28 + fine * 0.16 + micro * 0.08;
       const intensity = (combined + 1) * 0.5;
 
-      const shade = 0.82 + intensity * 0.32;
+      const shade = 0.88 + intensity * 0.20;
       const tintR = 1.0;
-      const tintG = 0.94 + intensity * 0.04;
-      const tintB = 0.82 + intensity * 0.07;
+      const tintG = 0.96 + intensity * 0.03;
+      const tintB = 0.86 + intensity * 0.05;
 
       let r = baseR * shade * tintR;
       let g = baseG * shade * tintG;
       let b = baseB * shade * tintB;
 
-      // 细微颗粒（使用确定性 hash，不受 fBm 影响）
-      const ghash = ((x2 * 374761393) ^ (y2 * 668265263)) & 0xff;
-      const grainN = (ghash / 255 - 0.5) * 6;
+      const ghash = ((x * 374761393) ^ (y * 668265263)) & 0xff;
+      const grainN = (ghash / 255 - 0.5) * 1.8;
 
-      for (let dy = 0; dy < step; dy += 1) {
-        for (let dx = 0; dx < step; dx += 1) {
-          const i = ((y2 + dy) * w + (x2 + dx)) * 4;
-          data[i] = Math.max(0, Math.min(255, r + grainN));
-          data[i + 1] = Math.max(0, Math.min(255, g + grainN * 0.55));
-          data[i + 2] = Math.max(0, Math.min(255, b + grainN * 0.12));
-          data[i + 3] = 255;
-        }
-      }
+      data[idx] = Math.max(0, Math.min(255, r + grainN));
+      data[idx + 1] = Math.max(0, Math.min(255, g + grainN * 0.5));
+      data[idx + 2] = Math.max(0, Math.min(255, b + grainN * 0.10));
+      data[idx + 3] = 255;
     }
   }
 
@@ -596,8 +580,8 @@ let _paperBgCacheKey = "";
 function getPaperBackgroundUrl() {
   const vw = window.innerWidth || 1920;
   const vh = window.innerHeight || 1080;
-  const w = Math.min(vw, 2000);
-  const h = Math.min(vh + 200, 2000);
+  const w = Math.min(vw, 2400);
+  const h = Math.min(vh + 200, 2400);
   const key = `${w}x${h}`;
   if (_paperBgCacheKey === key && _paperBgCache) return _paperBgCache;
   try {
@@ -619,8 +603,6 @@ function applyPaperTexture() {
     styleEl.id = ruleId;
     document.head.appendChild(styleEl);
   }
-  // 方案：面板透明，直接透出 body 的大型纹理 → 彻底消除纹理错位和接缝
-  // 同时使用无缝平铺纹理作为底纹，提供更细腻的纤维层次
   let _panelTex = "";
   try { _panelTex = generateSeamlessPaperTextureDataUrl(512, 67890); } catch (_) {}
   const panelVal = _panelTex ? `url("${_panelTex}")` : "none";
@@ -628,40 +610,44 @@ function applyPaperTexture() {
     body[data-theme="eye"] {
       --paper-bg: url("${url}");
       --paper-panel: ${panelVal};
-      background-color: #efebe6;
+      background-color: #e8dcc6;
       background-image:
         var(--paper-bg),
-        radial-gradient(ellipse at 20% 12%, rgba(255, 250, 230, 0.18), transparent 50%),
-        radial-gradient(ellipse at 88% 88%, rgba(85, 58, 20, 0.06), transparent 55%),
-        radial-gradient(ellipse at 50% 50%, rgba(232, 220, 196, 0.35), transparent 70%);
-      background-size: 100% 100%, cover, cover, cover;
-      background-repeat: no-repeat, no-repeat, no-repeat, no-repeat;
-      background-attachment: fixed, fixed, fixed, fixed;
+        radial-gradient(ellipse 60% 40% at 50% 50%, rgba(245, 235, 215, 0.12), transparent 70%);
+      background-size: 100% 100%, cover;
+      background-repeat: no-repeat, no-repeat;
+      background-attachment: fixed, fixed;
     }
-    /* 面板透明，透出 body 大型纹理 → 消除错位和接缝 */
+    body[data-theme="eye"]::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 9999;
+      background:
+        radial-gradient(ellipse 80% 60% at 50% 50%, transparent 65%, rgba(50, 35, 12, 0.05) 100%);
+    }
     body[data-theme="eye"] .app-shell,
     body[data-theme="eye"] .sidebar,
     body[data-theme="eye"] .topbar,
     body[data-theme="eye"] .editor-body,
     body[data-theme="eye"] .reader-panel,
-    body[data-theme="eye"] .welcome-dialog,
-    body[data-theme="eye"] .modal-dialog,
     body[data-theme="eye"] .graph-panel,
-    body[data-theme="eye"] .settings-shell,
     body[data-theme="eye"] #editor,
     body[data-theme="eye"] #preview {
       background-color: transparent !important;
       background-image: none !important;
+      background-size: auto !important;
+      background-repeat: auto !important;
+      background-attachment: auto !important;
       border-right: none !important;
       box-shadow: none !important;
     }
-    /* 编辑器工具栏等微面板也透明化 */
     body[data-theme="eye"] .editor-toolbar,
     body[data-theme="eye"] .graph-tools {
       background-color: transparent !important;
       background-image: none !important;
     }
-    /* 滚动条、边框线弱化 */
     body[data-theme="eye"] ::-webkit-scrollbar-thumb {
       background: rgba(110, 88, 55, 0.20);
     }
@@ -735,8 +721,8 @@ function restoreWindowZoom() {
 
 function applySettings(settings = loadSettings()) {
   document.body.dataset.theme = settings.theme;
-  const themeColorMap = { dark: "#1e1e1e", eye: "#e8dcc4", image: "#1a1a2e" };
-  const themeBgMap = { dark: "#1e1e1e", eye: "#e8dcc4", image: "#1a1a2e" };
+  const themeColorMap = { dark: "#1e1e1e", eye: "#efe3cc", image: "#1a1a2e" };
+  const themeBgMap = { dark: "#1e1e1e", eye: "#efe3cc", image: "#1a1a2e" };
   const metaThemeColor = document.querySelector('meta[name="theme-color"]');
   if (metaThemeColor) {
     metaThemeColor.content = themeColorMap[settings.theme] || "#fafafa";
@@ -5620,6 +5606,174 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Delete") return keyboardDelete(event);
 });
 
+// ===== 双击 Shift 唤起全局搜索 =====
+const _shiftTracker = { lastTime: 0 };
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Shift" && !event.repeat) {
+    const now = Date.now();
+    if (now - _shiftTracker.lastTime < 350) {
+      event.preventDefault();
+      _shiftTracker.lastTime = 0;
+      openGlobalSearch();
+    } else {
+      _shiftTracker.lastTime = now;
+    }
+  } else if (event.key !== "Shift") {
+    _shiftTracker.lastTime = 0;
+  }
+});
+
+// ===== 全局搜索 =====
+const gsOverlay = document.getElementById("globalSearchOverlay");
+const gsInput = document.getElementById("globalSearchInput");
+const gsResults = document.getElementById("globalSearchResults");
+const gsCount = document.getElementById("globalSearchCount");
+let gsSeq = 0;
+let gsSelectedIndex = -1;
+let gsCurrentItems = [];
+
+function openGlobalSearch() {
+  if (!gsOverlay) return;
+  gsOverlay.classList.remove("hidden");
+  gsInput.value = "";
+  gsResults.innerHTML = "";
+  gsCount.textContent = "";
+  gsCurrentItems = [];
+  gsSelectedIndex = -1;
+  requestAnimationFrame(() => gsInput.focus());
+}
+
+function closeGlobalSearch() {
+  gsOverlay.classList.add("hidden");
+}
+
+gsOverlay?.addEventListener("click", (e) => {
+  if (e.target === gsOverlay) closeGlobalSearch();
+});
+
+function escapeHtmlGs(s) {
+  return String(s)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
+function highlightSnippet(text, query) {
+  const escaped = escapeHtmlGs(text);
+  if (!query) return escaped;
+  const lowerText = text.toLowerCase();
+  const lowerQuery = query.toLowerCase();
+  const idx = lowerText.indexOf(lowerQuery);
+  if (idx === -1) return escaped;
+  const start = Math.max(0, idx - 40);
+  const end = Math.min(text.length, idx + query.length + 60);
+  const prefix = start > 0 ? "…" : "";
+  const suffix = end < text.length ? "…" : "";
+  const before = escapeHtmlGs(text.slice(start, idx));
+  const match = escapeHtmlGs(text.slice(idx, idx + query.length));
+  const after = escapeHtmlGs(text.slice(idx + query.length, end));
+  return prefix + before + `<mark>${match}</mark>` + after + suffix;
+}
+
+const gsDebounced = debounce(async (query) => {
+  const seq = ++gsSeq;
+  if (!query) {
+    gsResults.innerHTML = "";
+    gsCount.textContent = "";
+    gsCurrentItems = [];
+    return;
+  }
+  try {
+    const { results } = await api.get(`/api/search?q=${encodeURIComponent(query)}`);
+    if (seq !== gsSeq) return;
+    gsCurrentItems = results.slice(0, 50);
+    gsSelectedIndex = gsCurrentItems.length ? 0 : -1;
+    gsCount.textContent = `${results.length} 个结果`;
+    if (!gsCurrentItems.length) {
+      gsResults.innerHTML = `<div style="text-align:center;padding:32px 0;color:var(--muted,#999);font-size:13px;">未找到匹配内容</div>`;
+      return;
+    }
+    // 按文件分组
+    const groups = {};
+    const order = [];
+    for (const item of gsCurrentItems) {
+      const file = state.flatFiles.find((f) => f.path === item.path) || item;
+      const folder = (item.path || "").split("/").slice(0, -1).join("/") || "根目录";
+      if (!groups[folder]) { groups[folder] = []; order.push(folder); }
+      groups[folder].push({ item, file });
+    }
+    let html = "";
+    let idx = 0;
+    for (const folder of order) {
+      html += `<div class="global-search-group">${escapeHtmlGs(folder)}</div>`;
+      for (const { item, file } of groups[folder]) {
+        const selectedCls = idx === gsSelectedIndex ? " selected" : "";
+        html += `<button class="global-search-item${selectedCls}" data-idx="${idx}" data-path="${escapeHtmlGs(item.path)}" data-query="${escapeHtmlGs(query)}">
+          <span class="global-search-item-title">${escapeHtmlGs(displayName(file))}</span>
+          <span class="global-search-item-path">${escapeHtmlGs(item.path)}</span>
+          <span class="global-search-item-snippet">${highlightSnippet(item.snippet || item.content || "", query)}</span>
+        </button>`;
+        idx++;
+      }
+    }
+    gsResults.innerHTML = html;
+  } catch (err) {
+    gsResults.innerHTML = `<div style="text-align:center;padding:24px;color:var(--warn,#d97706);font-size:13px;">搜索出错，请重试</div>`;
+  }
+}, 200);
+
+gsInput?.addEventListener("input", () => {
+  gsDebounced(gsInput.value.trim());
+});
+
+gsInput?.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") { closeGlobalSearch(); return; }
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    if (gsCurrentItems.length === 0) return;
+    gsSelectedIndex = Math.min(gsSelectedIndex + 1, gsCurrentItems.length - 1);
+    updateGsSelection();
+  } else if (e.key === "ArrowUp") {
+    e.preventDefault();
+    if (gsCurrentItems.length === 0) return;
+    gsSelectedIndex = Math.max(gsSelectedIndex - 1, 0);
+    updateGsSelection();
+  } else if (e.key === "Enter") {
+    e.preventDefault();
+    if (gsSelectedIndex >= 0 && gsSelectedIndex < gsCurrentItems.length) {
+      openGsResult(gsCurrentItems[gsSelectedIndex], gsInput.value.trim());
+    }
+  }
+});
+
+function updateGsSelection() {
+  gsResults.querySelectorAll(".global-search-item").forEach((el) => {
+    el.classList.toggle("selected", Number(el.dataset.idx) === gsSelectedIndex);
+  });
+  const sel = gsResults.querySelector(".global-search-item.selected");
+  if (sel) sel.scrollIntoView({ block: "nearest" });
+}
+
+gsResults?.addEventListener("click", (e) => {
+  const btn = e.target.closest(".global-search-item");
+  if (!btn) return;
+  const idx = Number(btn.dataset.idx);
+  if (idx >= 0 && idx < gsCurrentItems.length) {
+    openGsResult(gsCurrentItems[idx], gsInput.value.trim());
+  }
+});
+
+function openGsResult(item, query) {
+  closeGlobalSearch();
+  openDoc(item.path, { searchTerm: query });
+}
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && gsOverlay && !gsOverlay.classList.contains("hidden")) {
+    closeGlobalSearch();
+  }
+});
+
 if (els.workspaceBtn) {
   els.workspaceBtn.addEventListener("click", openWorkspaceModal);
 }
@@ -5685,7 +5839,7 @@ if (els.workspaceBtn) {
     workspace: () => openWorkspaceModal(),
     "export-pdf": () => exportCurrentDocToPdf(),
     "export-wechat": () => copyCurrentDocAsWechat(),
-    settings: () => els.settingsBtn?.click(),
+    settings: () => openSettings(),
     "toggle-edit": () => state.currentPath && setMode("edit"),
     "toggle-reading": () => state.currentPath && setMode("view"),
     "toggle-sidebar": () => setSidebarCollapsed(!state.sidebarCollapsed),
@@ -6233,14 +6387,16 @@ document.addEventListener("selectionchange", debounce(refreshAiSelectionMenu, 80
 els.editor?.addEventListener("select", refreshAiSelectionMenu);
 els.editor?.addEventListener("mouseup", refreshAiSelectionMenu);
 els.editor?.addEventListener("keyup", refreshAiSelectionMenu);
-els.settingsBtn.addEventListener("click", async () => {
+
+async function openSettings() {
   applySettings();
   renderDefaultWorkspaceChoices();
   renderScreenshotSaveChoices();
   els.settingsModal.classList.remove("hidden");
   await checkLicenseStatus();
   await Promise.all([loadAiStatus(), loadAgentPolicyStatus()]);
-});
+}
+els.settingsBtn?.addEventListener("click", openSettings);
 
 els.goToLicenseBtn?.addEventListener("click", () => {
   els.licenseModal.classList.add("hidden");
@@ -6846,30 +7002,20 @@ function initEditorSplitters() {
 
   function applyLayout() {
     const layout = loadLayout();
-    const bodyWidth = els.editorBody.getBoundingClientRect().width;
     const outlineVisible = !els.editorBody.classList.contains("outline-hidden");
     const previewVisible = !els.editorBody.classList.contains("preview-hidden");
+    const r = Math.max(0.15, Math.min(0.85, layout.editorRatio || 0.5));
 
     if (outlineVisible) {
       const w = Math.max(MIN_OUTLINE, Math.min(MAX_OUTLINE, layout.outlineWidth));
-      els.editorBody.style.gridTemplateColumns = `${w}px 3px minmax(0, 1fr)`;
       if (previewVisible) {
-        els.editorBody.style.gridTemplateColumns += ` 3px minmax(0, 1fr)`;
-        const editorFlex = layout.editorRatio;
-        const remaining = bodyWidth - w - 6;
-        const editorW = Math.max(MIN_EDITOR, Math.floor(remaining * editorFlex));
-        const previewW = Math.max(MIN_PREVIEW, remaining - editorW);
-        els.editorBody.style.gridTemplateColumns = `${w}px 3px ${editorW}px 3px ${previewW}px`;
+        els.editorBody.style.gridTemplateColumns = `${w}px 3px minmax(0, ${r}fr) 3px minmax(0, ${1 - r}fr)`;
       } else {
         els.editorBody.style.gridTemplateColumns = `${w}px 3px minmax(0, 1fr) 0 0`;
       }
     } else {
       if (previewVisible) {
-        const remaining = bodyWidth - 3;
-        const editorFlex = layout.editorRatio;
-        const editorW = Math.max(MIN_EDITOR, Math.floor(remaining * editorFlex));
-        const previewW = Math.max(MIN_PREVIEW, remaining - editorW);
-        els.editorBody.style.gridTemplateColumns = `0 0 ${editorW}px 3px ${previewW}px`;
+        els.editorBody.style.gridTemplateColumns = `0 0 minmax(0, ${r}fr) 3px minmax(0, ${1 - r}fr)`;
       } else {
         els.editorBody.style.gridTemplateColumns = `0 0 minmax(0, 1fr) 0 0`;
       }
@@ -6933,7 +7079,7 @@ function initEditorSplitters() {
       let newEditorWidth = startEditorWidth + delta;
       const maxEditorWidth = available - MIN_PREVIEW;
       newEditorWidth = Math.max(MIN_EDITOR, Math.min(maxEditorWidth, newEditorWidth));
-      layout.editorRatio = newEditorWidth / available;
+      layout.editorRatio = Math.max(0.15, Math.min(0.85, newEditorWidth / available));
       saveLayout(layout);
       applyLayout();
     }
@@ -6957,16 +7103,47 @@ function initEditorSplitters() {
 }
 
 initEditorSplitters();
-els.bgImageInput.addEventListener("change", () => {
+els.bgImageInput.addEventListener("change", async () => {
   const file = els.bgImageInput.files?.[0];
   if (!file) return;
-  const reader = new FileReader();
-  reader.onload = () => {
-    localStorage.setItem("docBgImage", reader.result);
-    localStorage.setItem("docTheme", "image");
-    applySettings();
-  };
-  reader.readAsDataURL(file);
+  try {
+    const bitmap = await createImageBitmap(file);
+    const maxSide = 1920;
+    const ratio = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(bitmap.width * ratio));
+    canvas.height = Math.max(1, Math.round(bitmap.height * ratio));
+    const ctx = canvas.getContext("2d", { alpha: true });
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close?.();
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/webp", 0.85));
+    const compressedFile = blob || file;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        localStorage.setItem("docBgImage", reader.result);
+      } catch (e) {
+        alert("图片过大，即使压缩后仍超出存储限制，请选择更小的图片。");
+        return;
+      }
+      localStorage.setItem("docTheme", "image");
+      applySettings();
+    };
+    reader.readAsDataURL(compressedFile);
+  } catch (e) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        localStorage.setItem("docBgImage", reader.result);
+      } catch (err) {
+        alert("图片过大，超出本地存储限制，请选择更小的图片。");
+        return;
+      }
+      localStorage.setItem("docTheme", "image");
+      applySettings();
+    };
+    reader.readAsDataURL(file);
+  }
 });
 els.globalFontSize.addEventListener("input", () => {
   localStorage.setItem("docFontSize", els.globalFontSize.value);
@@ -7275,7 +7452,10 @@ window.addEventListener("resize", debounce(() => {
     resizeCanvas();
     fitGraphView();
   }
-}, 120));
+  if (document.body.getAttribute("data-theme") === "eye") {
+    applyPaperTexture();
+  }
+}, 200));
 
 if (els.recentDocs) {
   els.recentDocs.addEventListener("wheel", (event) => {
@@ -7302,9 +7482,11 @@ async function bootstrap(refresh = false) {
   }
 }
 
-// 启动初始化——先启动 splash 进度，再执行其他可能抛错的初始化
+// 启动初始化——先播放启动动画视频，再启动 splash 进度，再执行其他可能抛错的初始化
 let startupLicensePending = false;
 const appSplash = document.querySelector("#appSplash");
+const splashVideo = document.querySelector("#splashVideo");
+const splashLoading = document.querySelector("#splashLoading");
 const splashProgressFill = document.querySelector("#splashProgressFill");
 const splashProgressPct = document.querySelector("#splashProgressPct");
 const splashProgressText = document.querySelector("#splashProgressText");
@@ -7317,9 +7499,7 @@ function setSplashProgress(pct, text) {
   if (text && splashProgressText) splashProgressText.textContent = text;
 }
 
-// 尽早启动 license 检查和 bootstrap，避免后续初始化抛错时卡在 0%
-startupLicenseCheck();
-
+// 预加载设置但不启动加载流程，等视频播放完毕再开始
 try { applySettings(); } catch (e) { console.error("applySettings failed:", e); }
 try { restoreWindowZoom(); } catch (e) { console.error("restoreWindowZoom failed:", e); }
 try { restoreSidebarWidth(); } catch (e) { console.error("restoreSidebarWidth failed:", e); }
@@ -7332,6 +7512,41 @@ _deferIdle(() => {
   try { loadRecentDocs(); } catch (e) { console.error("loadRecentDocs failed:", e); }
   try { renderRecentDocs(); } catch (e) { console.error("renderRecentDocs failed:", e); }
 });
+
+// 启动动画流程：播放视频 → 显示加载界面 → 执行加载 → 进入应用
+function playStartupVideo() {
+  const video = splashVideo;
+  if (!video) { beginLoading(); return; }
+
+  const videoEnded = () => { beginLoading(); };
+  video.addEventListener("ended", videoEnded, { once: true });
+
+  video.addEventListener("error", () => { beginLoading(); }, { once: true });
+
+  // 超时保护：如果视频超过8秒未结束，直接进入加载
+  const timeout = setTimeout(() => {
+    video.removeEventListener("ended", videoEnded);
+    beginLoading();
+  }, 8000);
+
+  video.addEventListener("ended", () => { clearTimeout(timeout); }, { once: true });
+
+  // 尝试播放，如果自动播放被阻止则直接进入加载
+  video.muted = true;
+  video.play().catch(() => {
+    clearTimeout(timeout);
+    video.removeEventListener("ended", videoEnded);
+    beginLoading();
+  });
+}
+
+function beginLoading() {
+  // 隐藏视频，显示加载界面
+  if (splashVideo) splashVideo.style.display = "none";
+  if (splashLoading) splashLoading.classList.remove("hidden");
+  // 开始加载流程
+  startupLicenseCheck();
+}
 
 function hideSplash() {
   // 标记应用启动完成：此后运行时错误不再触发自动刷新，避免打断编辑心流。
@@ -7418,3 +7633,6 @@ async function startupLicenseCheck() {
     await bootstrap();
   }
 }
+
+// 启动入口：先播放视频动画，再进入加载流程
+playStartupVideo();
