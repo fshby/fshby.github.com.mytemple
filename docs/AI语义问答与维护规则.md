@@ -2,9 +2,11 @@
 schema: mytemple/v1
 title: AI 语义问答与维护规则
 tags:
-  - AI
-  - RAG
+  - ai
+  - rag
   - 使用指南
+  - 索引
+  - 模型
 domain: 知识库管理
 created: 2026-07-22
 updated: 2026-07-22

@@ -1,6 +1,6 @@
 {
-  "version": "1.3.0",
-  "downloadUrl": "https://github.com/fshby/fshby.github.com.mytemple/releases/download/v1.3.0/MyTempleKnowledge_Setup_v1.3.0.exe",
-  "releaseNotes": "1.3.0 更新:\n- 启动进度条：美观的进度条替代旋转动画，真实反映加载进度。\n- 时间回拨兼容：未过期授权不因时间回拨锁定，已过期才需重新激活。\n- 启动速度优化：合并 PowerShell 硬件检测为单次调用，缓存结果。\n- 编辑模式序号回车自动排序修复（CodeMirror 捕获模式）。\n- 用户习惯持久化：面板比例、字号、界面缩放均自动保存恢复。\n- 设置界面固定大小，切换 Tab 不再跳动。\n- 按钮大小统一，界面更美观。",
-  "releaseDate": "2026-08-07"
+  "version": "1.5.0",
+  "downloadUrl": "https://github.com/fshby/fshby.github.com.mytemple/releases/download/v1.5.0/MyTempleKnowledge_Setup_v1.5.0.exe",
+  "releaseNotes": "1.5.0 更新:\n- 安全防护：所有界面不再显示 IP 地址和端口，自定义对话框替代原生 confirm/prompt/alert，PDF 导出使用隔离 iframe 避免地址外泄。\n- 修复编辑模式切换大纲、预览、侧边栏时的布局错乱与留白问题，编辑栏与预览栏均分界面。\n- 隐藏预览时编辑栏文本顶格对齐整宽占满，与沉浸模式一致。\n- 编辑模式大纲子标题（h3+）支持折叠和展开显示。\n- 修复浏览设置后进入编辑模式偶发强制刷新跳转欢迎界面的问题，运行时错误不再触发自动刷新。\n- 知识管理栏新增知识健康度评分（满分 100 分），从链接密度、标签覆盖、知识活跃、概念关联四个维度量化知识库健康程度。\n- 护眼主题全面升级为自然纸张质感：HSL 微调色彩体系（燕麦纸底色、浓墨文本、褪色注释）、SVG 纤维噪点纹理叠加、微弱光影梯度、宽松行高与字间距、代码块纸张底色消除光晕、新增「纸张衬线」字体选项。",
+  "releaseDate": "2026-08-08"
 }

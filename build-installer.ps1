@@ -141,6 +141,7 @@ try {
                 "server\frontmatter.js",
                 "server\agent-policy.js",
                 "server\license.js",
+                "server\doc-views.js",
                 "public\app.js",
                 "public\graph-worker.js"
             )
