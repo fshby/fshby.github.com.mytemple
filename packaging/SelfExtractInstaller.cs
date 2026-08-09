@@ -246,27 +246,74 @@ namespace MyTempleInstaller
             Shown += (s, e) => CheckNodeAndProceed();
         }
 
-        bool NodeAvailable()
+        string ResolveNodePath()
         {
+            var candidates = new System.Collections.Generic.List<string>();
+            Action<string> addPath = value =>
+            {
+                if (string.IsNullOrWhiteSpace(value)) return;
+                var expanded = Environment.ExpandEnvironmentVariables(value.Trim().Trim('"'));
+                if (!string.IsNullOrWhiteSpace(expanded) && !candidates.Contains(expanded)) candidates.Add(expanded);
+            };
+
+            // The installer process may have started before Node.js was installed.
+            // Read both live and registry PATH values so recheck sees the new install.
+            foreach (var path in (Environment.GetEnvironmentVariable("PATH") ?? string.Empty).Split(Path.PathSeparator))
+                if (!string.IsNullOrWhiteSpace(path)) addPath(Path.Combine(path, "node.exe"));
             try
             {
-                var psi = new ProcessStartInfo("where", "node.exe")
-                {
-                    CreateNoWindow = true,
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                };
-                using (var p = Process.Start(psi))
-                {
-                    p.WaitForExit(3000);
-                    return p.ExitCode == 0 && p.StandardOutput.ReadToEnd().Trim().Length > 0;
-                }
+                var userPath = Registry.GetValue(
+                    @"HKEY_CURRENT_USER\Environment", "Path", string.Empty) as string;
+                var machinePath = Registry.GetValue(
+                    @"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\Environment", "Path", string.Empty) as string;
+                foreach (var path in (userPath ?? string.Empty).Split(Path.PathSeparator))
+                    if (!string.IsNullOrWhiteSpace(path)) addPath(Path.Combine(path, "node.exe"));
+                foreach (var path in (machinePath ?? string.Empty).Split(Path.PathSeparator))
+                    if (!string.IsNullOrWhiteSpace(path)) addPath(Path.Combine(path, "node.exe"));
             }
-            catch { return false; }
+            catch { /* Registry access can be restricted; fixed paths still cover normal installs. */ }
+
+            addPath(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "nodejs", "node.exe"));
+            addPath(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "nodejs", "node.exe"));
+            addPath(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "nodejs", "node.exe"));
+            addPath(@"C:\Program Files\nodejs\node.exe");
+            addPath(@"C:\Program Files (x86)\nodejs\node.exe");
+            addPath(@"D:\node\node.exe");
+
+            foreach (var candidate in candidates)
+            {
+                if (!File.Exists(candidate)) continue;
+                try
+                {
+                    var psi = new ProcessStartInfo(candidate, "--version")
+                    {
+                        CreateNoWindow = true,
+                        UseShellExecute = false,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                    };
+                    using (var process = Process.Start(psi))
+                    {
+                        if (process == null) continue;
+                        process.WaitForExit(3000);
+                        if (process.ExitCode == 0) return candidate;
+                    }
+                }
+                catch { }
+            }
+            return null;
+        }
+
+        bool NodeAvailable()
+        {
+            return !string.IsNullOrWhiteSpace(ResolveNodePath());
         }
 
         void CheckNodeAndProceed()
         {
+            _recheckNodeBtn.Enabled = false;
+            _nodeStatusLabel.Text = "正在重新检测 Node.js 运行环境…";
+            Application.DoEvents();
             if (NodeAvailable())
             {
                 _nodePanel.Visible = false;
@@ -279,6 +326,7 @@ namespace MyTempleInstaller
                 _installBtn.Enabled = false;
                 _statusLabel.Text = "请先安装 Node.js 运行环境。";
             }
+            _recheckNodeBtn.Enabled = true;
         }
 
         void StartInstall()
