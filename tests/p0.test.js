@@ -15,6 +15,9 @@ test("License deactivation is exposed as a dedicated credential removal route", 
   assert.match(serverSource, /unlink\(licenseFile\)/);
   assert.match(appSource, /api\.post\("\/api\/license\/deactivate"/);
   assert.match(appSource, /授权已解除，请重新授权/);
+  assert.match(serverSource, /code: "LICENSE_REQUIRED"/);
+  assert.match(appSource, /license-locked/);
+  assert.match(appSource, /license-required/);
 });
 
 test("Frontmatter template contains the P0 schema and remains parseable", () => {

@@ -13,6 +13,11 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="preload" href="/logo.png" as="image" />
     <style>html,body{margin:0;padding:0;background:#0f172a;}</style>
+    <style>
+      body.license-locked .app-shell { pointer-events: none; user-select: none; }
+      body.license-locked #licenseModal,
+      body.license-locked #settingsModal { pointer-events: auto; }
+    </style>
     <link rel="stylesheet" href="/styles.css?v=20260809-editor-v4" />
     <link rel="modulepreload" href="/editor-core.js?v=20260807-v1" />
     <link rel="modulepreload" href="/app.js?v=20260809-editor-v4" />
