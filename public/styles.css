@@ -6946,6 +6946,23 @@ body[data-theme="bagua"] .code-block code {
 .shortcut-settings-section[open] > summary::after { transform: rotate(180deg); }
 .shortcut-settings-section > summary + strong { display: none; }
 .settings-dialog .about-section { display: flex; align-items: center; }
+.privacy-inline {
+  width: 100%;
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border-color, rgba(128, 128, 128, .22));
+}
+.privacy-inline-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.privacy-inline-head strong { display: block; margin-bottom: 6px; }
+.privacy-inline-head p { margin: 0; max-width: 62ch; }
+.privacy-details { margin-top: 12px; }
+.privacy-details summary { cursor: pointer; color: var(--accent, #4a6fa5); font-weight: 600; }
+.privacy-summary { margin-top: 10px; line-height: 1.75; }
+.privacy-summary p { margin: 7px 0; }
+.privacy-summary a { overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .privacy-inline-head { flex-direction: column; }
+}
 .settings-dialog .about-btn { width: 100%; justify-content: flex-start; }
 
 /* Enterprise editor chrome: compact controls, clear visual grouping and
