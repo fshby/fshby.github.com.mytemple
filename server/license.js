@@ -6,7 +6,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 
 /**
- * 内嵌公钥（对应 keytool.js 中的私钥）
+ * 内嵌公钥（签发端私钥不随软件分发）
  * 密钥对由 RSA-2048 生成，仅软件侧持有公钥，无法伪造授权码。
  */
 const PUBLIC_KEY_PEM = `-----BEGIN PUBLIC KEY-----
