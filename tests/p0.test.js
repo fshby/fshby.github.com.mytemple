@@ -20,6 +20,19 @@ test("License deactivation is exposed as a dedicated credential removal route", 
   assert.match(appSource, /license-required/);
 });
 
+test("AI edit hint acceptance writes the suggested markdown back to its original paragraph", async () => {
+  const appSource = await readFile(path.join(process.cwd(), "public/app.js"), "utf8");
+  assert.match(appSource, /if \(action === "rewrite"\) applyAiHintRewrite\(suggestion, para\)/);
+  assert.match(appSource, /insertAiHintComment\(suggestion, para\)/);
+  assert.match(appSource, /function replaceEditorRange\(value, start, end, selectionMode = "end"\)/);
+  assert.match(appSource, /function resolveAiEditorRange\(range\)/);
+  assert.match(appSource, /els\.editor\.dispatchEvent\(new Event\("input", \{ bubbles: true \}\)\)/);
+  assert.match(appSource, /aiTransformGenerateBtn/);
+  assert.match(appSource, /preserveInstruction: true/);
+  assert.match(appSource, /state\.currentPath !== requestPath/);
+  assert.match(appSource, /els\.editor\.value !== requestContent/);
+});
+
 test("Frontmatter template contains the P0 schema and remains parseable", () => {
   const template = createDocumentTemplate("测试文档", "2026-07-22");
   const summary = frontmatterSummary(template);
@@ -101,6 +114,44 @@ test("AI settings reject unsafe service protocols", async () => {
   try {
     const rag = new RagService(root);
     await assert.rejects(() => rag.updateSettings({ baseUrl: "file:///secret" }), /HTTP/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("DeepSeek credentials stay server-side and are preserved when the UI leaves the key blank", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "mytemple-rag-secret-"));
+  try {
+    const rag = new RagService(root);
+    await rag.updateSettings({
+      chatProvider: "deepseek",
+      deepseekApiKey: "sk-test-secret",
+      deepseekChatModel: "deepseek-chat",
+    });
+    const publicSettings = rag.publicSettings();
+    assert.equal(publicSettings.deepseekApiKey, undefined);
+    assert.equal(publicSettings.deepseekApiKeyConfigured, true);
+    await rag.updateSettings({ chatProvider: "deepseek", deepseekApiKey: undefined });
+    assert.equal(rag.chatConfigured(), true);
+    assert.equal(rag.settings.deepseekApiKey, "sk-test-secret");
+    const compatibility = await rag.configuredModelCompatibility(undefined, "", "", {
+      provider: "deepseek",
+      deepseekModel: "deepseek-chat",
+    });
+    assert.equal(compatibility.compatibility.chat.installed, true);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("AI transforms reject oversized selections instead of silently truncating them", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "mytemple-rag-transform-limit-"));
+  try {
+    const rag = new RagService(root);
+    await assert.rejects(
+      () => rag.transformSelection("x".repeat(16001), "polish"),
+      /16000/,
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }

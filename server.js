@@ -86,6 +86,7 @@ const mimeTypes = {
 };
 
 function send(res, status, body, type = "application/json; charset=utf-8", headers = {}) {
+  if (res.writableEnded || res.destroyed) return;
   const buf = typeof body === "string" ? Buffer.from(body, "utf8") : body;
   res.writeHead(status, { "Content-Type": type, "Cache-Control": "no-store", "Content-Length": buf.length, ...headers });
   res.end(buf);
@@ -2013,7 +2014,9 @@ async function handleApi(req, res, url) {
   if (url.pathname === "/api/ai/query" && req.method === "POST") {
     const payload = await readJson(req);
     await ragService.ensure(data.files, currentKnowledgeVersion);
-    const scopedFile = payload.scope === "current" ? data.files.find((file) => file.path === payload.path) : null;
+    const wantsCurrentScope = payload.scope === "current";
+    const scopedFile = wantsCurrentScope ? data.files.find((file) => file.path === payload.path) : null;
+    if (wantsCurrentScope && !scopedFile) return json(res, 404, { error: "当前文档不存在，无法执行限定范围检索" });
     const policyWorkspaces = scopedFile
       ? data.workspaces.filter((workspace) => workspace.id === scopedFile.workspaceId)
       : data.workspaces.filter((workspace) => workspace.visible);
@@ -2601,16 +2604,19 @@ async function serveStatic(res, pathname) {
 }
 
 const REQUEST_TIMEOUT = 30 * 1000;
+const AI_REQUEST_TIMEOUT = 190 * 1000;
 
 createServer(async (req, res) => {
-  const timeoutId = setTimeout(() => {
-    if (!res.writableEnded) {
-      json(res, 504, { error: "Request timeout" });
-    }
-  }, REQUEST_TIMEOUT);
+  let timeoutId = 0;
 
   try {
     const url = new URL(req.url || "/", `http://${req.headers.host}`);
+    const timeoutMs = url.pathname.startsWith("/api/ai/") ? AI_REQUEST_TIMEOUT : REQUEST_TIMEOUT;
+    timeoutId = setTimeout(() => {
+      if (!res.writableEnded) {
+        json(res, 504, { error: "Request timeout" });
+      }
+    }, timeoutMs);
     if (url.pathname.startsWith("/api/")) return await handleApi(req, res, url);
     return await serveStatic(res, url.pathname);
   } catch (error) {
@@ -2618,7 +2624,7 @@ createServer(async (req, res) => {
       json(res, error.status || 500, { error: error.message || "Internal server error" });
     }
   } finally {
-    clearTimeout(timeoutId);
+    if (timeoutId) clearTimeout(timeoutId);
   }
 }).listen(PORT, HOST, () => {
   console.log(`Markdown knowledge app running at http://${HOST}:${PORT}`);

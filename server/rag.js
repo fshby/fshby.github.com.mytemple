@@ -249,7 +249,11 @@ export class RagService {
   }
 
   publicSettings() {
-    return { ...this.settings };
+    const { deepseekApiKey, ...settings } = this.settings;
+    return {
+      ...settings,
+      deepseekApiKeyConfigured: Boolean(String(deepseekApiKey || "").trim()),
+    };
   }
 
   hardwareProfile() {
@@ -285,7 +289,11 @@ export class RagService {
       embeddingModel: String(input.embeddingModel ?? this.settings.embeddingModel).trim().slice(0, 120),
       chatModel: String(input.chatModel ?? this.settings.chatModel).trim().slice(0, 120),
       chatProvider,
-      deepseekApiKey: String(input.deepseekApiKey ?? this.settings.deepseekApiKey ?? "").trim().slice(0, 200),
+      // The UI intentionally omits an unchanged secret. Only an explicit clear
+      // request may remove the key; an empty password field must preserve it.
+      deepseekApiKey: input.clearDeepseekApiKey
+        ? ""
+        : String(input.deepseekApiKey ?? this.settings.deepseekApiKey ?? "").trim().slice(0, 200),
       deepseekBaseUrl: normalizeBaseUrl(input.deepseekBaseUrl || this.settings.deepseekBaseUrl || "https://api.deepseek.com"),
       deepseekChatModel: String(input.deepseekChatModel ?? this.settings.deepseekChatModel ?? "deepseek-chat").trim().slice(0, 120) || "deepseek-chat",
       maxSources: Math.max(3, Math.min(10, Number(input.maxSources || this.settings.maxSources || 6))),
@@ -451,7 +459,7 @@ export class RagService {
       ? discovered.models.find((item) => installedModelMatches(item.name, chatModel))
       : null;
     const deepseekModel = String(chatOptions.deepseekModel || this.settings.deepseekChatModel || "").trim();
-    const deepseekReady = Boolean(chatOptions.apiKey && deepseekModel);
+    const deepseekReady = Boolean((chatOptions.apiKey || this.settings.deepseekApiKey) && deepseekModel);
     return {
       ...discovered,
       compatibility: {
@@ -730,7 +738,11 @@ export class RagService {
 
   async transformSelection(text, mode = "summary", options = {}) {
     await this.initialize();
-    const input = String(text || "").trim().slice(0, 16000);
+    const rawInput = String(text || "").trim();
+    if (rawInput.length > 16000) {
+      throw new Error("选中文本超过 16000 字，请分段处理，避免结果覆盖未处理内容");
+    }
+    const input = rawInput;
     const VALID_MODES = ["summary", "keypoints", "terms", "polish", "continue", "rewrite", "hint", "translate"];
     const transformMode = VALID_MODES.includes(mode) ? mode : "summary";
     // 代写/提示允许空选区（基于上下文生成），其余模式必须有选中文本。
