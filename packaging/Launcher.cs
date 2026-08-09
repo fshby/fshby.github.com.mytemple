@@ -685,20 +685,37 @@ internal static class MyTempleLauncher
                 string lastCheckPath = Path.Combine(dataDir, "last-update-check.txt");
                 if (!force && File.Exists(lastCheckPath))
                 {
+                    string[] lastCheckLines = File.ReadAllLines(lastCheckPath);
                     DateTime lastCheck;
-                    if (DateTime.TryParse(File.ReadAllText(lastCheckPath), out lastCheck))
+                    string checkedVersion = lastCheckLines.Length > 1 ? lastCheckLines[1].Trim() : "";
+                    if (DateTime.TryParse(lastCheckLines.Length > 0 ? lastCheckLines[0] : "", out lastCheck)
+                        && string.Equals(checkedVersion, currentVersion, StringComparison.OrdinalIgnoreCase))
                     {
-                        if ((DateTime.Now - lastCheck).TotalHours < 24) return;
+                        if ((DateTime.Now - lastCheck).TotalHours < 24)
+                        {
+                            WriteLog("info", "Update check skipped by 24-hour cache for version " + currentVersion + ".");
+                            return;
+                        }
                     }
                 }
 
-                File.WriteAllText(lastCheckPath, DateTime.Now.ToString("o"));
+                File.WriteAllText(lastCheckPath, DateTime.Now.ToString("o") + Environment.NewLine + currentVersion);
                 string json = DownloadString(UpdateUrl);
-                if (string.IsNullOrWhiteSpace(json)) return;
+                if (string.IsNullOrWhiteSpace(json))
+                {
+                    WriteLog("warn", "Update check returned no metadata from " + UpdateUrl + ".");
+                    return;
+                }
                 string latestVersion = ParseJsonString(json, "version");
                 string downloadUrl = ParseJsonString(json, "downloadUrl");
-                if (string.IsNullOrWhiteSpace(latestVersion) || string.IsNullOrWhiteSpace(downloadUrl)) return;
-                if (CompareVersions(currentVersion, latestVersion) >= 0) return;
+                if (string.IsNullOrWhiteSpace(latestVersion) || string.IsNullOrWhiteSpace(downloadUrl))
+                {
+                    WriteLog("warn", "Update metadata is incomplete.");
+                    return;
+                }
+                int comparison = CompareVersions(currentVersion, latestVersion);
+                WriteLog("info", "Update check completed. current=" + currentVersion + ", latest=" + latestVersion + ".");
+                if (comparison >= 0) return;
 
                 var result = MessageBox.Show(
                     "New version found: " + latestVersion + Environment.NewLine + "Current version: " + currentVersion + Environment.NewLine + Environment.NewLine + "Download now?",
