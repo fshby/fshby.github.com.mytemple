@@ -1038,7 +1038,7 @@ function formatDocument(source) {
       continue;
     }
     
-    if (inCode) {
+       if (inCode) {
       result.push(line);
       continue;
     }
@@ -1951,6 +1951,8 @@ function renderMarkdown(source, options = {}) {
   let table = [];
   let tableStartLine = -1;
   let blockquote = [];
+  let blockquoteStartLine = -1;
+  let codeStartLine = -1;
   const footnoteDefs = [];
 
   const flushList = () => {
@@ -1958,7 +1960,7 @@ function renderMarkdown(source, options = {}) {
     const hasTasks = list.items.some((item) => item.task);
     const listClass = hasTasks ? ' class="contains-task-list"' : "";
     const items = list.items.map((item) => `<li${item.task ? ' class="task-list-item"' : ""}>${item.html}</li>`).join("");
-    html.push(`<${list.type}${listClass}>${items}</${list.type}>`);
+     html.push(`<${list.type}${listClass} data-source-line="${list.startLine}">${items}</${list.type}>`);
     list = null;
   };
   const flushBlockquote = () => {
@@ -1971,12 +1973,13 @@ function renderMarkdown(source, options = {}) {
       const body = blockquote.slice(1);
       const titleHtml = `<strong class="callout-title">${inlineMarkdown(title || type, searchTerm)}</strong>`;
       const bodyHtml = body.map((l) => inlineMarkdown(l, searchTerm)).filter(Boolean).join("<br />");
-      html.push(`<div class="callout callout-${type}">${titleHtml}${bodyHtml ? `<div class="callout-body">${bodyHtml}</div>` : ""}</div>`);
+       html.push(`<div class="callout callout-${type}" data-source-line="${blockquoteStartLine}">${titleHtml}${bodyHtml ? `<div class="callout-body">${bodyHtml}</div>` : ""}</div>`);
     } else {
       const content = blockquote.map((l) => inlineMarkdown(l, searchTerm)).join("<br />");
-      html.push(`<blockquote>${content}</blockquote>`);
+       html.push(`<blockquote data-source-line="${blockquoteStartLine}">${content}</blockquote>`);
     }
-    blockquote = [];
+     blockquote = [];
+     blockquoteStartLine = -1;
   };
   const flushTable = () => {
     if (!table.length) return;
@@ -1994,9 +1997,9 @@ function renderMarkdown(source, options = {}) {
           <button type="button" class="md-table-tool" data-table-action="addCol" title="追加一列">+ 列</button>
           <button type="button" class="md-table-tool" data-table-action="removeCol" title="删除最后一列" ${columnCount <= 1 ? "disabled" : ""}>- 列</button>
         </div>`;
-        html.push(`<div class="markdown-table-wrap">${tools}${tableHtml}</div>`);
+         html.push(`<div class="markdown-table-wrap" data-source-line="${tableStartLine}">${tools}${tableHtml}</div>`);
       } else {
-        html.push(`<div class="markdown-table-wrap">${tableHtml}</div>`);
+         html.push(`<div class="markdown-table-wrap" data-source-line="${tableStartLine}">${tableHtml}</div>`);
       }
     }
     table = [];
@@ -2014,7 +2017,8 @@ function renderMarkdown(source, options = {}) {
         html.push(`<div class="code-block" data-language="${codeLanguage}"><span class="code-language">${escapeHtml(codeLanguage)}</span><button class="code-copy" type="button">\u590d\u5236</button><pre><code class="language-${codeLanguage}">${highlightCode(raw, codeLanguage)}</code></pre></div>`);
         code = [];
         codeLanguage = "text";
-      } else {
+       } else {
+         codeStartLine = i;
         codeLanguage = normalizeCodeLanguage(line.slice(3).trim().split(/\s+/)[0]);
       }
       inCode = !inCode;
@@ -2028,7 +2032,7 @@ function renderMarkdown(source, options = {}) {
       flushList();
       flushTable();
       flushBlockquote();
-      html.push("<hr />");
+       html.push(`<hr data-source-line="${i}" />`);
       continue;
     }
     const row = line.includes("|") ? splitMarkdownTableRow(line) : [];
@@ -2052,7 +2056,8 @@ function renderMarkdown(source, options = {}) {
     const quote = line.match(/^>\s?(.*)$/);
     if (quote) {
       flushList();
-      blockquote.push(quote[1]);
+       blockquote.push(quote[1]);
+       if (blockquoteStartLine < 0) blockquoteStartLine = i;
       continue;
     }
     flushBlockquote();
@@ -2086,7 +2091,7 @@ function renderMarkdown(source, options = {}) {
       }
       const idAttr = id ? ` id="${escapeHtml(id)}"` : "";
       const marginLeft = indent * 16;
-      html.push(`<h${level}${idAttr} style="margin-left: ${marginLeft}px;">${inlineMarkdown(indentedHeading[3], searchTerm)}</h${level}>`);
+       html.push(`<h${level}${idAttr} data-source-line="${i}" style="margin-left: ${marginLeft}px;">${inlineMarkdown(indentedHeading[3], searchTerm)}</h${level}>`);
       continue;
     }
     const cnHeading = line.match(/^(\s*)([一二三四五六七八九十]{1,4}[、.．]\s*.+)$/);
@@ -2098,7 +2103,7 @@ function renderMarkdown(source, options = {}) {
       const id = headingId(cnHeading[2], `auto-${h2Index++}`);
       h3Index = 0;
       h4Index = 0;
-      html.push(`<h${level}${id ? ` id="${escapeHtml(id)}"` : ""} style="margin-left: ${marginLeft}px;">${inlineMarkdown(cnHeading[2], searchTerm)}</h${level}>`);
+       html.push(`<h${level}${id ? ` id="${escapeHtml(id)}"` : ""} data-source-line="${i}" style="margin-left: ${marginLeft}px;">${inlineMarkdown(cnHeading[2], searchTerm)}</h${level}>`);
       continue;
     }
     const dottedHeading = line.match(/^(\s*)(\d+(?:\.\d+)+)([、.．])\s*([^-*].+)$/);
@@ -2110,7 +2115,7 @@ function renderMarkdown(source, options = {}) {
         const level = 3;
         const id = headingId(dottedHeading[4], `num-h3-${h3Index++}`);
         h4Index = 0;
-        html.push(`<h${level}${id ? ` id="${escapeHtml(id)}"` : ""} style="margin-left: ${marginLeft}px;">${inlineMarkdown(dottedHeading[2] + dottedHeading[3] + dottedHeading[4], searchTerm)}</h${level}>`);
+         html.push(`<h${level}${id ? ` id="${escapeHtml(id)}"` : ""} data-source-line="${i}" style="margin-left: ${marginLeft}px;">${inlineMarkdown(dottedHeading[2] + dottedHeading[3] + dottedHeading[4], searchTerm)}</h${level}>`);
         continue;
       }
     }
@@ -2123,7 +2128,7 @@ function renderMarkdown(source, options = {}) {
         const marginLeft = indent * 16;
         const level = 4;
         const id = headingId(numHeading[5], `num-h4-${h4Index++}`);
-        html.push(`<h${level}${id ? ` id="${escapeHtml(id)}"` : ""} style="margin-left: ${marginLeft}px;">${inlineMarkdown(numHeading[2] + numHeading[5], searchTerm)}</h${level}>`);
+         html.push(`<h${level}${id ? ` id="${escapeHtml(id)}"` : ""} data-source-line="${i}" style="margin-left: ${marginLeft}px;">${inlineMarkdown(numHeading[2] + numHeading[5], searchTerm)}</h${level}>`);
         continue;
       }
     }
@@ -2136,7 +2141,7 @@ function renderMarkdown(source, options = {}) {
       const task = content.match(/^\[([ xX])\](?:\s+(.*))?$/);
       if (!list || list.type !== type) {
         flushList();
-        list = { type, items: [] };
+        list = { type, items: [], startLine: i };
       }
       const marginStyle = indent > 0 ? ` style="margin-left: ${indent * 16}px;"` : "";
       if (task) {
@@ -2158,7 +2163,7 @@ function renderMarkdown(source, options = {}) {
       const marginLeft = indent * 16;
       const maxWidth = Math.max(50, 100 - indent * 10);
       const widthPercent = maxWidth < 100 ? `${maxWidth}%` : "100%";
-      html.push(`<div style="margin-left: ${marginLeft}px; width: ${widthPercent};"><p>${inlineMarkdown(indentedImage[2], searchTerm)}</p></div>`);
+       html.push(`<div data-source-line="${i}" style="margin-left: ${marginLeft}px; width: ${widthPercent};"><p>${inlineMarkdown(indentedImage[2], searchTerm)}</p></div>`);
       continue;
     }
     if (!line.trim()) {
@@ -2168,7 +2173,7 @@ function renderMarkdown(source, options = {}) {
       continue;
     }
     flushList();
-    html.push(`<p>${inlineMarkdown(line, searchTerm)}</p>`);
+     html.push(`<p data-source-line="${i}">${inlineMarkdown(line, searchTerm)}</p>`);
   }
   flushList();
   flushTable();
@@ -3683,7 +3688,7 @@ function endSidebarResize(event) {
   }
 }
 
-function syncPreviewToEditor() {
+function syncPreviewToEditor(preferCursor = true) {
   if (state.mode !== "edit") return;
   cancelAnimationFrame(state.syncPreviewScroll.frame);
   state.syncPreviewScroll.frame = requestAnimationFrame(() => {
@@ -3704,7 +3709,7 @@ function syncPreviewToEditor() {
     const cursor = Number(els.editor.selectionEnd ?? 0);
     const cursorLine = editorValue.slice(0, Math.max(0, cursor)).split("\n").length - 1;
     const scrollLine = Math.floor(Math.max(0, els.editor.scrollTop - topPadding) / lineHeight);
-    const currentLine = clamp(els.editor.hasFocus ? cursorLine : scrollLine, 0, Math.max(0, totalLines - 1));
+    const currentLine = clamp(preferCursor && els.editor.hasFocus ? cursorLine : scrollLine, 0, Math.max(0, totalLines - 1));
     const anchors = state.previewAnchors || [];
     if (anchors.length >= 2) {
       let previous = anchors[0];
@@ -3734,6 +3739,14 @@ function syncPreviewToEditor() {
 
 function syncPreviewSourceAnchors(source) {
   const lines = String(source || "").replace(/\r\n/g, "\n").split("\n");
+  const explicit = [...els.preview.querySelectorAll("[data-source-line]")]
+    .map((element) => ({ element, line: Number(element.dataset.sourceLine) }))
+    .filter((anchor) => Number.isFinite(anchor.line) && anchor.line >= 0)
+    .sort((a, b) => a.line - b.line);
+  if (explicit.length) {
+    state.previewAnchors = explicit;
+    return;
+  }
   const normalize = (value) => String(value || "")
     .replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1")
     .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
@@ -6679,7 +6692,7 @@ els.editor.addEventListener("compositionend", () => {
   scheduleAutoSave();
   scheduleAiEditHint();
 });
-els.editor.addEventListener("scroll", () => { hideAiEditHintPopover(); syncPreviewToEditor(); }, { passive: true });
+els.editor.addEventListener("scroll", () => { hideAiEditHintPopover(); syncPreviewToEditor(false); }, { passive: true });
 els.editor.addEventListener("select", () => { syncPreviewToEditor(); scheduleAiEditHint(); }, { passive: true });
 
 function addLineCursor(direction) {
@@ -7579,8 +7592,10 @@ if (resetEditorLayoutBtn) {
 els.checkUpdateBtn?.addEventListener("click", async () => {
   showToast("正在检查更新...");
   try {
+    await api.post("/api/update/check", {});
     await api.get("/api/version?refresh=1");
     await loadAboutInfo();
+    showToast("已请求桌面启动器强制检查升级，稍后将显示升级提示");
   } catch (error) {
     showToast(error.message || "检查更新失败");
   }

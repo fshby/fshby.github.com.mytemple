@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import os from "node:os";
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
@@ -51,8 +51,12 @@ function getHardwareIdentifiers() {
   // Windows 硬件信息（单次 PowerShell 调用获取全部信息）
   if (process.platform === "win32") {
     try {
-      const cmd = 'powershell -NoProfile -Command "$cpu=(Get-CimInstance Win32_Processor).ProcessorId; $disk=(Get-CimInstance Win32_DiskDrive | Select-Object -First 1).SerialNumber; $board=(Get-CimInstance Win32_BaseBoard).SerialNumber; $uuid=(Get-CimInstance Win32_ComputerSystemProduct).UUID; Write-Output \"$cpu|$disk|$board|$uuid\""';
-      const output = execSync(cmd, { timeout: 8000, encoding: "utf8" }).trim();
+      const script = '$cpu=(Get-CimInstance Win32_Processor).ProcessorId; $disk=(Get-CimInstance Win32_DiskDrive | Select-Object -First 1).SerialNumber; $board=(Get-CimInstance Win32_BaseBoard).SerialNumber; $uuid=(Get-CimInstance Win32_ComputerSystemProduct).UUID; [Console]::OutputEncoding=[Text.Encoding]::UTF8; Write-Output "$cpu|$disk|$board|$uuid"';
+      const output = execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], {
+        timeout: 8000,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }).trim();
       const [cpuId, diskSerial, boardSerial, uuid] = output.split("|");
       if (cpuId) parts.push(`cpu:${cpuId}`);
       if (diskSerial) parts.push(`disk:${diskSerial}`);

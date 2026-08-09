@@ -21,7 +21,7 @@ namespace MyTempleInstaller
             if (args.Length > 0 && (args[0] == "/uninstall" || args[0] == "-u"))
                 Application.Run(new UninstallForm());
             else
-                Application.Run(new InstallForm());
+                Application.Run(new InstallForm(args.Length > 0 && (args[0] == "/update" || args[0] == "-update")));
         }
     }
 
@@ -30,7 +30,7 @@ namespace MyTempleInstaller
     {
         public const string APP_NAME = "MyTempleKnowledge";
         public const string APP_TITLE = "MyTemple Knowledge";
-        public const string APP_VERSION = "1.7.0";
+        public const string APP_VERSION = "1.8.0";
         public static readonly string InstallDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), APP_NAME);
         public static readonly string UserDataDir = Path.Combine(
@@ -92,9 +92,12 @@ namespace MyTempleInstaller
         Button _downloadNodeBtn;
         Button _recheckNodeBtn;
         Label _nodeStatusLabel;
+        readonly bool _updateMode;
+        bool _installStarted;
 
-        public InstallForm()
+        public InstallForm(bool updateMode = false)
         {
+            _updateMode = updateMode;
             Text = AppConst.APP_TITLE + " 安装程序";
             ClientSize = new Size(520, 420);
             FormBorderStyle = FormBorderStyle.FixedSingle;
@@ -318,6 +321,13 @@ namespace MyTempleInstaller
             {
                 _nodePanel.Visible = false;
                 _installBtn.Enabled = true;
+                if (_updateMode && !_installStarted)
+                {
+                    _installStarted = true;
+                    _shortcutChk.Checked = false;
+                    _launchChk.Checked = true;
+                    BeginInvoke((MethodInvoker)delegate { StartInstall(); });
+                }
                 _statusLabel.Text = "环境检测通过，可以开始安装。";
             }
             else

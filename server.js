@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { createHash, randomUUID } from "node:crypto";
 import { cp, readFile, writeFile, readdir, stat, mkdir, rm, rename, unlink } from "node:fs/promises";
-import { existsSync, readFileSync, watch } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, watch } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createDocumentTemplate, frontmatterSummary, normalizeFrontmatter } from "./server/frontmatter.js";
@@ -1892,6 +1892,16 @@ async function handleApi(req, res, url) {
       return json(res, 200, versionData);
     } catch (e) {
       return json(res, 200, { version: "1.0.0", downloadUrl: "", releaseNotes: "", releaseDate: "" });
+    }
+  }
+
+  if (url.pathname === "/api/update/check" && req.method === "POST") {
+    try {
+      await mkdir(DATA_ROOT, { recursive: true });
+      writeFileSync(path.join(DATA_ROOT, "update-check-request.txt"), new Date().toISOString(), "utf8");
+      return json(res, 200, { ok: true, message: "已通知桌面启动器执行强制升级检查" });
+    } catch (e) {
+      return json(res, 500, { error: e.message || "无法请求升级检查" });
     }
   }
 

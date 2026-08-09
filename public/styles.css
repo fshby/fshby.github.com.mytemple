@@ -1782,10 +1782,13 @@ body.resizing-sidebar {
 
 .markdown-body {
   width: min(920px, calc(100% - 42px));
+  min-width: 0;
   margin: 0 auto;
   padding: 36px 0 80px;
   line-height: 1.72;
   font-size: var(--doc-font-size);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .code-block {
@@ -2466,8 +2469,9 @@ body.resizing-sidebar {
   contain: layout paint style;
   /* 编辑模式预览全量重渲染时用淡入掩盖 DOM 重建瞬间，降低闪烁 */
   transition: opacity .12s ease;
-  content-visibility: auto;
-  will-change: contents;
+  /* 源码行号同步依赖预览块的真实 offsetTop，不能让浏览器跳过远端块布局。 */
+  content-visibility: visible;
+  will-change: scroll-position;
 }
 
 .image-delete-wrapper {
