@@ -17,7 +17,7 @@ internal static class MyTempleLauncher
     private const string AppTitle = "MyTemple Knowledge";
     private const string MutexName = "MyTempleKnowledge.SingleInstance";
     private const int DefaultPort = 4173;
-    private const string UpdateUrl = "https://puke.fshby.cc/version.json";
+        private const string UpdateUrl = "https://mytemple.fshby.cc/version.json";
     private const string WindowProfileFolder = "launcher-profile";
 
     [STAThread]
