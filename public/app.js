@@ -356,7 +356,12 @@ const api = {
     const response = await fetch(path);
     if (!response.ok) {
       const body = await response.text();
-      try { throw new Error(JSON.parse(body).error || body); } catch (error) { if (error instanceof SyntaxError) throw new Error(body); throw error; }
+      let detail = {};
+      try { detail = JSON.parse(body); } catch (_) {}
+      if (response.status === 403 && detail.code === "LICENSE_REQUIRED") {
+        window.dispatchEvent(new CustomEvent("license-required", { detail }));
+      }
+      throw new Error(detail.error || body);
     }
     return response.json();
   },
@@ -368,7 +373,12 @@ const api = {
     });
     if (!response.ok) {
       const body = await response.text();
-      try { throw new Error(JSON.parse(body).error || body); } catch (error) { if (error instanceof SyntaxError) throw new Error(body); throw error; }
+      let detail = {};
+      try { detail = JSON.parse(body); } catch (_) {}
+      if (response.status === 403 && detail.code === "LICENSE_REQUIRED") {
+        window.dispatchEvent(new CustomEvent("license-required", { detail }));
+      }
+      throw new Error(detail.error || body);
     }
     return response.json();
   },
@@ -7158,9 +7168,7 @@ if (els.activateLicenseBtn) {
         els.licenseStatus.className = "license-status success";
         await checkLicenseStatus();
         if (startupLicensePending) {
-          startupLicensePending = false;
-          els.licenseModal?.classList.remove("startup-block");
-          els.licenseModal?.classList.add("hidden");
+          clearLicenseGate();
         }
       } else {
         els.licenseStatus.textContent = result.error || "激活失败";
@@ -7184,10 +7192,8 @@ if (els.deactivateLicenseBtn) {
       const result = await checkLicenseStatus();
       if (result.activated) throw new Error("授权凭据仍然有效，请重试");
       showToast("授权已解除，请重新授权");
-      startupLicensePending = true;
       els.settingsModal?.classList.add("hidden");
-      els.licenseModal?.classList.remove("hidden");
-      els.licenseModal?.classList.add("startup-block");
+      showLicenseGate("授权已解除，请重新授权");
     } catch (err) {
       showToast(`解除授权失败：${err.message}`);
     } finally {
@@ -7535,8 +7541,12 @@ if (els.kmEnableReminder) {
   });
 }
 
-els.closeSettingsBtn.addEventListener("click", () => els.settingsModal.classList.add("hidden"));
+els.closeSettingsBtn.addEventListener("click", () => {
+  if (startupLicensePending) return;
+  els.settingsModal.classList.add("hidden");
+});
 els.settingsModal.addEventListener("click", (event) => {
+  if (startupLicensePending) return;
   if (event.target === els.settingsModal) els.settingsModal.classList.add("hidden");
 });
 
@@ -8257,6 +8267,29 @@ const splashProgressPct = document.querySelector("#splashProgressPct");
 const splashProgressText = document.querySelector("#splashProgressText");
 
 let _splashProgress = 0;
+function showLicenseGate(message = "软件未授权，请完成授权后继续使用") {
+  startupLicensePending = true;
+  document.body.classList.add("license-locked");
+  els.settingsModal?.classList.add("hidden");
+  if (els.licenseStatus && message) {
+    els.licenseStatus.textContent = message;
+    els.licenseStatus.className = "license-status error";
+  }
+  els.licenseModal?.classList.remove("hidden");
+  els.licenseModal?.classList.add("startup-block");
+}
+
+function clearLicenseGate() {
+  startupLicensePending = false;
+  document.body.classList.remove("license-locked");
+  els.licenseModal?.classList.remove("startup-block");
+  els.licenseModal?.classList.add("hidden");
+}
+
+window.addEventListener("license-required", (event) => {
+  showLicenseGate(event.detail?.error || "授权已失效，请重新授权");
+});
+
 function setSplashProgress(pct, text) {
   _splashProgress = pct;
   if (splashProgressFill) splashProgressFill.style.width = pct + "%";
@@ -8350,18 +8383,14 @@ async function startupLicenseCheck() {
     state.tree = [];
     state.flatFiles = [];
     renderTree([]);
-    startupLicensePending = true;
-    els.licenseModal.classList.remove("hidden");
-    els.licenseModal.classList.add("startup-block");
+    showLicenseGate();
     hideSplash();
     await new Promise((resolve) => {
       const check = setInterval(async () => {
         const r = await checkLicenseStatus();
         if (r.activated) {
           clearInterval(check);
-          startupLicensePending = false;
-          els.licenseModal.classList.remove("startup-block");
-          els.licenseModal.classList.add("hidden");
+          clearLicenseGate();
           resolve();
         }
       }, 1500);

@@ -1630,6 +1630,31 @@ async function handleApi(req, res, url) {
     }
   }
 
+  // 所有文档、工作区、AI 和文件操作都必须先通过授权校验。
+  // 保留授权检查、激活、解除授权和版本查询，确保未授权用户仍能完成激活和更新。
+  const licenseFreePaths = new Set([
+    "/api/license/status",
+    "/api/license/activate",
+    "/api/license/deactivate",
+    "/api/license/check",
+    "/api/version",
+  ]);
+  if (url.pathname.startsWith("/api/") && !licenseFreePaths.has(url.pathname)) {
+    const licenseFile = path.join(DATA_ROOT, ".license");
+    if (!existsSync(licenseFile)) {
+      return json(res, 403, { code: "LICENSE_REQUIRED", error: "软件未授权，请先完成授权" });
+    }
+    try {
+      const licenseKey = await readFile(licenseFile, "utf8");
+      const result = await verifyLicense(licenseKey);
+      if (!result.valid) {
+        return json(res, 403, { code: "LICENSE_REQUIRED", error: result.error || "授权已失效，请重新授权" });
+      }
+    } catch (err) {
+      return json(res, 403, { code: "LICENSE_REQUIRED", error: "授权校验失败：" + err.message });
+    }
+  }
+
   if (url.pathname === "/api/asset" && req.method === "POST") {
     await ensureDocs();
     const payload = await readJson(req);
