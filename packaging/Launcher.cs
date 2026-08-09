@@ -495,10 +495,9 @@ internal static class MyTempleLauncher
                     FormBorderStyle = FormBorderStyle.Sizable,
                     ShowInTaskbar = true,
                 };
-                // splashBox 作为持久背景层：
-                //   - 启动时 logo.png 铺满窗口，消除 WebView2 初始化黑屏
-                //   - WebView2 就绪后 SendToBack（保留在 z-order 底层），作为 Chromium 重绘间隙的过渡底色
-                //   - Resize 时 Chromium GPU 重绘有 1-3 帧延迟，splashBox 覆盖在背后，避免纯色黑底穿透
+                // splashBox 只负责遮住 WebView2 的初始化空白，首个页面完成后立即隐藏。
+                // 不能把开机图长期留在 WebView2 后面，否则窗口快速缩放时 GPU 重绘间隙
+                // 会把开机图重新合成出来，造成主题背景穿帮。
                 var splashBox = new PictureBox
                 {
                     Dock = DockStyle.None,
@@ -519,14 +518,14 @@ internal static class MyTempleLauncher
                 webView = new WebView2 { Dock = DockStyle.Fill, CreationProperties = null, BackColor = formBg };
                 mainWindow.Controls.Add(webView);
                 webView.BringToFront();
+                splashBox.BringToFront();
 
                 // Resize 防抖：窗口拖拽过程中每帧都触发 Resize，Chromium 无法跟上。
-                // 使用 Timer 延迟 150ms 后才真正同步尺寸，避免黑屏闪烁。
+                // 原生图层只在启动期间存在，后续缩放不会再次显示开机图。
                 System.Windows.Forms.Timer resizeDebouncer = null;
                 mainWindow.Resize += delegate
                 {
-                    // 同步 splashBox 到新 ClientRectangle，覆盖 Chromium 未重绘区域。
-                    if (splashBox != null && !splashBox.IsDisposed)
+                    if (splashBox != null && !splashBox.IsDisposed && splashBox.Visible)
                     {
                         splashBox.Bounds = mainWindow.ClientRectangle;
                         splashBox.Invalidate();
@@ -552,7 +551,7 @@ internal static class MyTempleLauncher
                 mainWindow.SizeChanged += delegate
                 {
                     if (mainWindow.WindowState == FormWindowState.Minimized) return;
-                    if (splashBox != null && !splashBox.IsDisposed)
+                    if (splashBox != null && !splashBox.IsDisposed && splashBox.Visible)
                     {
                         splashBox.Bounds = mainWindow.ClientRectangle;
                         splashBox.Invalidate();
@@ -582,17 +581,15 @@ internal static class MyTempleLauncher
                 await webView.EnsureCoreWebView2Async(environment);
                 webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = true;
                 webView.CoreWebView2.Settings.IsStatusBarEnabled = false;
-                // 关键：让 WebView2 自身背景与窗体/闪屏底色一致，
-                // 这样 Chromium 重绘间隙显示的就是底色 logo/墨蓝，而非陌生的白色或黑色。
+                // WebView2 使用与窗体一致的纯色底，避免启动图隐藏后露出黑底。
                 webView.DefaultBackgroundColor = formBg;
                 webView.ZoomFactor = 1.0;
-                // WebView2 已就绪：splashBox 保留在 Controls 中但 SendToBack。
-                // 作为持久背景层覆盖 Chromium 重绘间隙，避免 Resize 时的黑色闪烁。
-                if (splashBox != null && !splashBox.IsDisposed)
+                webView.CoreWebView2.NavigationCompleted += delegate
                 {
-                    splashBox.SendToBack();
-                    splashBox.BackColor = formBg;
-                }
+                    if (splashBox == null || splashBox.IsDisposed) return;
+                    splashBox.Visible = false;
+                    splashBox.Dispose();
+                };
                 webView.CoreWebView2.Navigate(appUrl);
                 WriteLog("info", "WebView2 native window started.");
             }
