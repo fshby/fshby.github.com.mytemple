@@ -25,7 +25,7 @@
       </nav>
       <div class="nav-actions">
         <a class="nav-github" href="#features">核心能力</a>
-        <a class="button button-small button-primary" href="https://github.com/fshby/fshby.github.com.mytemple/releases">下载 v1.1.7</a>
+        <a class="button button-small button-primary" href="https://puke.fshby.cc/">下载 v1.1.7</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -37,7 +37,7 @@
           <h1 id="hero-title"><span>让散落的 Markdown，</span><span>形成可追溯的</span><span>知识神经网络</span></h1>
           <p class="hero-lede">把文档、标签与语义概念连成一张真正能被检索、编辑和持续维护的知识地图。数据留在本地，思路保持连贯。</p>
           <div class="hero-actions">
-            <a class="button button-primary" href="https://github.com/fshby/fshby.github.com.mytemple/releases">下载 v1.1.7 安装包 <span>↓</span></a>
+            <a class="button button-primary" href="https://puke.fshby.cc/">下载 v1.1.7 安装包 <span>↓</span></a>
             <a class="button button-quiet" href="#ai">了解 AI 接入 <span>→</span></a>
           </div>
           <div class="hero-note"><span>●</span> Windows 安装包 · 需要 Node.js 18+ · 无需云端账户</div>
@@ -132,26 +132,34 @@
       <section class="docs section-wrap" id="docs" aria-labelledby="docs-title">
         <div class="section-intro reveal"><p class="eyebrow">DOCUMENTATION</p><h2 id="docs-title">从第一篇文档开始，<span>每一步都有说明</span></h2><p>把使用说明放在手边，减少试错；文档也按同一套知识库规范编写，方便 AI 继续蒸馏。</p></div>
         <div class="docs-grid">
-          <a class="doc-link reveal" href="#docs"><span class="doc-num">01</span><span><b>快速开始</b><small>安装、工作区和第一次刷新</small></span><em>↗</em></a>
-          <a class="doc-link reveal reveal-delay-1" href="#docs"><span class="doc-num">02</span><span><b>图谱与标记</b><small>节点层级、标签与双向链接</small></span><em>↗</em></a>
-          <a class="doc-link reveal reveal-delay-2" href="#docs"><span class="doc-num">03</span><span><b>编辑规范</b><small>命名、Frontmatter 与目录结构</small></span><em>↗</em></a>
-          <a class="doc-link reveal" href="#docs"><span class="doc-num">04</span><span><b>AI 蒸馏规范</b><small>让模型按规则整理和提炼</small></span><em>↗</em></a>
-          <a class="doc-link reveal reveal-delay-1" href="#docs"><span class="doc-num">05</span><span><b>AI 维护规则</b><small>语义问答、写入边界与溯源</small></span><em>↗</em></a>
-          <a class="doc-link reveal reveal-delay-2" href="#docs"><span class="doc-num">06</span><span><b>主清单说明</b><small>给 AI 快速读取本地索引</small></span><em>↗</em></a>
+          <a class="doc-link reveal" href="#quick-start"><span class="doc-num">01</span><span><b>快速开始</b><small>安装、工作区和第一次刷新</small></span><em>↗</em></a>
+          <a class="doc-link reveal reveal-delay-1" href="#graph-guide"><span class="doc-num">02</span><span><b>图谱与标记</b><small>节点层级、标签与双向链接</small></span><em>↗</em></a>
+          <a class="doc-link reveal reveal-delay-2" href="#editing-guide"><span class="doc-num">03</span><span><b>编辑规范</b><small>命名、Frontmatter 与目录结构</small></span><em>↗</em></a>
+          <a class="doc-link reveal" href="#distill-guide"><span class="doc-num">04</span><span><b>AI 蒸馏规范</b><small>让模型按规则整理和提炼</small></span><em>↗</em></a>
+          <a class="doc-link reveal reveal-delay-1" href="#maintenance-guide"><span class="doc-num">05</span><span><b>AI 维护规则</b><small>语义问答、写入边界与溯源</small></span><em>↗</em></a>
+          <a class="doc-link reveal reveal-delay-2" href="#manifest-guide"><span class="doc-num">06</span><span><b>主清单说明</b><small>给 AI 快速读取本地索引</small></span><em>↗</em></a>
+        </div>
+        <div class="guide-list">
+          <article class="guide-card reveal" id="quick-start"><div class="guide-card-head"><span class="doc-num">01 / START</span><h3>快速开始</h3><p>用一个工作区建立第一套可持续维护的 Markdown 知识库。</p></div><div class="guide-columns"><div><h4>三分钟路径</h4><ol><li>下载安装包并完成安装，首次启动时选择默认工作区。</li><li>把 Markdown 文件放入工作区，或使用“新建文件”创建第一篇文档。</li><li>点击刷新，等待目录、标题索引和知识图谱完成更新。</li><li>从左侧目录打开文档，在阅读、编辑、图谱视图间切换。</li></ol></div><div><h4>推荐习惯</h4><ul><li>一个主题使用一个文件夹，文件名保持稳定。</li><li>重要文档开头写标题和标签，便于后续搜索。</li><li>粘贴图片后检查工作区的 <code>source</code> 目录。</li></ul></div></div></article>
+          <article class="guide-card reveal" id="graph-guide"><div class="guide-card-head"><span class="doc-num">02 / CONNECT</span><h3>图谱与标记</h3><p>让文件、标签和概念形成可追溯的关联，而不是难以阅读的线团。</p></div><div class="guide-columns"><div><h4>三种节点</h4><ul><li><strong>文档节点</strong>：代表 Markdown 文件，是关系的来源。</li><li><strong>标签节点</strong>：来自 Frontmatter 的 <code>tags</code> 或正文中的 <code>#标签</code>。</li><li><strong>语义节点</strong>：辅助发现相关主题，不替代人工结构。</li></ul></div><div><h4>建立连接</h4><pre><code>tags: [部署, 运维] | 参考 [[系统设计]] | #故障排查</code></pre><p>用双向链接表达文档关系，用标签表达稳定分类。</p></div></div></article>
+          <article class="guide-card reveal" id="editing-guide"><div class="guide-card-head"><span class="doc-num">03 / WRITE</span><h3>编辑规范</h3><p>保持文件可读、可搜索、可迁移，降低长期维护成本。</p></div><div class="guide-columns"><div><h4>命名建议</h4><ul><li>使用清晰稳定的名称，例如 <code>系统设计.md</code>。</li><li>同一目录避免重名，文件移动优先使用应用内拖动。</li><li>标题层级从 <code>#</code> 开始，不跳级。</li></ul></div><div><h4>推荐骨架</h4><pre><code># 文档标题 | ## 背景 | ## 结论 | ## 操作步骤 | ## 相关文档</code></pre><p>中文序号标题会被识别为二级目录，阅读模式可快速跳转。</p></div></div></article>
+          <article class="guide-card reveal" id="distill-guide"><div class="guide-card-head"><span class="doc-num">04 / DISTILL</span><h3>AI 蒸馏规范</h3><p>让 AI 先读取证据，再整理成可复用的知识片段。</p></div><div class="guide-columns"><div><h4>输入要求</h4><ol><li>先选定工作区或文档范围。</li><li>明确输出类型：摘要、步骤、风险或待办。</li><li>要求保留来源文件和原文位置。</li></ol></div><div><h4>推荐提示词</h4><pre><code>请整理已确认事实、可执行步骤和未解决问题，并为每条结论标注来源。</code></pre><p>无来源的推断必须标记为待验证。</p></div></div></article>
+          <article class="guide-card reveal" id="maintenance-guide"><div class="guide-card-head"><span class="doc-num">05 / MAINTAIN</span><h3>AI 维护规则</h3><p>让 AI 负责检索和建议，关键写入始终由人确认。</p></div><div class="guide-columns"><div><h4>允许执行</h4><ul><li>查找文档、归纳重复内容、建议标签和链接。</li><li>生成摘要、PPT 草稿和结构化提纲。</li><li>预览 Frontmatter 或文档修改内容。</li></ul></div><div><h4>必须确认</h4><ul><li>保存、重命名、移动、删除和批量修改文件。</li><li>改变工作区路径、索引范围或 AI 配置。</li><li>任何无法给出来源的结论。</li></ul></div></div></article>
+          <article class="guide-card reveal" id="manifest-guide"><div class="guide-card-head"><span class="doc-num">06 / INDEX</span><h3>主清单说明</h3><p>用一份轻量索引帮助 AI 和协作者快速理解知识库边界。</p></div><div class="guide-columns"><div><h4>索引应包含</h4><ul><li>工作区名称、根路径和更新时间。</li><li>文档路径、标题、标签、摘要和修改时间。</li><li>双向链接、图谱节点和待处理问题。</li></ul></div><div><h4>维护流程</h4><ol><li>新增或移动文档后刷新目录。</li><li>执行知识库索引诊断。</li><li>为孤立文档补充标签或相关链接。</li><li>把索引文件纳入备份，不手工覆盖正文。</li></ol></div></div></article>
         </div>
       </section>
 
       <section class="downloads section-wrap" id="downloads" aria-labelledby="downloads-title">
-        <div class="download-heading reveal"><div><p class="eyebrow">RELEASES</p><h2 id="downloads-title">选择适合你的入口</h2></div><a class="text-link" href="https://github.com/fshby/fshby.github.com.mytemple/releases" target="_blank" rel="noreferrer">查看全部 Release ↗</a></div>
+        <div class="download-heading reveal"><div><p class="eyebrow">RELEASES</p><h2 id="downloads-title">选择适合你的入口</h2></div><a class="text-link" href="https://puke.fshby.cc/">查看全部版本 ↗</a></div>
         <div class="release-grid">
-          <article class="release-card release-stable reveal"><div class="release-top"><span class="release-badge">LATEST · STABLE</span><span>Windows · WebView2</span></div><h3>v1.1.7</h3><p>当前稳定桌面版。包含原生窗口、高 DPI 渲染、专业编辑快捷键、保存状态保护、图谱、主题与本地 AI 能力。</p><div class="release-actions"><a class="button button-primary" href="https://github.com/fshby/fshby.github.com.mytemple/releases">下载安装包 ↓</a><a href="#downloads">版本说明 ↗</a></div></article>
-          <article class="release-card reveal reveal-delay-1"><div class="release-top"><span class="release-badge muted">ARCHIVE</span><span>Windows</span></div><h3>v1.1.4</h3><p>上一稳定版本。若需要对照旧环境或回滚，可下载历史安装包。</p><div class="release-actions"><a class="button button-quiet" href="https://github.com/fshby/fshby.github.com.mytemple/releases/tag/v1.1.4" target="_blank" rel="noreferrer">查看版本 ↗</a></div></article>
+          <article class="release-card release-stable reveal"><div class="release-top"><span class="release-badge">LATEST · STABLE</span><span>Windows · WebView2</span></div><h3>v1.1.7</h3><p>当前稳定桌面版。包含原生窗口、高 DPI 渲染、专业编辑快捷键、保存状态保护、图谱、主题与本地 AI 能力。</p><div class="release-actions"><a class="button button-primary" href="https://puke.fshby.cc/">下载安装包 ↓</a><a href="#downloads">版本说明 ↗</a></div></article>
+          <article class="release-card reveal reveal-delay-1"><div class="release-top"><span class="release-badge muted">ARCHIVE</span><span>Windows</span></div><h3>v1.1.4</h3><p>上一稳定版本。若需要对照旧环境或回滚，可下载历史安装包。</p><div class="release-actions"><a class="button button-quiet" href="https://puke.fshby.cc/">查看版本 ↗</a></div></article>
           <article class="release-card release-preview reveal reveal-delay-2"><div class="release-top"><span class="release-badge preview">ROADMAP</span><span>Source</span></div><h3>下一阶段</h3><p>继续完善本地 RAG、摘要提炼、语义链接推荐和索引诊断。所有开发记录公开在主分支，功能保持向后兼容。</p><div class="release-actions"><a class="button button-quiet" href="#features">查看能力路线 ↗</a></div></article>
         </div>
-        <p class="download-note">安装包下载自 GitHub Releases；安装前请确认 Node.js 18+。源代码与文档均可独立迁移，不锁定在单一平台。</p>
+        <p class="download-note">安装包下载自官方发布站；安装前请确认 Node.js 18+。源代码与文档均可独立迁移，不锁定在单一平台。</p>
       </section>
 
-      <section class="closing section-wrap reveal" aria-labelledby="closing-title"><div><p class="eyebrow">YOUR KNOWLEDGE, IN MOTION</p><h2 id="closing-title">今天写下的内容，<br><span>明天仍然找得到</span></h2><p>从一篇 Markdown 开始，让知识库成为可以持续生长的第二大脑。</p></div><a class="button button-primary" href="https://github.com/fshby/fshby.github.com.mytemple/releases">开始使用 MyTemple ↓</a></section>
+      <section class="closing section-wrap reveal" aria-labelledby="closing-title"><div><p class="eyebrow">YOUR KNOWLEDGE, IN MOTION</p><h2 id="closing-title">今天写下的内容，<br><span>明天仍然找得到</span></h2><p>从一篇 Markdown 开始，让知识库成为可以持续生长的第二大脑。</p></div><a class="button button-primary" href="https://puke.fshby.cc/">开始使用 MyTemple ↓</a></section>
     </main>
 
     <footer class="site-footer section-wrap"><div class="footer-brand"><a class="brand" href="#top"><span class="brand-mark" aria-hidden="true"><img src="logo.ico" alt=""></span><span>MyTemple <b>Knowledge</b></span></a><p>本地优先的 Markdown 知识库工作台</p></div><div class="footer-links"><a href="#features">核心能力</a><a href="#docs">使用文档</a><a href="#downloads">版本下载</a></div><small>© <span data-year></span> MyTemple Knowledge</small></footer>
