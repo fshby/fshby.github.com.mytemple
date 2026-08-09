@@ -347,6 +347,7 @@ body {
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
+  display: none;
 }
 .splash-bg {
   position: absolute;
@@ -7801,4 +7802,18 @@ body[data-theme="image"] .global-search-dialog {
   -webkit-backdrop-filter: none !important;
   border-color: rgba(255, 255, 255, 0.30);
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.30);
+}
+
+/* Resize isolation: the startup artwork must never remain visible after boot.
+   Non-image themes use an opaque app canvas so compositor redraws cannot expose
+   the previous image or Bagua surface at the window edges. */
+body:not([data-theme="image"]):not([data-theme="eye"]) {
+  background-color: var(--bg) !important;
+  background-image: none !important;
+  background-attachment: initial !important;
+}
+
+body:not([data-theme="image"]):not([data-theme="eye"]):not([data-theme="bagua"]) .app-shell {
+  background: var(--bg) !important;
+  background-image: none !important;
 }

@@ -8321,11 +8321,10 @@ function hideSplash() {
   if (typeof window.__markAppStarted === "function") window.__markAppStarted();
   if (appSplash && !appSplash.classList.contains("hidden")) {
     setSplashProgress(100, "加载完成");
-    setTimeout(() => {
-      appSplash.classList.add("hidden");
-      setTimeout(() => appSplash.remove(), 400);
-      showWelcomeIfNeeded();
-    }, 300);
+    // 立即移除启动图层，避免窗口缩放时 WebView 重新合成出旧的背景图。
+    appSplash.classList.add("hidden");
+    appSplash.remove();
+    showWelcomeIfNeeded();
   } else {
     showWelcomeIfNeeded();
   }
