@@ -7388,8 +7388,8 @@ async function loadAboutInfo() {
     if (result.releaseDate) {
       els.aboutDate.textContent = "发布日期：" + result.releaseDate;
     }
-    if (result.releaseNotes) {
-      els.aboutReleaseNotes.textContent = result.releaseNotes;
+    if (result.latestReleaseNotes || result.releaseNotes) {
+      els.aboutReleaseNotes.textContent = result.latestReleaseNotes || result.releaseNotes;
     }
   } catch (error) {
     els.aboutVersion.textContent = "1.0.0";
