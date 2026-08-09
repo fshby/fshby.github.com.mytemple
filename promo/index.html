@@ -9,6 +9,7 @@
   <link rel="icon" href="logo.ico" type="image/x-icon">
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="showcase.css">
+  <link rel="stylesheet" href="ai-showcase.css">
 </head>
 <body>
   <div class="site-shell shell-clip">
@@ -21,7 +22,7 @@
         <a href="#network">知识神经</a>
         <a href="#features">核心能力</a>
         <a href="#showcase">界面展示</a>
-        <a href="#ai">AI 接入</a>
+        <a href="#ai-lab">AI 接入</a>
         <a href="#docs">使用文档</a>
         <a href="#downloads">版本下载</a>
       </nav>
@@ -40,7 +41,7 @@
           <p class="hero-lede">把文档、标签与语义概念连成一张真正能被检索、编辑和持续维护的知识地图。数据留在本地，思路保持连贯。</p>
           <div class="hero-actions">
             <a class="button button-primary" href="https://puke.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.0.exe" download>下载 v1.8.0 安装包 <span>↓</span></a>
-            <a class="button button-quiet" href="#ai">了解 AI 接入 <span>→</span></a>
+            <a class="button button-quiet" href="#ai-lab">了解 AI 接入 <span>→</span></a>
           </div>
           <div class="hero-note"><span>●</span> Windows 安装包 · 需要 Node.js 18+ · 无需云端账户</div>
           <div class="hero-metrics" aria-label="产品特点">
@@ -149,6 +150,34 @@
               <div class="settings-shot-nav"><b>设置</b><span class="active">◐ 外观</span><span>▣ 工作区</span><span>✦ AI 与索引</span><span>✇ 许可</span></div><div class="settings-shot-body"><div class="settings-shot-title">外观与工作区</div><div class="theme-row"><span>主题</span><i class="theme-swatch light"></i><i class="theme-swatch dark active"></i><i class="theme-swatch eye"></i><i class="theme-swatch bagua"></i><em>卦象</em></div><div class="path-row"><span>工作路径</span><code>C:\Projects\docs</code><code>D:\Notes</code><button>添加路径</button></div><div class="setting-note">图片粘贴自动压缩至 source/ · 全局字体可调 · 设置重启保留</div></div>
             </div>
           </article>
+          <article class="screen-card screen-ai reveal">
+            <div class="screen-caption"><span class="screen-index">05</span><div><b>DeepSeek 对话模型接入</b><small>云端对话 + 本地向量索引 + 来源回溯</small></div><a href="#deepseek-guide">接入步骤 ↗</a></div>
+            <div class="ui-shot ai-config-shot" role="img" aria-label="DeepSeek 配置和本地索引界面示例">
+              <div class="ai-config-head"><b>AI 与索引</b><span class="status-ok">● 已连接</span></div><div class="provider-tabs"><span>本地 Ollama</span><strong>DeepSeek 云端</strong></div><div class="ai-fields"><label>API Key <code>sk-••••••••••</code></label><label>服务地址 <code>https://api.deepseek.com</code></label><label>对话模型 <code>deepseek-chat</code></label><label>向量模型 <code>qwen3-embedding · 本地</code></label></div><div class="ai-index-row"><span>混合检索</span><strong>1,284 段</strong><i><em></em></i><small>最近更新：刚刚</small></div>
+            </div>
+          </article>
+          <article class="screen-card screen-hint reveal reveal-delay-1">
+            <div class="screen-caption"><span class="screen-index">06</span><div><b>智能编辑提示</b><small>光标停留段落，给出改写、注释、翻译建议</small></div><a href="#hint-guide">使用方法 ↗</a></div>
+            <div class="ui-shot hint-shot" role="img" aria-label="智能编辑提示浮层示例">
+              <div class="hint-editor"><div class="hint-line"><span>38</span>容器启动失败时，首先检查日志和端口占用。</div><div class="hint-line active"><span>39</span>然后重启服务。</div><div class="hint-line"><span>40</span>确认服务恢复后记录结果。</div><div class="hint-popover"><b>AI 编辑提示</b><small>这段步骤可以补充“检查顺序”和“预期结果”。</small><div><button>改写</button><button>补充注释</button><button>翻译</button></div></div></div><div class="hint-status">光标停留 2.5 秒 · 已启用</div>
+            </div>
+          </article>
+          <article class="screen-card screen-health reveal">
+            <div class="screen-caption"><span class="screen-index">07</span><div><b>知识库智能管理与健康评分</b><small>标签、链接、陈旧文档和温习提醒</small></div><a href="#health-guide">评分规则 ↗</a></div>
+            <div class="ui-shot health-shot" role="img" aria-label="知识库健康评分界面示例">
+              <div class="health-head"><b>知识脉络健康度</b><strong>82<span>/100</span></strong><em>良好</em></div><div class="health-meter"><i></i></div><div class="health-stats"><div><span>文档总数</span><b>128</b></div><div><span>缺标签</span><b class="warn">9</b></div><div><span>缺链接</span><b class="warn">14</b></div><div><span>待温习</span><b>6</b></div></div><div class="health-tasks"><span>待处理建议</span><b>为 9 篇文档补充标签</b><b>为 14 篇文档建立关联</b></div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="ai-lab section-wrap" id="ai-lab" aria-labelledby="ai-lab-title">
+        <div class="section-intro reveal"><p class="eyebrow">AI WORKBENCH</p><h2 id="ai-lab-title">AI 不是黑盒，<span>每一步都能看见配置、证据和边界</span></h2><p>当前版本把云端对话、本地索引、选中文本处理、智能编辑提示和知识库健康管理拆成独立模块。你可以只启用需要的部分。</p></div>
+        <div class="ai-lab-grid">
+          <article class="ai-lab-card reveal" id="deepseek-guide"><div class="ai-lab-number">01</div><div><h3>DeepSeek 接入说明</h3><p class="ai-lead">适合希望使用云端对话能力、又希望本地文档索引留在设备上的场景。</p><ol><li>打开「设置 → AI 与索引」，选择「DeepSeek 云端」。</li><li>填写 API Key、服务地址和对话模型，默认地址为 <code>https://api.deepseek.com</code>，模型可用 <code>deepseek-chat</code>。</li><li>向量模型仍使用本地 Ollama；不配置向量模型时自动退回关键词检索。</li><li>点击「检测连接」确认配置，再点击「保存配置」；需要时可「重建索引」。</li></ol><div class="callout"><b>隐私边界</b><span>文档检索和生成请求会按当前配置发送给对应模型服务；不接 AI 时，编辑、搜索、图谱和导出仍可独立使用。</span></div></div></article>
+          <article class="ai-lab-card reveal reveal-delay-1" id="hint-guide"><div class="ai-lab-number">02</div><div><h3>智能编辑提示</h3><p class="ai-lead">让编辑器在你停留时给出轻量建议，不打断连续写作。</p><ul><li>在「设置 → AI 与索引」启用智能编辑提示。</li><li>光标停留在编辑段落达到设定延迟后，弹出改写、补充注释、翻译等建议。</li><li>接受结果前可以预览；插入编辑器或创建新文档都需要你的操作确认。</li><li>失焦、滚动或关闭提示时自动清理，不会持续占用编辑空间。</li></ul><div class="mini-command"><span>原文</span><code>然后重启服务。</code><span>建议</span><code>随后重启服务，并确认健康检查恢复。</code></div></div></article>
+          <article class="ai-lab-card reveal" id="health-guide"><div class="ai-lab-number">03</div><div><h3>知识库健康评分</h3><p class="ai-lead">评分不是内容好坏评价，而是知识结构维护仪表盘。</p><div class="score-rule"><span><b>标签覆盖</b><small>主题是否可被分类与检索</small></span><strong>40%</strong></div><div class="score-rule"><span><b>关联完整度</b><small>是否存在双向链接或相关文档</small></span><strong>35%</strong></div><div class="score-rule"><span><b>温习活跃度</b><small>长期未浏览文档的提醒情况</small></span><strong>25%</strong></div><p class="muted">点击「分析知识脉络」后，可展开缺标签、缺链接和建议温习列表，并直接打开对应文档处理。</p></div></article>
+          <article class="ai-lab-card reveal reveal-delay-1" id="knowledge-guide"><div class="ai-lab-number">04</div><div><h3>知识库智能管理</h3><p class="ai-lead">把“发现问题”变成可执行的维护清单。</p><div class="maintenance-flow"><span>分析</span><i>→</i><span>定位孤岛</span><i>→</i><span>补标签/链接</span><i>→</i><span>重新检索</span></div><ul><li>设置 7-365 天温习周期，列出较久未浏览的文档。</li><li>使用「智能适配标签」预览 AI 建议，保留已有标签后再确认写入。</li><li>用 Frontmatter 标准化工具统一文档元数据，规则文件约束 AI 写入范围。</li></ul></div></article>
         </div>
       </section>
 
@@ -205,8 +234,8 @@ source/screenshot-20260809.webp
 
       <section class="ai-section section-wrap" id="ai" aria-labelledby="ai-title">
         <div class="ai-panel reveal">
-          <div class="ai-copy"><p class="eyebrow">OPTIONAL LOCAL AI</p><h2 id="ai-title">让 AI 先找证据，<br><span>再给你答案</span></h2><p>连接本地模型后，MyTemple 会先从本地知识库召回相关片段，再生成带来源的回答。模型不是记忆库，原文才是。</p><div class="ai-actions"><a class="button button-primary" href="#docs">查看 AI 接入说明 ↗</a><a class="text-link" href="#features">了解本地 AI ↗</a></div></div>
-          <div class="ai-steps"><div><span>01</span><b>安装并启动 Ollama</b><small>模型运行在你的设备上</small></div><div><span>02</span><b>设置 → AI 与索引</b><small>选择对话模型与嵌入模型</small></div><div><span>03</span><b>提问并回到来源</b><small>回答附带文件名和命中片段</small></div><p class="ai-footnote">不接 AI 也能正常编辑、搜索和浏览图谱；本地 AI 是增强，不是门槛。</p></div>
+          <div class="ai-copy"><p class="eyebrow">OPTIONAL AI · LOCAL INDEX</p><h2 id="ai-title">让 AI 先找证据，<br><span>再给你答案</span></h2><p>对话模型可选本地 Ollama 或云端 DeepSeek；知识库向量索引仍可留在本机，并为回答附上文件、标题和行号来源。</p><div class="ai-actions"><a class="button button-primary" href="#deepseek-guide">查看 AI 接入说明 ↗</a><a class="text-link" href="#health-guide">查看知识库健康度 ↗</a></div></div>
+          <div class="ai-steps"><div><span>01</span><b>选择模型服务</b><small>Ollama 本地或 DeepSeek 云端</small></div><div><span>02</span><b>建立本地索引</b><small>向量模型可留空，自动使用关键词模式</small></div><div><span>03</span><b>提问并回到来源</b><small>点击来源直接打开原文位置</small></div><p class="ai-footnote">不接 AI 也能正常编辑、搜索和浏览图谱；AI 是可选增强，不是使用门槛。</p></div>
         </div>
       </section>
 
