@@ -8,6 +8,7 @@
   <title>MyTemple Knowledge · 让知识形成网络</title>
   <link rel="icon" href="logo.ico" type="image/x-icon">
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="showcase.css">
 </head>
 <body>
   <div class="site-shell shell-clip">
@@ -19,12 +20,13 @@
       <nav class="nav-links" aria-label="主导航">
         <a href="#network">知识神经</a>
         <a href="#features">核心能力</a>
+        <a href="#showcase">界面展示</a>
         <a href="#ai">AI 接入</a>
         <a href="#docs">使用文档</a>
         <a href="#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="nav-github" href="#features">核心能力</a>
+        <a class="nav-github" href="#catalog">功能清单</a>
         <a class="button button-small button-primary" href="https://puke.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.0.exe" download>下载 v1.8.0</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
@@ -33,7 +35,7 @@
     <main id="top">
       <section class="hero section-wrap" aria-labelledby="hero-title">
         <div class="hero-copy reveal">
-          <p class="eyebrow"><span class="status-dot"></span> LOCAL-FIRST KNOWLEDGE OS <em>v1.1.7 DESKTOP</em></p>
+          <p class="eyebrow"><span class="status-dot"></span> LOCAL-FIRST KNOWLEDGE OS <em>v1.8.0 DESKTOP</em></p>
           <h1 id="hero-title"><span>让散落的 Markdown，</span><span>形成可追溯的</span><span>知识神经网络</span></h1>
           <p class="hero-lede">把文档、标签与语义概念连成一张真正能被检索、编辑和持续维护的知识地图。数据留在本地，思路保持连贯。</p>
           <div class="hero-actions">
@@ -108,6 +110,85 @@
           <article class="feature-card reveal"><div class="feature-icon icon-theme">◐</div><div><span class="feature-kicker">ADAPT</span><h3>主题与阅读</h3><p>暗色沉浸、浅色专注和自定义主题保持同一信息层级，阅读模式目录支持三级折叠。</p></div></article>
           <article class="feature-card reveal reveal-delay-1"><div class="feature-icon icon-shield">◇</div><div><span class="feature-kicker">PRIVATE</span><h3>本地优先</h3><p>Markdown 文件、索引和设置放在本地目录；AI 可接 Ollama，断开模型也不影响核心编辑。</p></div></article>
           <article class="feature-card reveal reveal-delay-2"><div class="feature-icon icon-speed">↯</div><div><span class="feature-kicker">PERFORM</span><h3>越大越稳</h3><p>目录懒加载、增量解析、图谱缓存与自适应帧率，减少大库刷新时的等待和资源消耗。</p></div></article>
+        </div>
+      </section>
+
+      <section class="showcase section-wrap" id="showcase" aria-labelledby="showcase-title">
+        <div class="section-intro reveal"><p class="eyebrow">PRODUCT SURFACE</p><h2 id="showcase-title">把功能放回真实工作流，<span>一眼看懂怎么用</span></h2><p>下面是按当前桌面版界面整理的功能截屏式示例。每个画面都对应一个真实入口，先看结果，再进入文档操作。</p></div>
+        <div class="screen-grid">
+          <article class="screen-card screen-library reveal">
+            <div class="screen-caption"><span class="screen-index">01</span><div><b>工作区与 Markdown 阅读</b><small>目录、搜索、阅读模式、内部标题目录</small></div><a href="#quick-start">操作说明 ↗</a></div>
+            <div class="ui-shot library-shot" role="img" aria-label="工作区目录和 Markdown 阅读界面示例">
+              <div class="shot-sidebar"><div class="shot-brand"><i>MD</i><strong>文档知识库</strong></div><div class="shot-search">⌕ 全局搜索关键字</div><div class="shot-tree"><b>⌄ architecture</b><span>− 工作文档</span><span class="active">− github部署文档.md</span><span>− system-design.md</span><b>⌄ notes</b><span>− 会议记录.md</span></div></div>
+              <div class="shot-reader"><div class="shot-topline">architecture / github部署文档.md</div><div class="shot-reader-grid"><div class="shot-outline"><b>本文目录</b><span>部署准备</span><span>安装步骤</span><span>验证与回滚</span></div><div class="shot-document"><h3>GitHub 部署文档</h3><p class="shot-muted">最后修改：刚刚 · 已自动保存</p><h4>安装步骤</h4><p>选择工作区、检索文件，并在阅读模式中快速跳到二级标题。</p><div class="shot-code">npm run build<br>npm run deploy</div></div></div></div>
+            </div>
+          </article>
+          <article class="screen-card screen-editor reveal reveal-delay-1">
+            <div class="screen-caption"><span class="screen-index">02</span><div><b>编辑与实时预览</b><small>Markdown 编辑器、格式工具栏、同步滚动</small></div><a href="#editing-guide">编辑规范 ↗</a></div>
+            <div class="ui-shot editor-shot" role="img" aria-label="Markdown 编辑和实时预览界面示例">
+              <div class="shot-toolbar"><span>编辑</span><i>↶</i><i>↷</i><i>B</i><i>I</i><i>H2</i><i>🎨</i><i>—</i><span class="toolbar-spacer"></span><em>实时保存</em></div>
+              <div class="shot-editor-columns"><pre><code># 发布检查清单
+
+## 一、准备工作
+
+- 检查环境变量
+- 确认部署目录
+
+代码块</code></pre><div class="shot-preview"><h3>发布检查清单</h3><h4>一、准备工作</h4><ul><li>检查环境变量</li><li>确认部署目录</li></ul><div class="shot-code">npm run build</div></div></div>
+            </div>
+          </article>
+          <article class="screen-card screen-graph reveal">
+            <div class="screen-caption"><span class="screen-index">03</span><div><b>知识图谱与关系检索</b><small>文档、标签、语义概念分层显示</small></div><a href="#graph-guide">图谱说明 ↗</a></div>
+            <div class="ui-shot graph-shot" role="img" aria-label="知识神经图谱界面示例">
+              <div class="graph-shot-head"><b>知识神经图谱</b><span>全库 · 语义概念 · 动态</span></div><div class="graph-map"><i class="graph-edge e1"></i><i class="graph-edge e2"></i><i class="graph-edge e3"></i><i class="graph-node node-main">部署</i><i class="graph-node node-doc n1">部署文档</i><i class="graph-node node-doc n2">系统设计</i><i class="graph-node node-tag n3">#运维</i><i class="graph-node node-sem n4">容器</i><i class="graph-node node-sem n5">发布</i></div><div class="graph-shot-foot"><span><i class="dot doc-dot"></i>文档</span><span><i class="dot tag-dot"></i>标签</span><span><i class="dot sem-dot"></i>语义</span><small>拖动节点 · 滚轮缩放 · 双击打开文档</small></div>
+            </div>
+          </article>
+          <article class="screen-card screen-settings reveal reveal-delay-1">
+            <div class="screen-caption"><span class="screen-index">04</span><div><b>主题、工作路径与授权</b><small>外观偏好、随机目录、双工作区、许可管理</small></div><a href="#catalog">查看清单 ↗</a></div>
+            <div class="ui-shot settings-shot" role="img" aria-label="设置页面主题和工作区界面示例">
+              <div class="settings-shot-nav"><b>设置</b><span class="active">◐ 外观</span><span>▣ 工作区</span><span>✦ AI 与索引</span><span>✇ 许可</span></div><div class="settings-shot-body"><div class="settings-shot-title">外观与工作区</div><div class="theme-row"><span>主题</span><i class="theme-swatch light"></i><i class="theme-swatch dark active"></i><i class="theme-swatch eye"></i><i class="theme-swatch bagua"></i><em>卦象</em></div><div class="path-row"><span>工作路径</span><code>C:\Projects\docs</code><code>D:\Notes</code><button>添加路径</button></div><div class="setting-note">图片粘贴自动压缩至 source/ · 全局字体可调 · 设置重启保留</div></div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="catalog section-wrap" id="catalog" aria-labelledby="catalog-title">
+        <div class="section-intro reveal"><p class="eyebrow">V1.8.0 CAPABILITY CATALOG</p><h2 id="catalog-title">当前版本功能全景</h2><p>按“收集、组织、编辑、连接、复用、维护”六个阶段整理，方便你快速判断产品是否适合日常查阅和技术文档工作。</p></div>
+        <div class="catalog-grid">
+          <article class="catalog-card reveal"><div class="catalog-head"><span>01</span><h3>收集与工作区</h3></div><ul><li>导入任意磁盘目录作为 Markdown 工作路径</li><li>最近工作路径记录，支持最多两个工作区并排显示</li><li>新建文件夹、新建 Markdown 文件、重命名与删除</li><li>文件、文件夹跨目录拖动移动，支持复制粘贴</li><li>粘贴截图自动压缩并保存到工作区 <code>source/</code></li></ul></article>
+          <article class="catalog-card reveal reveal-delay-1"><div class="catalog-head"><span>02</span><h3>查阅与导航</h3></div><ul><li>左侧目录树按文件夹层级展示，支持折叠、隐藏与宽度调整</li><li>全局关键词检索，结果定位到文件和首个命中位置</li><li>阅读模式显示一级、二级标题目录，点击快速跳转</li><li>编辑模式目录与预览同步，长文档保持当前编辑位置</li><li>文件名超长自动省略，目录滚动区域独立不遮挡顶部操作</li></ul></article>
+          <article class="catalog-card reveal"><div class="catalog-head"><span>03</span><h3>编辑与格式</h3></div><ul><li>CodeMirror Markdown 编辑器与语法高亮</li><li>加粗、斜体、标题、文字颜色、重点背景、下划线、删除线、分割线</li><li>Ctrl+Z 撤销、快捷键操作、表格编辑与代码块一键复制</li><li>输入“1.”或“一、”回车自动扩展序号，Shift+Enter 保持原行</li><li>输入代码时自动补齐围栏，避免重复添加代码标记</li><li>实时保存，保存状态清晰反馈，减少频繁手动保存</li></ul></article>
+          <article class="catalog-card reveal reveal-delay-1"><div class="catalog-head"><span>04</span><h3>知识连接</h3></div><ul><li>文档、显式标签、语义概念三层知识图谱</li><li>识别 Frontmatter tags、正文 #标签 与双向链接</li><li>图谱搜索、高亮、范围/深度筛选、孤立节点与未创建引用</li><li>节点拖动、牵引动画、缩放、双击打开文档</li><li>图谱缓存与增量更新，降低大知识库重复计算</li></ul></article>
+          <article class="catalog-card reveal"><div class="catalog-head"><span>05</span><h3>主题与界面</h3></div><ul><li>明亮、暗色、护眼、卦象、图片背景五种主题入口</li><li>卦象主题以太极阴阳、八卦语义色、五行 UI 色重构界面</li><li>操作界面字体与 Markdown 内容字体独立调节</li><li>Markdown 标题、表格、代码、链接、引用、标签颜色可配置</li><li>高 DPI 与半屏窗口适配，目录隐藏后仍可正常编辑</li></ul></article>
+          <article class="catalog-card reveal reveal-delay-1"><div class="catalog-head"><span>06</span><h3>导出、AI 与安全</h3></div><ul><li>导出 PDF、演示文稿、公众号格式 HTML</li><li>本地 Ollama RAG：关键词/语义检索、来源回溯、选中文本处理</li><li>AI 代写、摘要、要点、术语、翻译和 PPT 草稿辅助</li><li>Agent 规则、写入确认、最大文件数与操作审计</li><li>机器码授权、解除授权即时失效、版本检查与官方更新地址</li></ul></article>
+        </div>
+      </section>
+
+      <section class="examples section-wrap" id="examples" aria-labelledby="examples-title">
+        <div class="section-intro reveal"><p class="eyebrow">COPY · PASTE · REUSE</p><h2 id="examples-title">四个可以马上照做的示例</h2><p>不需要先理解全部概念，复制下面的结构，就能让第一批文档从“能打开”变成“可检索、可关联、可复用”。</p></div>
+        <div class="example-grid">
+          <article class="example-card reveal"><div class="example-tag">A · 文档元数据</div><h3>给文档一个稳定身份</h3><pre><code>---
+title: GitHub 部署文档
+tags: [部署, 运维]
+status: active
+---
+
+# GitHub 部署文档</code></pre><p>Frontmatter 让目录、搜索、图谱和 AI 共享同一份结构。</p></article>
+          <article class="example-card reveal reveal-delay-1"><div class="example-tag">B · 关联关系</div><h3>让相关文档互相可达</h3><pre><code>相关文档：
+- [[系统设计]]
+- [[发布检查清单]]
+
+#部署 #运维</code></pre><p>链接表达具体关系，标签表达稳定分类，图谱会分别呈现。</p></article>
+          <article class="example-card reveal reveal-delay-2"><div class="example-tag">C · 全局检索</div><h3>从一句话找回证据</h3><pre><code>搜索：容器启动失败
+
+命中：github部署文档.md
+位置：## 故障排查 · 第 42 行
+操作：打开并跳到首个关键词</code></pre><p>精确关键字先命中文件和行，语义检索用于找回表达不同但意思相近的内容。</p></article>
+          <article class="example-card reveal"><div class="example-tag">D · 截图存档</div><h3>粘贴截图，路径自动落地</h3><pre><code>粘贴图片
+  ↓ 自动压缩
+source/screenshot-20260809.webp
+  ↓ 写入 Markdown
+![部署流程](../source/screenshot-20260809.webp)</code></pre><p>图片与文档一起留在工作区，迁移、备份和分享时不依赖临时剪贴板。</p></article>
         </div>
       </section>
 
