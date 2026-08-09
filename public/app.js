@@ -3449,7 +3449,9 @@ const aiHintState = { timer: null, lastKey: "", lastShownAt: 0, inflight: false 
 
 function aiEditHintEnabled() {
   // 仅在编辑模式且编辑器获得焦点（光标停留于编辑栏）时启用，避免阅读/图谱模式误触发。
-  return localStorage.getItem("aiEditHint") === "1" && state.mode === "edit" && document.activeElement === els.editor;
+  const editorFocused = Boolean(els.editor?.hasFocus)
+    || Boolean(els.editor?.contains?.(document.activeElement));
+  return localStorage.getItem("aiEditHint") === "1" && state.mode === "edit" && editorFocused;
 }
 
 function initAiEditHintSettings() {
