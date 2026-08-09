@@ -3435,7 +3435,10 @@ async function insertAiTransform() {
   if (!transform || transform.source !== "editor" || !content) return;
   const range = resolveAiEditorRange(transform);
   if (!range) return showToast("原文已变化，请重新生成 AI 结果后再插入");
-  if (!replaceEditorRange(content, range.start, range.end, "end")) {
+  if (content === els.editor.value.slice(range.start, range.end).trim()) {
+    return showToast("AI 结果与原文相同，请重新生成后再插入");
+  }
+  if (!await replaceEditorRange(content, range.start, range.end, "end")) {
     return showToast("AI 结果未能写入编辑器，请重试");
   }
   closeAiTransformModal();
@@ -3540,6 +3543,10 @@ async function requestAiEditHint() {
   try {
     const result = await api.post("/api/ai/transform", { text: para.text, mode: "hint" });
     if (!result || !result.content) return;
+    if (result.answerMode === "local-fallback") {
+      if (result.warning) showToast(result.warning);
+      return;
+    }
     const activeParagraph = currentEditorParagraph();
     if (!aiEditHintEnabled()
       || state.currentPath !== requestPath
@@ -3638,23 +3645,26 @@ function resolveAiEditorRange(range) {
   return nearestStart === -1 ? null : { start: nearestStart, end: nearestStart + text.length };
 }
 
-function applyAiHintRewrite(suggestion, para) {
+async function applyAiHintRewrite(suggestion, para) {
   const replacement = String(suggestion || "").trim();
   if (!replacement) return showToast("本次提示没有可采纳的改写内容");
   const range = resolveAiEditorRange(para);
   if (!range) return showToast("原段落已变化，请重新获取智能提示");
-  if (!replaceEditorRange(replacement, range.start, range.end, "end")) {
+  if (replacement === els.editor.value.slice(range.start, range.end).trim()) {
+    return showToast("AI 没有生成不同内容，请重新获取提示或检查模型配置");
+  }
+  if (!await replaceEditorRange(replacement, range.start, range.end, "end")) {
     return showToast("改写内容未能写入编辑器，请重试");
   }
   showToast("已采纳 AI 改写并实时保存");
 }
 
-function insertAiHintComment(suggestion, para) {
+async function insertAiHintComment(suggestion, para) {
   if (!suggestion) return;
   const comment = `\n> ${String(suggestion).split("\n").join("\n> ")}\n`;
   const range = resolveAiEditorRange(para);
   if (!range) return showToast("原段落已变化，请重新获取智能提示");
-  if (!replaceEditorRange(comment, range.end, range.end, "end")) {
+  if (!await replaceEditorRange(comment, range.end, range.end, "end")) {
     return showToast("注释未能写入编辑器，请重试");
   }
   showToast("已插入 AI 注释并实时保存");
@@ -5656,7 +5666,7 @@ async function activateGraphNode(node) {
   scheduleGraphDraw();
 }
 
-function replaceEditorRange(value, start, end, selectionMode = "end") {
+async function replaceEditorRange(value, start, end, selectionMode = "end") {
   const replacement = String(value ?? "");
   const before = els.editor.value;
   const clamp = (position) => Math.max(0, Math.min(before.length, Number(position) || 0));
@@ -5690,8 +5700,7 @@ function replaceEditorRange(value, start, end, selectionMode = "end") {
   });
   els.editor.dispatchEvent(new Event("input", { bubbles: true }));
   // AI actions are explicit user decisions, so persist them immediately.
-  void saveCurrentDoc({ keepEditorState: true, renderAfterSave: false });
-  return true;
+  return saveCurrentDoc({ keepEditorState: true, renderAfterSave: false });
 }
 
 function insertAtCursor(value) {

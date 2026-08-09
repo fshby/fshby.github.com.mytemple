@@ -31,6 +31,9 @@ test("AI edit hint acceptance writes the suggested markdown back to its original
   assert.match(appSource, /preserveInstruction: true/);
   assert.match(appSource, /state\.currentPath !== requestPath/);
   assert.match(appSource, /els\.editor\.value !== requestContent/);
+  assert.match(appSource, /result\.answerMode === "local-fallback"/);
+  assert.match(appSource, /AI 没有生成不同内容/);
+  assert.match(appSource, /return saveCurrentDoc\(\{ keepEditorState: true, renderAfterSave: false \}\)/);
 });
 
 test("Frontmatter template contains the P0 schema and remains parseable", () => {
