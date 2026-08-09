@@ -8,6 +8,15 @@ import { createDocumentTemplate, frontmatterSummary, normalizeFrontmatter } from
 import { defaultAgentRules, loadAgentPolicy, policyAllows } from "../server/agent-policy.js";
 import { RagService, chunkMarkdown, fallbackTransformSelection } from "../server/rag.js";
 
+test("License deactivation is exposed as a dedicated credential removal route", async () => {
+  const serverSource = await readFile(path.join(process.cwd(), "server.js"), "utf8");
+  const appSource = await readFile(path.join(process.cwd(), "public/app.js"), "utf8");
+  assert.match(serverSource, /\/api\/license\/deactivate/);
+  assert.match(serverSource, /unlink\(licenseFile\)/);
+  assert.match(appSource, /api\.post\("\/api\/license\/deactivate"/);
+  assert.match(appSource, /授权已解除，请重新授权/);
+});
+
 test("Frontmatter template contains the P0 schema and remains parseable", () => {
   const template = createDocumentTemplate("测试文档", "2026-07-22");
   const summary = frontmatterSummary(template);

@@ -7156,7 +7156,12 @@ if (els.activateLicenseBtn) {
       if (result.valid) {
         els.licenseStatus.textContent = "激活成功！";
         els.licenseStatus.className = "license-status success";
-        setTimeout(() => checkLicenseStatus(), 800);
+        await checkLicenseStatus();
+        if (startupLicensePending) {
+          startupLicensePending = false;
+          els.licenseModal?.classList.remove("startup-block");
+          els.licenseModal?.classList.add("hidden");
+        }
       } else {
         els.licenseStatus.textContent = result.error || "激活失败";
         els.licenseStatus.className = "license-status error";
@@ -7173,11 +7178,21 @@ if (els.activateLicenseBtn) {
 if (els.deactivateLicenseBtn) {
   els.deactivateLicenseBtn.addEventListener("click", async () => {
     if (!await customConfirm("确定要解除当前设备的授权吗？", { title: "解除授权", danger: true })) return;
+    els.deactivateLicenseBtn.disabled = true;
     try {
-      // 通过删除 .license 文件解除授权（通过 API）
-      await api.post("/api/license/activate", { licenseKey: "" });
-    } catch (_) { /* ignore */ }
-    checkLicenseStatus();
+      await api.post("/api/license/deactivate", {});
+      const result = await checkLicenseStatus();
+      if (result.activated) throw new Error("授权凭据仍然有效，请重试");
+      showToast("授权已解除，请重新授权");
+      startupLicensePending = true;
+      els.settingsModal?.classList.add("hidden");
+      els.licenseModal?.classList.remove("hidden");
+      els.licenseModal?.classList.add("startup-block");
+    } catch (err) {
+      showToast(`解除授权失败：${err.message}`);
+    } finally {
+      els.deactivateLicenseBtn.disabled = false;
+    }
   });
 }
 

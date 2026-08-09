@@ -1606,6 +1606,16 @@ async function handleApi(req, res, url) {
     return json(res, 200, result);
   }
 
+  if (url.pathname === "/api/license/deactivate" && req.method === "POST") {
+    const licenseFile = path.join(DATA_ROOT, ".license");
+    try {
+      await unlink(licenseFile);
+    } catch (err) {
+      if (err.code !== "ENOENT") throw err;
+    }
+    return json(res, 200, { activated: false, machineCode: getMachineCode() });
+  }
+
   if (url.pathname === "/api/license/check" && req.method === "GET") {
     const licenseFile = path.join(DATA_ROOT, ".license");
     if (!existsSync(licenseFile)) {
