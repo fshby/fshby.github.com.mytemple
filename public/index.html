@@ -539,7 +539,7 @@
                   <label class="setting-field"><span>对话模型</span><input id="aiChatModel" list="aiModelChoices" placeholder="选择本机已有模型" /></label>
                 </div>
                 <div class="ai-provider-fields hidden" data-provider-fields="deepseek">
-                  <label class="setting-field"><span>API Key</span><input id="aiDeepseekApiKey" type="password" placeholder="sk-..." autocomplete="off" /></label>
+                  <label class="setting-field"><span>API Key</span><input id="aiDeepseekApiKey" type="password" placeholder="sk-..." autocomplete="off" /><small class="muted">已配置时留空可保留原密钥；如需更换，请输入新密钥。</small></label>
                   <label class="setting-field"><span>服务地址</span><input id="aiDeepseekBaseUrl" value="https://api.deepseek.com" /></label>
                   <label class="setting-field"><span>对话模型</span><input id="aiDeepseekChatModel" placeholder="deepseek-chat" /></label>
                   <p class="muted">DeepSeek 不提供向量模型，语义索引仍使用上方本地向量模型（可留空进入关键词模式）。AI 处理选中、知识库问答均使用 DeepSeek 对话模型。</p>
@@ -967,6 +967,7 @@
         </label>
         <div class="modal-actions">
           <button type="button" id="aiTransformCancelBtn">取消</button>
+          <button type="button" id="aiTransformGenerateBtn" class="primary hidden">生成结果</button>
           <button type="button" id="aiTransformInsertBtn">插入当前位置</button>
           <button type="button" id="aiTransformCreateBtn" class="primary">新建摘要文档</button>
         </div>

@@ -335,6 +335,7 @@ const els = {
   aiTransformDocName: document.querySelector("#aiTransformDocName"),
   aiTransformCloseBtn: document.querySelector("#aiTransformCloseBtn"),
   aiTransformCancelBtn: document.querySelector("#aiTransformCancelBtn"),
+  aiTransformGenerateBtn: document.querySelector("#aiTransformGenerateBtn"),
   aiTransformInsertBtn: document.querySelector("#aiTransformInsertBtn"),
   aiTransformCreateBtn: document.querySelector("#aiTransformCreateBtn"),
   standardizeFrontmatterBtn: document.querySelector("#standardizeFrontmatterBtn"),
@@ -3187,7 +3188,12 @@ async function loadAiStatus() {
       if (els.aiBaseUrl) els.aiBaseUrl.value = status.baseUrl || "http://127.0.0.1:11434";
       if (els.aiEmbeddingModel) els.aiEmbeddingModel.value = status.embeddingModel || "";
       if (els.aiChatModel) els.aiChatModel.value = status.chatModel || "";
-      if (els.aiDeepseekApiKey) els.aiDeepseekApiKey.value = status.deepseekApiKey || "";
+      if (els.aiDeepseekApiKey) {
+        els.aiDeepseekApiKey.value = "";
+        els.aiDeepseekApiKey.placeholder = status.deepseekApiKeyConfigured
+          ? "已配置，留空则保持不变"
+          : "sk-...";
+      }
       if (els.aiDeepseekBaseUrl) els.aiDeepseekBaseUrl.value = status.deepseekBaseUrl || "https://api.deepseek.com";
       if (els.aiDeepseekChatModel) els.aiDeepseekChatModel.value = status.deepseekChatModel || "deepseek-chat";
       setAiProvider(status.chatProvider === "deepseek" ? "deepseek" : "ollama");
@@ -3343,12 +3349,16 @@ function refreshAiSelectionMenu() {
   }
 }
 
+let aiTransformRequestSeq = 0;
+
 function closeAiTransformModal() {
+  aiTransformRequestSeq += 1;
   els.aiTransformModal?.classList.add("hidden");
   state.ai.transform = null;
 }
 
-async function runAiTransform(mode) {
+async function runAiTransform(mode, { preserveInstruction = false } = {}) {
+  const requestId = ++aiTransformRequestSeq;
   const selection = state.ai.selection || getAiSelection();
   const isRewrite = mode === "rewrite";
   // 代写模式允许无选区（基于写作要求生成新文档），其余模式需选中文本。
@@ -3375,7 +3385,13 @@ async function runAiTransform(mode) {
   // 代写模式显示「写作要求」输入框，其余模式隐藏。
   const instrWrap = document.querySelector("#aiTransformInstructionWrap");
   if (instrWrap) instrWrap.classList.toggle("hidden", !isRewrite);
-  if (els.aiTransformInstruction) els.aiTransformInstruction.value = "";
+  if (els.aiTransformInstruction && !preserveInstruction) els.aiTransformInstruction.value = "";
+  if (els.aiTransformGenerateBtn) {
+    els.aiTransformGenerateBtn.classList.toggle("hidden", !isRewrite);
+    els.aiTransformGenerateBtn.disabled = isRewrite;
+  }
+  els.aiTransformCreateBtn.textContent = isRewrite ? "新建文档" : "新建摘要文档";
+  state.ai.transform = null;
   const sourceText = selection?.text || "";
   els.aiTransformSource.textContent = sourceText
     ? `${selection.source === "editor" ? "编辑器选区" : "阅读器选区"} · ${sourceText.length} 字`
@@ -3388,22 +3404,28 @@ async function runAiTransform(mode) {
   if (isRewrite && !instruction) {
     els.aiTransformResult.value = "";
     els.aiTransformResult.disabled = false;
+    if (els.aiTransformGenerateBtn) els.aiTransformGenerateBtn.disabled = false;
     return showToast("请在「写作要求」中填写需求");
   }
   try {
     const payload = { text: sourceText, mode };
     if (instruction) payload.instruction = instruction;
     const result = await api.post("/api/ai/transform", payload);
+    if (requestId !== aiTransformRequestSeq) return;
     els.aiTransformResult.value = result.content || "";
     state.ai.transform = { ...(selection || {}), mode, result: result.content || "" };
     els.aiTransformCreateBtn.disabled = !result.content;
     if (result.warning) showToast(result.warning);
   } catch (error) {
+    if (requestId !== aiTransformRequestSeq) return;
     els.aiTransformResult.value = "";
     showToast(error.message || "文本处理失败");
     closeAiTransformModal();
   } finally {
-    els.aiTransformResult.disabled = false;
+    if (requestId === aiTransformRequestSeq) {
+      els.aiTransformResult.disabled = false;
+      if (els.aiTransformGenerateBtn) els.aiTransformGenerateBtn.disabled = false;
+    }
   }
 }
 
@@ -3411,9 +3433,11 @@ async function insertAiTransform() {
   const transform = state.ai.transform;
   const content = els.aiTransformResult.value.trim();
   if (!transform || transform.source !== "editor" || !content) return;
-  els.editor.focus();
-  els.editor.setRangeText(content, transform.start, transform.end, "end");
-  els.editor.dispatchEvent(new Event("input", { bubbles: true }));
+  const range = resolveAiEditorRange(transform);
+  if (!range) return showToast("原文已变化，请重新生成 AI 结果后再插入");
+  if (!replaceEditorRange(content, range.start, range.end, "end")) {
+    return showToast("AI 结果未能写入编辑器，请重试");
+  }
   closeAiTransformModal();
   showToast("AI 结果已插入当前位置");
 }
@@ -3507,15 +3531,20 @@ async function requestAiEditHint() {
   if (aiHintState.inflight || !aiEditHintEnabled()) return;
   const para = currentEditorParagraph();
   if (!para || para.text.length < 8) return;
-  const key = `${para.start}:${para.text.slice(0, 32)}`;
+  const requestPath = state.currentPath;
+  const requestContent = els.editor.value;
+  const key = `${requestPath}:${para.start}:${para.text}`;
   // 同一段落 5 分钟内不重复提示。
   if (key === aiHintState.lastKey && Date.now() - aiHintState.lastShownAt < 300000) return;
-  aiHintState.lastKey = key;
-  aiHintState.lastShownAt = Date.now();
   aiHintState.inflight = true;
   try {
     const result = await api.post("/api/ai/transform", { text: para.text, mode: "hint" });
     if (!result || !result.content) return;
+    const activeParagraph = currentEditorParagraph();
+    if (!aiEditHintEnabled()
+      || state.currentPath !== requestPath
+      || els.editor.value !== requestContent
+      || activeParagraph?.start !== para.start) return;
     let hint = null;
     let suggestion = "";
     try {
@@ -3527,7 +3556,14 @@ async function requestAiEditHint() {
       hint = String(result.content).slice(0, 120);
       suggestion = String(result.content);
     }
-    showAiEditHintPopover({ hint, suggestion, para, warning: result.warning });
+    aiHintState.lastKey = key;
+    aiHintState.lastShownAt = Date.now();
+    showAiEditHintPopover({
+      hint,
+      suggestion,
+      para: { ...para, path: requestPath, contentSnapshot: requestContent },
+      warning: result.warning,
+    });
   } catch (_) { /* AI 不可用时静默不弹 */ } finally {
     aiHintState.inflight = false;
   }
@@ -3568,19 +3604,60 @@ function showAiEditHintPopover({ hint, suggestion, para, warning }) {
     if (!btn) return;
     const action = btn.dataset.hintAction;
     hideAiEditHintPopover();
-    state.ai.selection = { source: "editor", text: para.text, start: para.start, end: para.end };
-    if (action === "rewrite") runAiTransform("polish");
-    else if (action === "insert") insertAiHintComment(suggestion);
+    if (para.path && (state.currentPath !== para.path || els.editor.value !== para.contentSnapshot)) {
+      showToast("文档已变化，请重新获取智能提示");
+      return;
+    }
+    state.ai.selection = { source: "editor", text: para.text, start: para.start, end: para.end, path: para.path || state.currentPath };
+    if (action === "rewrite") applyAiHintRewrite(suggestion, para);
+    else if (action === "insert") insertAiHintComment(suggestion, para);
     else if (action === "translate") runAiTransform("translate");
   });
   if (warning) showToast(warning);
 }
 
-function insertAiHintComment(suggestion) {
+function resolveAiEditorRange(range) {
+  const value = els.editor.value;
+  const text = String(range?.text || "").trim();
+  const clamp = (position) => Math.max(0, Math.min(value.length, Number(position) || 0));
+  const start = clamp(range?.start);
+  const end = Math.max(start, clamp(range?.end));
+
+  if (!text || value.slice(start, end).trim() === text) return { start, end };
+
+  let matchStart = -1;
+  let nearestStart = -1;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+  while ((matchStart = value.indexOf(text, matchStart + 1)) !== -1) {
+    const distance = Math.abs(matchStart - start);
+    if (distance < nearestDistance) {
+      nearestStart = matchStart;
+      nearestDistance = distance;
+    }
+  }
+  return nearestStart === -1 ? null : { start: nearestStart, end: nearestStart + text.length };
+}
+
+function applyAiHintRewrite(suggestion, para) {
+  const replacement = String(suggestion || "").trim();
+  if (!replacement) return showToast("本次提示没有可采纳的改写内容");
+  const range = resolveAiEditorRange(para);
+  if (!range) return showToast("原段落已变化，请重新获取智能提示");
+  if (!replaceEditorRange(replacement, range.start, range.end, "end")) {
+    return showToast("改写内容未能写入编辑器，请重试");
+  }
+  showToast("已采纳 AI 改写并实时保存");
+}
+
+function insertAiHintComment(suggestion, para) {
   if (!suggestion) return;
   const comment = `\n> ${String(suggestion).split("\n").join("\n> ")}\n`;
-  insertAtCursor(comment);
-  showToast("已插入注释");
+  const range = resolveAiEditorRange(para);
+  if (!range) return showToast("原段落已变化，请重新获取智能提示");
+  if (!replaceEditorRange(comment, range.end, range.end, "end")) {
+    return showToast("注释未能写入编辑器，请重试");
+  }
+  showToast("已插入 AI 注释并实时保存");
 }
 
 function hideAiEditHintPopover() {
@@ -5579,6 +5656,44 @@ async function activateGraphNode(node) {
   scheduleGraphDraw();
 }
 
+function replaceEditorRange(value, start, end, selectionMode = "end") {
+  const replacement = String(value ?? "");
+  const before = els.editor.value;
+  const clamp = (position) => Math.max(0, Math.min(before.length, Number(position) || 0));
+  const from = clamp(start);
+  const to = Math.max(from, clamp(end));
+  const expected = `${before.slice(0, from)}${replacement}${before.slice(to)}`;
+  const scrollTop = els.editor.scrollTop;
+  const scrollLeft = els.editor.scrollLeft;
+
+  try {
+    els.editor.setRangeText(replacement, from, to, selectionMode);
+  } catch (_) {
+    return false;
+  }
+
+  // The CodeMirror adapter normally commits the transaction above. Keep a
+  // narrow fallback for a rare native bridge no-op without risking a second edit.
+  if (els.editor.value === before && expected !== before) {
+    try {
+      els.editor.view?.dispatch?.({ changes: { from, to, insert: replacement } });
+    } catch (_) { /* The post-condition below reports a failed write. */ }
+  }
+  if (els.editor.value !== expected) return false;
+
+  els.editor.focus();
+  els.editor.scrollTop = scrollTop;
+  els.editor.scrollLeft = scrollLeft;
+  requestAnimationFrame(() => {
+    els.editor.scrollTop = scrollTop;
+    els.editor.scrollLeft = scrollLeft;
+  });
+  els.editor.dispatchEvent(new Event("input", { bubbles: true }));
+  // AI actions are explicit user decisions, so persist them immediately.
+  void saveCurrentDoc({ keepEditorState: true, renderAfterSave: false });
+  return true;
+}
+
 function insertAtCursor(value) {
   const text = String(value ?? "");
   const start = els.editor.selectionStart ?? els.editor.value.length;
@@ -7065,6 +7180,7 @@ els.aiTransformCancelBtn?.addEventListener("click", closeAiTransformModal);
 els.aiTransformModal?.addEventListener("click", (event) => {
   if (event.target === els.aiTransformModal) closeAiTransformModal();
 });
+els.aiTransformGenerateBtn?.addEventListener("click", () => runAiTransform("rewrite", { preserveInstruction: true }));
 els.aiTransformInsertBtn?.addEventListener("click", insertAiTransform);
 els.aiTransformCreateBtn?.addEventListener("click", createAiTransformDocument);
 document.addEventListener("selectionchange", debounce(refreshAiSelectionMenu, 80));
@@ -7217,7 +7333,7 @@ if (els.deactivateLicenseBtn) {
   });
 }
 
-[els.aiBaseUrl, els.aiEmbeddingModel, els.aiChatModel].filter(Boolean).forEach((input) => {
+[els.aiBaseUrl, els.aiEmbeddingModel, els.aiChatModel, els.aiDeepseekApiKey, els.aiDeepseekBaseUrl, els.aiDeepseekChatModel].filter(Boolean).forEach((input) => {
   input.addEventListener("input", () => {
     state.ai.configDirty = true;
   });
@@ -7228,12 +7344,14 @@ function aiCurrentProvider() {
 }
 
 function aiConfigPayload(embeddingModel) {
+  const deepseekApiKey = els.aiDeepseekApiKey?.value.trim() || "";
   return {
     baseUrl: els.aiBaseUrl.value.trim(),
     embeddingModel: embeddingModel ?? els.aiEmbeddingModel.value.trim(),
     chatModel: els.aiChatModel.value.trim(),
     chatProvider: aiCurrentProvider(),
-    deepseekApiKey: els.aiDeepseekApiKey?.value.trim() || "",
+    // An empty password field means "keep the saved key", never erase it by accident.
+    ...(deepseekApiKey ? { deepseekApiKey } : {}),
     deepseekBaseUrl: els.aiDeepseekBaseUrl?.value.trim() || "https://api.deepseek.com",
     deepseekChatModel: els.aiDeepseekChatModel?.value.trim() || "deepseek-chat",
     enabled: true,
@@ -7312,6 +7430,12 @@ els.aiSaveBtn?.addEventListener("click", async () => {
     const result = await api.post("/api/ai/config", aiConfigPayload());
     state.ai.configDirty = false;
     setAiStatus(result.status);
+    if (els.aiDeepseekApiKey) {
+      els.aiDeepseekApiKey.value = "";
+      els.aiDeepseekApiKey.placeholder = result.status?.deepseekApiKeyConfigured
+        ? "已配置，留空则保持不变"
+        : "sk-...";
+    }
     showToast(result.rebuildRequired ? "配置已保存，正在重建语义索引" : "AI 配置已保存");
   } catch (error) {
     els.aiSettingsStatus.textContent = error.message || "保存失败";
