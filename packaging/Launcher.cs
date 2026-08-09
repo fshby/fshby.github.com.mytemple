@@ -95,10 +95,14 @@ internal static class MyTempleLauncher
         private volatile bool shuttingDown;
         private volatile bool restarting;
         private int port;
+        private int uiThreadId;
+        private SynchronizationContext uiContext;
         private string currentVersion = "1.0.0";
 
         public LauncherContext()
         {
+            uiThreadId = Thread.CurrentThread.ManagedThreadId;
+            uiContext = SynchronizationContext.Current ?? new WindowsFormsSynchronizationContext();
             installDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
             if (string.IsNullOrWhiteSpace(installDir))
             {
@@ -232,11 +236,24 @@ internal static class MyTempleLauncher
                     : "";
                 if (storedVersion == currentVersion) return;
 
-                string webviewCacheDir = Path.Combine(dataDir, WindowProfileFolder, "webview2");
-                if (Directory.Exists(webviewCacheDir))
+                // 仅清理 HTTP/Service Worker 缓存子目录，保留 Local Storage / IndexedDB / Cookies，
+                // 避免版本升级时清空用户习惯（主题、字体、缩放、最近文档、AI 设置、图片主题背景等）。
+                string webviewProfile = Path.Combine(dataDir, WindowProfileFolder, "webview2");
+                if (Directory.Exists(webviewProfile))
                 {
-                    WriteLog("info", "Clearing WebView2 cache due to version change (" + storedVersion + " -> " + currentVersion + ").");
-                    DeleteDirectorySafe(webviewCacheDir);
+                    WriteLog("info", "Clearing WebView2 HTTP cache only (preserving user data) due to version change (" + storedVersion + " -> " + currentVersion + ").");
+                    string[] cacheSubDirs = System.IO.Directory.GetDirectories(webviewProfile, "*", System.IO.SearchOption.AllDirectories);
+                    foreach (string sub in cacheSubDirs)
+                    {
+                        string name = System.IO.Path.GetFileName(sub);
+                        if (name.IndexOf("Cache", StringComparison.OrdinalIgnoreCase) >= 0
+                            || name.IndexOf("Service Worker", StringComparison.OrdinalIgnoreCase) >= 0
+                            || name.IndexOf("GPUCache", StringComparison.OrdinalIgnoreCase) >= 0
+                            || name.IndexOf("Code Cache", StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            DeleteDirectorySafe(sub);
+                        }
+                    }
                 }
                 File.WriteAllText(versionStampPath, currentVersion ?? "");
             }
@@ -444,6 +461,11 @@ internal static class MyTempleLauncher
 
         private void LaunchBrowserWindow()
         {
+            if (Thread.CurrentThread.ManagedThreadId != uiThreadId)
+            {
+                uiContext.Post(delegate { LaunchBrowserWindow(); }, null);
+                return;
+            }
             lock (gate)
             {
                 if (mainWindow != null)
@@ -460,6 +482,7 @@ internal static class MyTempleLauncher
                 int winX = screenRect.X + (screenRect.Width - winW) / 2;
                 int winY = screenRect.Y + (screenRect.Height - winH) / 2;
 
+                var formBg = Color.FromArgb(15, 23, 42);
                 mainWindow = new AppForm
                 {
                     Text = AppTitle,
@@ -467,13 +490,75 @@ internal static class MyTempleLauncher
                     StartPosition = FormStartPosition.Manual,
                     Location = new Point(winX, winY),
                     Size = new Size(winW, winH),
-                    MinimumSize = new Size(960, 640),
-                    BackColor = Color.FromArgb(15, 23, 42),
+                    MinimumSize = new Size(640, 480),
+                    BackColor = formBg,
                     FormBorderStyle = FormBorderStyle.Sizable,
                     ShowInTaskbar = true,
                 };
-                webView = new WebView2 { Dock = DockStyle.Fill, CreationProperties = null };
+                // splashBox 作为持久背景层：
+                //   - 启动时 logo.png 铺满窗口，消除 WebView2 初始化黑屏
+                //   - WebView2 就绪后 SendToBack（保留在 z-order 底层），作为 Chromium 重绘间隙的过渡底色
+                //   - Resize 时 Chromium GPU 重绘有 1-3 帧延迟，splashBox 覆盖在背后，避免纯色黑底穿透
+                var splashBox = new PictureBox
+                {
+                    Dock = DockStyle.None,
+                    SizeMode = PictureBoxSizeMode.Zoom,
+                    BackColor = formBg,
+                    CausesValidation = false,
+                };
+                try
+                {
+                    string logoPath = Path.Combine(installDir, "logo.png");
+                    if (File.Exists(logoPath)) splashBox.Image = Image.FromFile(logoPath);
+                }
+                catch { }
+                mainWindow.Controls.Add(splashBox);
+                splashBox.BringToFront();
+                splashBox.Bounds = mainWindow.ClientRectangle;
+
+                webView = new WebView2 { Dock = DockStyle.Fill, CreationProperties = null, BackColor = formBg };
                 mainWindow.Controls.Add(webView);
+                webView.BringToFront();
+
+                // Resize 防抖：窗口拖拽过程中每帧都触发 Resize，Chromium 无法跟上。
+                // 使用 Timer 延迟 150ms 后才真正同步尺寸，避免黑屏闪烁。
+                System.Windows.Forms.Timer resizeDebouncer = null;
+                mainWindow.Resize += delegate
+                {
+                    // 同步 splashBox 到新 ClientRectangle，覆盖 Chromium 未重绘区域。
+                    if (splashBox != null && !splashBox.IsDisposed)
+                    {
+                        splashBox.Bounds = mainWindow.ClientRectangle;
+                        splashBox.Invalidate();
+                    }
+                    if (resizeDebouncer == null)
+                    {
+                        resizeDebouncer = new System.Windows.Forms.Timer { Interval = 150 };
+                        resizeDebouncer.Tick += (st, ev) =>
+                        {
+                            resizeDebouncer.Stop();
+                            if (webView != null && !webView.IsDisposed && webView.Handle != IntPtr.Zero)
+                            {
+                                mainWindow.SuspendLayout();
+                                webView.PerformLayout();
+                                webView.Invalidate();
+                                mainWindow.ResumeLayout();
+                            }
+                        };
+                    }
+                    resizeDebouncer.Stop();
+                    resizeDebouncer.Start();
+                };
+                mainWindow.SizeChanged += delegate
+                {
+                    if (mainWindow.WindowState == FormWindowState.Minimized) return;
+                    if (splashBox != null && !splashBox.IsDisposed)
+                    {
+                        splashBox.Bounds = mainWindow.ClientRectangle;
+                        splashBox.Invalidate();
+                    }
+                };
+
                 mainWindow.FormClosing += delegate(object sender, FormClosingEventArgs args)
                 {
                     if (!shuttingDown)
@@ -482,37 +567,44 @@ internal static class MyTempleLauncher
                         mainWindow.Hide();
                     }
                 };
-                mainWindow.Resize += delegate
-                {
-                    if (webView != null && !webView.IsDisposed)
-                    {
-                        webView.Width = mainWindow.ClientSize.Width;
-                        webView.Height = mainWindow.ClientSize.Height;
-                    }
-                };
                 mainWindow.Show();
-                InitializeWebViewAsync();
+                InitializeWebViewAsync(splashBox, formBg);
             }
         }
 
-        private async void InitializeWebViewAsync()
+        private async void InitializeWebViewAsync(PictureBox splashBox, Color formBg)
         {
             try
             {
-                string profile = Path.Combine(dataDir, WindowProfileFolder, "webview2");
+                string profile = Path.Combine(dataDir, WindowProfileFolder, "webview2", Process.GetCurrentProcess().Id.ToString());
                 Directory.CreateDirectory(profile);
                 CoreWebView2Environment environment = await CoreWebView2Environment.CreateAsync(null, profile);
                 await webView.EnsureCoreWebView2Async(environment);
                 webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = true;
                 webView.CoreWebView2.Settings.IsStatusBarEnabled = false;
+                // 关键：让 WebView2 自身背景与窗体/闪屏底色一致，
+                // 这样 Chromium 重绘间隙显示的就是底色 logo/墨蓝，而非陌生的白色或黑色。
+                webView.DefaultBackgroundColor = formBg;
                 webView.ZoomFactor = 1.0;
+                // WebView2 已就绪：splashBox 保留在 Controls 中但 SendToBack。
+                // 作为持久背景层覆盖 Chromium 重绘间隙，避免 Resize 时的黑色闪烁。
+                if (splashBox != null && !splashBox.IsDisposed)
+                {
+                    splashBox.SendToBack();
+                    splashBox.BackColor = formBg;
+                }
                 webView.CoreWebView2.Navigate(appUrl);
                 WriteLog("info", "WebView2 native window started.");
             }
             catch (Exception ex)
             {
                 WriteLog("error", "WebView2 initialization failed: " + ex);
+                if (splashBox != null && !splashBox.IsDisposed)
+                {
+                    splashBox.Visible = false;
+                }
                 MessageBox.Show("WebView2 初始化失败，请安装 Microsoft Edge WebView2 Runtime。" + Environment.NewLine + ex.Message, AppTitle, MessageBoxButtons.OK, MessageBoxIcon.Error);
+                CloseBrowserWindow();
             }
         }
 

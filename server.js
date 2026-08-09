@@ -1019,6 +1019,35 @@ function buildKnowledgeIndex(data) {
   };
 }
 
+async function writeKnowledgeIndexLegacy(data) {
+  const indexPath = path.join(DOCS_ROOT, KNOWLEDGE_INDEX_FILENAME);
+  await mkdir(DOCS_ROOT, { recursive: true });
+  const index = buildKnowledgeIndex(data);
+  const tempPath = path.join(DOCS_ROOT, `.${KNOWLEDGE_INDEX_FILENAME}.${process.pid}.${randomUUID()}.tmp`);
+  try {
+    await writeFile(tempPath, `${JSON.stringify(index, null, 2)}\n`, "utf8");
+    // Keep index writing independent from document-save request state.
+    const ref = "";
+    const payload = {};
+    const res = null;
+    const existing = cache.documentCache.get(ref) || cache.files.find((file) => file.path === ref);
+    const baseHash = String(payload.baseHash || "").trim();
+    if (baseHash && existing?.contentSha256 && baseHash !== existing.contentSha256) {
+      return json(res, 409, { error: "文档已被其他变更更新，请重新打开或刷新后再保存", contentSha256: existing.contentSha256 });
+    }
+    try {
+      await rename(tempPath, indexPath);
+    } catch (error) {
+      if (!["EEXIST", "EPERM", "ENOTEMPTY"].includes(error.code)) throw error;
+      await rm(indexPath, { force: true });
+      await rename(tempPath, indexPath);
+    }
+  } finally {
+    await rm(tempPath, { force: true }).catch(() => {});
+  }
+  return { indexPath, index };
+}
+
 async function writeKnowledgeIndex(data) {
   const indexPath = path.join(DOCS_ROOT, KNOWLEDGE_INDEX_FILENAME);
   await mkdir(DOCS_ROOT, { recursive: true });
@@ -1026,11 +1055,6 @@ async function writeKnowledgeIndex(data) {
   const tempPath = path.join(DOCS_ROOT, `.${KNOWLEDGE_INDEX_FILENAME}.${process.pid}.${randomUUID()}.tmp`);
   try {
     await writeFile(tempPath, `${JSON.stringify(index, null, 2)}\n`, "utf8");
-    const existing = cache.documentCache.get(ref) || cache.files.find((file) => file.path === ref);
-    const baseHash = String(payload.baseHash || "").trim();
-    if (baseHash && existing?.contentSha256 && baseHash !== existing.contentSha256) {
-      return json(res, 409, { error: "文档已被其他变更更新，请重新打开或刷新后再保存", contentSha256: existing.contentSha256 });
-    }
     try {
       await rename(tempPath, indexPath);
     } catch (error) {
@@ -1963,7 +1987,7 @@ async function handleApi(req, res, url) {
   if (url.pathname === "/api/ai/transform" && req.method === "POST") {
     const payload = await readJson(req);
     try {
-      const result = await ragService.transformSelection(payload.text, payload.mode);
+      const result = await ragService.transformSelection(payload.text, payload.mode, { instruction: payload.instruction, context: payload.context });
       return json(res, 200, result);
     } catch (error) {
       return json(res, 400, { error: error.message });
