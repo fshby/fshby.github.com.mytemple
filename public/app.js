@@ -3499,8 +3499,14 @@ function initAiEditHintSettings() {
       localStorage.setItem("aiEditHintDelay", String(v));
     });
   }
-  // 编辑器失焦时清除提示定时器，光标不在编辑栏时不启动智能编辑提示。
-  els.editor?.addEventListener("blur", () => { clearAiEditHintTimer(); hideAiEditHintPopover(); });
+  // 点击提示弹窗时编辑器会先失焦，但弹窗按钮仍需完成 click 回写。
+  // 只有真正离开编辑器和提示弹窗时才清理提示，避免按钮在 click 前被移除。
+  els.editor?.addEventListener("blur", (event) => {
+    const nextTarget = event.relatedTarget;
+    if (nextTarget && document.getElementById("aiEditHintPopover")?.contains(nextTarget)) return;
+    clearAiEditHintTimer();
+    hideAiEditHintPopover();
+  });
 }
 
 function clearAiEditHintTimer() {
@@ -3606,9 +3612,16 @@ function showAiEditHintPopover({ hint, suggestion, para, warning }) {
   popover.style.top = `${Math.max(12, rect.top + 16)}px`;
   popover.style.right = `${Math.max(12, window.innerWidth - rect.right + 16)}px`;
   popover.querySelector(".ai-edit-hint-close").addEventListener("click", hideAiEditHintPopover);
+  // WebView2/Chromium 可能在 pointerdown 阶段将焦点移到按钮，导致编辑器 blur。
+  // 阻止按钮抢焦点，保留后续 click 事件，让编辑器回写稳定完成。
+  popover.addEventListener("pointerdown", (event) => {
+    if (event.target.closest("[data-hint-action], .ai-edit-hint-close")) event.preventDefault();
+  });
   popover.addEventListener("click", (event) => {
     const btn = event.target.closest("[data-hint-action]");
     if (!btn) return;
+    event.preventDefault();
+    event.stopPropagation();
     const action = btn.dataset.hintAction;
     hideAiEditHintPopover();
     if (para.path && (state.currentPath !== para.path || els.editor.value !== para.contentSnapshot)) {
