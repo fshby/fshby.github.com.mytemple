@@ -706,7 +706,7 @@ function loadSettings() {
   try { markdownColors = JSON.parse(localStorage.getItem("markdownColors") || "{}"); } catch (_) {}
   return {
     // 默认暗色主题；用户调整后保存于 docTheme，重启自动恢复用户习惯。
-    theme: localStorage.getItem("docTheme") || "dark",
+    theme: ["light","dark","eye","glow","image"].includes(localStorage.getItem("docTheme")) ? localStorage.getItem("docTheme") : "dark",
     bg: localStorage.getItem("docBgImage") || "",
     fontSize: Number(savedFontSize || computeOptimalFontSize()),
     contentFontSize: Number(savedContentFontSize || computeOptimalContentFontSize()),
@@ -760,8 +760,8 @@ function restoreWindowZoom() {
 
 function applySettings(settings = loadSettings()) {
   document.body.dataset.theme = settings.theme;
-  const themeColorMap = { dark: "#1e1e1e", eye: "#efe3cc", image: "#1a1a2e", bagua: "#14110d" };
-  const themeBgMap = { dark: "#1e1e1e", eye: "#efe3cc", image: "#1a1a2e", bagua: "#14110d" };
+  const themeColorMap = { dark: "#252827", eye: "#edf3ec", glow: "#f5efe6", image: "#1a1a2e" };
+  const themeBgMap = { dark: "#252827", eye: "#edf3ec", glow: "#f5efe6", image: "#1a1a2e" };
   const metaThemeColor = document.querySelector('meta[name="theme-color"]');
   if (metaThemeColor) {
     metaThemeColor.content = themeColorMap[settings.theme] || "#fafafa";

@@ -186,6 +186,7 @@ try {
     Copy-FileSafe (Join-Path $packagingDir "logo.ico") (Join-Path $payloadDir "logo.ico")
     Copy-FileSafe (Join-Path $packagingDir "logo1.ico") (Join-Path $payloadDir "logo1.ico")
     Copy-FileSafe (Join-Path $packagingDir "logo.png") (Join-Path $payloadDir "logo.png")
+    Copy-FileSafe (Join-Path $projectRoot "public\boot.png") (Join-Path $payloadDir "boot.png")
     Copy-FileSafe (Join-Path $packagingDir "webview2\Microsoft.Web.WebView2.Core.dll") (Join-Path $payloadDir "Microsoft.Web.WebView2.Core.dll")
     Copy-FileSafe (Join-Path $packagingDir "webview2\Microsoft.Web.WebView2.WinForms.dll") (Join-Path $payloadDir "Microsoft.Web.WebView2.WinForms.dll")
     Copy-FileSafe (Join-Path $packagingDir "webview2\WebView2Loader.dll") (Join-Path $payloadDir "WebView2Loader.dll")
@@ -207,12 +208,14 @@ try {
             "MyTempleKnowledge.exe",
             "logo1.ico",
             "logo.png",
+            "boot.png",
             "Microsoft.Web.WebView2.Core.dll",
             "Microsoft.Web.WebView2.WinForms.dll",
             "WebView2Loader.dll",
             "public/index.html",
             "public/app.js",
             "public/logo.png",
+            "public/boot.webp",
             "public/qqqun.webp",
             "docs/README.md"
         ) + $requiredDocEntries + @($knowledgeIndexPayloadEntry)

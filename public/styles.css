@@ -61,269 +61,356 @@
 }
 
 body[data-theme="dark"] {
-  --bg: #1e1e1e;
-  --panel: rgba(37, 37, 37, 0.94);
-  --panel-glass: rgba(37, 37, 37, 0.88);
-  --line: rgba(80, 80, 80, 0.5);
-  --text: #d4d4d4;
-  --muted: #969696;
-  --soft: #2a2a2a;
-  --accent: #4ec9b0;
-  --accent-strong: #6ee7b7;
-  --warn: #dcdcaa;
-  --code-bg: #1e1e1e;
-  --code-text: #d4d4d4;
-  --control-bg: rgba(45, 45, 45, 0.7);
-  --hover-bg: rgba(78, 201, 176, 0.08);
-  --active-bg: rgba(78, 201, 176, 0.12);
-  --brand-bg: #181818;
-  --inline-code-bg: rgba(128, 128, 128, 0.18);
-  --inline-code-text: #ce9178;
-  --graph-bg: #181818;
-  --graph-grid: rgba(150, 150, 150, 0.07);
-  --graph-text: #d4d4d4;
-  --graph-muted: #8a8a8a;
-  --graph-edge: rgba(120, 120, 120, 0.42);
-  --graph-link: #4ec9b0;
-  --graph-doc: #2a2a2a;
-  --graph-doc-border: #666666;
-  --graph-tag: #dcdcaa;
-  --graph-keyword: #c586c0;
-  --graph-missing: #f44747;
-  --graph-active: #4ec9b0;
-  --graph-label-bg: rgba(30, 30, 30, 0.88);
-  --md-heading: #e8e8e8;
-  --md-link: #4ec9b0;
-  --md-strong: #ffffff;
-  --md-emphasis: #d4d4d4;
-  --md-inline-code: #ce9178;
-  --md-search-bg: #614008;
-  --md-search-text: #ffd700;
-  /* syntax highlight tokens - dark theme (VSCode Dark+) */
-  --syn-keyword: #569cd6;
-  --syn-string: #ce9178;
-  --syn-comment: #6a9955;
-  --syn-number: #b5cea8;
-  --syn-function: #dcdcaa;
-  --syn-type: #4ec9b0;
-  --syn-builtin: #4fc1ff;
-  --syn-variable: #9cdcfe;
-  --syn-operator: #d4d4d4;
-  --syn-tag: #569cd6;
-  --syn-attr: #9cdcfe;
+  --bg: #252827;
+  --panel: rgba(38, 42, 40, 0.94);
+  --panel-glass: rgba(38, 42, 40, 0.88);
+  --line: rgba(110, 120, 114, 0.38);
+  --text: #c5bfb2;
+  --muted: #8f8a7e;
+  --soft: #303431;
+  --accent: #7ab89a;
+  --accent-strong: #96c9b0;
+  --warn: #c9b87a;
+  --code-bg: #252827;
+  --code-text: #c5bfb2;
+  --control-bg: rgba(44, 48, 46, 0.7);
+  --hover-bg: rgba(122, 184, 154, 0.09);
+  --active-bg: rgba(122, 184, 154, 0.14);
+  --brand-bg: #1f2221;
+  --inline-code-bg: rgba(122, 184, 154, 0.14);
+  --inline-code-text: #b8a48c;
+  --graph-bg: #1f2221;
+  --graph-grid: rgba(140, 150, 144, 0.08);
+  --graph-text: #c5bfb2;
+  --graph-muted: #847e72;
+  --graph-edge: rgba(120, 132, 124, 0.36);
+  --graph-link: #7ab89a;
+  --graph-doc: #303431;
+  --graph-doc-border: #5a645d;
+  --graph-tag: #c9b87a;
+  --graph-keyword: #a898b8;
+  --graph-missing: #c97a7a;
+  --graph-active: #7ab89a;
+  --graph-label-bg: rgba(37, 40, 39, 0.88);
+  --md-heading: #d8d3c6;
+  --md-link: #7ab89a;
+  --md-strong: #e2ddd0;
+  --md-emphasis: #c5bfb2;
+  --md-inline-code: #b8a48c;
+  --md-search-bg: rgba(201, 184, 122, 0.18);
+  --md-search-text: #d9c98b;
+  /* syntax highlight tokens - warm eye-care dark theme */
+  --syn-keyword: #89a5c0;
+  --syn-string: #b8a48c;
+  --syn-comment: #7a8a78;
+  --syn-number: #a8b89a;
+  --syn-function: #c9b87a;
+  --syn-type: #7ab89a;
+  --syn-builtin: #89b0c0;
+  --syn-variable: #b0b8a8;
+  --syn-operator: #b5b0a5;
+  --syn-tag: #89a5c0;
+  --syn-attr: #a8b5a5;
 }
 
 body[data-theme="eye"] {
-  /* 自然纸张色彩体系：暖黄油墨色调，模拟羊皮纸/燕麦纸的物理质感 */
-  --bg: #e8dcc6;
-  --panel: rgba(247, 239, 224, 0.94);
-  --panel-glass: rgba(247, 239, 224, 0.86);
-  --line: rgba(110, 88, 55, 0.18);
-  --text: #3a2e1f;
-  --muted: #6b5c48;
-  --soft: #d9cdb4;
-  --accent: #7a5c32;
-  --accent-strong: #5a4020;
-  --warn: #b85c3c;
-  --code-bg: rgba(215, 205, 185, 0.72);
-  --code-text: #3a2e1f;
-  --control-bg: rgba(247, 239, 224, 0.82);
-  --hover-bg: rgba(107, 79, 42, 0.06);
-  --active-bg: rgba(107, 79, 42, 0.10);
-  --brand-bg: #3a2e1f;
-  --inline-code-bg: rgba(107, 79, 42, 0.08);
-  --inline-code-text: #3a2e1f;
-  --graph-bg: #e8dcc0;
-  --graph-grid: rgba(110, 88, 55, 0.08);
-  --graph-text: #3a2e1f;
-  --graph-muted: #8a7d68;
-  --graph-edge: rgba(110, 88, 55, 0.35);
-  --graph-link: #7a5c32;
-  --graph-doc: #f0e6d2;
-  --graph-doc-border: #a89373;
-  --graph-tag: #b85c3c;
-  --graph-keyword: #6c71c4;
-  --graph-missing: #c4392f;
-  --graph-active: #7a5c32;
-  --graph-label-bg: rgba(240, 230, 210, 0.92);
-  --md-heading: #2c2218;
-  --md-link: #2e5d8f;
-  --md-strong: #2c2218;
-  --md-emphasis: #3a2e1f;
-  --md-inline-code: #3a2e1f;
-  --md-search-bg: rgba(180, 148, 90, 0.22);
-  --md-search-text: #3a2e1f;
-  /* syntax highlight tokens - 自然纸张主题：暖调低饱和，消除光晕 */
-  --syn-keyword: #2e5d8f;
-  --syn-string: #5a7a5a;
-  --syn-comment: #b0a698;
-  --syn-number: #8b5e3c;
-  --syn-function: #7a6f66;
-  --syn-type: #6b4e3b;
-  --syn-builtin: #4a6b7c;
-  --syn-variable: #3a2e1f;
-  --syn-operator: #6b5c48;
-  --syn-tag: #2e5d8f;
-  --syn-attr: #b0a698;
+  --bg: #edf3ec;
+  --panel: rgba(250, 252, 247, 0.96);
+  --panel-glass: rgba(246, 249, 244, 0.86);
+  --line: rgba(110, 138, 123, 0.18);
+  --text: #243228;
+  --muted: #5f7066;
+  --soft: #e5eee4;
+  --accent: #5f8f76;
+  --accent-strong: #36654f;
+  --warn: #9e7551;
+  --code-bg: #f5f8f4;
+  --code-text: #26332c;
+  --control-bg: rgba(247, 250, 245, 0.88);
+  --hover-bg: rgba(95, 143, 118, 0.09);
+  --active-bg: rgba(95, 143, 118, 0.14);
+  --brand-bg: #dfe9e0;
+  --inline-code-bg: rgba(95, 143, 118, 0.10);
+  --inline-code-text: #355845;
+  --graph-bg: #f4f8f2;
+  --graph-grid: rgba(110, 138, 123, 0.08);
+  --graph-text: #243228;
+  --graph-muted: #6b7f73;
+  --graph-edge: rgba(95, 143, 118, 0.26);
+  --graph-link: #4f7f68;
+  --graph-doc: #f9fbf8;
+  --graph-doc-border: #a7b8ac;
+  --graph-tag: #7c9b84;
+  --graph-keyword: #688a9a;
+  --graph-missing: #b77a64;
+  --graph-active: #5f8f76;
+  --graph-label-bg: rgba(250, 252, 248, 0.92);
+  --md-heading: #213127;
+  --md-link: #3e6f5a;
+  --md-strong: #1d2a22;
+  --md-emphasis: #4a5d53;
+  --md-inline-code: #31443a;
+  --md-search-bg: rgba(95, 143, 118, 0.16);
+  --md-search-text: #203128;
+  --surface-0: #edf3ec;
+  --surface-1: rgba(250, 252, 247, 0.96);
+  --surface-2: rgba(240, 246, 238, 0.95);
+  --surface-3: rgba(226, 236, 225, 0.95);
+  --hairline: rgba(110, 138, 123, 0.18);
+  --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
+  --accent-wash: color-mix(in srgb, var(--accent) 6%, transparent);
+  --shadow-sm: 0 1px 3px rgba(29, 46, 36, 0.06), 0 8px 20px rgba(29, 46, 36, 0.05);
+  --shadow-md: 0 20px 50px rgba(29, 46, 36, 0.10);
+  --syn-keyword: #3e6f8f;
+  --syn-string: #5c7d5d;
+  --syn-comment: #99a99f;
+  --syn-number: #8a6646;
+  --syn-function: #6f7f6a;
+  --syn-type: #5a7280;
+  --syn-builtin: #4d6d62;
+  --syn-variable: #2f3d36;
+  --syn-operator: #607366;
+  --syn-tag: #3e6f8f;
+  --syn-attr: #9aa79d;
+  background:
+    radial-gradient(circle at 16% 16%, rgba(95, 143, 118, 0.11), transparent 15rem),
+    radial-gradient(circle at 82% 78%, rgba(143, 123, 72, 0.06), transparent 16rem),
+    linear-gradient(180deg, #edf3ec 0%, #f7fbf6 100%);
+  letter-spacing: 0.006em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
-body[data-theme="image"] {
-  --bg: transparent;
-  --panel: transparent;
-  --panel-glass: transparent;
-  --line: rgba(255, 255, 255, 0.12);
-  --control-bg: transparent;
-  --hover-bg: rgba(255, 255, 255, 0.10);
-  --active-bg: rgba(255, 255, 255, 0.14);
-  --soft: transparent;
-  --inline-code-bg: rgba(15, 23, 42, 0.40);
-  --surface-0: transparent;
-  --surface-1: transparent;
-  --surface-2: rgba(255, 255, 255, 0.06);
-  --surface-3: rgba(255, 255, 255, 0.10);
-  --hairline: rgba(255, 255, 255, 0.10);
-  --accent-soft: color-mix(in srgb, var(--accent) 22%, transparent);
-  --accent-wash: color-mix(in srgb, var(--accent) 12%, transparent);
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
-  --shadow-md: 0 14px 42px rgba(0, 0, 0, 0.14);
-  --graph-bg: rgba(248, 250, 252, 0.10);
-  --graph-grid: rgba(51, 65, 85, 0.08);
-  --graph-text: #1f2937;
-  --graph-muted: #475569;
-  --graph-edge: rgba(71, 85, 105, 0.35);
-  --graph-link: #0f9f91;
-  --graph-doc: rgba(255, 255, 255, 0.82);
-  --graph-doc-border: #7c8da3;
-  --graph-tag: #d89315;
-  --graph-keyword: #7356c4;
-  --graph-missing: #d95d6c;
-  --graph-active: #059669;
-  --graph-label-bg: rgba(255, 255, 255, 0.80);
-  --text: #1f2733;
-  --muted: #475569;
-  --accent: #10b981;
-  --accent-strong: #047857;
-  --code-bg: rgba(15, 23, 42, 0.50);
-  --code-text: #e5e7eb;
-  --md-heading: #0f172a;
-  --md-link: #0d9488;
-  --md-strong: #0f172a;
-  --md-emphasis: #1e293b;
-  --md-inline-code: #0f172a;
-  --md-search-bg: rgba(253, 224, 71, 0.55);
-  --md-search-text: #0f172a;
-  /* syntax highlight tokens - image theme (uses light defaults) */
-  --syn-keyword: #6d28d9;
-  --syn-string: #047857;
-  --syn-comment: #64748b;
-  --syn-number: #92400e;
-  --syn-function: #1d4ed8;
-  --syn-type: #0369a1;
-  --syn-builtin: #be185d;
-  --syn-variable: #1f2733;
-  --syn-operator: #475569;
-  --syn-tag: #9333ea;
-  --syn-attr: #c2410c;
-  background: var(--custom-bg, var(--bg));
-  background-size: cover;
-  background-position: center;
-  background-attachment: fixed;
+body[data-theme="glow"] {
+  --bg: #f5efe6;
+  --panel: rgba(250, 246, 239, 0.96);
+  --panel-glass: rgba(246, 240, 230, 0.86);
+  --line: rgba(160, 138, 112, 0.18);
+  --text: #3d362e;
+  --muted: #6b6158;
+  --soft: #ece4d6;
+  --accent: #c8956c;
+  --accent-strong: #a8784f;
+  --warn: #9e7551;
+  --code-bg: #faf6ef;
+  --code-text: #3d362e;
+  --control-bg: rgba(247, 242, 233, 0.88);
+  --hover-bg: rgba(200, 149, 108, 0.09);
+  --active-bg: rgba(200, 149, 108, 0.14);
+  --brand-bg: #e8dec9;
+  --inline-code-bg: rgba(200, 149, 108, 0.10);
+  --inline-code-text: #8a6640;
+  --graph-bg: #f5efe6;
+  --graph-grid: rgba(160, 138, 112, 0.08);
+  --graph-text: #3d362e;
+  --graph-muted: #7a7066;
+  --graph-edge: rgba(200, 149, 108, 0.26);
+  --graph-link: #a8784f;
+  --graph-doc: #faf6ef;
+  --graph-doc-border: #b8a890;
+  --graph-tag: #c8956c;
+  --graph-keyword: #8a7a9a;
+  --graph-missing: #b77a64;
+  --graph-active: #c8956c;
+  --graph-label-bg: rgba(250, 246, 239, 0.92);
+  --md-heading: #3d3428;
+  --md-link: #a8784f;
+  --md-strong: #2a2418;
+  --md-emphasis: #5a4f44;
+  --md-inline-code: #6b5840;
+  --md-search-bg: rgba(200, 149, 108, 0.16);
+  --md-search-text: #3d3428;
+  --surface-0: #f5efe6;
+  --surface-1: rgba(250, 246, 239, 0.96);
+  --surface-2: rgba(244, 237, 225, 0.95);
+  --surface-3: rgba(232, 223, 206, 0.95);
+  --hairline: rgba(160, 138, 112, 0.18);
+  --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
+  --accent-wash: color-mix(in srgb, var(--accent) 6%, transparent);
+  --shadow-sm: 0 1px 3px rgba(60, 45, 25, 0.06), 0 8px 20px rgba(60, 45, 25, 0.05);
+  --shadow-md: 0 20px 50px rgba(60, 45, 25, 0.10);
+  --syn-keyword: #8a6a44;
+  --syn-string: #6b7856;
+  --syn-comment: #9a8f82;
+  --syn-number: #b08850;
+  --syn-function: #a07850;
+  --syn-type: #7a6856;
+  --syn-builtin: #6b5a44;
+  --syn-variable: #3d362e;
+  --syn-operator: #5a5048;
+  --syn-tag: #8a6a44;
+  --syn-attr: #8a7a68;
+  background:
+    radial-gradient(circle at 16% 16%, rgba(200, 149, 108, 0.11), transparent 15rem),
+    radial-gradient(circle at 82% 78%, rgba(160, 138, 112, 0.08), transparent 16rem),
+    linear-gradient(180deg, #f5efe6 0%, #faf6ef 100%);
+  letter-spacing: 0.006em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
-/* 卦象罗盘主题：太极阴阳的东方宇宙观视觉语言。
-   墨色为阴（背景）、留白为阳（文本），朱砂点睛（强调），金线分野（边框），
-   玉青与赭石取自传统矿物颜料，营造道法自然的沉浸编辑氛围。 */
-body[data-theme="bagua"] {
-  --bg: #14110d;
-  --panel: rgba(28, 24, 18, 0.92);
-  --panel-glass: rgba(28, 24, 18, 0.84);
-  --line: rgba(197, 162, 92, 0.22);
-  --text: #e8e2d0;
-  --muted: #9c8f72;
-  --soft: #1f1a13;
-  --accent: #c9302c;
-  --accent-strong: #e15048;
-  --warn: #d4a24c;
-  --code-bg: #0e0c09;
-  --code-text: #e8e2d0;
-  --control-bg: rgba(40, 33, 22, 0.7);
-  --hover-bg: rgba(201, 48, 44, 0.10);
-  --active-bg: rgba(201, 48, 44, 0.16);
-  --brand-bg: #0a0907;
-  --inline-code-bg: rgba(197, 162, 92, 0.12);
-  --inline-code-text: #d4a24c;
-  --graph-bg: #100e0a;
-  --graph-grid: rgba(197, 162, 92, 0.06);
-  --graph-text: #e8e2d0;
-  --graph-muted: #7a6f56;
-  --graph-edge: rgba(197, 162, 92, 0.30);
-  --graph-link: #c9302c;
-  --graph-doc: #1f1a13;
-  --graph-doc-border: #8a6d3b;
-  --graph-tag: #d4a24c;
-  --graph-keyword: #6b8e9e;
-  --graph-missing: #c4392f;
-  --graph-active: #c9302c;
-  --graph-label-bg: rgba(20, 17, 13, 0.90);
-  --md-heading: #f2ecd9;
-  --md-link: #c9302c;
-  --md-strong: #fbf6e8;
-  --md-emphasis: #e8e2d0;
-  --md-inline-code: #d4a24c;
-  --md-search-bg: rgba(212, 162, 76, 0.24);
-  --md-search-text: #fbf6e8;
-  --surface-0: #100e0a;
-  --surface-1: #16120c;
-  --surface-2: rgba(197, 162, 92, 0.08);
-  --surface-3: rgba(197, 162, 92, 0.14);
-  --hairline: rgba(197, 162, 92, 0.16);
-  --accent-soft: color-mix(in srgb, var(--accent) 22%, transparent);
-  --accent-wash: color-mix(in srgb, var(--accent) 12%, transparent);
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 14px 42px rgba(0, 0, 0, 0.5);
-  /* 朱砂赭石矿物颜料语法高亮 */
-  --syn-keyword: #c9302c;
-  --syn-string: #7a9e6e;
-  --syn-comment: #6e6450;
-  --syn-number: #d4a24c;
-  --syn-function: #b58a4c;
-  --syn-type: #6b8e9e;
-  --syn-builtin: #8e6b4c;
-  --syn-variable: #e8e2d0;
-  --syn-operator: #9c8f72;
-  --syn-tag: #c9302c;
-  --syn-attr: #d4a24c;
-  background-image:
-    radial-gradient(ellipse 90% 60% at 50% 0%, rgba(201, 48, 44, 0.06), transparent 70%),
-    radial-gradient(ellipse 70% 50% at 50% 100%, rgba(197, 162, 92, 0.05), transparent 70%);
-  background-attachment: fixed;
+body[data-theme="eye"] .app-shell,
+body[data-theme="eye"] .sidebar,
+body[data-theme="eye"] .topbar,
+body[data-theme="eye"] .reader-panel,
+body[data-theme="eye"] .graph-panel,
+body[data-theme="eye"] #editor,
+body[data-theme="eye"] #preview {
+  background-image: none !important;
 }
 
-* { box-sizing: border-box; }
-
-*::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+body[data-theme="eye"] .app-shell {
+  background-color: transparent;
 }
-*::-webkit-scrollbar-track {
+
+body[data-theme="eye"] .welcome-overlay,
+body[data-theme="eye"] .modal-overlay,
+body[data-theme="eye"] .settings-overlay {
+  background: rgba(36, 50, 41, 0.34);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+body[data-theme="eye"] .welcome-dialog,
+body[data-theme="eye"] .modal-dialog,
+body[data-theme="eye"] .settings-dialog {
+  background: rgba(250, 252, 247, 0.96) !important;
+  border-color: rgba(110, 138, 123, 0.18);
+  box-shadow: 0 18px 48px rgba(29, 46, 36, 0.14);
+  color: #243228;
+}
+
+body[data-theme="eye"] .global-search-overlay {
+  background: rgba(36, 50, 41, 0.30);
+}
+
+body[data-theme="eye"] .global-search-dialog {
+  background: rgba(250, 252, 247, 0.98) !important;
+  border-color: rgba(110, 138, 123, 0.20);
+  box-shadow: 0 20px 48px rgba(29, 46, 36, 0.16);
+}
+
+body[data-theme="eye"] .global-search-input-wrap input,
+body[data-theme="eye"] .global-search-item-title,
+body[data-theme="eye"] .global-search-item-snippet {
+  color: #243228;
+}
+
+body[data-theme="eye"] .markdown-body {
+  line-height: 1.82;
+  letter-spacing: 0.01em;
+}
+
+body[data-theme="eye"] #editor .cm-content {
+  line-height: 1.82;
+  letter-spacing: 0.006em;
+}
+
+body[data-theme="eye"] .markdown-body pre {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+
+body[data-theme="eye"] .markdown-body :not(pre) > code {
+  background: var(--inline-code-bg);
+  color: var(--inline-code-text);
+  border: 1px solid var(--line);
+}
+
+body[data-theme="eye"] .sidebar-resizer,
+body[data-theme="eye"] .editor-splitter {
+  background: transparent !important;
+}
+
+body[data-theme="eye"] *::-webkit-scrollbar-thumb {
+  background: rgba(95, 143, 118, 0.22);
+}
+
+body[data-theme="eye"] *::-webkit-scrollbar-track {
   background: transparent;
 }
-*::-webkit-scrollbar-thumb {
-  background: var(--line);
-  border-radius: 3px;
-}
-*::-webkit-scrollbar-thumb:hover {
-  background: var(--muted);
-}
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--line) transparent;
+
+body[data-theme="glow"] .app-shell,
+body[data-theme="glow"] .sidebar,
+body[data-theme="glow"] .topbar,
+body[data-theme="glow"] .reader-panel,
+body[data-theme="glow"] .graph-panel,
+body[data-theme="glow"] #editor,
+body[data-theme="glow"] #preview {
+  background-image: none !important;
 }
 
-html, body {
-  height: 100%;
-  overflow: hidden !important;
-  overscroll-behavior: none;
+body[data-theme="glow"] .app-shell {
+  background-color: transparent;
+}
+
+body[data-theme="glow"] .welcome-overlay,
+body[data-theme="glow"] .modal-overlay,
+body[data-theme="glow"] .settings-overlay {
+  background: rgba(60, 45, 25, 0.30);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+body[data-theme="glow"] .welcome-dialog,
+body[data-theme="glow"] .modal-dialog,
+body[data-theme="glow"] .settings-dialog {
+  background: rgba(250, 246, 239, 0.96) !important;
+  border-color: rgba(160, 138, 112, 0.18);
+  box-shadow: 0 18px 48px rgba(60, 45, 25, 0.14);
+  color: #3d362e;
+}
+
+body[data-theme="glow"] .global-search-overlay {
+  background: rgba(60, 45, 25, 0.28);
+}
+
+body[data-theme="glow"] .global-search-dialog {
+  background: rgba(250, 246, 239, 0.98) !important;
+  border-color: rgba(160, 138, 112, 0.20);
+  box-shadow: 0 20px 48px rgba(60, 45, 25, 0.16);
+}
+
+body[data-theme="glow"] .global-search-input-wrap input,
+body[data-theme="glow"] .global-search-item-title,
+body[data-theme="glow"] .global-search-item-snippet {
+  color: #3d362e;
+}
+
+body[data-theme="glow"] .markdown-body {
+  line-height: 1.82;
+  letter-spacing: 0.01em;
+}
+
+body[data-theme="glow"] #editor .cm-content {
+  line-height: 1.82;
+  letter-spacing: 0.006em;
+}
+
+body[data-theme="glow"] .markdown-body pre {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+
+body[data-theme="glow"] .markdown-body :not(pre) > code {
+  background: var(--inline-code-bg);
+  color: var(--inline-code-text);
+  border: 1px solid var(--line);
+}
+
+body[data-theme="glow"] .sidebar-resizer,
+body[data-theme="glow"] .editor-splitter {
+  background: transparent !important;
+}
+
+body[data-theme="glow"] *::-webkit-scrollbar-thumb {
+  background: rgba(200, 149, 108, 0.22);
+}
+
+body[data-theme="glow"] *::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 body {
@@ -339,7 +426,7 @@ body {
   position: fixed;
   inset: 0;
   z-index: 99999;
-  background: #0f172a;
+  background: #252827;
   transition: opacity 0.4s ease, visibility 0.4s ease;
   overflow: hidden;
 }
@@ -1802,14 +1889,14 @@ body.resizing-sidebar {
   height: 28px;
   padding: 0 9px;
   border-color: color-mix(in srgb, var(--accent) 58%, white 18%);
-  background: color-mix(in srgb, var(--accent) 78%, #0f172a 22%);
+  background: color-mix(in srgb, var(--accent) 78%, #252827 22%);
   color: #fff;
   font-size: 12px;
   font-weight: 700;
   box-shadow: 0 2px 8px rgba(0, 0, 0, .22);
   z-index: 2;
 }
-.code-copy:hover { background: color-mix(in srgb, var(--accent-strong) 84%, #0f172a 16%); color: #fff; }
+.code-copy:hover { background: color-mix(in srgb, var(--accent-strong) 84%, #252827 16%); color: #fff; }
 
 .markdown-body.empty-state {
   color: var(--muted);
@@ -4623,355 +4710,315 @@ button.primary.full:hover {
 }
 
 body[data-theme="dark"] {
-  --surface-0: #080e19;
-  --surface-1: color-mix(in srgb, #111b2b 92%, transparent);
-  --surface-2: color-mix(in srgb, #18263a 88%, #0b1220);
-  --surface-3: color-mix(in srgb, #22334b 76%, #0b1220);
-  --hairline: rgba(148, 163, 184, 0.18);
+  --surface-0: #1c201f;
+  --surface-1: color-mix(in srgb, #282e2b 92%, transparent);
+  --surface-2: color-mix(in srgb, #303834 88%, #1f2322);
+  --surface-3: color-mix(in srgb, #3a423e 76%, #1f2322);
+  --hairline: rgba(140, 152, 144, 0.18);
   --accent-soft: color-mix(in srgb, var(--accent) 15%, transparent);
   --accent-wash: color-mix(in srgb, var(--accent) 7%, transparent);
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.22), 0 10px 26px rgba(0, 0, 0, 0.16);
-  --shadow-md: 0 22px 60px rgba(0, 0, 0, 0.34);
+  --shadow-sm: 0 1px 2px rgba(20, 26, 23, 0.28), 0 10px 26px rgba(20, 26, 23, 0.20);
+  --shadow-md: 0 22px 60px rgba(20, 26, 23, 0.40);
 }
 
 body[data-theme="eye"] {
-  /* 纸张色阶：暖黄油墨色调，模拟羊皮纸/燕麦纸 */
-  --surface-0: #e8dcc6;
-  --surface-1: #f0e6d2;
-  --surface-2: #e4d8bf;
-  --surface-3: #d7cab0;
-  --hairline: rgba(110, 88, 55, 0.14);
-  --accent-soft: color-mix(in srgb, var(--accent) 15%, transparent);
-  --accent-wash: color-mix(in srgb, var(--accent) 8%, transparent);
-  --shadow-sm: 0 1px 3px rgba(60, 40, 15, 0.08), 0 4px 14px rgba(60, 40, 15, 0.06);
-  --shadow-md: 0 14px 42px rgba(60, 40, 15, 0.14);
-}
-
-/* 护眼主题：自然纸张质感 — 纹理由 JS Canvas 动态生成 */
-body[data-theme="eye"] {
-  /* 字体渲染：去锐化，接近印刷品圆润感 */
-  letter-spacing: 0.012em;
+  --bg: #edf3ec;
+  --panel: rgba(250, 252, 247, 0.96);
+  --panel-glass: rgba(246, 249, 244, 0.86);
+  --line: rgba(110, 138, 123, 0.18);
+  --text: #243228;
+  --muted: #5f7066;
+  --soft: #e5eee4;
+  --accent: #5f8f76;
+  --accent-strong: #36654f;
+  --warn: #9e7551;
+  --code-bg: #f5f8f4;
+  --code-text: #26332c;
+  --control-bg: rgba(247, 250, 245, 0.88);
+  --hover-bg: rgba(95, 143, 118, 0.09);
+  --active-bg: rgba(95, 143, 118, 0.14);
+  --brand-bg: #dfe9e0;
+  --inline-code-bg: rgba(95, 143, 118, 0.10);
+  --inline-code-text: #355845;
+  --graph-bg: #f4f8f2;
+  --graph-grid: rgba(110, 138, 123, 0.08);
+  --graph-text: #243228;
+  --graph-muted: #6b7f73;
+  --graph-edge: rgba(95, 143, 118, 0.26);
+  --graph-link: #4f7f68;
+  --graph-doc: #f9fbf8;
+  --graph-doc-border: #a7b8ac;
+  --graph-tag: #7c9b84;
+  --graph-keyword: #688a9a;
+  --graph-missing: #b77a64;
+  --graph-active: #5f8f76;
+  --graph-label-bg: rgba(250, 252, 248, 0.92);
+  --md-heading: #213127;
+  --md-link: #3e6f5a;
+  --md-strong: #1d2a22;
+  --md-emphasis: #4a5d53;
+  --md-inline-code: #31443a;
+  --md-search-bg: rgba(95, 143, 118, 0.16);
+  --md-search-text: #203128;
+  --surface-0: #edf3ec;
+  --surface-1: rgba(250, 252, 247, 0.96);
+  --surface-2: rgba(240, 246, 238, 0.95);
+  --surface-3: rgba(226, 236, 225, 0.95);
+  --hairline: rgba(110, 138, 123, 0.18);
+  --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
+  --accent-wash: color-mix(in srgb, var(--accent) 6%, transparent);
+  --shadow-sm: 0 1px 3px rgba(29, 46, 36, 0.06), 0 8px 20px rgba(29, 46, 36, 0.05);
+  --shadow-md: 0 20px 50px rgba(29, 46, 36, 0.10);
+  --syn-keyword: #3e6f8f;
+  --syn-string: #5c7d5d;
+  --syn-comment: #99a99f;
+  --syn-number: #8a6646;
+  --syn-function: #6f7f6a;
+  --syn-type: #5a7280;
+  --syn-builtin: #4d6d62;
+  --syn-variable: #2f3d36;
+  --syn-operator: #607366;
+  --syn-tag: #3e6f8f;
+  --syn-attr: #9aa79d;
+  background:
+    radial-gradient(circle at 16% 16%, rgba(95, 143, 118, 0.11), transparent 15rem),
+    radial-gradient(circle at 82% 78%, rgba(143, 123, 72, 0.06), transparent 16rem),
+    linear-gradient(180deg, #edf3ec 0%, #f7fbf6 100%);
+  letter-spacing: 0.006em;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
-  /* Fallback：如果 JS 纹理未加载，使用纯色 */
-  background-color: #e8dcc6;
-  background-image: none;
 }
 
-/* 护眼主题：面板透明化处理，纹理由 JS 注入，面板透出 body 纹理 */
-body[data-theme="eye"] .app-shell {
-  background-color: transparent;
-  background-image: none;
+body[data-theme="glow"] {
+  --bg: #f5efe6;
+  --panel: rgba(250, 246, 239, 0.96);
+  --panel-glass: rgba(246, 240, 230, 0.86);
+  --line: rgba(160, 138, 112, 0.18);
+  --text: #3d362e;
+  --muted: #6b6158;
+  --soft: #ece4d6;
+  --accent: #c8956c;
+  --accent-strong: #a8784f;
+  --warn: #9e7551;
+  --code-bg: #faf6ef;
+  --code-text: #3d362e;
+  --control-bg: rgba(247, 242, 233, 0.88);
+  --hover-bg: rgba(200, 149, 108, 0.09);
+  --active-bg: rgba(200, 149, 108, 0.14);
+  --brand-bg: #e8dec9;
+  --inline-code-bg: rgba(200, 149, 108, 0.10);
+  --inline-code-text: #8a6640;
+  --graph-bg: #f5efe6;
+  --graph-grid: rgba(160, 138, 112, 0.08);
+  --graph-text: #3d362e;
+  --graph-muted: #7a7066;
+  --graph-edge: rgba(200, 149, 108, 0.26);
+  --graph-link: #a8784f;
+  --graph-doc: #faf6ef;
+  --graph-doc-border: #b8a890;
+  --graph-tag: #c8956c;
+  --graph-keyword: #8a7a9a;
+  --graph-missing: #b77a64;
+  --graph-active: #c8956c;
+  --graph-label-bg: rgba(250, 246, 239, 0.92);
+  --md-heading: #3d3428;
+  --md-link: #a8784f;
+  --md-strong: #2a2418;
+  --md-emphasis: #5a4f44;
+  --md-inline-code: #6b5840;
+  --md-search-bg: rgba(200, 149, 108, 0.16);
+  --md-search-text: #3d3428;
+  --surface-0: #f5efe6;
+  --surface-1: rgba(250, 246, 239, 0.96);
+  --surface-2: rgba(244, 237, 225, 0.95);
+  --surface-3: rgba(232, 223, 206, 0.95);
+  --hairline: rgba(160, 138, 112, 0.18);
+  --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
+  --accent-wash: color-mix(in srgb, var(--accent) 6%, transparent);
+  --shadow-sm: 0 1px 3px rgba(60, 45, 25, 0.06), 0 8px 20px rgba(60, 45, 25, 0.05);
+  --shadow-md: 0 20px 50px rgba(60, 45, 25, 0.10);
+  --syn-keyword: #8a6a44;
+  --syn-string: #6b7856;
+  --syn-comment: #9a8f82;
+  --syn-number: #b08850;
+  --syn-function: #a07850;
+  --syn-type: #7a6856;
+  --syn-builtin: #6b5a44;
+  --syn-variable: #3d362e;
+  --syn-operator: #5a5048;
+  --syn-tag: #8a6a44;
+  --syn-attr: #8a7a68;
+  background:
+    radial-gradient(circle at 16% 16%, rgba(200, 149, 108, 0.11), transparent 15rem),
+    radial-gradient(circle at 82% 78%, rgba(160, 138, 112, 0.08), transparent 16rem),
+    linear-gradient(180deg, #f5efe6 0%, #faf6ef 100%);
+  letter-spacing: 0.006em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
+body[data-theme="eye"] .app-shell,
 body[data-theme="eye"] .sidebar,
 body[data-theme="eye"] .topbar,
 body[data-theme="eye"] .reader-panel,
-body[data-theme="eye"] .graph-panel {
-  background-color: transparent;
-  background-image: none;
-  border-right: none;
-  box-shadow: none;
+body[data-theme="eye"] .graph-panel,
+body[data-theme="eye"] #editor,
+body[data-theme="eye"] #preview {
+  background-image: none !important;
 }
 
-body[data-theme="eye"] .welcome-dialog,
-body[data-theme="eye"] .modal-dialog,
-body[data-theme="eye"] .settings-dialog {
-  background-color: rgba(247, 239, 224, 0.94) !important;
-  background-image: none !important;
-  border-right: none !important;
-  box-shadow: 0 16px 48px rgba(90, 65, 30, 0.28), 0 2px 8px rgba(90, 65, 30, 0.12) !important;
-  border-radius: 14px;
-  color: #4a3826;
+body[data-theme="eye"] .app-shell {
+  background-color: transparent;
 }
 
 body[data-theme="eye"] .welcome-overlay,
 body[data-theme="eye"] .modal-overlay,
 body[data-theme="eye"] .settings-overlay {
-  background: rgba(40, 28, 10, 0.45);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background: rgba(36, 50, 41, 0.34);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 
-body[data-theme="eye"] .sidebar {
-  background-color: transparent;
-  border-right: none !important;
-  box-shadow: none !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-}
-
-body[data-theme="eye"] .sidebar-resizer {
-  background: transparent !important;
-  border-right: none !important;
-}
-body[data-theme="eye"] .sidebar-resizer::before {
-  display: none;
-}
-
-body[data-theme="eye"] .topbar {
-  background-color: transparent !important;
-  border-bottom: none !important;
-  box-shadow: none !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-}
-
-body[data-theme="eye"] .editor-splitter {
-  background: transparent !important;
-}
-body[data-theme="eye"] .editor-splitter::before {
-  display: none;
-}
-
-body[data-theme="eye"] .editor-outline {
-  background: transparent !important;
-  border-right: none !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-}
-
-body[data-theme="eye"] .reader-outline {
-  border-right: none !important;
-  background: transparent !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-}
-
-body[data-theme="eye"] .reader-panel {
-  background: transparent !important;
-  background-image: none !important;
-  background-size: auto !important;
-  background-repeat: auto !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-  box-shadow: none !important;
-}
-
-body[data-theme="eye"] .workspace-summary {
-  border-bottom: none !important;
-}
-
-body[data-theme="eye"] .search-box {
-  background: transparent !important;
-  border-color: rgba(110, 88, 55, 0.14) !important;
-}
-
-body[data-theme="eye"] .tree-workspace {
-  background: rgba(247, 239, 224, 0.35) !important;
-  border-color: rgba(110, 88, 55, 0.18) !important;
-  box-shadow: none !important;
-}
-
-body[data-theme="eye"] .app-shell::after {
-  opacity: 0.15;
-}
-
-body[data-theme="eye"] #editor,
-body[data-theme="eye"] #preview {
-  background-color: transparent !important;
-  background-image: none !important;
-  background-size: auto !important;
-  background-repeat: auto !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-  box-shadow: none !important;
-}
-
-body[data-theme="eye"] .editor-toolbar,
-body[data-theme="eye"] .graph-tools {
-  background-color: transparent !important;
-  background-image: none !important;
-  border-bottom: none !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-}
-
-body[data-theme="eye"] .editor-body {
-  background-color: transparent !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-}
-
-body[data-theme="eye"] .ai-drawer {
-  background: rgba(247, 239, 224, 0.6) !important;
-  backdrop-filter: blur(18px) !important;
-  -webkit-backdrop-filter: blur(18px) !important;
-}
-
-body[data-theme="eye"] .editor-outline-title::before {
-  background: rgba(110, 88, 55, 0.35);
-}
-
-body[data-theme="eye"] .sidebar-resizer:hover,
-body[data-theme="eye"] .sidebar-resizer.dragging {
-  background: transparent !important;
-}
-
-body[data-theme="eye"] .editor-splitter:hover,
-body[data-theme="eye"] .editor-splitter.dragging {
-  background: transparent !important;
-}
-
+body[data-theme="eye"] .welcome-dialog,
+body[data-theme="eye"] .modal-dialog,
 body[data-theme="eye"] .settings-dialog {
-  color: #4a3826;
-}
-body[data-theme="eye"] .settings-dialog h2,
-body[data-theme="eye"] .settings-dialog h3,
-body[data-theme="eye"] .settings-dialog h1 {
-  color: #4a3826;
-}
-body[data-theme="eye"] .settings-nav-item {
-  color: #6b5540;
-}
-body[data-theme="eye"] .settings-nav-item:hover {
-  background: rgba(110, 88, 55, 0.10);
-  color: #4a3826;
-}
-body[data-theme="eye"] .settings-nav-item.active {
-  background: rgba(110, 88, 55, 0.14);
-  color: #3d2f1f;
-}
-body[data-theme="eye"] .settings-nav-item.active::before {
-  background: #8b6d3f;
-}
-body[data-theme="eye"] .settings-dialog input[type="text"],
-body[data-theme="eye"] .settings-dialog input[type="number"],
-body[data-theme="eye"] .settings-dialog input[type="url"],
-body[data-theme="eye"] .settings-dialog select {
-  background: rgba(255, 253, 245, 0.85);
-  border-color: rgba(110, 88, 55, 0.25);
-  color: #3d2f1f;
-}
-body[data-theme="eye"] .settings-dialog input[type="range"] {
-  accent-color: #8b6d3f;
-}
-body[data-theme="eye"] .settings-dialog button:not(.primary) {
-  background: rgba(255, 253, 245, 0.7);
-  border-color: rgba(110, 88, 55, 0.25);
-  color: #5a4530;
-}
-body[data-theme="eye"] .settings-dialog button.primary {
-  background: #8b6d3f;
-  border-color: #8b6d3f;
-  color: #fdf6e3;
-}
-body[data-theme="eye"] .settings-dialog .settings-section-title,
-body[data-theme="eye"] .settings-dialog label {
-  color: #5a4530;
-}
-body[data-theme="eye"] .modal-dialog h2 {
-  color: #4a3826;
-}
-body[data-theme="eye"] .modal-dialog p {
-  color: #7a6550;
-}
-body[data-theme="eye"] .modal-dialog button.primary {
-  background: #8b6d3f;
-  border-color: #8b6d3f;
-  color: #fdf6e3;
-}
-body[data-theme="eye"] .welcome-dialog button.primary {
-  background: #8b6d3f;
-  border-color: #8b6d3f;
-  color: #fdf6e3;
-}
-body[data-theme="eye"] .tree-workspace {
-  background: rgba(255, 252, 242, 0.55) !important;
-  border-color: rgba(110, 88, 55, 0.18) !important;
-}
-body[data-theme="eye"] .tree-workspace-head {
-  color: #5a4530;
-}
-body[data-theme="eye"] .tree-folder,
-body[data-theme="eye"] .tree-file {
-  color: #6b5540;
-}
-body[data-theme="eye"] .tree-folder:hover,
-body[data-theme="eye"] .tree-file:hover {
-  background: rgba(110, 88, 55, 0.10);
-  color: #4a3826;
-}
-body[data-theme="eye"] .tree-item.active {
-  background: rgba(110, 88, 55, 0.16);
-  color: #3d2f1f;
-}
-body[data-theme="eye"] .sidebar-section-title {
-  color: #8a7055;
-}
-body[data-theme="eye"] .workspace-summary {
-  color: #8a7055;
-}
-body[data-theme="eye"] .search-box {
-  background: rgba(255, 253, 245, 0.85) !important;
-  border-color: rgba(110, 88, 55, 0.22) !important;
-  color: #5a4530;
-}
-body[data-theme="eye"] .search-box input {
-  color: #5a4530;
-}
-body[data-theme="eye"] .search-box input::placeholder {
-  color: #a08c72;
-}
-body[data-theme="eye"] .menu-item {
-  color: #6b5540;
-}
-body[data-theme="eye"] .menu-item:hover,
-body[data-theme="eye"] .menu-item.active {
-  background: rgba(110, 88, 55, 0.12);
-  color: #3d2f1f;
-}
-body[data-theme="eye"] .toolbar button {
-  color: #6b5540;
-}
-body[data-theme="eye"] .toolbar button:hover {
-  background: rgba(110, 88, 55, 0.12);
-  color: #3d2f1f;
-}
-body[data-theme="eye"] .recent-docs .recent-item {
-  background: rgba(255, 253, 245, 0.5);
-  color: #6b5540;
-  border-color: rgba(110, 88, 55, 0.18);
+  background: rgba(250, 252, 247, 0.96) !important;
+  border-color: rgba(110, 138, 123, 0.18);
+  box-shadow: 0 18px 48px rgba(29, 46, 36, 0.14);
+  color: #243228;
 }
 
-/* 护眼主题文档内容：宽松行高与字间距，模拟铅字印刷呼吸感 */
+body[data-theme="eye"] .global-search-overlay {
+  background: rgba(36, 50, 41, 0.30);
+}
+
+body[data-theme="eye"] .global-search-dialog {
+  background: rgba(250, 252, 247, 0.98) !important;
+  border-color: rgba(110, 138, 123, 0.20);
+  box-shadow: 0 20px 48px rgba(29, 46, 36, 0.16);
+}
+
+body[data-theme="eye"] .global-search-input-wrap input,
+body[data-theme="eye"] .global-search-item-title,
+body[data-theme="eye"] .global-search-item-snippet {
+  color: #243228;
+}
+
 body[data-theme="eye"] .markdown-body {
-  line-height: 1.85;
-  letter-spacing: 0.015em;
-}
-body[data-theme="eye"] .markdown-body p,
-body[data-theme="eye"] .markdown-body li {
-  line-height: 1.85;
-}
-body[data-theme="eye"] .markdown-body code,
-body[data-theme="eye"] .markdown-body pre {
-  font-variant-ligatures: contextual;
-}
-/* 护眼主题编辑器内容：同步行高与字间距 */
-body[data-theme="eye"] #editor .cm-content {
-  line-height: 1.85;
+  line-height: 1.82;
   letter-spacing: 0.01em;
-  font-variant-ligatures: contextual;
 }
-/* 护眼主题代码块：纸张底色而非深色反差，消除光晕 */
+
+body[data-theme="eye"] #editor .cm-content {
+  line-height: 1.82;
+  letter-spacing: 0.006em;
+}
+
 body[data-theme="eye"] .markdown-body pre {
-  background: var(--code-bg);
+  background: var(--surface-2);
   border: 1px solid var(--line);
 }
-body[data-theme="eye"] .markdown-body pre code {
-  color: var(--code-text);
-}
-/* 护眼主题遮罩层：暖棕半透明，替代冷蓝色调 */
-body[data-theme="eye"] .welcome-overlay,
-body[data-theme="eye"] .modal {
-  background: rgba(60, 52, 48, 0.32);
-}
-/* 护眼主题行内代码：纸张底色而非高对比反差 */
+
 body[data-theme="eye"] .markdown-body :not(pre) > code {
   background: var(--inline-code-bg);
   color: var(--inline-code-text);
   border: 1px solid var(--line);
+}
+
+body[data-theme="eye"] .sidebar-resizer,
+body[data-theme="eye"] .editor-splitter {
+  background: transparent !important;
+}
+
+body[data-theme="eye"] *::-webkit-scrollbar-thumb {
+  background: rgba(95, 143, 118, 0.22);
+}
+
+body[data-theme="eye"] *::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+body[data-theme="glow"] .app-shell,
+body[data-theme="glow"] .sidebar,
+body[data-theme="glow"] .topbar,
+body[data-theme="glow"] .reader-panel,
+body[data-theme="glow"] .graph-panel,
+body[data-theme="glow"] #editor,
+body[data-theme="glow"] #preview {
+  background-image: none !important;
+}
+
+body[data-theme="glow"] .app-shell {
+  background-color: transparent;
+}
+
+body[data-theme="glow"] .welcome-overlay,
+body[data-theme="glow"] .modal-overlay,
+body[data-theme="glow"] .settings-overlay {
+  background: rgba(60, 45, 25, 0.30);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+body[data-theme="glow"] .welcome-dialog,
+body[data-theme="glow"] .modal-dialog,
+body[data-theme="glow"] .settings-dialog {
+  background: rgba(250, 246, 239, 0.96) !important;
+  border-color: rgba(160, 138, 112, 0.18);
+  box-shadow: 0 18px 48px rgba(60, 45, 25, 0.14);
+  color: #3d362e;
+}
+
+body[data-theme="glow"] .global-search-overlay {
+  background: rgba(60, 45, 25, 0.28);
+}
+
+body[data-theme="glow"] .global-search-dialog {
+  background: rgba(250, 246, 239, 0.98) !important;
+  border-color: rgba(160, 138, 112, 0.20);
+  box-shadow: 0 20px 48px rgba(60, 45, 25, 0.16);
+}
+
+body[data-theme="glow"] .global-search-input-wrap input,
+body[data-theme="glow"] .global-search-item-title,
+body[data-theme="glow"] .global-search-item-snippet {
+  color: #3d362e;
+}
+
+body[data-theme="glow"] .markdown-body {
+  line-height: 1.82;
+  letter-spacing: 0.01em;
+}
+
+body[data-theme="glow"] #editor .cm-content {
+  line-height: 1.82;
+  letter-spacing: 0.006em;
+}
+
+body[data-theme="glow"] .markdown-body pre {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+
+body[data-theme="glow"] .markdown-body :not(pre) > code {
+  background: var(--inline-code-bg);
+  color: var(--inline-code-text);
+  border: 1px solid var(--line);
+}
+
+body[data-theme="glow"] .sidebar-resizer,
+body[data-theme="glow"] .editor-splitter {
+  background: transparent !important;
+}
+
+body[data-theme="glow"] *::-webkit-scrollbar-thumb {
+  background: rgba(200, 149, 108, 0.22);
+}
+
+body[data-theme="glow"] *::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 body {
@@ -5578,363 +5625,6 @@ body[data-theme="image"] .editor-splitter::before {
   .editor-body.outline-hidden #editor { grid-row: 1; }
   .editor-body.preview-hidden #editor { grid-row: 1 / span 2; }
   .editor-body.preview-hidden #preview { display: none !important; }
-}
-
-/* Taiji Compass v2: quiet material theme based on the user's Taiji/Bagua
-   concept. Text surfaces stay readable; philosophy appears in boundaries,
-   motion cues, syntax colors, and low-opacity compass details. */
-body[data-theme="bagua"] {
-  --bg: #1a1614;
-  --panel: rgba(44, 35, 30, 0.88);
-  --panel-glass: rgba(44, 35, 30, 0.76);
-  --line: rgba(196, 188, 176, 0.45);
-  --text: #efe4d2;
-  --muted: #c8bca8;
-  --soft: rgba(214, 207, 196, 0.18);
-  --accent: #c1793b;
-  --accent-strong: #d7b77b;
-  --warn: #c95a5a;
-  --code-bg: rgba(44, 35, 30, 0.88);
-  --code-text: #eee4cf;
-  --control-bg: rgba(245, 240, 232, 0.12);
-  --hover-bg: rgba(193, 121, 59, 0.14);
-  --active-bg: rgba(193, 121, 59, 0.22);
-  --brand-bg: #2c231e;
-  --inline-code-bg: rgba(44, 35, 30, 0.09);
-  --inline-code-text: #5a4630;
-  --surface-0: rgba(26, 22, 20, 0.72);
-  --surface-1: rgba(44, 35, 30, 0.70);
-  --surface-2: rgba(245, 240, 232, 0.12);
-  --surface-3: rgba(245, 240, 232, 0.20);
-  --hairline: rgba(196, 188, 176, 0.38);
-  --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.28);
-  --shadow-md: 0 20px 54px rgba(0, 0, 0, 0.42);
-  --md-heading: #3c342e;
-  --md-link: #b85c5c;
-  --md-strong: #2c231e;
-  --md-emphasis: #5d4b37;
-  --md-inline-code: #4c3927;
-  --md-search-bg: rgba(193, 121, 59, 0.26);
-  --md-search-text: #2c231e;
-  --syn-keyword: #4a6fa5;
-  --syn-string: #7b8d6e;
-  --syn-function: #c1793b;
-  --syn-variable: #8b7e74;
-  --syn-number: #5a7a9a;
-  --syn-operator: #b85c5c;
-  --syn-comment: #9e928b;
-  --syn-type: #6b8f71;
-  --syn-builtin: #6b8f71;
-  --syn-tag: #4a6fa5;
-  --syn-attr: #c1793b;
-  background:
-    radial-gradient(circle at 18% 16%, rgba(245, 240, 232, 0.12), transparent 11rem),
-    radial-gradient(circle at 74% 76%, rgba(44, 35, 30, 0.12), transparent 13rem),
-    linear-gradient(135deg, #211a16 0%, #f5f0e8 47%, #ede6dc 100%);
-}
-
-body[data-theme="bagua"] .app-shell {
-  background:
-    linear-gradient(90deg, rgba(26, 22, 20, 0.94) 0, rgba(44, 35, 30, 0.84) var(--sidebar-width, 360px), rgba(245, 240, 232, 0.88) var(--sidebar-width, 360px), rgba(245, 240, 232, 0.94) 100%);
-}
-
-body[data-theme="bagua"] .app-shell::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(circle at 7rem 7rem, rgba(245, 240, 232, 0.06), transparent 4.2rem),
-    radial-gradient(circle at calc(var(--sidebar-width, 360px) + 78%) 86%, rgba(44, 35, 30, 0.035), transparent 7rem);
-  z-index: 0;
-}
-
-body[data-theme="bagua"] .sidebar,
-body[data-theme="bagua"] .sidebar-resizer,
-body[data-theme="bagua"] .workspace {
-  position: relative;
-  z-index: 1;
-}
-
-body[data-theme="bagua"] .sidebar {
-  background:
-    linear-gradient(rgba(20, 17, 13, 0.34), rgba(20, 17, 13, 0.42)),
-    url("/themes/taiji-compass-v2/sidebar.webp") center top / cover no-repeat;
-  border-right: 1px solid rgba(196, 188, 176, 0.36);
-  box-shadow: inset -1px 0 0 rgba(245, 240, 232, 0.08), 18px 0 44px rgba(44, 35, 30, 0.20);
-  color: #efe4d2;
-}
-
-body[data-theme="bagua"] .brand,
-body[data-theme="bagua"] .workspace-summary {
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.62);
-}
-
-body[data-theme="bagua"] .brand-mark {
-  background:
-    radial-gradient(circle at 35% 35%, rgba(245, 240, 232, 0.22), transparent 1.35rem),
-    rgba(245, 240, 232, 0.08);
-  border: 1px solid rgba(196, 188, 176, 0.34);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28), inset 0 0 18px rgba(214, 207, 196, 0.08);
-}
-
-body[data-theme="bagua"] .search-box,
-body[data-theme="bagua"] .workspace-summary,
-body[data-theme="bagua"] .tree-workspace,
-body[data-theme="bagua"] .search-results {
-  background: rgba(245, 240, 232, 0.075);
-  border-color: rgba(196, 188, 176, 0.24);
-  box-shadow: inset 0 0 0 1px rgba(245, 240, 232, 0.045);
-}
-
-body[data-theme="bagua"] .sidebar .search-box input {
-  background: transparent;
-  border-color: transparent;
-  color: #f5f0e8;
-  box-shadow: none;
-}
-
-body[data-theme="bagua"] .sidebar .search-box input::placeholder {
-  color: rgba(245, 240, 232, 0.58);
-}
-
-body[data-theme="bagua"] .folder-title,
-body[data-theme="bagua"] .file-item,
-body[data-theme="bagua"] .search-item {
-  color: #efe4d2;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.58);
-}
-
-body[data-theme="bagua"] .file-item.active,
-body[data-theme="bagua"] .folder-title.selected,
-body[data-theme="bagua"] .tree-workspace.active-workspace {
-  background: linear-gradient(90deg, rgba(193, 121, 59, 0.25), rgba(245, 240, 232, 0.09));
-  border-color: rgba(215, 183, 123, 0.52);
-  color: #fff0cc;
-}
-
-body[data-theme="bagua"] .sidebar-resizer {
-  background:
-    radial-gradient(circle at 50% 42%, rgba(245, 240, 232, 0.50) 0 4px, transparent 5px),
-    radial-gradient(circle at 50% 57%, rgba(44, 35, 30, 0.50) 0 4px, transparent 5px),
-    linear-gradient(180deg, transparent 0, rgba(196, 188, 176, 0.48) 18%, rgba(245, 240, 232, 0.24) 50%, rgba(196, 188, 176, 0.48) 82%, transparent 100%);
-  border-right-color: rgba(196, 188, 176, 0.42);
-}
-
-body[data-theme="bagua"] .topbar {
-  background:
-    linear-gradient(rgba(26, 22, 20, 0.70), rgba(26, 22, 20, 0.62)),
-    url("/themes/taiji-compass-v2/topbar.webp") center / cover no-repeat;
-  border-bottom-color: rgba(196, 188, 176, 0.34);
-  box-shadow: 0 1px 0 rgba(245, 240, 232, 0.07), 0 10px 28px rgba(44, 35, 30, 0.20);
-}
-
-body[data-theme="bagua"] .menu-item,
-body[data-theme="bagua"] .toolbar button,
-body[data-theme="bagua"] .editor-toolbar button,
-body[data-theme="bagua"] .editor-toolbar select,
-body[data-theme="bagua"] .editor-toolbar label,
-body[data-theme="bagua"] .graph-controls button,
-body[data-theme="bagua"] .graph-controls select,
-body[data-theme="bagua"] button {
-  background: linear-gradient(180deg, rgba(245, 240, 232, 0.12), rgba(245, 240, 232, 0.055));
-  border-color: rgba(196, 188, 176, 0.31);
-  color: #efe4d2;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.46);
-}
-
-body[data-theme="bagua"] button:hover,
-body[data-theme="bagua"] button.active,
-body[data-theme="bagua"] .menu-item:hover,
-body[data-theme="bagua"] .menu-item.active {
-  border-color: rgba(215, 183, 123, 0.66);
-  color: #fff0cc;
-  box-shadow: inset 0 0 18px rgba(193, 121, 59, 0.14), 0 0 0 2px rgba(193, 121, 59, 0.08);
-}
-
-body[data-theme="bagua"] .reader-panel {
-  background:
-    linear-gradient(90deg, rgba(26, 22, 20, 0.12), rgba(245, 240, 232, 0.80)),
-    url("/themes/taiji-compass-v2/paper.webp") center / cover no-repeat;
-}
-
-body[data-theme="bagua"] .reader-outline,
-body[data-theme="bagua"] .editor-outline {
-  background:
-    linear-gradient(rgba(245, 240, 232, 0.86), rgba(245, 240, 232, 0.91)),
-    url("/themes/taiji-compass-v2/panel.webp") center / cover no-repeat;
-  border-color: rgba(196, 188, 176, 0.38);
-  color: #4b4037;
-  box-shadow: inset 0 0 0 1px rgba(255, 250, 235, 0.34);
-}
-
-body[data-theme="bagua"] .reader-outline button {
-  background: rgba(245, 240, 232, 0.42);
-  border-color: rgba(196, 188, 176, 0.30);
-  color: #5d4b37;
-  text-shadow: none;
-  opacity: 1;
-}
-
-body[data-theme="bagua"] .reader-outline button:hover,
-body[data-theme="bagua"] .reader-outline button.active,
-body[data-theme="bagua"] .editor-outline button:hover,
-body[data-theme="bagua"] .editor-outline button.active {
-  background: rgba(193, 121, 59, 0.15);
-  border-color: rgba(193, 121, 59, 0.36);
-  color: #2c231e;
-  text-shadow: none;
-}
-
-body[data-theme="bagua"] .editor-outline button {
-  background: rgba(245, 240, 232, 0.42);
-  border-color: rgba(196, 188, 176, 0.30);
-  color: #5d4b37;
-  text-shadow: none;
-  opacity: 1;
-}
-
-body[data-theme="bagua"] .reader-panel > .markdown-body {
-  background:
-    linear-gradient(rgba(245, 240, 232, 0.90), rgba(245, 240, 232, 0.94)),
-    url("/themes/taiji-compass-v2/paper.webp") center top / cover no-repeat;
-  color: #3c342e;
-  border-left: 1px solid rgba(196, 188, 176, 0.34);
-  border-right: 1px solid rgba(196, 188, 176, 0.34);
-  box-shadow: inset 0 0 0 1px rgba(214, 207, 196, 0.24);
-}
-
-body[data-theme="bagua"] .markdown-body {
-  color: #3c342e;
-  text-shadow: 0 1px 1px rgba(255, 250, 235, 0.42);
-}
-
-body[data-theme="bagua"] .markdown-body h1,
-body[data-theme="bagua"] .markdown-body h2,
-body[data-theme="bagua"] .markdown-body h3,
-body[data-theme="bagua"] .markdown-body strong {
-  color: #2c231e;
-}
-
-body[data-theme="bagua"] .markdown-body blockquote {
-  background: rgba(193, 121, 59, 0.08);
-  border-left-color: rgba(193, 121, 59, 0.72);
-  color: #5d4b37;
-  text-shadow: 0 1px 1px rgba(255, 250, 235, 0.32);
-}
-
-body[data-theme="bagua"] .markdown-body blockquote p,
-body[data-theme="bagua"] #preview blockquote p {
-  color: #5d4b37;
-}
-
-body[data-theme="bagua"] .editor-panel {
-  background:
-    linear-gradient(90deg, rgba(245, 240, 232, 0.86), rgba(237, 230, 220, 0.92)),
-    url("/themes/taiji-compass-v2/paper.webp") center / cover no-repeat;
-}
-
-body[data-theme="bagua"] .editor-toolbar {
-  background:
-    linear-gradient(rgba(26, 22, 20, 0.78), rgba(26, 22, 20, 0.70)),
-    url("/themes/taiji-compass-v2/topbar.webp") center / cover no-repeat;
-  border-bottom-color: rgba(196, 188, 176, 0.34);
-}
-
-body[data-theme="bagua"] #editor {
-  background:
-    linear-gradient(rgba(245, 240, 232, 0.91), rgba(245, 240, 232, 0.96)),
-    url("/themes/taiji-compass-v2/paper.webp") center top / cover no-repeat;
-  color: #3c342e;
-  border-right-color: rgba(196, 188, 176, 0.34);
-}
-
-body[data-theme="bagua"] #editor .cm-editor,
-body[data-theme="bagua"] #editor .cm-scroller {
-  background: transparent;
-  color: #3c342e;
-}
-
-body[data-theme="bagua"] #editor .cm-content,
-body[data-theme="bagua"] #editor .cm-line {
-  color: #3c342e;
-  text-shadow: 0 1px 1px rgba(255, 250, 235, 0.56);
-}
-
-body[data-theme="bagua"] #preview {
-  background:
-    linear-gradient(rgba(245, 240, 232, 0.87), rgba(245, 240, 232, 0.92)),
-    url("/themes/taiji-compass-v2/panel.webp") center / cover no-repeat;
-  color: #3c342e;
-  border-left-color: rgba(196, 188, 176, 0.34);
-}
-
-body[data-theme="bagua"] #preview.markdown-body,
-body[data-theme="bagua"] #preview .markdown-body,
-body[data-theme="bagua"] #preview p,
-body[data-theme="bagua"] #preview li {
-  color: #3c342e;
-  text-shadow: 0 1px 1px rgba(255, 250, 235, 0.42);
-}
-
-body[data-theme="bagua"] #preview h1,
-body[data-theme="bagua"] #preview h2,
-body[data-theme="bagua"] #preview h3,
-body[data-theme="bagua"] #preview strong {
-  color: #2c231e;
-}
-
-body[data-theme="bagua"] .editor-splitter,
-body[data-theme="bagua"] #previewSplitter,
-body[data-theme="bagua"] #outlineSplitter {
-  background:
-    radial-gradient(circle at 50% 36%, rgba(245, 240, 232, 0.55) 0 4px, transparent 5px),
-    radial-gradient(circle at 50% 64%, rgba(44, 35, 30, 0.48) 0 4px, transparent 5px),
-    linear-gradient(180deg, transparent, rgba(196, 188, 176, 0.44), transparent);
-}
-
-body[data-theme="bagua"] .modal-dialog,
-body[data-theme="bagua"] .settings-dialog,
-body[data-theme="bagua"] .welcome-dialog,
-body[data-theme="bagua"] .donation-dialog,
-body[data-theme="bagua"] .workspace-dialog {
-  background:
-    linear-gradient(rgba(245, 240, 232, 0.91), rgba(245, 240, 232, 0.96)),
-    url("/themes/taiji-compass-v2/panel.webp") center / cover no-repeat;
-  border-color: rgba(196, 188, 176, 0.42);
-  color: #3c342e;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.34), inset 0 0 0 1px rgba(255, 248, 222, 0.35);
-}
-
-body[data-theme="bagua"] input,
-body[data-theme="bagua"] textarea,
-body[data-theme="bagua"] select {
-  background: rgba(245, 240, 232, 0.76);
-  border-color: rgba(196, 188, 176, 0.40);
-  color: #2c231e;
-}
-
-body[data-theme="bagua"] *::-webkit-scrollbar-thumb {
-  background: linear-gradient(rgba(160, 154, 144, 0.62), rgba(196, 188, 176, 0.50));
-  border-radius: 999px;
-}
-
-body[data-theme="bagua"] * {
-  scrollbar-color: rgba(180, 148, 90, 0.62) transparent;
-}
-
-body[data-theme="bagua"] .markdown-body pre,
-body[data-theme="bagua"] .code-block pre {
-  background: rgba(44, 35, 30, 0.88);
-  border-color: rgba(196, 188, 176, 0.32);
-  color: #efe4d2;
-  text-shadow: none;
-}
-
-body[data-theme="bagua"] .markdown-body pre code,
-body[data-theme="bagua"] .code-block code {
-  color: #efe4d2;
-  text-shadow: none;
 }
 
 /* Quiet support affordance: visible, reachable and theme-aware without
@@ -7127,23 +6817,23 @@ body[data-theme="bagua"] .code-block code {
 /* CodeMirror semantic tokens are driven by theme variables so Markdown
    punctuation and links stay readable in every application theme. */
 body[data-theme="dark"] #editor .cm-editor {
-  --cm-heading: #6ee7b7;
-  --cm-heading-strong: #a7f3d0;
-  --cm-link: #67e8f9;
-  --cm-url: #a5b4fc;
-  --cm-emphasis: #f8fafc;
-  --cm-strong: #ffffff;
-  --cm-code: #f1f5f9;
-  --cm-comment: #94a3b8;
-  --cm-keyword: #c4b5fd;
-  --cm-string: #86efac;
-  --cm-number: #fcd34d;
-  --cm-bool: #fda4af;
-  --cm-type: #7dd3fc;
-  --cm-property: #5eead4;
-  --cm-operator: #cbd5e1;
-  --cm-punctuation: #cbd5e1;
-  --cm-invalid: #fda4af;
+  --cm-heading: #96c9b0;
+  --cm-heading-strong: #b0d5c0;
+  --cm-link: #89b0c0;
+  --cm-url: #a5b0b8;
+  --cm-emphasis: #d8d3c6;
+  --cm-strong: #e2ddd0;
+  --cm-code: #d0cbc0;
+  --cm-comment: #8a9a88;
+  --cm-keyword: #a5b5cc;
+  --cm-string: #b8c9a8;
+  --cm-number: #d9c98b;
+  --cm-bool: #c9a4a4;
+  --cm-type: #96c9b0;
+  --cm-property: #a5c0b5;
+  --cm-operator: #b5b0a5;
+  --cm-punctuation: #b0aca0;
+  --cm-invalid: #c9a4a4;
 }
 body[data-theme="eye"] #editor .cm-editor {
   /* 编辑器语法高亮：温暖纸张色调，低饱和墨色 */
@@ -7806,9 +7496,9 @@ body[data-theme="eye"] .global-search-group {
   color: #a08c72;
 }
 
-/* 深色主题适配 */
+/* 深色主题适配：暖调柔光遮罩，降低蓝光刺激 */
 body[data-theme="dark"] .global-search-overlay {
-  background: rgba(0, 0, 0, 0.65);
+  background: rgba(20, 26, 23, 0.70);
 }
 
 /* 图片主题适配：搜索对话框保持高可读玻璃底 */
@@ -7827,14 +7517,14 @@ body[data-theme="image"] .global-search-dialog {
 
 /* Resize isolation: the startup artwork must never remain visible after boot.
    Non-image themes use an opaque app canvas so compositor redraws cannot expose
-   the previous image or Bagua surface at the window edges. */
+   the previous image surface at the window edges. */
 body:not([data-theme="image"]):not([data-theme="eye"]) {
   background-color: var(--bg) !important;
   background-image: none !important;
   background-attachment: initial !important;
 }
 
-body:not([data-theme="image"]):not([data-theme="eye"]):not([data-theme="bagua"]) .app-shell {
+body:not([data-theme="image"]):not([data-theme="eye"]) .app-shell {
   background: var(--bg) !important;
   background-image: none !important;
 }
