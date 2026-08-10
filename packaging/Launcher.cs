@@ -487,7 +487,7 @@ internal static class MyTempleLauncher
                 int winX = screenRect.X + (screenRect.Width - winW) / 2;
                 int winY = screenRect.Y + (screenRect.Height - winH) / 2;
 
-                var formBg = Color.FromArgb(15, 23, 42);
+                var formBg = Color.FromArgb(37, 40, 39);
                 mainWindow = new AppForm
                 {
                     Text = AppTitle,
@@ -512,7 +512,8 @@ internal static class MyTempleLauncher
                 };
                 try
                 {
-                    string logoPath = Path.Combine(installDir, "logo.png");
+                    string logoPath = Path.Combine(installDir, "boot.png");
+                    if (!File.Exists(logoPath)) logoPath = Path.Combine(installDir, "logo.png");
                     if (File.Exists(logoPath)) splashBox.Image = Image.FromFile(logoPath);
                 }
                 catch { }

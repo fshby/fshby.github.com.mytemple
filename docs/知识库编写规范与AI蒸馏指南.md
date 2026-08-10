@@ -18,8 +18,10 @@ doc_type: standard
 owner: knowledge-base
 ---
 
-# 知识库编写规范与 AI 蒸馏指南
 
+![screenshot-1786284866974](/source/ws_258316e94f/screenshot-1786284866974.webp)
+
+# 知识库编写规范与 AI 蒸馏指南
 ## 一、规范目标
 
 本规范用于统一 Markdown 知识库的写法，使文档同时满足以下目标：
@@ -142,16 +144,16 @@ aliases: []
 
 字段说明：
 
-| 字段 | 要求 | 示例 |
-|---|---|---|
-| `schema` | 固定为 `mytemple/v1` | `mytemple/v1` |
-| `title` | 与正文一级标题一致 | `Docker容器内存溢出排查` |
-| `tags` | 二至五个稳定标签 | `Docker`、`故障排查` |
-| `domain` | 一个稳定领域 | `容器平台` |
-| `created` | 首次创建日期，不随修改变化 | `2026-07-22` |
-| `updated` | 内容发生实质变化时更新 | `2026-07-22` |
-| `status` | `draft`、`active` 或 `archived` | `active` |
-| `aliases` | 旧称、缩写和常见别名 | `OOM排查` |
+| 字段 | 要求 | 示例 | 新列 |
+| --- | --- | --- | --- |
+| `schema` | 固定为 `mytemple/v1` | `mytemple/v1` | 内容 |
+| `title` | 与正文一级标题一致 | `Docker容器内存溢出排查` | 内容 |
+| `tags` | 二至五个稳定标签 | `Docker`、`故障排查` | 内容 |
+| `domain` | 一个稳定领域 | `容器平台` | 内容 |
+| `created` | 首次创建日期，不随修改变化 | `2026-07-22` | 内容 |
+| `updated` | 内容发生实质变化时更新 | `2026-07-22` | 内容 |
+| `status` | `draft`、`active` 或 `archived` | `active` | 内容 |
+| `aliases` | 旧称、缩写和常见别名 | `OOM排查` | 内容 |
 
 ### 2. AI 蒸馏推荐字段
 
