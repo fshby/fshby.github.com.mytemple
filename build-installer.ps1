@@ -185,6 +185,7 @@ try {
     Copy-PayloadItem "source"
     Copy-FileSafe (Join-Path $packagingDir "logo.ico") (Join-Path $payloadDir "logo.ico")
     Copy-FileSafe (Join-Path $packagingDir "logo1.ico") (Join-Path $payloadDir "logo1.ico")
+    Copy-FileSafe (Join-Path $packagingDir "logo.png") (Join-Path $payloadDir "logo.png")
     Copy-FileSafe (Join-Path $packagingDir "webview2\Microsoft.Web.WebView2.Core.dll") (Join-Path $payloadDir "Microsoft.Web.WebView2.Core.dll")
     Copy-FileSafe (Join-Path $packagingDir "webview2\Microsoft.Web.WebView2.WinForms.dll") (Join-Path $payloadDir "Microsoft.Web.WebView2.WinForms.dll")
     Copy-FileSafe (Join-Path $packagingDir "webview2\WebView2Loader.dll") (Join-Path $payloadDir "WebView2Loader.dll")
@@ -205,11 +206,13 @@ try {
             "version.json",
             "MyTempleKnowledge.exe",
             "logo1.ico",
+            "logo.png",
             "Microsoft.Web.WebView2.Core.dll",
             "Microsoft.Web.WebView2.WinForms.dll",
             "WebView2Loader.dll",
             "public/index.html",
             "public/app.js",
+            "public/logo.png",
             "public/qqqun.webp",
             "docs/README.md"
         ) + $requiredDocEntries + @($knowledgeIndexPayloadEntry)
@@ -227,14 +230,17 @@ try {
     $installerSource = [regex]::Replace($installerSource, $versionPattern, "const string APP_VERSION = `"$version`";", 1)
     [IO.File]::WriteAllText($generatedInstallerSource, $installerSource, [System.Text.Encoding]::UTF8)
     Invoke-Compiler $cscPath @(
-        "/target:exe",
+        "/target:winexe",
         "/out:$installerOutput",
         "/resource:$payloadZip,payload.zip",
+        "/resource:$(Join-Path $packagingDir 'logo1.ico'),logo1.ico",
         "/win32icon:$(Join-Path $packagingDir 'logo1.ico')",
         "/platform:x64",
         "/nologo",
         "/reference:System.IO.Compression.dll",
         "/reference:System.IO.Compression.FileSystem.dll",
+        "/reference:System.Windows.Forms.dll",
+        "/reference:System.Drawing.dll",
         $generatedInstallerSource
     ) "Installer"
     $installerSize = [IO.File]::ReadAllBytes($installerOutput).Length

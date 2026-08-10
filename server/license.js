@@ -1,12 +1,12 @@
 import crypto from "node:crypto";
 import os from "node:os";
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 
 /**
- * 内嵌公钥（对应 keytool.js 中的私钥）
+ * 内嵌公钥（签发端私钥不随软件分发）
  * 密钥对由 RSA-2048 生成，仅软件侧持有公钥，无法伪造授权码。
  */
 const PUBLIC_KEY_PEM = `-----BEGIN PUBLIC KEY-----
@@ -51,8 +51,12 @@ function getHardwareIdentifiers() {
   // Windows 硬件信息（单次 PowerShell 调用获取全部信息）
   if (process.platform === "win32") {
     try {
-      const cmd = 'powershell -NoProfile -Command "$cpu=(Get-CimInstance Win32_Processor).ProcessorId; $disk=(Get-CimInstance Win32_DiskDrive | Select-Object -First 1).SerialNumber; $board=(Get-CimInstance Win32_BaseBoard).SerialNumber; $uuid=(Get-CimInstance Win32_ComputerSystemProduct).UUID; Write-Output \"$cpu|$disk|$board|$uuid\""';
-      const output = execSync(cmd, { timeout: 8000, encoding: "utf8" }).trim();
+      const script = '$cpu=(Get-CimInstance Win32_Processor).ProcessorId; $disk=(Get-CimInstance Win32_DiskDrive | Select-Object -First 1).SerialNumber; $board=(Get-CimInstance Win32_BaseBoard).SerialNumber; $uuid=(Get-CimInstance Win32_ComputerSystemProduct).UUID; [Console]::OutputEncoding=[Text.Encoding]::UTF8; Write-Output "$cpu|$disk|$board|$uuid"';
+      const output = execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], {
+        timeout: 8000,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }).trim();
       const [cpuId, diskSerial, boardSerial, uuid] = output.split("|");
       if (cpuId) parts.push(`cpu:${cpuId}`);
       if (diskSerial) parts.push(`disk:${diskSerial}`);
@@ -108,8 +112,8 @@ export function getMachineFingerprint() {
  * 同时交叉校验文件修改时间，防止用户删除高水位文件后倒拨。
  */
 const HIGH_WATER_FILE = path.join(
-  process.env.LOCALAPPDATA || path.join(process.env.APPDATA || "", "..", "Local"),
-  "MyTempleKnowledgeData",
+  process.env.MYTEMPLE_DATA_ROOT || process.env.DATA_DIR
+    || path.join(process.env.LOCALAPPDATA || path.join(process.env.APPDATA || "", "..", "Local"), "MyTempleKnowledgeData"),
   ".hwmark"
 );
 

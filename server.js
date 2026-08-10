@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { createHash, randomUUID } from "node:crypto";
 import { cp, readFile, writeFile, readdir, stat, mkdir, rm, rename, unlink } from "node:fs/promises";
-import { existsSync, readFileSync, watch } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, watch } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createDocumentTemplate, frontmatterSummary, normalizeFrontmatter } from "./server/frontmatter.js";
@@ -16,7 +16,25 @@ const PUBLIC_ROOT = path.join(__dirname, "public");
 const SOURCE_ROOT = process.env.MYTEMPLE_SOURCE_ROOT || path.join(__dirname, "source");
 
 const APP_DATA_DIR = path.join(process.env.LOCALAPPDATA || path.join(process.env.APPDATA, "..", "Local"), "MyTempleKnowledgeData");
-const DATA_ROOT = process.env.MYTEMPLE_DATA_ROOT || APP_DATA_DIR;
+// Launcher 旧版本使用 DATA_DIR，新版本使用 MYTEMPLE_DATA_ROOT；统一兼容，
+// 避免设置页与启动校验读取到不同目录下的 .license。
+const DATA_ROOT = process.env.MYTEMPLE_DATA_ROOT || process.env.DATA_DIR || APP_DATA_DIR;
+const LICENSE_FILENAME = ".license";
+
+function primaryLicenseFile() {
+  return path.join(DATA_ROOT, LICENSE_FILENAME);
+}
+
+function legacyLicenseFile() {
+  return path.join(APP_DATA_DIR, LICENSE_FILENAME);
+}
+
+function existingLicenseFile() {
+  const primary = primaryLicenseFile();
+  if (existsSync(primary)) return primary;
+  const legacy = legacyLicenseFile();
+  return existsSync(legacy) ? legacy : primary;
+}
 const WORKSPACE_CONFIG = path.join(DATA_ROOT, "workspaces.json");
 const PORT = Number(process.env.PORT || 4173);
 const HOST = process.env.HOST || "127.0.0.1";
@@ -86,6 +104,7 @@ const mimeTypes = {
 };
 
 function send(res, status, body, type = "application/json; charset=utf-8", headers = {}) {
+  if (res.writableEnded || res.destroyed) return;
   const buf = typeof body === "string" ? Buffer.from(body, "utf8") : body;
   res.writeHead(status, { "Content-Type": type, "Cache-Control": "no-store", "Content-Length": buf.length, ...headers });
   res.end(buf);
@@ -1019,6 +1038,35 @@ function buildKnowledgeIndex(data) {
   };
 }
 
+async function writeKnowledgeIndexLegacy(data) {
+  const indexPath = path.join(DOCS_ROOT, KNOWLEDGE_INDEX_FILENAME);
+  await mkdir(DOCS_ROOT, { recursive: true });
+  const index = buildKnowledgeIndex(data);
+  const tempPath = path.join(DOCS_ROOT, `.${KNOWLEDGE_INDEX_FILENAME}.${process.pid}.${randomUUID()}.tmp`);
+  try {
+    await writeFile(tempPath, `${JSON.stringify(index, null, 2)}\n`, "utf8");
+    // Keep index writing independent from document-save request state.
+    const ref = "";
+    const payload = {};
+    const res = null;
+    const existing = cache.documentCache.get(ref) || cache.files.find((file) => file.path === ref);
+    const baseHash = String(payload.baseHash || "").trim();
+    if (baseHash && existing?.contentSha256 && baseHash !== existing.contentSha256) {
+      return json(res, 409, { error: "文档已被其他变更更新，请重新打开或刷新后再保存", contentSha256: existing.contentSha256 });
+    }
+    try {
+      await rename(tempPath, indexPath);
+    } catch (error) {
+      if (!["EEXIST", "EPERM", "ENOTEMPTY"].includes(error.code)) throw error;
+      await rm(indexPath, { force: true });
+      await rename(tempPath, indexPath);
+    }
+  } finally {
+    await rm(tempPath, { force: true }).catch(() => {});
+  }
+  return { indexPath, index };
+}
+
 async function writeKnowledgeIndex(data) {
   const indexPath = path.join(DOCS_ROOT, KNOWLEDGE_INDEX_FILENAME);
   await mkdir(DOCS_ROOT, { recursive: true });
@@ -1026,11 +1074,6 @@ async function writeKnowledgeIndex(data) {
   const tempPath = path.join(DOCS_ROOT, `.${KNOWLEDGE_INDEX_FILENAME}.${process.pid}.${randomUUID()}.tmp`);
   try {
     await writeFile(tempPath, `${JSON.stringify(index, null, 2)}\n`, "utf8");
-    const existing = cache.documentCache.get(ref) || cache.files.find((file) => file.path === ref);
-    const baseHash = String(payload.baseHash || "").trim();
-    if (baseHash && existing?.contentSha256 && baseHash !== existing.contentSha256) {
-      return json(res, 409, { error: "文档已被其他变更更新，请重新打开或刷新后再保存", contentSha256: existing.contentSha256 });
-    }
     try {
       await rename(tempPath, indexPath);
     } catch (error) {
@@ -1575,15 +1618,26 @@ async function handleApi(req, res, url) {
     const result = await verifyLicense(licenseKey);
     if (result.valid) {
       // 保存授权码到本地
-      const licenseFile = path.join(DATA_ROOT, ".license");
+      const licenseFile = primaryLicenseFile();
       await mkdir(path.dirname(licenseFile), { recursive: true }).catch(() => {});
       await writeFile(licenseFile, licenseKey, "utf8").catch(() => {});
     }
     return json(res, 200, result);
   }
 
+  if (url.pathname === "/api/license/deactivate" && req.method === "POST") {
+    for (const licenseFile of new Set([primaryLicenseFile(), legacyLicenseFile()])) {
+      try {
+        await unlink(licenseFile);
+      } catch (err) {
+        if (err.code !== "ENOENT") throw err;
+      }
+    }
+    return json(res, 200, { activated: false, machineCode: getMachineCode() });
+  }
+
   if (url.pathname === "/api/license/check" && req.method === "GET") {
-    const licenseFile = path.join(DATA_ROOT, ".license");
+    const licenseFile = existingLicenseFile();
     if (!existsSync(licenseFile)) {
       return json(res, 200, { activated: false, machineCode: getMachineCode() });
     }
@@ -1593,6 +1647,31 @@ async function handleApi(req, res, url) {
       return json(res, 200, { activated: result.valid, ...result });
     } catch (err) {
       return json(res, 200, { activated: false, error: err.message, machineCode: getMachineCode() });
+    }
+  }
+
+  // 所有文档、工作区、AI 和文件操作都必须先通过授权校验。
+  // 保留授权检查、激活、解除授权和版本查询，确保未授权用户仍能完成激活和更新。
+  const licenseFreePaths = new Set([
+    "/api/license/status",
+    "/api/license/activate",
+    "/api/license/deactivate",
+    "/api/license/check",
+    "/api/version",
+  ]);
+  if (url.pathname.startsWith("/api/") && !licenseFreePaths.has(url.pathname)) {
+    const licenseFile = existingLicenseFile();
+    if (!existsSync(licenseFile)) {
+      return json(res, 403, { code: "LICENSE_REQUIRED", error: "软件未授权，请先完成授权" });
+    }
+    try {
+      const licenseKey = await readFile(licenseFile, "utf8");
+      const result = await verifyLicense(licenseKey);
+      if (!result.valid) {
+        return json(res, 403, { code: "LICENSE_REQUIRED", error: result.error || "授权已失效，请重新授权" });
+      }
+    } catch (err) {
+      return json(res, 403, { code: "LICENSE_REQUIRED", error: "授权校验失败：" + err.message });
     }
   }
 
@@ -1836,6 +1915,16 @@ async function handleApi(req, res, url) {
     }
   }
 
+  if (url.pathname === "/api/update/check" && req.method === "POST") {
+    try {
+      await mkdir(DATA_ROOT, { recursive: true });
+      writeFileSync(path.join(DATA_ROOT, "update-check-request.txt"), new Date().toISOString(), "utf8");
+      return json(res, 200, { ok: true, message: "已通知桌面启动器执行强制升级检查" });
+    } catch (e) {
+      return json(res, 500, { error: e.message || "无法请求升级检查" });
+    }
+  }
+
   const data = await refreshCache(url.searchParams.get("refresh") === "1");
   const currentKnowledgeVersion = refreshKnowledgeVersion(data);
 
@@ -1845,9 +1934,11 @@ async function handleApi(req, res, url) {
     return json(res, 200, await ragService.statusWithStorage());
   }
   if (url.pathname === "/api/ai/test" && req.method === "POST") {
+    let providerForError = "ollama";
     try {
       const payload = await readJson(req);
       const useDeepseek = payload.chatProvider === "deepseek";
+      providerForError = useDeepseek ? "deepseek" : "ollama";
       const chatOptions = {
         provider: useDeepseek ? "deepseek" : "ollama",
         apiKey: payload.deepseekApiKey,
@@ -1856,7 +1947,7 @@ async function handleApi(req, res, url) {
       };
       const result = await ragService.configuredModelCompatibility(payload.baseUrl, payload.embeddingModel, payload.chatModel, chatOptions);
       let embeddingCheck = { ok: true, skipped: true, model: "" };
-      if (String(payload.embeddingModel || "").trim()) {
+      if (String(payload.embeddingModel || "").trim() && !useDeepseek) {
         if (!result.compatibility.embedding.installed) {
           embeddingCheck = {
             ok: false,
@@ -1891,7 +1982,7 @@ async function handleApi(req, res, url) {
       }
       return json(res, 200, { ...result, embeddingCheck, chatCheck });
     } catch (error) {
-      return json(res, 503, { error: `无法连接本地 AI 服务：${error.message}` });
+      return json(res, 503, { error: providerForError === "deepseek" ? `无法连接 DeepSeek 服务：${error.message}` : `无法连接本地 AI 服务：${error.message}` });
     }
   }
   if (url.pathname === "/api/ai/config" && req.method === "POST") {
@@ -1905,10 +1996,10 @@ async function handleApi(req, res, url) {
         deepseekBaseUrl: payload.deepseekBaseUrl,
       };
       const compatibility = await ragService.configuredModelCompatibility(payload.baseUrl, payload.embeddingModel, payload.chatModel, chatOptions);
-      if (payload.embeddingModel && !compatibility.compatibility.embedding.installed) {
+      if (payload.embeddingModel && !useDeepseek && !compatibility.compatibility.embedding.installed) {
         throw new Error(`本机未安装向量模型“${payload.embeddingModel}”，请先执行 ollama pull ${payload.embeddingModel}`);
       }
-      if (payload.embeddingModel && !compatibility.compatibility.embedding.capable) {
+      if (payload.embeddingModel && !useDeepseek && !compatibility.compatibility.embedding.capable) {
         throw new Error(`模型“${payload.embeddingModel}”不支持 Embeddings，请选择 nomic-embed-text 或其他专用向量模型`);
       }
       if (useDeepseek) {
@@ -1921,7 +2012,7 @@ async function handleApi(req, res, url) {
           throw new Error(`本机未安装对话模型“${payload.chatModel}”，请先执行 ollama pull ${payload.chatModel}`);
         }
       }
-      if (payload.embeddingModel) {
+      if (payload.embeddingModel && !useDeepseek) {
         await ragService.testEmbeddingModel(payload.baseUrl, payload.embeddingModel);
       }
       const result = await ragService.updateSettings(payload);
@@ -1944,7 +2035,9 @@ async function handleApi(req, res, url) {
   if (url.pathname === "/api/ai/query" && req.method === "POST") {
     const payload = await readJson(req);
     await ragService.ensure(data.files, currentKnowledgeVersion);
-    const scopedFile = payload.scope === "current" ? data.files.find((file) => file.path === payload.path) : null;
+    const wantsCurrentScope = payload.scope === "current";
+    const scopedFile = wantsCurrentScope ? data.files.find((file) => file.path === payload.path) : null;
+    if (wantsCurrentScope && !scopedFile) return json(res, 404, { error: "当前文档不存在，无法执行限定范围检索" });
     const policyWorkspaces = scopedFile
       ? data.workspaces.filter((workspace) => workspace.id === scopedFile.workspaceId)
       : data.workspaces.filter((workspace) => workspace.visible);
@@ -1963,7 +2056,7 @@ async function handleApi(req, res, url) {
   if (url.pathname === "/api/ai/transform" && req.method === "POST") {
     const payload = await readJson(req);
     try {
-      const result = await ragService.transformSelection(payload.text, payload.mode);
+      const result = await ragService.transformSelection(payload.text, payload.mode, { instruction: payload.instruction, context: payload.context });
       return json(res, 200, result);
     } catch (error) {
       return json(res, 400, { error: error.message });
@@ -2532,16 +2625,19 @@ async function serveStatic(res, pathname) {
 }
 
 const REQUEST_TIMEOUT = 30 * 1000;
+const AI_REQUEST_TIMEOUT = 190 * 1000;
 
 createServer(async (req, res) => {
-  const timeoutId = setTimeout(() => {
-    if (!res.writableEnded) {
-      json(res, 504, { error: "Request timeout" });
-    }
-  }, REQUEST_TIMEOUT);
+  let timeoutId = 0;
 
   try {
     const url = new URL(req.url || "/", `http://${req.headers.host}`);
+    const timeoutMs = url.pathname.startsWith("/api/ai/") ? AI_REQUEST_TIMEOUT : REQUEST_TIMEOUT;
+    timeoutId = setTimeout(() => {
+      if (!res.writableEnded) {
+        json(res, 504, { error: "Request timeout" });
+      }
+    }, timeoutMs);
     if (url.pathname.startsWith("/api/")) return await handleApi(req, res, url);
     return await serveStatic(res, url.pathname);
   } catch (error) {
@@ -2549,7 +2645,7 @@ createServer(async (req, res) => {
       json(res, error.status || 500, { error: error.message || "Internal server error" });
     }
   } finally {
-    clearTimeout(timeoutId);
+    if (timeoutId) clearTimeout(timeoutId);
   }
 }).listen(PORT, HOST, () => {
   console.log(`Markdown knowledge app running at http://${HOST}:${PORT}`);

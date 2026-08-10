@@ -42,6 +42,8 @@
   --md-strong: #1e1e1e;
   --md-emphasis: #3c3c3c;
   --md-inline-code: #3c3c3c;
+  --md-table-accent: #e9eef2;
+  --md-tag: #059669;
   --md-search-bg: #fde68a;
   --md-search-text: #1d2430;
   /* syntax highlight tokens - light theme */
@@ -228,6 +230,75 @@ body[data-theme="image"] {
   background-attachment: fixed;
 }
 
+/* 卦象罗盘主题：太极阴阳的东方宇宙观视觉语言。
+   墨色为阴（背景）、留白为阳（文本），朱砂点睛（强调），金线分野（边框），
+   玉青与赭石取自传统矿物颜料，营造道法自然的沉浸编辑氛围。 */
+body[data-theme="bagua"] {
+  --bg: #14110d;
+  --panel: rgba(28, 24, 18, 0.92);
+  --panel-glass: rgba(28, 24, 18, 0.84);
+  --line: rgba(197, 162, 92, 0.22);
+  --text: #e8e2d0;
+  --muted: #9c8f72;
+  --soft: #1f1a13;
+  --accent: #c9302c;
+  --accent-strong: #e15048;
+  --warn: #d4a24c;
+  --code-bg: #0e0c09;
+  --code-text: #e8e2d0;
+  --control-bg: rgba(40, 33, 22, 0.7);
+  --hover-bg: rgba(201, 48, 44, 0.10);
+  --active-bg: rgba(201, 48, 44, 0.16);
+  --brand-bg: #0a0907;
+  --inline-code-bg: rgba(197, 162, 92, 0.12);
+  --inline-code-text: #d4a24c;
+  --graph-bg: #100e0a;
+  --graph-grid: rgba(197, 162, 92, 0.06);
+  --graph-text: #e8e2d0;
+  --graph-muted: #7a6f56;
+  --graph-edge: rgba(197, 162, 92, 0.30);
+  --graph-link: #c9302c;
+  --graph-doc: #1f1a13;
+  --graph-doc-border: #8a6d3b;
+  --graph-tag: #d4a24c;
+  --graph-keyword: #6b8e9e;
+  --graph-missing: #c4392f;
+  --graph-active: #c9302c;
+  --graph-label-bg: rgba(20, 17, 13, 0.90);
+  --md-heading: #f2ecd9;
+  --md-link: #c9302c;
+  --md-strong: #fbf6e8;
+  --md-emphasis: #e8e2d0;
+  --md-inline-code: #d4a24c;
+  --md-search-bg: rgba(212, 162, 76, 0.24);
+  --md-search-text: #fbf6e8;
+  --surface-0: #100e0a;
+  --surface-1: #16120c;
+  --surface-2: rgba(197, 162, 92, 0.08);
+  --surface-3: rgba(197, 162, 92, 0.14);
+  --hairline: rgba(197, 162, 92, 0.16);
+  --accent-soft: color-mix(in srgb, var(--accent) 22%, transparent);
+  --accent-wash: color-mix(in srgb, var(--accent) 12%, transparent);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 14px 42px rgba(0, 0, 0, 0.5);
+  /* 朱砂赭石矿物颜料语法高亮 */
+  --syn-keyword: #c9302c;
+  --syn-string: #7a9e6e;
+  --syn-comment: #6e6450;
+  --syn-number: #d4a24c;
+  --syn-function: #b58a4c;
+  --syn-type: #6b8e9e;
+  --syn-builtin: #8e6b4c;
+  --syn-variable: #e8e2d0;
+  --syn-operator: #9c8f72;
+  --syn-tag: #c9302c;
+  --syn-attr: #d4a24c;
+  background-image:
+    radial-gradient(ellipse 90% 60% at 50% 0%, rgba(201, 48, 44, 0.06), transparent 70%),
+    radial-gradient(ellipse 70% 50% at 50% 100%, rgba(197, 162, 92, 0.05), transparent 70%);
+  background-attachment: fixed;
+}
+
 * { box-sizing: border-box; }
 
 *::-webkit-scrollbar {
@@ -268,89 +339,67 @@ body {
   position: fixed;
   inset: 0;
   z-index: 99999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #000;
+  background: #0f172a;
   transition: opacity 0.4s ease, visibility 0.4s ease;
+  overflow: hidden;
 }
 .app-splash.hidden {
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
+  display: none;
 }
-.splash-video {
+.splash-bg {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
   z-index: 1;
+  user-select: none;
+  -webkit-user-drag: none;
 }
-.splash-loading {
+.splash-progress-wrap {
   position: absolute;
-  inset: 0;
+  left: 50%;
+  top: 75.2%;
+  transform: translate(-50%, -50%);
   z-index: 2;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--bg, #fafafa);
-}
-.splash-loading.hidden {
-  display: none;
-}
-.splash-content {
-  display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 24px;
-  min-width: 320px;
-}
-.splash-brand {
-  width: 64px;
-  height: 64px;
-  border-radius: 16px;
-  background: linear-gradient(135deg, var(--accent, #10b981), color-mix(in srgb, var(--accent, #10b981) 60%, #fff));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 8px 24px color-mix(in srgb, var(--accent, #10b981) 25%, transparent);
-}
-.splash-logo {
-  width: 36px;
-  height: 36px;
-  object-fit: contain;
-}
-.splash-title {
-  font-size: 20px;
-  font-weight: 600;
-  color: var(--text, #3c3c3c);
-  letter-spacing: 0.05em;
-}
-.splash-progress {
-  width: 320px;
-  display: flex;
-  flex-direction: column;
   gap: 8px;
+  width: min(31vw, 620px);
+  min-width: 360px;
 }
 .splash-progress-bar {
   width: 100%;
-  height: 4px;
-  background: var(--line, rgba(200,200,200,0.3));
-  border-radius: 2px;
+  height: 18px;
+  padding: 4px;
+  box-sizing: border-box;
+  background: rgba(9, 12, 13, 0.48);
+  border: 1px solid rgba(248, 207, 132, 0.82);
+  border-radius: 999px;
   overflow: hidden;
+  box-shadow: 0 0 14px rgba(255, 200, 80, 0.14), inset 0 0 12px rgba(0, 0, 0, 0.58);
 }
 .splash-progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, var(--accent, #10b981), color-mix(in srgb, var(--accent, #10b981) 70%, #fff));
-  border-radius: 2px;
+  background: linear-gradient(90deg, #d89a4f, #ffd18a 58%, #9d7441);
+  background-size: 200% 100%;
+  border-radius: 999px;
   transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 0 9px rgba(245, 190, 108, 0.42);
 }
 .splash-progress-info {
   display: flex;
   justify-content: space-between;
+  width: 100%;
   font-size: 12px;
-  color: var(--muted, #6a6a6a);
+  color: rgba(255, 245, 215, 0.85);
+  letter-spacing: 0.04em;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  font-family: "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
 }
 
 .welcome-overlay {
@@ -1411,6 +1460,11 @@ body.resizing-sidebar {
   text-overflow: ellipsis;
 }
 
+.search-more {
+  cursor: default;
+  opacity: 0.82;
+}
+
 .workspace {
   min-width: 0;
   min-height: 0;
@@ -1728,10 +1782,13 @@ body.resizing-sidebar {
 
 .markdown-body {
   width: min(920px, calc(100% - 42px));
+  min-width: 0;
   margin: 0 auto;
   padding: 36px 0 80px;
   line-height: 1.72;
   font-size: var(--doc-font-size);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .code-block {
@@ -1820,6 +1877,65 @@ body.resizing-sidebar {
   border-left: 3px solid var(--accent);
   background: var(--soft);
   color: var(--text);
+}
+
+/* Obsidian 兼容：callout / 脚注 / 标签 / 数学占位 */
+.markdown-body .callout,
+#preview .callout {
+  margin: 16px 0;
+  padding: 10px 16px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel) 94%, var(--accent) 6%);
+}
+.markdown-body .callout-title,
+#preview .callout-title {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.95em;
+}
+.markdown-body .callout-body,
+#preview .callout-body { font-size: 0.95em; line-height: 1.7; }
+.callout-note { border-left-color: #4f8cf7; background: color-mix(in srgb, var(--panel) 94%, #4f8cf7 6%); }
+.callout-info { border-left-color: #4f8cf7; }
+.callout-tip { border-left-color: #10b981; background: color-mix(in srgb, var(--panel) 94%, #10b981 6%); }
+.callout-success { border-left-color: #10b981; }
+.callout-warning { border-left-color: #f59e0b; background: color-mix(in srgb, var(--panel) 94%, #f59e0b 6%); }
+.callout-danger, .callout-failure, .callout-bug { border-left-color: #ef4444; background: color-mix(in srgb, var(--panel) 94%, #ef4444 6%); }
+.callout-question { border-left-color: #8b5cf6; }
+.callout-quote, .callout-abstract { border-left-color: var(--muted); }
+.callout-example { border-left-color: #06b6d4; }
+.callout-todo, .callout-important, .callout-caution { border-left-color: #f59e0b; }
+
+.markdown-body .footnotes,
+#preview .footnotes {
+  margin-top: 28px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  font-size: 0.88em;
+  color: var(--muted);
+}
+.markdown-body .footnote-ref a,
+#preview .footnote-ref a { color: var(--accent); text-decoration: none; }
+
+.markdown-body .md-tag,
+#preview .md-tag {
+  display: inline-block;
+  padding: 0 6px;
+  margin: 0 2px;
+  border-radius: 10px;
+  font-size: 0.82em;
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+  color: var(--md-tag, var(--accent));
+}
+
+.markdown-body code.math,
+#preview code.math {
+  background: color-mix(in srgb, var(--accent) 10%, var(--code-bg));
+  color: var(--accent);
+  font-family: "Cambria Math", "Times New Roman", serif;
+  font-style: italic;
 }
 
 .markdown-body pre {
@@ -1919,6 +2035,8 @@ body.resizing-sidebar {
 .markdown-body table {
   width: 100%;
   max-width: 100%;
+  min-width: 620px;
+  table-layout: fixed;
   border-collapse: collapse;
   margin: 0;
   display: block;
@@ -1935,12 +2053,41 @@ body.resizing-sidebar {
   border-radius: 8px;
 }
 
-.markdown-body thead {
-  background: color-mix(in srgb, var(--control-bg) 86%, var(--accent) 14%);
+/* 编辑模式预览中表格行/列扩展工具栏 */
+.md-table-tools {
+  display: flex;
+  gap: 6px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel) 94%, var(--accent) 6%);
+}
+.md-table-tool {
+  border: 1px solid var(--line);
+  background: var(--control-bg);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 2px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.md-table-tool:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 16%, var(--control-bg));
+  border-color: var(--accent);
+}
+.md-table-tool:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
-.markdown-body tbody tr:nth-child(even) {
-  background: color-mix(in srgb, var(--panel) 92%, var(--accent) 8%);
+.markdown-body thead {
+  background: var(--md-table-accent);
+}
+
+.markdown-body tbody tr,
+.markdown-body tbody tr:nth-child(even),
+.markdown-body tbody tr:nth-child(odd) {
+  background: color-mix(in srgb, var(--panel) 97%, var(--md-table-accent) 3%);
 }
 
 .markdown-body img {
@@ -1968,6 +2115,10 @@ body.resizing-sidebar {
   border-bottom: 1px solid var(--line);
   padding: 8px 10px;
   text-align: left;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  vertical-align: top;
 }
 
 .markdown-body tr > :last-child {
@@ -2316,8 +2467,11 @@ body.resizing-sidebar {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   contain: layout paint style;
-  content-visibility: auto;
-  will-change: contents;
+  /* 编辑模式预览全量重渲染时用淡入掩盖 DOM 重建瞬间，降低闪烁 */
+  transition: opacity .12s ease;
+  /* 源码行号同步依赖预览块的真实 offsetTop，不能让浏览器跳过远端块布局。 */
+  content-visibility: visible;
+  will-change: scroll-position;
 }
 
 .image-delete-wrapper {
@@ -3204,6 +3358,43 @@ body.resizing-sidebar {
   padding: 6px;
 }
 
+.markdown-color-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+  margin-top: 10px;
+}
+
+.markdown-color-grid .setting-row {
+  min-height: 34px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel) 88%, var(--soft));
+}
+
+.markdown-color-grid input[type="color"] {
+  width: 34px;
+  height: 26px;
+  padding: 2px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.license-email-hint {
+  margin: 0 0 10px;
+  padding: 9px 11px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 7%, var(--panel));
+  color: var(--text);
+  font-size: 12px;
+}
+
+@media (max-width: 560px) {
+  .markdown-color-grid { grid-template-columns: 1fr; }
+}
+
 .modal-actions {
   display: flex;
   justify-content: flex-end;
@@ -3727,7 +3918,8 @@ body.resizing-sidebar {
   }
 
   .app-shell.sidebar-collapsed {
-    grid-template-rows: 0 100vh;
+    grid-template-columns: 1fr;
+    grid-template-rows: 100vh;
   }
 
   .sidebar-resizer {
@@ -3742,6 +3934,13 @@ body.resizing-sidebar {
 
   .workspace {
     height: 64vh;
+  }
+
+  .app-shell.sidebar-collapsed .workspace {
+    grid-column: 1;
+    grid-row: 1;
+    height: 100vh;
+    min-height: 0;
   }
 
   .topbar {
@@ -4350,6 +4549,18 @@ button.primary.full:hover {
   .app-shell {
     grid-template-rows: 32vh 68vh;
   }
+
+  .app-shell.sidebar-collapsed {
+    grid-template-columns: 1fr;
+    grid-template-rows: 100vh;
+  }
+
+  .app-shell.sidebar-collapsed .workspace {
+    grid-column: 1;
+    grid-row: 1;
+    height: 100vh;
+  }
+
   .workspace {
     height: 68vh;
   }
@@ -5333,6 +5544,399 @@ body[data-theme="image"] .editor-splitter::before {
   background: transparent;
 }
 
+/* A narrow window must keep the editor and preview readable instead of
+   leaving them in a five-column grid wider than the viewport. */
+@media (max-width: 860px) {
+  .workspace,
+  .reader-panel,
+  .editor-panel,
+  .graph-panel {
+    min-width: 0;
+  }
+
+  .editor-body,
+  .editor-body.outline-hidden,
+  .editor-body.preview-hidden,
+  .editor-body.outline-hidden.preview-hidden {
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) !important;
+  }
+
+  .editor-body > #editorOutline,
+  .editor-body > #outlineSplitter,
+  .editor-body > #editor,
+  .editor-body > #previewSplitter,
+  .editor-body > #preview {
+    grid-column: 1 !important;
+  }
+
+  .editor-body > #editorOutline { grid-row: 1; }
+  .editor-body > #outlineSplitter { display: none; }
+  .editor-body > #editor { grid-row: 1; border-right: 0; border-bottom: 1px solid var(--line); }
+  .editor-body > #previewSplitter { display: none; }
+  .editor-body > #preview { grid-row: 2; }
+  .editor-body.outline-hidden #editor { grid-row: 1; }
+  .editor-body.preview-hidden #editor { grid-row: 1 / span 2; }
+  .editor-body.preview-hidden #preview { display: none !important; }
+}
+
+/* Taiji Compass v2: quiet material theme based on the user's Taiji/Bagua
+   concept. Text surfaces stay readable; philosophy appears in boundaries,
+   motion cues, syntax colors, and low-opacity compass details. */
+body[data-theme="bagua"] {
+  --bg: #1a1614;
+  --panel: rgba(44, 35, 30, 0.88);
+  --panel-glass: rgba(44, 35, 30, 0.76);
+  --line: rgba(196, 188, 176, 0.45);
+  --text: #efe4d2;
+  --muted: #c8bca8;
+  --soft: rgba(214, 207, 196, 0.18);
+  --accent: #c1793b;
+  --accent-strong: #d7b77b;
+  --warn: #c95a5a;
+  --code-bg: rgba(44, 35, 30, 0.88);
+  --code-text: #eee4cf;
+  --control-bg: rgba(245, 240, 232, 0.12);
+  --hover-bg: rgba(193, 121, 59, 0.14);
+  --active-bg: rgba(193, 121, 59, 0.22);
+  --brand-bg: #2c231e;
+  --inline-code-bg: rgba(44, 35, 30, 0.09);
+  --inline-code-text: #5a4630;
+  --surface-0: rgba(26, 22, 20, 0.72);
+  --surface-1: rgba(44, 35, 30, 0.70);
+  --surface-2: rgba(245, 240, 232, 0.12);
+  --surface-3: rgba(245, 240, 232, 0.20);
+  --hairline: rgba(196, 188, 176, 0.38);
+  --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.28);
+  --shadow-md: 0 20px 54px rgba(0, 0, 0, 0.42);
+  --md-heading: #3c342e;
+  --md-link: #b85c5c;
+  --md-strong: #2c231e;
+  --md-emphasis: #5d4b37;
+  --md-inline-code: #4c3927;
+  --md-search-bg: rgba(193, 121, 59, 0.26);
+  --md-search-text: #2c231e;
+  --syn-keyword: #4a6fa5;
+  --syn-string: #7b8d6e;
+  --syn-function: #c1793b;
+  --syn-variable: #8b7e74;
+  --syn-number: #5a7a9a;
+  --syn-operator: #b85c5c;
+  --syn-comment: #9e928b;
+  --syn-type: #6b8f71;
+  --syn-builtin: #6b8f71;
+  --syn-tag: #4a6fa5;
+  --syn-attr: #c1793b;
+  background:
+    radial-gradient(circle at 18% 16%, rgba(245, 240, 232, 0.12), transparent 11rem),
+    radial-gradient(circle at 74% 76%, rgba(44, 35, 30, 0.12), transparent 13rem),
+    linear-gradient(135deg, #211a16 0%, #f5f0e8 47%, #ede6dc 100%);
+}
+
+body[data-theme="bagua"] .app-shell {
+  background:
+    linear-gradient(90deg, rgba(26, 22, 20, 0.94) 0, rgba(44, 35, 30, 0.84) var(--sidebar-width, 360px), rgba(245, 240, 232, 0.88) var(--sidebar-width, 360px), rgba(245, 240, 232, 0.94) 100%);
+}
+
+body[data-theme="bagua"] .app-shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 7rem 7rem, rgba(245, 240, 232, 0.06), transparent 4.2rem),
+    radial-gradient(circle at calc(var(--sidebar-width, 360px) + 78%) 86%, rgba(44, 35, 30, 0.035), transparent 7rem);
+  z-index: 0;
+}
+
+body[data-theme="bagua"] .sidebar,
+body[data-theme="bagua"] .sidebar-resizer,
+body[data-theme="bagua"] .workspace {
+  position: relative;
+  z-index: 1;
+}
+
+body[data-theme="bagua"] .sidebar {
+  background:
+    linear-gradient(rgba(20, 17, 13, 0.34), rgba(20, 17, 13, 0.42)),
+    url("/themes/taiji-compass-v2/sidebar.webp") center top / cover no-repeat;
+  border-right: 1px solid rgba(196, 188, 176, 0.36);
+  box-shadow: inset -1px 0 0 rgba(245, 240, 232, 0.08), 18px 0 44px rgba(44, 35, 30, 0.20);
+  color: #efe4d2;
+}
+
+body[data-theme="bagua"] .brand,
+body[data-theme="bagua"] .workspace-summary {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.62);
+}
+
+body[data-theme="bagua"] .brand-mark {
+  background:
+    radial-gradient(circle at 35% 35%, rgba(245, 240, 232, 0.22), transparent 1.35rem),
+    rgba(245, 240, 232, 0.08);
+  border: 1px solid rgba(196, 188, 176, 0.34);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28), inset 0 0 18px rgba(214, 207, 196, 0.08);
+}
+
+body[data-theme="bagua"] .search-box,
+body[data-theme="bagua"] .workspace-summary,
+body[data-theme="bagua"] .tree-workspace,
+body[data-theme="bagua"] .search-results {
+  background: rgba(245, 240, 232, 0.075);
+  border-color: rgba(196, 188, 176, 0.24);
+  box-shadow: inset 0 0 0 1px rgba(245, 240, 232, 0.045);
+}
+
+body[data-theme="bagua"] .sidebar .search-box input {
+  background: transparent;
+  border-color: transparent;
+  color: #f5f0e8;
+  box-shadow: none;
+}
+
+body[data-theme="bagua"] .sidebar .search-box input::placeholder {
+  color: rgba(245, 240, 232, 0.58);
+}
+
+body[data-theme="bagua"] .folder-title,
+body[data-theme="bagua"] .file-item,
+body[data-theme="bagua"] .search-item {
+  color: #efe4d2;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.58);
+}
+
+body[data-theme="bagua"] .file-item.active,
+body[data-theme="bagua"] .folder-title.selected,
+body[data-theme="bagua"] .tree-workspace.active-workspace {
+  background: linear-gradient(90deg, rgba(193, 121, 59, 0.25), rgba(245, 240, 232, 0.09));
+  border-color: rgba(215, 183, 123, 0.52);
+  color: #fff0cc;
+}
+
+body[data-theme="bagua"] .sidebar-resizer {
+  background:
+    radial-gradient(circle at 50% 42%, rgba(245, 240, 232, 0.50) 0 4px, transparent 5px),
+    radial-gradient(circle at 50% 57%, rgba(44, 35, 30, 0.50) 0 4px, transparent 5px),
+    linear-gradient(180deg, transparent 0, rgba(196, 188, 176, 0.48) 18%, rgba(245, 240, 232, 0.24) 50%, rgba(196, 188, 176, 0.48) 82%, transparent 100%);
+  border-right-color: rgba(196, 188, 176, 0.42);
+}
+
+body[data-theme="bagua"] .topbar {
+  background:
+    linear-gradient(rgba(26, 22, 20, 0.70), rgba(26, 22, 20, 0.62)),
+    url("/themes/taiji-compass-v2/topbar.webp") center / cover no-repeat;
+  border-bottom-color: rgba(196, 188, 176, 0.34);
+  box-shadow: 0 1px 0 rgba(245, 240, 232, 0.07), 0 10px 28px rgba(44, 35, 30, 0.20);
+}
+
+body[data-theme="bagua"] .menu-item,
+body[data-theme="bagua"] .toolbar button,
+body[data-theme="bagua"] .editor-toolbar button,
+body[data-theme="bagua"] .editor-toolbar select,
+body[data-theme="bagua"] .editor-toolbar label,
+body[data-theme="bagua"] .graph-controls button,
+body[data-theme="bagua"] .graph-controls select,
+body[data-theme="bagua"] button {
+  background: linear-gradient(180deg, rgba(245, 240, 232, 0.12), rgba(245, 240, 232, 0.055));
+  border-color: rgba(196, 188, 176, 0.31);
+  color: #efe4d2;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.46);
+}
+
+body[data-theme="bagua"] button:hover,
+body[data-theme="bagua"] button.active,
+body[data-theme="bagua"] .menu-item:hover,
+body[data-theme="bagua"] .menu-item.active {
+  border-color: rgba(215, 183, 123, 0.66);
+  color: #fff0cc;
+  box-shadow: inset 0 0 18px rgba(193, 121, 59, 0.14), 0 0 0 2px rgba(193, 121, 59, 0.08);
+}
+
+body[data-theme="bagua"] .reader-panel {
+  background:
+    linear-gradient(90deg, rgba(26, 22, 20, 0.12), rgba(245, 240, 232, 0.80)),
+    url("/themes/taiji-compass-v2/paper.webp") center / cover no-repeat;
+}
+
+body[data-theme="bagua"] .reader-outline,
+body[data-theme="bagua"] .editor-outline {
+  background:
+    linear-gradient(rgba(245, 240, 232, 0.86), rgba(245, 240, 232, 0.91)),
+    url("/themes/taiji-compass-v2/panel.webp") center / cover no-repeat;
+  border-color: rgba(196, 188, 176, 0.38);
+  color: #4b4037;
+  box-shadow: inset 0 0 0 1px rgba(255, 250, 235, 0.34);
+}
+
+body[data-theme="bagua"] .reader-outline button {
+  background: rgba(245, 240, 232, 0.42);
+  border-color: rgba(196, 188, 176, 0.30);
+  color: #5d4b37;
+  text-shadow: none;
+  opacity: 1;
+}
+
+body[data-theme="bagua"] .reader-outline button:hover,
+body[data-theme="bagua"] .reader-outline button.active,
+body[data-theme="bagua"] .editor-outline button:hover,
+body[data-theme="bagua"] .editor-outline button.active {
+  background: rgba(193, 121, 59, 0.15);
+  border-color: rgba(193, 121, 59, 0.36);
+  color: #2c231e;
+  text-shadow: none;
+}
+
+body[data-theme="bagua"] .editor-outline button {
+  background: rgba(245, 240, 232, 0.42);
+  border-color: rgba(196, 188, 176, 0.30);
+  color: #5d4b37;
+  text-shadow: none;
+  opacity: 1;
+}
+
+body[data-theme="bagua"] .reader-panel > .markdown-body {
+  background:
+    linear-gradient(rgba(245, 240, 232, 0.90), rgba(245, 240, 232, 0.94)),
+    url("/themes/taiji-compass-v2/paper.webp") center top / cover no-repeat;
+  color: #3c342e;
+  border-left: 1px solid rgba(196, 188, 176, 0.34);
+  border-right: 1px solid rgba(196, 188, 176, 0.34);
+  box-shadow: inset 0 0 0 1px rgba(214, 207, 196, 0.24);
+}
+
+body[data-theme="bagua"] .markdown-body {
+  color: #3c342e;
+  text-shadow: 0 1px 1px rgba(255, 250, 235, 0.42);
+}
+
+body[data-theme="bagua"] .markdown-body h1,
+body[data-theme="bagua"] .markdown-body h2,
+body[data-theme="bagua"] .markdown-body h3,
+body[data-theme="bagua"] .markdown-body strong {
+  color: #2c231e;
+}
+
+body[data-theme="bagua"] .markdown-body blockquote {
+  background: rgba(193, 121, 59, 0.08);
+  border-left-color: rgba(193, 121, 59, 0.72);
+  color: #5d4b37;
+  text-shadow: 0 1px 1px rgba(255, 250, 235, 0.32);
+}
+
+body[data-theme="bagua"] .markdown-body blockquote p,
+body[data-theme="bagua"] #preview blockquote p {
+  color: #5d4b37;
+}
+
+body[data-theme="bagua"] .editor-panel {
+  background:
+    linear-gradient(90deg, rgba(245, 240, 232, 0.86), rgba(237, 230, 220, 0.92)),
+    url("/themes/taiji-compass-v2/paper.webp") center / cover no-repeat;
+}
+
+body[data-theme="bagua"] .editor-toolbar {
+  background:
+    linear-gradient(rgba(26, 22, 20, 0.78), rgba(26, 22, 20, 0.70)),
+    url("/themes/taiji-compass-v2/topbar.webp") center / cover no-repeat;
+  border-bottom-color: rgba(196, 188, 176, 0.34);
+}
+
+body[data-theme="bagua"] #editor {
+  background:
+    linear-gradient(rgba(245, 240, 232, 0.91), rgba(245, 240, 232, 0.96)),
+    url("/themes/taiji-compass-v2/paper.webp") center top / cover no-repeat;
+  color: #3c342e;
+  border-right-color: rgba(196, 188, 176, 0.34);
+}
+
+body[data-theme="bagua"] #editor .cm-editor,
+body[data-theme="bagua"] #editor .cm-scroller {
+  background: transparent;
+  color: #3c342e;
+}
+
+body[data-theme="bagua"] #editor .cm-content,
+body[data-theme="bagua"] #editor .cm-line {
+  color: #3c342e;
+  text-shadow: 0 1px 1px rgba(255, 250, 235, 0.56);
+}
+
+body[data-theme="bagua"] #preview {
+  background:
+    linear-gradient(rgba(245, 240, 232, 0.87), rgba(245, 240, 232, 0.92)),
+    url("/themes/taiji-compass-v2/panel.webp") center / cover no-repeat;
+  color: #3c342e;
+  border-left-color: rgba(196, 188, 176, 0.34);
+}
+
+body[data-theme="bagua"] #preview.markdown-body,
+body[data-theme="bagua"] #preview .markdown-body,
+body[data-theme="bagua"] #preview p,
+body[data-theme="bagua"] #preview li {
+  color: #3c342e;
+  text-shadow: 0 1px 1px rgba(255, 250, 235, 0.42);
+}
+
+body[data-theme="bagua"] #preview h1,
+body[data-theme="bagua"] #preview h2,
+body[data-theme="bagua"] #preview h3,
+body[data-theme="bagua"] #preview strong {
+  color: #2c231e;
+}
+
+body[data-theme="bagua"] .editor-splitter,
+body[data-theme="bagua"] #previewSplitter,
+body[data-theme="bagua"] #outlineSplitter {
+  background:
+    radial-gradient(circle at 50% 36%, rgba(245, 240, 232, 0.55) 0 4px, transparent 5px),
+    radial-gradient(circle at 50% 64%, rgba(44, 35, 30, 0.48) 0 4px, transparent 5px),
+    linear-gradient(180deg, transparent, rgba(196, 188, 176, 0.44), transparent);
+}
+
+body[data-theme="bagua"] .modal-dialog,
+body[data-theme="bagua"] .settings-dialog,
+body[data-theme="bagua"] .welcome-dialog,
+body[data-theme="bagua"] .donation-dialog,
+body[data-theme="bagua"] .workspace-dialog {
+  background:
+    linear-gradient(rgba(245, 240, 232, 0.91), rgba(245, 240, 232, 0.96)),
+    url("/themes/taiji-compass-v2/panel.webp") center / cover no-repeat;
+  border-color: rgba(196, 188, 176, 0.42);
+  color: #3c342e;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.34), inset 0 0 0 1px rgba(255, 248, 222, 0.35);
+}
+
+body[data-theme="bagua"] input,
+body[data-theme="bagua"] textarea,
+body[data-theme="bagua"] select {
+  background: rgba(245, 240, 232, 0.76);
+  border-color: rgba(196, 188, 176, 0.40);
+  color: #2c231e;
+}
+
+body[data-theme="bagua"] *::-webkit-scrollbar-thumb {
+  background: linear-gradient(rgba(160, 154, 144, 0.62), rgba(196, 188, 176, 0.50));
+  border-radius: 999px;
+}
+
+body[data-theme="bagua"] * {
+  scrollbar-color: rgba(180, 148, 90, 0.62) transparent;
+}
+
+body[data-theme="bagua"] .markdown-body pre,
+body[data-theme="bagua"] .code-block pre {
+  background: rgba(44, 35, 30, 0.88);
+  border-color: rgba(196, 188, 176, 0.32);
+  color: #efe4d2;
+  text-shadow: none;
+}
+
+body[data-theme="bagua"] .markdown-body pre code,
+body[data-theme="bagua"] .code-block code {
+  color: #efe4d2;
+  text-shadow: none;
+}
+
 /* Quiet support affordance: visible, reachable and theme-aware without
    competing with the document canvas or graph nodes. */
 .coffee-button {
@@ -5909,6 +6513,61 @@ body[data-theme="image"] .editor-splitter::before {
   max-height: min(760px, calc(100dvh - 32px));
   overflow: auto;
 }
+.ai-transform-instruction-field textarea {
+  min-height: 72px;
+  font-family: var(--mono, ui-monospace, monospace);
+}
+
+/* AI 智能编辑提示 popover */
+.ai-edit-hint-popover {
+  position: fixed;
+  z-index: 9000;
+  width: min(320px, calc(100vw - 24px));
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.18);
+  font-size: 13px;
+  color: var(--text);
+  animation: hint-pop 0.18s ease;
+}
+@keyframes hint-pop {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.ai-edit-hint-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.ai-edit-hint-close {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 18px;
+  cursor: pointer;
+  line-height: 1;
+}
+.ai-edit-hint-text { margin: 0 0 10px; line-height: 1.6; color: var(--text); }
+.ai-edit-hint-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.ai-edit-hint-actions button {
+  border: 1px solid var(--line);
+  background: var(--control-bg);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.ai-edit-hint-actions button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 16%, var(--control-bg));
+  border-color: var(--accent);
+}
+.ai-edit-hint-actions button:disabled { opacity: 0.4; cursor: not-allowed; }
 .ai-transform-dialog .modal-head {
   align-items: flex-start;
 }
@@ -6291,6 +6950,23 @@ body[data-theme="image"] .editor-splitter::before {
 .shortcut-settings-section[open] > summary::after { transform: rotate(180deg); }
 .shortcut-settings-section > summary + strong { display: none; }
 .settings-dialog .about-section { display: flex; align-items: center; }
+.privacy-inline {
+  width: 100%;
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border-color, rgba(128, 128, 128, .22));
+}
+.privacy-inline-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.privacy-inline-head strong { display: block; margin-bottom: 6px; }
+.privacy-inline-head p { margin: 0; max-width: 62ch; }
+.privacy-details { margin-top: 12px; }
+.privacy-details summary { cursor: pointer; color: var(--accent, #4a6fa5); font-weight: 600; }
+.privacy-summary { margin-top: 10px; line-height: 1.75; }
+.privacy-summary p { margin: 7px 0; }
+.privacy-summary a { overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .privacy-inline-head { flex-direction: column; }
+}
 .settings-dialog .about-btn { width: 100%; justify-content: flex-start; }
 
 /* Enterprise editor chrome: compact controls, clear visual grouping and
@@ -7147,4 +7823,18 @@ body[data-theme="image"] .global-search-dialog {
   -webkit-backdrop-filter: none !important;
   border-color: rgba(255, 255, 255, 0.30);
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.30);
+}
+
+/* Resize isolation: the startup artwork must never remain visible after boot.
+   Non-image themes use an opaque app canvas so compositor redraws cannot expose
+   the previous image or Bagua surface at the window edges. */
+body:not([data-theme="image"]):not([data-theme="eye"]) {
+  background-color: var(--bg) !important;
+  background-image: none !important;
+  background-attachment: initial !important;
+}
+
+body:not([data-theme="image"]):not([data-theme="eye"]):not([data-theme="bagua"]) .app-shell {
+  background: var(--bg) !important;
+  background-image: none !important;
 }

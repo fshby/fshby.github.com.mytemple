@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bagua Theme Preview</title>
+    <link rel="stylesheet" href="/styles.css?v=20260809-bagua-v2" />
+    <style>
+      body { min-height: 100vh; }
+      .app-shell { height: 100vh; }
+      .preview-tree-indent { padding-left: 18px; border-left: 1px solid rgba(196,188,176,.22); }
+      .reader-panel, .editor-panel { display: flex; min-height: 0; }
+      .reader-panel { height: calc(100vh - 72px); }
+      .editor-panel { height: calc(100vh - 72px); }
+      .preview-mode-grid { display: grid; grid-template-columns: 1fr 10px 1fr; width: 100%; min-width: 0; }
+      #editor, #preview { min-height: 100%; overflow: auto; }
+      #editor { padding: 28px 34px; box-sizing: border-box; }
+      #editor .cm-line { margin-bottom: 10px; }
+      #preview { padding: 30px 38px; box-sizing: border-box; }
+    </style>
+  </head>
+  <body data-theme="bagua">
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">MD</div>
+          <div class="brand-text">
+            <h1>文档知识库</h1>
+            <p>卦象主题预览</p>
+          </div>
+        </div>
+        <label class="search-box">
+          <span>S</span>
+          <input placeholder="全局检索关键字" />
+        </label>
+        <div class="workspace-summary">当前工作路径：docs</div>
+        <nav class="tree">
+          <div class="tree-workspace active-workspace">
+            <div class="folder-title selected">v architecture</div>
+            <div class="preview-tree-indent">
+              <div class="folder-title">v 工作文档</div>
+              <button class="file-item active">github部署文档.md</button>
+              <button class="file-item">system-design.md</button>
+              <button class="file-item">search-design.md</button>
+            </div>
+          </div>
+          <div class="tree-workspace">
+            <div class="folder-title">v github</div>
+            <div class="preview-tree-indent">
+              <button class="file-item">知识点1.md</button>
+              <button class="file-item">项目教程.md</button>
+            </div>
+          </div>
+        </nav>
+      </aside>
+      <div class="sidebar-resizer"></div>
+      <main class="workspace">
+        <header class="topbar">
+          <nav class="menu-bar">
+            <button class="menu-item active">文件</button>
+            <button class="menu-item">编辑</button>
+            <button class="menu-item">查看</button>
+          </nav>
+          <div class="doc-meta">
+            <strong>github部署文档.md</strong>
+            <span>architecture/工作文档</span>
+          </div>
+          <div class="toolbar">
+            <button class="active">修改</button>
+            <button>图谱</button>
+            <button>设置</button>
+          </div>
+        </header>
+        <section class="editor-panel">
+          <div class="editor-outline">
+            <h3>本文目录</h3>
+            <button>一、部署概览</button>
+            <button>二、环境准备</button>
+            <button>三、代码发布</button>
+          </div>
+          <div class="preview-mode-grid">
+            <div id="editor">
+              <div class="cm-editor">
+                <div class="cm-scroller">
+                  <div class="cm-content">
+                    <div class="cm-line"># github部署文档</div>
+                    <div class="cm-line">## 一、部署概览</div>
+                    <div class="cm-line">这里是编辑区。宣纸底色保持低纹理，保证长时间阅读和修改不疲劳。</div>
+                    <div class="cm-line">```js</div>
+                    <div class="cm-line">const theme = "Taiji Markdown";</div>
+                    <div class="cm-line">console.log(theme);</div>
+                    <div class="cm-line">```</div>
+                    <div class="cm-line">## 二、环境准备</div>
+                    <div class="cm-line">卦象色用于语义高亮，太极意象用于边界和状态反馈。</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="editor-splitter"></div>
+            <article id="preview" class="markdown-body">
+              <h1>github部署文档</h1>
+              <h2>一、部署概览</h2>
+              <p>这是预览区。视觉重点是文档内容，边框、滚动条、按钮才承载罗盘和阴阳隐喻。</p>
+              <blockquote>艮为山：引用块以稳定的竖线承载说明文字。</blockquote>
+              <pre><code>const theme = "Taiji Markdown";
+console.log(theme);</code></pre>
+              <h2>二、环境准备</h2>
+              <p><strong>乾为天</strong>用于标题，<a href="#">离为火</a>用于链接。</p>
+            </article>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
