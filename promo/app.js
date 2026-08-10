@@ -8,9 +8,9 @@
   const state = { width: 0, height: 0, dpr: 1, nodes: [], edges: [], hover: -1, pulse: 0, running: false, visible: true, raf: 0, time: 0 };
 
   const kinds = [
-    { key: 'doc', color: '#65d7db', weight: 1 },
-    { key: 'sem', color: '#a98bff', weight: 2 },
-    { key: 'tag', color: '#ffbf5a', weight: 1 }
+    { key: 'doc', color: '#88a956', weight: 1 },
+    { key: 'sem', color: '#b2c38d', weight: 2 },
+    { key: 'tag', color: '#d4c58a', weight: 1 }
   ];
 
   function seeded(seed) {
@@ -23,7 +23,7 @@
 
   function createGraph() {
     const random = seeded(20260723);
-    const count = mobile.matches ? 54 : 92;
+    const count = mobile.matches ? 42 : 72;
     state.nodes = Array.from({ length: count }, (_, i) => {
       const angle = random() * Math.PI * 2;
       const radius = Math.sqrt(random()) * 0.42;
@@ -31,10 +31,10 @@
       return {
         x: 0.5 + Math.cos(angle) * radius,
         y: 0.52 + Math.sin(angle) * radius * 0.76,
-        vx: (random() - .5) * .00017,
-        vy: (random() - .5) * .00017,
+        vx: (random() - .5) * .00011,
+        vy: (random() - .5) * .00011,
         phase: random() * Math.PI * 2,
-        r: 2.4 + random() * (kind.key === 'doc' ? 2.7 : 2),
+        r: 1.9 + random() * (kind.key === 'doc' ? 2.2 : 1.7),
         kind
       };
     });
@@ -53,7 +53,7 @@
     const rect = canvas.getBoundingClientRect();
     state.width = rect.width;
     state.height = rect.height;
-    state.dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    state.dpr = Math.min(window.devicePixelRatio || 1, 1.35);
     canvas.width = Math.max(1, Math.floor(rect.width * state.dpr));
     canvas.height = Math.max(1, Math.floor(rect.height * state.dpr));
   }
@@ -67,9 +67,9 @@
     ctx.clearRect(0, 0, state.width, state.height);
     const points = state.nodes.map((node, i) => {
       if (!reducedMotion && state.running) {
-        const wander = Math.sin(now * .00023 + node.phase) * .00012;
+        const wander = Math.sin(now * .00018 + node.phase) * .00008;
         node.x += node.vx + wander;
-        node.y += node.vy + Math.cos(now * .00019 + node.phase) * .00009;
+        node.y += node.vy + Math.cos(now * .00016 + node.phase) * .00006;
         if (node.x < .08 || node.x > .92) node.vx *= -1;
         if (node.y < .12 || node.y > .9) node.vy *= -1;
       }
@@ -80,19 +80,19 @@
       const a = points[edge.a]; const b = points[edge.b];
       const related = active >= 0 && (edge.a === active || edge.b === active);
       ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
-      ctx.strokeStyle = related ? 'rgba(101,215,219,.62)' : `rgba(132,124,198,${.10 + edge.strength * .13})`;
-      ctx.lineWidth = related ? 1.25 : .65;
+      ctx.strokeStyle = related ? 'rgba(136,169,86,.5)' : `rgba(126,150,85,${.06 + edge.strength * .08})`;
+      ctx.lineWidth = related ? 1.1 : .55;
       ctx.stroke();
     });
     state.nodes.forEach((node, i) => {
       const point = points[i]; const activeNode = i === active;
-      const glow = activeNode ? 17 : 8;
-      const opacity = active >= 0 && !activeNode && !state.edges.some(edge => (edge.a === active && edge.b === i) || (edge.b === active && edge.a === i)) ? .35 : .9;
+      const glow = activeNode ? 11 : 5;
+      const opacity = active >= 0 && !activeNode && !state.edges.some(edge => (edge.a === active && edge.b === i) || (edge.b === active && edge.a === i)) ? .3 : .82;
       ctx.beginPath(); ctx.arc(point.x, point.y, node.r + (activeNode ? 1.8 : 0), 0, Math.PI * 2);
       ctx.fillStyle = node.kind.color; ctx.globalAlpha = opacity; ctx.shadowColor = node.kind.color; ctx.shadowBlur = glow; ctx.fill(); ctx.shadowBlur = 0; ctx.globalAlpha = 1;
       if (activeNode || (state.pulse > 0 && i === Math.floor(state.pulse))) {
         ctx.beginPath(); ctx.arc(point.x, point.y, node.r + 8 + (1 - (state.time % 850) / 850) * 7, 0, Math.PI * 2);
-        ctx.strokeStyle = `${node.kind.color}66`; ctx.lineWidth = 1; ctx.stroke();
+        ctx.strokeStyle = `${node.kind.color}55`; ctx.lineWidth = 0.9; ctx.stroke();
       }
     });
     if (state.running && !reducedMotion) state.raf = requestAnimationFrame(draw);
