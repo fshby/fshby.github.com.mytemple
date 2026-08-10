@@ -12,7 +12,7 @@ const text = {
 
 const LARGE_PREVIEW_BYTES = 100 * 1024;
 const LARGE_PREVIEW_DELAY = 700;
-const GRAPH_WORKER_URL = "/graph-worker.js?v=20260722-worker-1";
+const GRAPH_WORKER_URL = "/graph-worker.js?v=20260810-graph-1";
 const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20260809-worker-4";
 const AI_HISTORY_KEY = "mytemple.ai.history.v1";
 const AI_TRANSFORM_LABELS = { summary: "摘要", keypoints: "要点", terms: "术语解释", polish: "润色", continue: "续写", rewrite: "代写", translate: "翻译", hint: "编辑提示" };
@@ -760,8 +760,8 @@ function restoreWindowZoom() {
 
 function applySettings(settings = loadSettings()) {
   document.body.dataset.theme = settings.theme;
-  const themeColorMap = { dark: "#252827", eye: "#edf3ec", glow: "#f5efe6", image: "#1a1a2e" };
-  const themeBgMap = { dark: "#252827", eye: "#edf3ec", glow: "#f5efe6", image: "#1a1a2e" };
+  const themeColorMap = { dark: "#252827", eye: "#ede8df", glow: "#f3ede4", image: "#1a1a2e" };
+  const themeBgMap = { dark: "#252827", eye: "#ede8df", glow: "#f3ede4", image: "#1a1a2e" };
   const metaThemeColor = document.querySelector('meta[name="theme-color"]');
   if (metaThemeColor) {
     metaThemeColor.content = themeColorMap[settings.theme] || "#fafafa";
@@ -5059,6 +5059,7 @@ function getGraphSimulationCache(nodes = state.graphView.visibleNodes, edges = s
   });
   const springs = [];
   const adjacency = Array.from({ length: nodes.length }, () => []);
+  const neighborSets = Array.from({ length: nodes.length }, () => new Set());
   for (const edge of edges) {
     const a = nodeIndex.get(edge.source);
     const b = nodeIndex.get(edge.target);
@@ -5066,6 +5067,8 @@ function getGraphSimulationCache(nodes = state.graphView.visibleNodes, edges = s
     springs.push({ edge, a, b });
     adjacency[a].push({ index: b, edge });
     adjacency[b].push({ index: a, edge });
+    neighborSets[a].add(b);
+    neighborSets[b].add(a);
   }
 
   const cache = {
@@ -5075,6 +5078,7 @@ function getGraphSimulationCache(nodes = state.graphView.visibleNodes, edges = s
     nodeById,
     springs,
     adjacency,
+    neighborSets,
     fx: new Float64Array(nodes.length),
     fy: new Float64Array(nodes.length),
     phases: Float64Array.from(nodes, (node) => graphHash(node.id) * Math.PI * 2),
@@ -5199,35 +5203,14 @@ function animateGraphRelaxation(frames = 12) {
   state.graphView.relaxFrame = requestAnimationFrame(() => settle(frames));
 }
 
-function startGraphRebound(previousPositions) {
+function startGraphRebound() {
   if (state.graphView.reboundAnimation) cancelAnimationFrame(state.graphView.reboundAnimation);
-  stopGraphSimulation();
-  const items = state.graphView.visibleNodes
-    .map((node) => ({ node, fromX: node.x, fromY: node.y, to: previousPositions.get(node.id) }))
-    .filter((item) => item.to);
-  if (!items.length) return;
-  const started = performance.now();
-  const duration = 1250;
-  const tick = (now) => {
-    const progress = clamp((now - started) / duration, 0, 1);
-    // Damped spring: it overshoots subtly, then settles at the pre-drag layout.
-    const eased = progress >= 1
-      ? 1
-      : 1 - Math.exp(-5.2 * progress) * Math.cos(11.5 * progress);
-    for (const item of items) {
-      item.node.x = item.fromX + (item.to.x - item.fromX) * eased;
-      item.node.y = item.fromY + (item.to.y - item.fromY) * eased;
-      item.node.energy = Math.max(item.node.energy || 0, 0.35 * (1 - progress));
-    }
-    scheduleGraphDraw();
-    if (progress < 1) {
-      state.graphView.reboundAnimation = requestAnimationFrame(tick);
-    } else {
-      state.graphView.reboundAnimation = 0;
-      if (state.graphView.dynamic) startGraphSimulation();
-    }
-  };
-  state.graphView.reboundAnimation = requestAnimationFrame(tick);
+  state.graphView.reboundAnimation = 0;
+  // 拖拽结束后不再用固定时长插值覆盖节点轨迹，而是交由 runGraphSimulation
+  // 以引力 + 回弹力规则沿物理轨迹缓慢复原至平衡位置（target）。reboundUntil
+  // 维持较长的回弹窗口，配合压低的 returnStrength 呈现舒缓的自然复原。
+  state.graphView.reboundUntil = performance.now() + 3600;
+  startGraphSimulation();
 }
 
 function exciteGraphNode(source, dragDx = 0, dragDy = 0) {
@@ -5383,7 +5366,10 @@ function runGraphSimulation(timestamp) {
           }
           if (distanceSq > 42000) continue;
           const distance = Math.sqrt(distanceSq);
-          const force = 24 / (1 + distanceSq / 900);
+          // 联系紧密（有直接链接）的节点对减弱排斥，让引力把它们聚拢；
+          // 联系松散的节点对增强排斥，使无关节点彼此散开、层级清晰。
+          const repelScale = cache.neighborSets[index].has(otherIndex) ? 0.4 : 1.25;
+          const force = (24 / (1 + distanceSq / 900)) * repelScale;
           const pushX = (dx / distance) * force;
           const pushY = (dy / distance) * force;
           fx[index] -= pushX;
@@ -5401,8 +5387,9 @@ function runGraphSimulation(timestamp) {
     const dx = b.x - a.x;
     const dy = b.y - a.y;
     const distance = Math.max(1, Math.hypot(dx, dy));
-    const desired = edge.type === "tag" ? 78 : edge.type === "keyword" ? 94 : 112;
-    const strength = edge.backbone ? 0.038 : 0.006;
+    const desired = edge.type === "tag" ? 74 : edge.type === "keyword" ? 88 : 104;
+    // 有链接的文档对引力更强，强关联聚集成核心集群，松散连接只维持弱牵引。
+    const strength = edge.backbone ? 0.052 : 0.008;
     const pull = clamp((distance - desired) * strength, -5, 5);
     const pullX = (dx / distance) * pull;
     const pullY = (dy / distance) * pull;
@@ -5422,20 +5409,23 @@ function runGraphSimulation(timestamp) {
       return;
     }
     const phase = cache.phases[index];
-    const drift = node.layoutRoot ? 0.026 : 0.078;
+    // 游离呼吸幅度收束到自然和谐区间，避免长时间观察时的晃动疲劳。
+    const drift = node.layoutRoot ? 0.014 : 0.034;
     fx[index] += Math.sin(timestamp * 0.00047 + phase) * drift;
     fy[index] += Math.cos(timestamp * 0.00039 + phase * 1.31) * drift;
+    // 拖拽复原期以引力规则缓慢拉回平衡位置（target），轨迹由物理自然产生，
+    // 而非固定时长插值；强度刻意压低以呈现"缓慢复原"的舒缓感。
     const returnStrength = rebound
-      ? (node.layoutRoot ? 0.075 : 0.052)
+      ? (node.layoutRoot ? 0.02 : 0.014)
       : (node.layoutRoot ? 0.006 : 0.0014);
     fx[index] += (node.targetX - node.x) * returnStrength;
     fy[index] += (node.targetY - node.y) * returnStrength;
-    node.vx = (node.vx + fx[index] * dt) * 0.88;
-    node.vy = (node.vy + fy[index] * dt) * 0.88;
+    node.vx = (node.vx + fx[index] * dt) * 0.86;
+    node.vy = (node.vy + fy[index] * dt) * 0.86;
     node.energy = Math.max(0, (node.energy || 0) * 0.95);
     maxEnergy = Math.max(maxEnergy, node.energy);
     const speed = Math.max(0.001, Math.hypot(node.vx, node.vy));
-    const limit = Math.min(node.layoutRoot ? 1.5 : 3.2, speed);
+    const limit = Math.min(node.layoutRoot ? 1.0 : 2.0, speed);
     node.x += (node.vx / speed) * limit * dt;
     node.y += (node.vy / speed) * limit * dt;
   });
@@ -5562,8 +5552,8 @@ function drawGraph() {
     const related = !focusId || connected.has(node.id);
     const queryMatch = !query || matches.has(node.id);
     const energy = clamp(node.energy || 0, 0, 1);
-    const idlePulse = view.dynamic ? Math.sin(motionTime * 0.002 + graphHash(node.id) * Math.PI * 2) * 0.025 : 0;
-    const radius = graphNodeRadius(node) * clamp(view.scale, 0.72, 1.18) * (1 + idlePulse + energy * 0.2);
+    const idlePulse = view.dynamic ? Math.sin(motionTime * 0.0015 + graphHash(node.id) * Math.PI * 2) * 0.014 : 0;
+    const radius = graphNodeRadius(node) * clamp(view.scale, 0.72, 1.18) * (1 + idlePulse + energy * 0.12);
     const kindColor = node.kind === "tag" ? palette.tag : node.kind === "keyword" ? palette.keyword : node.kind === "missing" ? palette.missing : palette.doc;
     ctx.globalAlpha = related && queryMatch ? 1 : query && matches.has(node.id) ? 1 : 0.18;
     ctx.fillStyle = active || hovered ? palette.active : kindColor;
@@ -8391,10 +8381,9 @@ els.canvas.addEventListener("pointerup", (event) => {
   els.canvas.classList.remove("dragging");
   els.canvas.releasePointerCapture?.(event.pointerId);
   if (drag.type === "node" && drag.moved) {
-    state.graphView.reboundUntil = performance.now() + 1800;
     state.graphView.hoveredId = "";
     els.graphTooltip.classList.add("hidden");
-    startGraphRebound(drag.previousPositions);
+    startGraphRebound();
   }
   if (!drag.moved && drag.type === "node") activateGraphNode(drag.node);
 });
