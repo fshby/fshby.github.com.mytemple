@@ -347,11 +347,54 @@ function renderMarkdown(source, options = {}) {
   return html.join("\n");
 }
 
+self._markdownCache = self._markdownCache || new Map();
+self._markdownCacheBytes = self._markdownCacheBytes || 0;
+
+function workerCacheKey(source, searchTerm, includeHtml, includeOutline) {
+  const text = String(source || "");
+  return `${includeHtml ? 1 : 0}${includeOutline ? 1 : 0}\n${searchTerm || ""}\n${text.length}\n${text}`;
+}
+
+function renderWithCache({ source = "", searchTerm = "", includeHtml = true, includeOutline = true } = {}) {
+  const text = String(source || "");
+  if (searchTerm || text.length > 900000) {
+    return {
+      html: includeHtml ? renderMarkdown(text, { searchTerm }) : null,
+      outline: includeOutline ? extractOutline(text) : null,
+    };
+  }
+  const key = workerCacheKey(text, searchTerm, includeHtml, includeOutline);
+  const hit = self._markdownCache.get(key);
+  if (hit) {
+    self._markdownCache.delete(key);
+    self._markdownCache.set(key, hit);
+    return hit.value;
+  }
+  const value = {
+    html: includeHtml ? renderMarkdown(text, { searchTerm }) : null,
+    outline: includeOutline ? extractOutline(text) : null,
+  };
+  const htmlLength = value.html?.length || 0;
+  const outlineLength = JSON.stringify(value.outline || []).length;
+  const size = text.length + htmlLength + outlineLength;
+  self._markdownCache.set(key, { value, size });
+  self._markdownCacheBytes += size;
+  while (self._markdownCache.size > 18 || self._markdownCacheBytes > 8_000_000) {
+    const oldestKey = self._markdownCache.keys().next().value;
+    if (!oldestKey) break;
+    const oldest = self._markdownCache.get(oldestKey);
+    self._markdownCacheBytes -= oldest?.size || 0;
+    self._markdownCache.delete(oldestKey);
+  }
+  return value;
+}
+
 self.onmessage = (event) => {
   const { seq, source = "", searchTerm = "", includeHtml = true, includeOutline = true } = event.data || {};
+  const result = renderWithCache({ source, searchTerm, includeHtml, includeOutline });
   self.postMessage({
     seq,
-    html: includeHtml ? renderMarkdown(source, { searchTerm }) : null,
-    outline: includeOutline ? extractOutline(source) : null,
+    html: result.html,
+    outline: result.outline,
   });
 };

@@ -13,9 +13,9 @@ const text = {
 const LARGE_PREVIEW_BYTES = 100 * 1024;
 const LARGE_PREVIEW_DELAY = 700;
 const GRAPH_WORKER_URL = "/graph-worker.js?v=20260722-worker-1";
-const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20260731-worker-3";
+const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20260809-worker-4";
 const AI_HISTORY_KEY = "mytemple.ai.history.v1";
-const AI_TRANSFORM_LABELS = { summary: "摘要", keypoints: "要点", terms: "术语解释" };
+const AI_TRANSFORM_LABELS = { summary: "摘要", keypoints: "要点", terms: "术语解释", polish: "润色", continue: "续写", rewrite: "代写", translate: "翻译", hint: "编辑提示" };
 
 const state = {
   tree: [],
@@ -59,6 +59,7 @@ const state = {
     chainUntil: 0,
     reboundUntil: 0,
     reboundAnimation: 0,
+    pageActive: true,
     fitted: false,
   },
   selectedNode: "",
@@ -93,6 +94,8 @@ const state = {
   previewTimer: 0,
   previewLastContent: "",
   previewRenderSeq: 0,
+  previewPending: null,
+  previewAnchors: [],
   editorOutlineVisible: localStorage.getItem("editorOutlineVisible") !== "0",
   editorOutlineTimer: 0,
   editorOutlineSeq: 0,
@@ -103,6 +106,8 @@ const state = {
   markdownWorkerSeq: 0,
   markdownWorkerPending: new Map(),
   markdownWorkerFailed: false,
+  markdownCache: new Map(),
+  markdownCacheBytes: 0,
   taskSaveQueue: Promise.resolve(),
   autoSave: {
     idleTimer: 0,
@@ -234,6 +239,8 @@ const els = {
   kmStaleList: document.querySelector("#kmStaleList"),
   themeChoices: document.querySelector("#themeChoices"),
   bgImageInput: document.querySelector("#bgImageInput"),
+  imageTextMode: document.querySelector("#imageTextMode"),
+  pickImageColorBtn: document.querySelector("#pickImageColorBtn"),
   globalFontSize: document.querySelector("#globalFontSize"),
   globalFontSizeValue: document.querySelector("#globalFontSizeValue"),
   docFontSize: document.querySelector("#docFontSize"),
@@ -241,11 +248,20 @@ const els = {
   windowZoom: document.querySelector("#windowZoom"),
   windowZoomValue: document.querySelector("#windowZoomValue"),
   globalFontFamily: document.querySelector("#globalFontFamily"),
+  mdColorHeading: document.querySelector("#mdColorHeading"),
+  mdColorLink: document.querySelector("#mdColorLink"),
+  mdColorCode: document.querySelector("#mdColorCode"),
+  mdColorQuote: document.querySelector("#mdColorQuote"),
+  mdColorTable: document.querySelector("#mdColorTable"),
+  mdColorTag: document.querySelector("#mdColorTag"),
   defaultWorkspaceChoices: document.querySelector("#defaultWorkspaceChoices"),
   screenshotSaveChoices: document.querySelector("#screenshotSaveChoices"),
   pdfShowDate: document.querySelector("#pdfShowDate"),
   pdfShowAuthor: document.querySelector("#pdfShowAuthor"),
+  pdfAuthorText: document.querySelector("#pdfAuthorText"),
   pdfShowFooter: document.querySelector("#pdfShowFooter"),
+  pdfFooterText: document.querySelector("#pdfFooterText"),
+  pdfWatermarkText: document.querySelector("#pdfWatermarkText"),
   pdfSettingsStatus: document.querySelector("#pdfSettingsStatus"),
   browseFolderBtn: document.querySelector("#browseFolderBtn"),
   fileBrowser: document.querySelector("#fileBrowser"),
@@ -285,6 +301,7 @@ const els = {
   aiStatusBadge: document.querySelector("#aiStatusBadge"),
   aiScope: document.querySelector("#aiScope"),
   aiClearBtn: document.querySelector("#aiClearBtn"),
+  aiRewriteBtn: document.querySelector("#aiRewriteBtn"),
   aiMessages: document.querySelector("#aiMessages"),
   aiForm: document.querySelector("#aiForm"),
   aiQuestion: document.querySelector("#aiQuestion"),
@@ -296,11 +313,14 @@ const els = {
   aiDeepseekApiKey: document.querySelector("#aiDeepseekApiKey"),
   aiDeepseekBaseUrl: document.querySelector("#aiDeepseekBaseUrl"),
   aiDeepseekChatModel: document.querySelector("#aiDeepseekChatModel"),
+  aiPptBtn: document.querySelector("#aiPptBtn"),
   aiModelChoices: document.querySelector("#aiModelChoices"),
   aiTestBtn: document.querySelector("#aiTestBtn"),
   aiSaveBtn: document.querySelector("#aiSaveBtn"),
   aiReindexBtn: document.querySelector("#aiReindexBtn"),
   aiDisableEmbeddingBtn: document.querySelector("#aiDisableEmbeddingBtn"),
+  aiEditHintToggle: document.querySelector("#aiEditHintToggle"),
+  aiEditHintDelay: document.querySelector("#aiEditHintDelay"),
   aiSettingsStatus: document.querySelector("#aiSettingsStatus"),
   aiIndexMode: document.querySelector("#aiIndexMode"),
   aiIndexCount: document.querySelector("#aiIndexCount"),
@@ -312,9 +332,11 @@ const els = {
   aiTransformTitle: document.querySelector("#aiTransformTitle"),
   aiTransformSource: document.querySelector("#aiTransformSource"),
   aiTransformResult: document.querySelector("#aiTransformResult"),
+  aiTransformInstruction: document.querySelector("#aiTransformInstruction"),
   aiTransformDocName: document.querySelector("#aiTransformDocName"),
   aiTransformCloseBtn: document.querySelector("#aiTransformCloseBtn"),
   aiTransformCancelBtn: document.querySelector("#aiTransformCancelBtn"),
+  aiTransformGenerateBtn: document.querySelector("#aiTransformGenerateBtn"),
   aiTransformInsertBtn: document.querySelector("#aiTransformInsertBtn"),
   aiTransformCreateBtn: document.querySelector("#aiTransformCreateBtn"),
   standardizeFrontmatterBtn: document.querySelector("#standardizeFrontmatterBtn"),
@@ -333,10 +355,15 @@ if (els.graphDynamic) els.graphDynamic.checked = state.graphView.dynamic;
 
 const api = {
   async get(path) {
-    const response = await fetch(path);
+      const response = await fetch(`${path}${path.includes("?") ? "&" : "?"}_license=${Date.now()}`, { cache: "no-store" });
     if (!response.ok) {
       const body = await response.text();
-      try { throw new Error(JSON.parse(body).error || body); } catch (error) { if (error instanceof SyntaxError) throw new Error(body); throw error; }
+      let detail = {};
+      try { detail = JSON.parse(body); } catch (_) {}
+      if (response.status === 403 && detail.code === "LICENSE_REQUIRED") {
+        window.dispatchEvent(new CustomEvent("license-required", { detail }));
+      }
+      throw new Error(detail.error || body);
     }
     return response.json();
   },
@@ -348,7 +375,12 @@ const api = {
     });
     if (!response.ok) {
       const body = await response.text();
-      try { throw new Error(JSON.parse(body).error || body); } catch (error) { if (error instanceof SyntaxError) throw new Error(body); throw error; }
+      let detail = {};
+      try { detail = JSON.parse(body); } catch (_) {}
+      if (response.status === 403 && detail.code === "LICENSE_REQUIRED") {
+        window.dispatchEvent(new CustomEvent("license-required", { detail }));
+      }
+      throw new Error(detail.error || body);
     }
     return response.json();
   },
@@ -594,6 +626,8 @@ function getPaperBackgroundUrl() {
 }
 
 function applyPaperTexture() {
+  const existing = document.getElementById("paper-texture-style");
+  if (existing?.dataset.ready === "1") return;
   const url = getPaperBackgroundUrl();
   if (!url) return;
   const ruleId = "paper-texture-style";
@@ -655,6 +689,7 @@ function applyPaperTexture() {
       background: transparent;
     }
   `;
+  styleEl.dataset.ready = "1";
 }
 
 function showToast(message) {
@@ -667,12 +702,16 @@ function showToast(message) {
 function loadSettings() {
   const savedFontSize = localStorage.getItem("docFontSize");
   const savedContentFontSize = localStorage.getItem("docContentFontSize");
+  let markdownColors = {};
+  try { markdownColors = JSON.parse(localStorage.getItem("markdownColors") || "{}"); } catch (_) {}
   return {
-    theme: localStorage.getItem("docTheme") || "light",
+    // 默认暗色主题；用户调整后保存于 docTheme，重启自动恢复用户习惯。
+    theme: localStorage.getItem("docTheme") || "dark",
     bg: localStorage.getItem("docBgImage") || "",
     fontSize: Number(savedFontSize || computeOptimalFontSize()),
     contentFontSize: Number(savedContentFontSize || computeOptimalContentFontSize()),
     fontFamily: localStorage.getItem("docFontFamily") || els.globalFontFamily.value,
+    markdownColors,
   };
 }
 
@@ -721,8 +760,8 @@ function restoreWindowZoom() {
 
 function applySettings(settings = loadSettings()) {
   document.body.dataset.theme = settings.theme;
-  const themeColorMap = { dark: "#1e1e1e", eye: "#efe3cc", image: "#1a1a2e" };
-  const themeBgMap = { dark: "#1e1e1e", eye: "#efe3cc", image: "#1a1a2e" };
+  const themeColorMap = { dark: "#1e1e1e", eye: "#efe3cc", image: "#1a1a2e", bagua: "#14110d" };
+  const themeBgMap = { dark: "#1e1e1e", eye: "#efe3cc", image: "#1a1a2e", bagua: "#14110d" };
   const metaThemeColor = document.querySelector('meta[name="theme-color"]');
   if (metaThemeColor) {
     metaThemeColor.content = themeColorMap[settings.theme] || "#fafafa";
@@ -730,10 +769,34 @@ function applySettings(settings = loadSettings()) {
   if (settings.theme === "eye") {
     applyPaperTexture();
   }
+  // 图片主题文字明暗：根据背景图深浅切换文字配色，保证可读性。
+  const imageTextMode = localStorage.getItem("imageTextMode") === "light" ? "light" : "dark";
+  document.body.dataset.imageText = settings.theme === "image" ? imageTextMode : "";
+  if (els.imageTextMode) els.imageTextMode.value = imageTextMode;
+  // 图片主题取色结果持久化：重启后恢复用户从背景图取色的强调色；离开图片主题时移除内联覆盖，回归主题默认配色。
+  if (settings.theme === "image") {
+    const savedAccent = localStorage.getItem("imageAccentColor");
+    if (savedAccent) document.documentElement.style.setProperty("--accent", savedAccent);
+  } else {
+    document.documentElement.style.removeProperty("--accent");
+  }
   const currentScale = parseFloat(document.documentElement.style.getPropertyValue("--app-scale")) || 1;
   document.documentElement.style.setProperty("--app-font-size", `${Math.round(settings.fontSize * currentScale)}px`);
   document.documentElement.style.setProperty("--doc-font-size", `${Math.round(settings.contentFontSize * currentScale)}px`);
   document.documentElement.style.setProperty("--app-font-family", settings.fontFamily);
+  const markdownColorVars = {
+    heading: "--md-heading",
+    link: "--md-link",
+    code: "--md-inline-code",
+    quote: "--md-emphasis",
+    table: "--md-table-accent",
+    tag: "--md-tag",
+  };
+  Object.entries(markdownColorVars).forEach(([key, variable]) => {
+    const value = settings.markdownColors?.[key];
+    if (/^#[0-9a-f]{6}$/i.test(String(value || ""))) document.documentElement.style.setProperty(variable, value);
+    else document.documentElement.style.removeProperty(variable);
+  });
   if (settings.bg) document.documentElement.style.setProperty("--custom-bg", `url("${settings.bg}")`);
   else document.documentElement.style.removeProperty("--custom-bg");
   els.globalFontSize.value = settings.fontSize;
@@ -741,6 +804,17 @@ function applySettings(settings = loadSettings()) {
   els.docFontSize.value = settings.contentFontSize;
   els.docFontSizeValue.textContent = `${settings.contentFontSize}px`;
   els.globalFontFamily.value = settings.fontFamily;
+  const colorInputs = {
+    heading: els.mdColorHeading,
+    link: els.mdColorLink,
+    code: els.mdColorCode,
+    quote: els.mdColorQuote,
+    table: els.mdColorTable,
+    tag: els.mdColorTag,
+  };
+  Object.entries(colorInputs).forEach(([key, input]) => {
+    if (input) input.value = settings.markdownColors?.[key] || getComputedStyle(document.documentElement).getPropertyValue(markdownColorVars[key]).trim() || input.value;
+  });
   [...els.themeChoices.querySelectorAll("[data-theme]")].forEach((button) => {
     button.classList.toggle("active", button.dataset.theme === settings.theme);
   });
@@ -897,7 +971,8 @@ function extractOutline(source) {
   let h2Index = 0;
   let h3Index = 0;
   let h4Index = 0;
-  for (const line of lines) {
+  for (let lineNo = 0; lineNo < lines.length; lineNo += 1) {
+    const line = lines[lineNo];
     if (line.startsWith("```")) {
       inCode = !inCode;
       continue;
@@ -922,13 +997,13 @@ function extractOutline(source) {
       } else {
         index = `h4-${h4Index++}`;
       }
-      outline.push({ id: headingId(heading[3], index), title: plainText(heading[3]), level });
+      outline.push({ id: headingId(heading[3], index), title: plainText(heading[3]), level, line: lineNo });
       continue;
     }
     const autoHeading = line.match(/^(\s*)([一二三四五六七八九十]{1,4}[、.．]\s*.+)$/);
     if (autoHeading) {
       const level = 2;
-      outline.push({ id: headingId(autoHeading[2], `auto-${h2Index++}`), title: plainText(autoHeading[2]), level });
+      outline.push({ id: headingId(autoHeading[2], `auto-${h2Index++}`), title: plainText(autoHeading[2]), level, line: lineNo });
       h3Index = 0;
       h4Index = 0;
       continue;
@@ -936,15 +1011,15 @@ function extractOutline(source) {
     const dottedHeading = line.match(/^(\s*)(\d+(?:\.\d+)+)[、.．]\s*([^-*].+)$/);
     if (dottedHeading) {
       const level = 3;
-      outline.push({ id: headingId(dottedHeading[3], `num-h3-${h3Index++}`), title: plainText(dottedHeading[3]), level });
+      outline.push({ id: headingId(dottedHeading[3], `num-h3-${h3Index++}`), title: plainText(dottedHeading[3]), level, line: lineNo });
       h4Index = 0;
       continue;
     }
-    
+
     const numHeading = line.match(/^(\s*)(\((?:\d{1,3})\)|(\d{1,3})([、.．)]))\s*([^-*].+)$/);
     if (numHeading && !/^\s*\d+[.)]\s+\[[ xX]\](?:\s|$)/.test(line)) {
       const level = 4;
-      outline.push({ id: headingId(numHeading[5], `num-h4-${h4Index++}`), title: plainText(numHeading[5]), level });
+      outline.push({ id: headingId(numHeading[5], `num-h4-${h4Index++}`), title: plainText(numHeading[5]), level, line: lineNo });
     }
   }
   return outline;
@@ -965,7 +1040,7 @@ function formatDocument(source) {
       continue;
     }
     
-    if (inCode) {
+       if (inCode) {
       result.push(line);
       continue;
     }
@@ -1093,7 +1168,7 @@ function renderEditorOutline(content) {
   }
   const itemButton = (item) => {
     const indent = Math.max(0, item.level - 1) * 14;
-    return `<button class="editor-outline-item level-${item.level}" data-heading-text="${escapeHtml(item.title)}" style="margin-left:${indent}px" title="${escapeHtml(item.title)}">${escapeHtml(compactName(item.title, 15))}</button>`;
+    return `<button class="editor-outline-item level-${item.level}" data-heading-text="${escapeHtml(item.title)}" data-heading-line="${Number.isFinite(item.line) ? item.line : -1}" style="margin-left:${indent}px" title="${escapeHtml(item.title)}">${escapeHtml(compactName(item.title, 15))}</button>`;
   };
   // level <= 2 的标题作为可折叠分组父级，其后紧跟的 level > 2 子标题收进折叠区。
   const rows = [];
@@ -1114,9 +1189,9 @@ function renderEditorOutline(content) {
     rows.push(`<section class="editor-outline-group">
       <div class="editor-outline-group-head">
         ${itemButton(item)}
-        <button type="button" class="editor-outline-toggle" data-editor-outline-toggle="${groupId}" aria-controls="${groupId}" aria-expanded="true" title="折叠/展开子标题"><span aria-hidden="true">&#8250;</span></button>
+        <button type="button" class="editor-outline-toggle" data-editor-outline-toggle="${groupId}" aria-controls="${groupId}" aria-expanded="false" title="展开子标题"><span aria-hidden="true">&#8250;</span></button>
       </div>
-      <div id="${groupId}" class="editor-outline-children">${children.map((child) => itemButton(child)).join("")}</div>
+      <div id="${groupId}" class="editor-outline-children is-collapsed">${children.map((child) => itemButton(child)).join("")}</div>
     </section>`);
     index = cursor - 1;
   }
@@ -1195,16 +1270,20 @@ function buildDocumentPrintHtml() {
   const title = els.docTitle?.textContent || state.currentDoc?.title || "MyTemple 文档";
   const rawContent = String(state.currentContent || els.editor.value || "");
   const content = stripFrontmatter(rawContent);
-  const body = normalizeAssetUrlsToRelative(renderMarkdown(content));
-  const pdfSettings = JSON.parse(localStorage.getItem("pdfExportSettings") || "{}");
-  const showDate = pdfSettings.showDate !== false;
-  const showAuthor = pdfSettings.showAuthor !== false;
-  const showFooter = pdfSettings.showFooter !== false;
+  const body = normalizeAssetUrlsToRelative(cachedRenderMarkdown(content));
+  const pdfSettings = readPdfExportSettings();
+  const showDate = pdfSettings.showDate;
+  const showAuthor = pdfSettings.showAuthor;
+  const showFooter = pdfSettings.showFooter;
   const updated = state.currentDoc?.updated || state.currentDoc?.modified;
   const dateLabel = showDate && updated ? new Date(updated).toLocaleString() : "";
-  const exportNote = showAuthor ? '<p class="print-author">由 MyTemple Knowledge 导出 · 郑堃逢</p>' : "";
-  const footer = showFooter ? '<footer class="print-footer"><span>MyTemple Knowledge · 本地 Markdown 知识库</span></footer>' : "";
+  const authorLabel = escapeHtml(pdfSettings.authorText || "郑堃逢");
+  const exportNote = showAuthor ? `<p class="print-author">由 MyTemple Knowledge 导出 · ${authorLabel}</p>` : "";
+  const footerLabel = escapeHtml(pdfSettings.footerText || "MyTemple Knowledge · 本地 Markdown 知识库");
+  const footer = showFooter ? `<footer class="print-footer"><span>${footerLabel}</span></footer>` : "";
+  const watermark = buildExportWatermark(pdfSettings.watermarkText);
   return `<article class="print-article">
+    ${watermark}
     <header class="print-header">
       <h1 class="print-title">${escapeHtml(title)}</h1>
       ${dateLabel ? `<p class="print-meta">${escapeHtml(dateLabel)}</p>` : ""}
@@ -1353,6 +1432,7 @@ const PRINT_STYLES = `html,body{margin:0;padding:0;background:#fff;}
 .print-body li{margin:0.3em 0;}
 .print-body hr{border:0;border-top:1px solid #e5e7eb;margin:1.8em 0;}
 .print-footer{margin-top:36px;padding-top:14px;border-top:1px solid #e5e7eb;text-align:center;font-size:11px;color:#9ca3af;}
+.print-watermark{position:fixed;top:0;left:0;width:100%;height:100%;display:flex;justify-content:center;align-items:center;font-size:52px;color:rgba(15,23,42,0.05);pointer-events:none;transform:rotate(-30deg);z-index:9999;letter-spacing:6px;white-space:nowrap;font-weight:700;}
 @page{margin:18mm 16mm;}`;
 
 async function exportCurrentDocToPdf() {
@@ -1405,7 +1485,7 @@ async function buildWechatArticleHtml() {
   const title = els.docTitle?.textContent || state.currentDoc?.title || "MyTemple 文档";
   const rawContent = String(state.currentContent || els.editor.value || "");
   const content = stripFrontmatter(rawContent);
-  const body = renderMarkdown(content);
+  const body = cachedRenderMarkdown(content);
   const wrapper = document.createElement("div");
   wrapper.innerHTML = body;
   // 公众号编辑器无法访问本地相对路径，将本地图片转为 data URL 内联，
@@ -1474,6 +1554,160 @@ async function copyCurrentDocAsWechat() {
   showToast(ok ? "已复制，可在公众号编辑器中粘贴" : "复制失败，请重试");
 }
 
+// 幻灯片导出：将 Markdown 按分隔符或标题拆分为多页，生成自包含 HTML 演示文稿。
+// 离线优先，图片内联为 data URL，支持键盘/点击翻页与全屏演示。
+function splitMarkdownIntoSlides(markdown) {
+  const source = stripFrontmatter(String(markdown || "")).trim();
+  if (!source) return [];
+  // 优先按独立成行的 --- 分页（水平分隔线作为幻灯片断点）
+  const byRule = source.split(/(?:\r?\n|\r)\s*-{3,}\s*(?:\r?\n|\r)/).map((s) => s.trim()).filter(Boolean);
+  if (byRule.length > 1) return byRule;
+  // 无分隔线时按二级标题拆分，标题前内容作为封面
+  const chunks = [];
+  const headingRe = /^##\s+/m;
+  if (!headingRe.test(source)) return [source];
+  const lines = source.split(/\r?\n/);
+  let buffer = [];
+  for (const line of lines) {
+    if (/^##\s+/.test(line) && buffer.length) {
+      chunks.push(buffer.join("\n").trim());
+      buffer = [];
+    }
+    buffer.push(line);
+  }
+  if (buffer.length) chunks.push(buffer.join("\n").trim());
+  return chunks.filter(Boolean);
+}
+
+async function exportCurrentDocToPpt() {
+  if (!state.currentPath && !state.currentContent) {
+    showToast("请先打开一个文档");
+    return;
+  }
+  showToast("正在准备幻灯片导出...");
+  const title = els.docTitle?.textContent || state.currentDoc?.title || "MyTemple 文档";
+  const rawContent = String(state.currentContent || els.editor.value || "");
+  const slides = splitMarkdownIntoSlides(rawContent);
+  if (!slides.length) {
+    showToast("文档内容为空，无法生成幻灯片");
+    return;
+  }
+  const pdfSettings = readPdfExportSettings();
+  const watermarkText = escapeHtml(pdfSettings.watermarkText || "MyTemple Knowledge");
+  // 渲染每页幻灯片，图片内联为 data URL
+  const slideHtmlArray = await Promise.all(slides.map(async (slide) => {
+    let html = normalizeAssetUrlsToRelative(cachedRenderMarkdown(slide));
+    html = await inlinePrintImages(html);
+    return html;
+  }));
+  const slidesJson = JSON.stringify(slideHtmlArray);
+  const presentationHtml = `<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${escapeHtml(title)} - 幻灯片</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{width:100%;height:100%;overflow:hidden;background:#1a1a2e;font-family:"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;}
+.deck{width:100vw;height:100vh;display:flex;align-items:center;justify-content:center;position:relative;}
+.slide{width:min(960px,92vw);height:min(600px,80vh);background:#fff;border-radius:12px;padding:48px 56px;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3);display:none;position:relative;}
+.slide.active{display:block;}
+.slide h1{font-size:36px;font-weight:700;color:#1a1a2e;margin-bottom:24px;line-height:1.35;border-bottom:3px solid #6366f1;padding-bottom:12px;}
+.slide h2{font-size:30px;font-weight:600;color:#312e81;margin:20px 0 14px;}
+.slide h3{font-size:24px;font-weight:600;color:#4338ca;margin:16px 0 10px;}
+.slide p{font-size:20px;line-height:1.8;color:#374151;margin:12px 0;}
+.slide ul,.slide ol{margin:12px 0;padding-left:32px;font-size:20px;line-height:1.8;color:#374151;}
+.slide li{margin:6px 0;}
+.slide blockquote{border-left:4px solid #6366f1;background:#f5f3ff;padding:12px 20px;margin:16px 0;border-radius:0 8px 8px 0;color:#4b5563;font-size:19px;}
+.slide pre{background:#1e293b;color:#e2e8f0;border-radius:8px;padding:16px 20px;overflow-x:auto;font-family:"Cascadia Code",Consolas,monospace;font-size:16px;line-height:1.6;margin:14px 0;}
+.slide code{font-family:"Cascadia Code",Consolas,monospace;background:rgba(99,102,241,0.1);padding:2px 6px;border-radius:4px;font-size:0.9em;color:#4338ca;}
+.slide pre code{background:transparent;padding:0;color:inherit;}
+.slide table{width:100%;border-collapse:collapse;margin:16px 0;font-size:18px;}
+.slide th,.slide td{border:1px solid #d1d5db;padding:8px 14px;text-align:left;}
+.slide th{background:#eef2ff;font-weight:600;color:#312e81;}
+.slide img{max-width:100%;height:auto;border-radius:8px;margin:14px auto;display:block;}
+.slide a{color:#4338ca;text-decoration:underline;}
+.slide hr{border:0;border-top:2px solid #e5e7eb;margin:20px 0;}
+.deck-watermark{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-30deg);font-size:48px;color:rgba(99,102,241,0.06);pointer-events:none;z-index:9999;font-weight:700;letter-spacing:6px;white-space:nowrap;}
+.nav{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:16px;background:rgba(255,255,255,0.1);backdrop-filter:blur(8px);padding:8px 20px;border-radius:999px;z-index:10000;}
+.nav button{background:rgba(255,255,255,0.15);border:0;color:#fff;width:40px;height:40px;border-radius:50%;cursor:pointer;font-size:18px;transition:background 0.2s;}
+.nav button:hover{background:rgba(255,255,255,0.3);}
+.nav .counter{color:rgba(255,255,255,0.8);font-size:14px;min-width:60px;text-align:center;}
+.progress{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,#6366f1,#8b5cf6);transition:width 0.3s ease;z-index:10000;}
+.hint{position:fixed;top:16px;right:20px;color:rgba(255,255,255,0.4);font-size:12px;z-index:10000;}
+</style>
+</head>
+<body>
+<div class="deck" id="deck"></div>
+<div class="deck-watermark" aria-hidden="true">${watermarkText}</div>
+<div class="progress" id="progress" style="width:0%"></div>
+<div class="nav">
+  <button id="prevBtn" title="上一页 (←)">‹</button>
+  <span class="counter" id="counter">1 / 1</span>
+  <button id="nextBtn" title="下一页 (→)">›</button>
+  <button id="fsBtn" title="全屏 (F)">⛶</button>
+</div>
+<div class="hint">← → 翻页 · F 全屏 · 点击右侧前进</div>
+<script>
+(function(){
+  var slides = ${slidesJson};
+  var deck = document.getElementById("deck");
+  var current = 0;
+  slides.forEach(function(html, i){
+    var div = document.createElement("div");
+    div.className = "slide" + (i === 0 ? " active" : "");
+    div.innerHTML = html;
+    deck.appendChild(div);
+  });
+  var counter = document.getElementById("counter");
+  var progress = document.getElementById("progress");
+  function show(i){
+    current = Math.max(0, Math.min(slides.length - 1, i));
+    var els = deck.querySelectorAll(".slide");
+    els.forEach(function(el, idx){ el.classList.toggle("active", idx === current); });
+    counter.textContent = (current + 1) + " / " + slides.length;
+    progress.style.width = ((current + 1) / slides.length * 100) + "%";
+  }
+  document.getElementById("prevBtn").addEventListener("click", function(e){ e.stopPropagation(); show(current - 1); });
+  document.getElementById("nextBtn").addEventListener("click", function(e){ e.stopPropagation(); show(current + 1); });
+  document.getElementById("fsBtn").addEventListener("click", function(e){ e.stopPropagation(); toggleFs(); });
+  function toggleFs(){
+    if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+    else document.exitFullscreen();
+  }
+  deck.addEventListener("click", function(e){
+    if (e.target.closest("a")) return;
+    var rect = deck.getBoundingClientRect();
+    if (e.clientX > rect.left + rect.width / 2) show(current + 1);
+    else show(current - 1);
+  });
+  document.addEventListener("keydown", function(e){
+    if (e.key === "ArrowRight" || e.key === " " || e.key === "PageDown") { e.preventDefault(); show(current + 1); }
+    else if (e.key === "ArrowLeft" || e.key === "PageUp") { e.preventDefault(); show(current - 1); }
+    else if (e.key === "f" || e.key === "F") { e.preventDefault(); toggleFs(); }
+    else if (e.key === "Home") { e.preventDefault(); show(0); }
+    else if (e.key === "End") { e.preventDefault(); show(slides.length - 1); }
+    else if (e.key === "Escape" && document.fullscreenElement) document.exitFullscreen();
+  });
+  show(0);
+})();
+</script>
+</body>
+</html>`;
+  const blob = new Blob([presentationHtml], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const safeName = String(title).replace(/[\\/:*?"<>|]/g, "_").slice(0, 60) || "幻灯片";
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${safeName}_幻灯片.html`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  showToast(`已导出 ${slides.length} 页幻灯片，双击 HTML 文件即可演示`);
+}
+
 function ensureMarkdownWorker() {
   if (state.markdownWorker || state.markdownWorkerFailed) return state.markdownWorker;
   try {
@@ -1504,7 +1738,7 @@ function requestMarkdownRender({ source = "", searchTerm = "", includeHtml = tru
   const worker = ensureMarkdownWorker();
   if (!worker) {
     return Promise.resolve({
-      html: includeHtml ? renderMarkdown(source, { searchTerm }) : null,
+      html: includeHtml ? cachedRenderMarkdown(source, { searchTerm }) : null,
       outline: includeOutline ? extractOutline(source) : null,
     });
   }
@@ -1526,17 +1760,19 @@ async function renderReaderContent(source, options = {}) {
       includeOutline: true,
     });
     if (state.currentContent !== content && !searchTerm) return;
-    els.markdownView.innerHTML = html ?? renderMarkdown(content, { searchTerm });
+    els.markdownView.innerHTML = html ?? cachedRenderMarkdown(content, { searchTerm });
     renderOutlineItems(outline || extractOutline(content));
   } catch (error) {
     console.error(error);
-    els.markdownView.innerHTML = renderMarkdown(content, { searchTerm });
+    els.markdownView.innerHTML = cachedRenderMarkdown(content, { searchTerm });
     renderOutline(content);
   }
 }
 
 function inlineMarkdown(value, searchTerm = "") {
   let html = escapeHtml(value)
+    .replace(/%%[\s\S]*?%%/g, "")
+    .replace(/\$\$([\s\S]+?)\$\$/g, "<code class=\"math\">$1</code>")
     .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" class="auto-size-image" loading="lazy" />')
     .replace(/==([^=]+)==/g, "<mark>$1</mark>")
     .replace(/\+\+([^+]+)\+\+/g, "<u>$1</u>")
@@ -1563,6 +1799,8 @@ function inlineMarkdown(value, searchTerm = "") {
   }
 
   return html
+    .replace(/\[\^([\w-]+)\]/g, '<sup class="footnote-ref"><a href="#fn-$1">[^$1]</a></sup>')
+    .replace(/(^|[\s>])#([A-Za-z\u4e00-\u9fa5][\w\u4e00-\u9fa5-]{1,30})(?![\w\u4e00-\u9fa5-])/g, '$1<span class="md-tag">#$2</span>')
     .replace(/\[\[([^\]]+)\]\]/g, '<a href="#" data-doc-link="$1">$1</a>')
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, url) => `<a href="${safeMarkdownUrl(url)}">${label}</a>`);
 }
@@ -1701,6 +1939,7 @@ function highlightCode(raw, language) {
 
 function renderMarkdown(source, options = {}) {
   const searchTerm = options.searchTerm || "";
+  const editTools = options.editTools === true;
   const lines = source.replace(/\r\n/g, "\n").split("\n");
   const html = [];
   let h1Index = 0;
@@ -1712,14 +1951,37 @@ function renderMarkdown(source, options = {}) {
   let codeLanguage = "text";
   let list = null;
   let table = [];
+  let tableStartLine = -1;
+  let blockquote = [];
+  let blockquoteStartLine = -1;
+  let codeStartLine = -1;
+  const footnoteDefs = [];
 
   const flushList = () => {
     if (!list) return;
     const hasTasks = list.items.some((item) => item.task);
     const listClass = hasTasks ? ' class="contains-task-list"' : "";
     const items = list.items.map((item) => `<li${item.task ? ' class="task-list-item"' : ""}>${item.html}</li>`).join("");
-    html.push(`<${list.type}${listClass}>${items}</${list.type}>`);
+     html.push(`<${list.type}${listClass} data-source-line="${list.startLine}">${items}</${list.type}>`);
     list = null;
+  };
+  const flushBlockquote = () => {
+    if (!blockquote.length) return;
+    const first = blockquote[0];
+    const calloutMatch = first.match(/^\[!(note|info|tip|warning|danger|quote|success|question|bug|example|failure|abstract|todo|important|caution)\]\s*(.*)$/i);
+    if (calloutMatch) {
+      const type = calloutMatch[1].toLowerCase();
+      const title = calloutMatch[2].trim();
+      const body = blockquote.slice(1);
+      const titleHtml = `<strong class="callout-title">${inlineMarkdown(title || type, searchTerm)}</strong>`;
+      const bodyHtml = body.map((l) => inlineMarkdown(l, searchTerm)).filter(Boolean).join("<br />");
+       html.push(`<div class="callout callout-${type}" data-source-line="${blockquoteStartLine}">${titleHtml}${bodyHtml ? `<div class="callout-body">${bodyHtml}</div>` : ""}</div>`);
+    } else {
+      const content = blockquote.map((l) => inlineMarkdown(l, searchTerm)).join("<br />");
+       html.push(`<blockquote data-source-line="${blockquoteStartLine}">${content}</blockquote>`);
+    }
+     blockquote = [];
+     blockquoteStartLine = -1;
   };
   const flushTable = () => {
     if (!table.length) return;
@@ -1729,9 +1991,21 @@ function renderMarkdown(source, options = {}) {
       const alignments = divider.map(markdownTableAlignment);
       const columnCount = head.length;
       const cell = (tag, value, index) => `<${tag} style="text-align:${alignments[index] || "left"}">${inlineMarkdown(value || "", searchTerm)}</${tag}>`;
-      html.push(`<div class="markdown-table-wrap"><table><thead><tr>${head.map((value, index) => cell("th", value, index)).join("")}</tr></thead><tbody>${body.map((row) => `<tr>${Array.from({ length: columnCount }, (_, index) => cell("td", row[index], index)).join("")}</tr>`).join("")}</tbody></table></div>`);
+      const tableHtml = `<table><thead><tr>${head.map((value, index) => cell("th", value, index)).join("")}</tr></thead><tbody>${body.map((row) => `<tr>${Array.from({ length: columnCount }, (_, index) => cell("td", row[index], index)).join("")}</tr>`).join("")}</tbody></table>`;
+      // 编辑模式预览中提供行/列扩展工具，回写源码；阅读模式与导出不含工具。
+      if (editTools && tableStartLine >= 0) {
+        const tools = `<div class="md-table-tools" data-table-start="${tableStartLine}">
+          <button type="button" class="md-table-tool" data-table-action="addRow" title="在末尾追加一行">+ 行</button>
+          <button type="button" class="md-table-tool" data-table-action="addCol" title="追加一列">+ 列</button>
+          <button type="button" class="md-table-tool" data-table-action="removeCol" title="删除最后一列" ${columnCount <= 1 ? "disabled" : ""}>- 列</button>
+        </div>`;
+         html.push(`<div class="markdown-table-wrap" data-source-line="${tableStartLine}">${tools}${tableHtml}</div>`);
+      } else {
+         html.push(`<div class="markdown-table-wrap" data-source-line="${tableStartLine}">${tableHtml}</div>`);
+      }
     }
     table = [];
+    tableStartLine = -1;
   };
 
   for (let i = 0; i < lines.length; i++) {
@@ -1739,12 +2013,14 @@ function renderMarkdown(source, options = {}) {
     if (line.startsWith("```")) {
       flushList();
       flushTable();
+      flushBlockquote();
       if (inCode) {
         const raw = code.join("\n");
         html.push(`<div class="code-block" data-language="${codeLanguage}"><span class="code-language">${escapeHtml(codeLanguage)}</span><button class="code-copy" type="button">\u590d\u5236</button><pre><code class="language-${codeLanguage}">${highlightCode(raw, codeLanguage)}</code></pre></div>`);
         code = [];
         codeLanguage = "text";
-      } else {
+       } else {
+         codeStartLine = i;
         codeLanguage = normalizeCodeLanguage(line.slice(3).trim().split(/\s+/)[0]);
       }
       inCode = !inCode;
@@ -1757,7 +2033,8 @@ function renderMarkdown(source, options = {}) {
     if (/^\s*---+\s*$/.test(line)) {
       flushList();
       flushTable();
-      html.push("<hr />");
+      flushBlockquote();
+       html.push(`<hr data-source-line="${i}" />`);
       continue;
     }
     const row = line.includes("|") ? splitMarkdownTableRow(line) : [];
@@ -1766,6 +2043,8 @@ function renderMarkdown(source, options = {}) {
       && nextRow.every((cell) => markdownTableAlignment(cell));
     if (startsTable) {
       flushList();
+      flushBlockquote();
+      tableStartLine = i;
       table.push(line, lines[i + 1]);
       i += 1;
       continue;
@@ -1775,6 +2054,22 @@ function renderMarkdown(source, options = {}) {
       continue;
     }
     flushTable();
+    // 引用块：累积连续 > 行，支持 Obsidian callout（> [!type] 标题）。
+    const quote = line.match(/^>\s?(.*)$/);
+    if (quote) {
+      flushList();
+       blockquote.push(quote[1]);
+       if (blockquoteStartLine < 0) blockquoteStartLine = i;
+      continue;
+    }
+    flushBlockquote();
+    // 脚注定义：[^id]: 文本，收集后文末统一渲染。
+    const fnDef = line.match(/^\[\^([\w-]+)\]:\s*(.*)$/);
+    if (fnDef) {
+      flushList();
+      footnoteDefs.push({ id: fnDef[1], text: fnDef[2] });
+      continue;
+    }
     const indentedHeading = line.match(/^(\s*)(#{1,6})\s+(.+)$/);
     if (indentedHeading) {
       flushList();
@@ -1798,7 +2093,7 @@ function renderMarkdown(source, options = {}) {
       }
       const idAttr = id ? ` id="${escapeHtml(id)}"` : "";
       const marginLeft = indent * 16;
-      html.push(`<h${level}${idAttr} style="margin-left: ${marginLeft}px;">${inlineMarkdown(indentedHeading[3], searchTerm)}</h${level}>`);
+       html.push(`<h${level}${idAttr} data-source-line="${i}" style="margin-left: ${marginLeft}px;">${inlineMarkdown(indentedHeading[3], searchTerm)}</h${level}>`);
       continue;
     }
     const cnHeading = line.match(/^(\s*)([一二三四五六七八九十]{1,4}[、.．]\s*.+)$/);
@@ -1810,7 +2105,7 @@ function renderMarkdown(source, options = {}) {
       const id = headingId(cnHeading[2], `auto-${h2Index++}`);
       h3Index = 0;
       h4Index = 0;
-      html.push(`<h${level}${id ? ` id="${escapeHtml(id)}"` : ""} style="margin-left: ${marginLeft}px;">${inlineMarkdown(cnHeading[2], searchTerm)}</h${level}>`);
+       html.push(`<h${level}${id ? ` id="${escapeHtml(id)}"` : ""} data-source-line="${i}" style="margin-left: ${marginLeft}px;">${inlineMarkdown(cnHeading[2], searchTerm)}</h${level}>`);
       continue;
     }
     const dottedHeading = line.match(/^(\s*)(\d+(?:\.\d+)+)([、.．])\s*([^-*].+)$/);
@@ -1822,7 +2117,7 @@ function renderMarkdown(source, options = {}) {
         const level = 3;
         const id = headingId(dottedHeading[4], `num-h3-${h3Index++}`);
         h4Index = 0;
-        html.push(`<h${level}${id ? ` id="${escapeHtml(id)}"` : ""} style="margin-left: ${marginLeft}px;">${inlineMarkdown(dottedHeading[2] + dottedHeading[3] + dottedHeading[4], searchTerm)}</h${level}>`);
+         html.push(`<h${level}${id ? ` id="${escapeHtml(id)}"` : ""} data-source-line="${i}" style="margin-left: ${marginLeft}px;">${inlineMarkdown(dottedHeading[2] + dottedHeading[3] + dottedHeading[4], searchTerm)}</h${level}>`);
         continue;
       }
     }
@@ -1835,15 +2130,9 @@ function renderMarkdown(source, options = {}) {
         const marginLeft = indent * 16;
         const level = 4;
         const id = headingId(numHeading[5], `num-h4-${h4Index++}`);
-        html.push(`<h${level}${id ? ` id="${escapeHtml(id)}"` : ""} style="margin-left: ${marginLeft}px;">${inlineMarkdown(numHeading[2] + numHeading[5], searchTerm)}</h${level}>`);
+         html.push(`<h${level}${id ? ` id="${escapeHtml(id)}"` : ""} data-source-line="${i}" style="margin-left: ${marginLeft}px;">${inlineMarkdown(numHeading[2] + numHeading[5], searchTerm)}</h${level}>`);
         continue;
       }
-    }
-    const quote = line.match(/^>\s?(.+)$/);
-    if (quote) {
-      flushList();
-      html.push(`<blockquote>${inlineMarkdown(quote[1], searchTerm)}</blockquote>`);
-      continue;
     }
     const bullet = line.match(/^(\s*)[-*]\s+(.+)$/);
     const ordered = line.match(/^(\s*)(\d+)[.)]\s+(.+)$/);
@@ -1854,7 +2143,7 @@ function renderMarkdown(source, options = {}) {
       const task = content.match(/^\[([ xX])\](?:\s+(.*))?$/);
       if (!list || list.type !== type) {
         flushList();
-        list = { type, items: [] };
+        list = { type, items: [], startLine: i };
       }
       const marginStyle = indent > 0 ? ` style="margin-left: ${indent * 16}px;"` : "";
       if (task) {
@@ -1876,24 +2165,63 @@ function renderMarkdown(source, options = {}) {
       const marginLeft = indent * 16;
       const maxWidth = Math.max(50, 100 - indent * 10);
       const widthPercent = maxWidth < 100 ? `${maxWidth}%` : "100%";
-      html.push(`<div style="margin-left: ${marginLeft}px; width: ${widthPercent};"><p>${inlineMarkdown(indentedImage[2], searchTerm)}</p></div>`);
+       html.push(`<div data-source-line="${i}" style="margin-left: ${marginLeft}px; width: ${widthPercent};"><p>${inlineMarkdown(indentedImage[2], searchTerm)}</p></div>`);
       continue;
     }
     if (!line.trim()) {
       flushList();
+      flushBlockquote();
       html.push("");
       continue;
     }
     flushList();
-    html.push(`<p>${inlineMarkdown(line, searchTerm)}</p>`);
+     html.push(`<p data-source-line="${i}">${inlineMarkdown(line, searchTerm)}</p>`);
   }
   flushList();
   flushTable();
+  flushBlockquote();
   if (inCode) {
     const raw = code.join("\n");
     html.push(`<div class="code-block" data-language="${codeLanguage}"><span class="code-language">${escapeHtml(codeLanguage)}</span><button class="code-copy" type="button">\u590d\u5236</button><pre><code class="language-${codeLanguage}">${highlightCode(raw, codeLanguage)}</code></pre></div>`);
   }
+  // 脚注定义统一渲染到文末。
+  if (footnoteDefs.length) {
+    const items = footnoteDefs.map((fn) => `<li id="fn-${escapeHtml(fn.id)}">${inlineMarkdown(fn.text || "", searchTerm)}</li>`).join("");
+    html.push(`<section class="footnotes"><ol>${items}</ol></section>`);
+  }
   return html.join("\n");
+}
+
+function markdownCacheKey(source, options = {}) {
+  const text = String(source || "");
+  const mode = options.editTools ? "edit" : "read";
+  const searchTerm = options.searchTerm || "";
+  return `${mode}\n${searchTerm}\n${text.length}\n${text}`;
+}
+
+function cachedRenderMarkdown(source, options = {}) {
+  const text = String(source || "");
+  const searchTerm = options.searchTerm || "";
+  if (searchTerm || text.length > 900000) return renderMarkdown(text, options);
+  const key = markdownCacheKey(text, options);
+  const hit = state.markdownCache.get(key);
+  if (hit) {
+    state.markdownCache.delete(key);
+    state.markdownCache.set(key, hit);
+    return hit.html;
+  }
+  const html = renderMarkdown(text, options);
+  const size = text.length + html.length;
+  state.markdownCache.set(key, { html, size });
+  state.markdownCacheBytes += size;
+  while (state.markdownCache.size > 18 || state.markdownCacheBytes > 8_000_000) {
+    const oldestKey = state.markdownCache.keys().next().value;
+    if (!oldestKey) break;
+    const oldest = state.markdownCache.get(oldestKey);
+    state.markdownCacheBytes -= oldest?.size || 0;
+    state.markdownCache.delete(oldestKey);
+  }
+  return html;
 }
 
 function syncTaskInputs(lineIndex, checked) {
@@ -2655,7 +2983,10 @@ function setMode(mode) {
   if (mode === "view") {
     void renderReaderContent(state.currentContent);
   }
-  if (mode !== "graph") stopGraphSimulation();
+  if (mode !== "graph") {
+    stopGraphSimulation();
+    releaseGraphCanvas();
+  }
   if (mode === "graph") requestAnimationFrame(() => initGraph());
 }
 
@@ -2767,6 +3098,7 @@ async function openDoc(docPath, options = {}) {
     requestAnimationFrame(() => scrollReaderToElement(els.markdownView.querySelector(".search-hit"), "auto"));
   }
   addRecentDoc(doc.path);
+  try { localStorage.setItem("lastOpenedDoc", doc.path); } catch (_) {}
 }
 
 function debounce(fn, wait = 180) {
@@ -2860,7 +3192,12 @@ async function loadAiStatus() {
       if (els.aiBaseUrl) els.aiBaseUrl.value = status.baseUrl || "http://127.0.0.1:11434";
       if (els.aiEmbeddingModel) els.aiEmbeddingModel.value = status.embeddingModel || "";
       if (els.aiChatModel) els.aiChatModel.value = status.chatModel || "";
-      if (els.aiDeepseekApiKey) els.aiDeepseekApiKey.value = status.deepseekApiKey || "";
+      if (els.aiDeepseekApiKey) {
+        els.aiDeepseekApiKey.value = "";
+        els.aiDeepseekApiKey.placeholder = status.deepseekApiKeyConfigured
+          ? "已配置，留空则保持不变"
+          : "sk-...";
+      }
       if (els.aiDeepseekBaseUrl) els.aiDeepseekBaseUrl.value = status.deepseekBaseUrl || "https://api.deepseek.com";
       if (els.aiDeepseekChatModel) els.aiDeepseekChatModel.value = status.deepseekChatModel || "deepseek-chat";
       setAiProvider(status.chatProvider === "deepseek" ? "deepseek" : "ollama");
@@ -3016,35 +3353,83 @@ function refreshAiSelectionMenu() {
   }
 }
 
+let aiTransformRequestSeq = 0;
+
 function closeAiTransformModal() {
+  aiTransformRequestSeq += 1;
   els.aiTransformModal?.classList.add("hidden");
   state.ai.transform = null;
 }
 
-async function runAiTransform(mode) {
+async function runAiTransform(mode, { preserveInstruction = false } = {}) {
+  const requestId = ++aiTransformRequestSeq;
   const selection = state.ai.selection || getAiSelection();
-  if (!selection?.text) return showToast("请先选中一段文本");
-  state.ai.selection = selection;
+  const isRewrite = mode === "rewrite";
+  // 代写模式允许无选区（基于写作要求生成新文档），其余模式需选中文本。
+  if (!isRewrite && !selection?.text) return showToast("请先选中一段文本");
+  state.ai.selection = selection || { source: "editor", text: "", start: 0, end: 0 };
   els.aiSelectionMenu?.classList.add("hidden");
   els.aiTransformModal?.classList.remove("hidden");
-  els.aiTransformTitle.textContent = `生成${AI_TRANSFORM_LABELS[mode] || "结果"}`;
-  els.aiTransformSource.textContent = `${selection.source === "editor" ? "编辑器选区" : "阅读器选区"} · ${selection.text.length} 字`;
-  els.aiTransformResult.value = "正在处理选中文本…";
+  // 双向翻译：标题根据源语言显示"英译中/中译英"，与后端 prompt 判定保持一致。
+  function detectLanguageDirection(source) {
+    const s = String(source || "");
+    if (!s) return "zh2en";
+    const cjkCount = (s.match(/[\u4e00-\u9fff\u3400-\u4dbf\u3000-\u303f\uff00-\uffef]/g) || []).length;
+    const letterCount = (s.match(/[A-Za-z]/g) || []).length;
+    if (letterCount === 0 && cjkCount === 0) return "zh2en";
+    const cjkRatio = cjkCount / Math.max(1, cjkCount + letterCount);
+    return cjkRatio >= 0.3 ? "zh2en" : "en2zh";
+  }
+  let titleLabel = AI_TRANSFORM_LABELS[mode] || "结果";
+  if (mode === "translate") {
+    const direction = detectLanguageDirection(selection?.text || "");
+    titleLabel = direction === "zh2en" ? "中译英" : "英译中";
+  }
+  els.aiTransformTitle.textContent = `生成${titleLabel}`;
+  // 代写模式显示「写作要求」输入框，其余模式隐藏。
+  const instrWrap = document.querySelector("#aiTransformInstructionWrap");
+  if (instrWrap) instrWrap.classList.toggle("hidden", !isRewrite);
+  if (els.aiTransformInstruction && !preserveInstruction) els.aiTransformInstruction.value = "";
+  if (els.aiTransformGenerateBtn) {
+    els.aiTransformGenerateBtn.classList.toggle("hidden", !isRewrite);
+    els.aiTransformGenerateBtn.disabled = isRewrite;
+  }
+  els.aiTransformCreateBtn.textContent = isRewrite ? "新建文档" : "新建摘要文档";
+  state.ai.transform = null;
+  const sourceText = selection?.text || "";
+  els.aiTransformSource.textContent = sourceText
+    ? `${selection.source === "editor" ? "编辑器选区" : "阅读器选区"} · ${sourceText.length} 字`
+    : "代写模式：根据写作要求生成新文档";
+  els.aiTransformResult.value = isRewrite ? "正在根据要求生成文档…" : "正在处理选中文本…";
   els.aiTransformResult.disabled = true;
-  els.aiTransformInsertBtn.disabled = selection.source !== "editor";
+  els.aiTransformInsertBtn.disabled = isRewrite || selection?.source !== "editor";
   els.aiTransformCreateBtn.disabled = true;
+  const instruction = isRewrite ? (els.aiTransformInstruction?.value || "").trim() : "";
+  if (isRewrite && !instruction) {
+    els.aiTransformResult.value = "";
+    els.aiTransformResult.disabled = false;
+    if (els.aiTransformGenerateBtn) els.aiTransformGenerateBtn.disabled = false;
+    return showToast("请在「写作要求」中填写需求");
+  }
   try {
-    const result = await api.post("/api/ai/transform", { text: selection.text, mode });
+    const payload = { text: sourceText, mode };
+    if (instruction) payload.instruction = instruction;
+    const result = await api.post("/api/ai/transform", payload);
+    if (requestId !== aiTransformRequestSeq) return;
     els.aiTransformResult.value = result.content || "";
-    state.ai.transform = { ...selection, mode, result: result.content || "" };
+    state.ai.transform = { ...(selection || {}), mode, result: result.content || "" };
     els.aiTransformCreateBtn.disabled = !result.content;
     if (result.warning) showToast(result.warning);
   } catch (error) {
+    if (requestId !== aiTransformRequestSeq) return;
     els.aiTransformResult.value = "";
     showToast(error.message || "文本处理失败");
     closeAiTransformModal();
   } finally {
-    els.aiTransformResult.disabled = false;
+    if (requestId === aiTransformRequestSeq) {
+      els.aiTransformResult.disabled = false;
+      if (els.aiTransformGenerateBtn) els.aiTransformGenerateBtn.disabled = false;
+    }
   }
 }
 
@@ -3052,9 +3437,14 @@ async function insertAiTransform() {
   const transform = state.ai.transform;
   const content = els.aiTransformResult.value.trim();
   if (!transform || transform.source !== "editor" || !content) return;
-  els.editor.focus();
-  els.editor.setRangeText(content, transform.start, transform.end, "end");
-  els.editor.dispatchEvent(new Event("input", { bubbles: true }));
+  const range = resolveAiEditorRange(transform);
+  if (!range) return showToast("原文已变化，请重新生成 AI 结果后再插入");
+  if (content === els.editor.value.slice(range.start, range.end).trim()) {
+    return showToast("AI 结果与原文相同，请重新生成后再插入");
+  }
+  if (!await replaceEditorRange(content, range.start, range.end, "end")) {
+    return showToast("AI 结果未能写入编辑器，请重试");
+  }
   closeAiTransformModal();
   showToast("AI 结果已插入当前位置");
 }
@@ -3063,9 +3453,11 @@ async function createAiTransformDocument() {
   const transform = state.ai.transform;
   const content = els.aiTransformResult.value.trim();
   if (!transform || !content) return;
-  const baseName = String(splitPathRef(transform.path).relative.split("/").pop() || "文档").replace(/\.md$/i, "");
+  // 代写模式可能无选区路径，回退到当前文档路径或活跃工作区。
+  const basePath = transform.path || state.currentPath || "";
+  const baseName = String(splitPathRef(basePath).relative.split("/").pop() || "文档").replace(/\.md$/i, "");
   const name = (els.aiTransformDocName.value.trim() || `${baseName}-${AI_TRANSFORM_LABELS[transform.mode] || "整理"}`).slice(0, 80);
-  const parent = parentPathRef(transform.path);
+  const parent = parentPathRef(basePath);
   els.aiTransformCreateBtn.disabled = true;
   try {
     const created = await api.post("/api/create-doc", { parent, name });
@@ -3081,6 +3473,222 @@ async function createAiTransformDocument() {
   } finally {
     els.aiTransformCreateBtn.disabled = false;
   }
+}
+
+// ===== AI 智能编辑提示：光标停留分析并给出改写/注释/翻译建议 =====
+const aiHintState = { timer: null, lastKey: "", lastShownAt: 0, inflight: false };
+
+function aiEditHintEnabled() {
+  // 仅在编辑模式且编辑器获得焦点（光标停留于编辑栏）时启用，避免阅读/图谱模式误触发。
+  const editorFocused = Boolean(els.editor?.hasFocus)
+    || Boolean(els.editor?.contains?.(document.activeElement));
+  return localStorage.getItem("aiEditHint") === "1" && state.mode === "edit" && editorFocused;
+}
+
+function initAiEditHintSettings() {
+  if (els.aiEditHintToggle) {
+    els.aiEditHintToggle.checked = localStorage.getItem("aiEditHint") === "1";
+    els.aiEditHintToggle.addEventListener("change", () => {
+      localStorage.setItem("aiEditHint", els.aiEditHintToggle.checked ? "1" : "0");
+      if (!els.aiEditHintToggle.checked) { clearAiEditHintTimer(); hideAiEditHintPopover(); }
+    });
+  }
+  if (els.aiEditHintDelay) {
+    const saved = parseFloat(localStorage.getItem("aiEditHintDelay"));
+    if (Number.isFinite(saved)) els.aiEditHintDelay.value = String(saved);
+    els.aiEditHintDelay.addEventListener("change", () => {
+      // 最大等待时长 60s，允许长停留分析；最小 1s。
+      const v = Math.min(60, Math.max(1, parseFloat(els.aiEditHintDelay.value) || 2.5));
+      els.aiEditHintDelay.value = String(v);
+      localStorage.setItem("aiEditHintDelay", String(v));
+    });
+  }
+  // 点击提示弹窗时编辑器会先失焦，但弹窗按钮仍需完成 click 回写。
+  // 只有真正离开编辑器和提示弹窗时才清理提示，避免按钮在 click 前被移除。
+  els.editor?.addEventListener("blur", (event) => {
+    const nextTarget = event.relatedTarget;
+    if (nextTarget && document.getElementById("aiEditHintPopover")?.contains(nextTarget)) return;
+    clearAiEditHintTimer();
+    hideAiEditHintPopover();
+  });
+}
+
+function clearAiEditHintTimer() {
+  if (aiHintState.timer) { clearTimeout(aiHintState.timer); aiHintState.timer = null; }
+}
+
+function scheduleAiEditHint() {
+  clearAiEditHintTimer();
+  if (!aiEditHintEnabled()) return;
+  const delaySec = parseFloat(localStorage.getItem("aiEditHintDelay")) || 2.5;
+  // 上限 60s，与设置面板最大值一致，支持长停留分析。
+  const delay = Math.min(60000, Math.max(1000, delaySec * 1000));
+  aiHintState.timer = setTimeout(requestAiEditHint, delay);
+}
+
+function currentEditorParagraph() {
+  const value = els.editor.value;
+  if (!value) return null;
+  const pos = els.editor.selectionStart ?? 0;
+  const before = value.slice(0, pos);
+  const after = value.slice(pos);
+  const lastBreak = before.lastIndexOf("\n\n");
+  const paraStart = lastBreak === -1 ? 0 : lastBreak + 2;
+  const nextBreak = after.indexOf("\n\n");
+  const paraEnd = nextBreak === -1 ? value.length : pos + nextBreak;
+  const text = value.slice(paraStart, paraEnd).trim();
+  return text ? { text, start: paraStart, end: paraEnd } : null;
+}
+
+async function requestAiEditHint() {
+  if (aiHintState.inflight || !aiEditHintEnabled()) return;
+  const para = currentEditorParagraph();
+  if (!para || para.text.length < 8) return;
+  const requestPath = state.currentPath;
+  const requestContent = els.editor.value;
+  const key = `${requestPath}:${para.start}:${para.text}`;
+  // 同一段落 5 分钟内不重复提示。
+  if (key === aiHintState.lastKey && Date.now() - aiHintState.lastShownAt < 300000) return;
+  aiHintState.inflight = true;
+  try {
+    const result = await api.post("/api/ai/transform", { text: para.text, mode: "hint" });
+    if (!result || !result.content) return;
+    if (result.answerMode === "local-fallback") {
+      if (result.warning) showToast(result.warning);
+      return;
+    }
+    const activeParagraph = currentEditorParagraph();
+    if (!aiEditHintEnabled()
+      || state.currentPath !== requestPath
+      || els.editor.value !== requestContent
+      || activeParagraph?.start !== para.start) return;
+    let hint = null;
+    let suggestion = "";
+    try {
+      const cleaned = result.content.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+      const parsed = JSON.parse(cleaned);
+      hint = parsed.hint || null;
+      suggestion = parsed.suggestion || "";
+    } catch (_) {
+      hint = String(result.content).slice(0, 120);
+      suggestion = String(result.content);
+    }
+    aiHintState.lastKey = key;
+    aiHintState.lastShownAt = Date.now();
+    showAiEditHintPopover({
+      hint,
+      suggestion,
+      para: { ...para, path: requestPath, contentSnapshot: requestContent },
+      warning: result.warning,
+    });
+  } catch (_) { /* AI 不可用时静默不弹 */ } finally {
+    aiHintState.inflight = false;
+  }
+}
+
+function showAiEditHintPopover({ hint, suggestion, para, warning }) {
+  hideAiEditHintPopover();
+  if (!hint) return;
+  // 双向翻译：自动识别源语言方向，按钮文案显示"翻译为中文/英文"。
+  function detectLanguageDirection(source) {
+    const s = String(source || "");
+    if (!s) return "zh2en";
+    const cjkCount = (s.match(/[\u4e00-\u9fff\u3400-\u4dbf\u3000-\u303f\uff00-\uffef]/g) || []).length;
+    const letterCount = (s.match(/[A-Za-z]/g) || []).length;
+    if (letterCount === 0 && cjkCount === 0) return "zh2en";
+    const cjkRatio = cjkCount / Math.max(1, cjkCount + letterCount);
+    return cjkRatio >= 0.3 ? "zh2en" : "en2zh";
+  }
+  const direction = detectLanguageDirection(para?.text || "");
+  const translateLabel = direction === "zh2en" ? "翻译为英文" : "翻译为中文";
+  const popover = document.createElement("div");
+  popover.id = "aiEditHintPopover";
+  popover.className = "ai-edit-hint-popover";
+  popover.innerHTML = `<div class="ai-edit-hint-head"><strong>AI 编辑提示</strong><button type="button" class="ai-edit-hint-close" aria-label="关闭">×</button></div>
+    <p class="ai-edit-hint-text">${escapeHtml(hint)}</p>
+    <div class="ai-edit-hint-actions">
+      <button type="button" data-hint-action="rewrite">采纳改写</button>
+      <button type="button" data-hint-action="insert">插入注释</button>
+      <button type="button" data-hint-action="translate">${translateLabel}</button>
+    </div>`;
+  document.body.appendChild(popover);
+  const rect = els.editor.getBoundingClientRect();
+  popover.style.top = `${Math.max(12, rect.top + 16)}px`;
+  popover.style.right = `${Math.max(12, window.innerWidth - rect.right + 16)}px`;
+  popover.querySelector(".ai-edit-hint-close").addEventListener("click", hideAiEditHintPopover);
+  // WebView2/Chromium 可能在 pointerdown 阶段将焦点移到按钮，导致编辑器 blur。
+  // 阻止按钮抢焦点，保留后续 click 事件，让编辑器回写稳定完成。
+  popover.addEventListener("pointerdown", (event) => {
+    if (event.target.closest("[data-hint-action], .ai-edit-hint-close")) event.preventDefault();
+  });
+  popover.addEventListener("click", (event) => {
+    const btn = event.target.closest("[data-hint-action]");
+    if (!btn) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const action = btn.dataset.hintAction;
+    hideAiEditHintPopover();
+    if (para.path && (state.currentPath !== para.path || els.editor.value !== para.contentSnapshot)) {
+      showToast("文档已变化，请重新获取智能提示");
+      return;
+    }
+    state.ai.selection = { source: "editor", text: para.text, start: para.start, end: para.end, path: para.path || state.currentPath };
+    if (action === "rewrite") applyAiHintRewrite(suggestion, para);
+    else if (action === "insert") insertAiHintComment(suggestion, para);
+    else if (action === "translate") runAiTransform("translate");
+  });
+  if (warning) showToast(warning);
+}
+
+function resolveAiEditorRange(range) {
+  const value = els.editor.value;
+  const text = String(range?.text || "").trim();
+  const clamp = (position) => Math.max(0, Math.min(value.length, Number(position) || 0));
+  const start = clamp(range?.start);
+  const end = Math.max(start, clamp(range?.end));
+
+  if (!text || value.slice(start, end).trim() === text) return { start, end };
+
+  let matchStart = -1;
+  let nearestStart = -1;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+  while ((matchStart = value.indexOf(text, matchStart + 1)) !== -1) {
+    const distance = Math.abs(matchStart - start);
+    if (distance < nearestDistance) {
+      nearestStart = matchStart;
+      nearestDistance = distance;
+    }
+  }
+  return nearestStart === -1 ? null : { start: nearestStart, end: nearestStart + text.length };
+}
+
+async function applyAiHintRewrite(suggestion, para) {
+  const replacement = String(suggestion || "").trim();
+  if (!replacement) return showToast("本次提示没有可采纳的改写内容");
+  const range = resolveAiEditorRange(para);
+  if (!range) return showToast("原段落已变化，请重新获取智能提示");
+  if (replacement === els.editor.value.slice(range.start, range.end).trim()) {
+    return showToast("AI 没有生成不同内容，请重新获取提示或检查模型配置");
+  }
+  if (!await replaceEditorRange(replacement, range.start, range.end, "end")) {
+    return showToast("改写内容未能写入编辑器，请重试");
+  }
+  showToast("已采纳 AI 改写并实时保存");
+}
+
+async function insertAiHintComment(suggestion, para) {
+  if (!suggestion) return;
+  const comment = `\n> ${String(suggestion).split("\n").join("\n> ")}\n`;
+  const range = resolveAiEditorRange(para);
+  if (!range) return showToast("原段落已变化，请重新获取智能提示");
+  if (!await replaceEditorRange(comment, range.end, range.end, "end")) {
+    return showToast("注释未能写入编辑器，请重试");
+  }
+  showToast("已插入 AI 注释并实时保存");
+}
+
+function hideAiEditHintPopover() {
+  document.getElementById("aiEditHintPopover")?.remove();
 }
 
 async function loadAgentPolicyStatus() {
@@ -3186,7 +3794,7 @@ function endSidebarResize(event) {
   }
 }
 
-function syncPreviewToEditor() {
+function syncPreviewToEditor(preferCursor = true) {
   if (state.mode !== "edit") return;
   cancelAnimationFrame(state.syncPreviewScroll.frame);
   state.syncPreviewScroll.frame = requestAnimationFrame(() => {
@@ -3203,11 +3811,12 @@ function syncPreviewToEditor() {
     const topPadding = Number.parseFloat(getComputedStyle(editorDom?.querySelector(".cm-content") || editorDom).paddingTop) || 26;
     const totalLines = Math.max(1, String(state.currentContent || els.editor.value || "").split(/\r?\n/).length);
     const visibleLines = Math.max(1, Math.floor(els.editor.clientHeight / lineHeight));
-    const currentLine = clamp(Math.floor(Math.max(0, els.editor.scrollTop - topPadding) / lineHeight), 0, Math.max(0, totalLines - 1));
-    const anchors = [...els.preview.children]
-      .map((element) => ({ element, line: Number(element.dataset.sourceLine) }))
-      .filter((item) => Number.isFinite(item.line))
-      .sort((a, b) => a.line - b.line);
+    const editorValue = String(state.currentContent || els.editor.value || "");
+    const cursor = Number(els.editor.selectionEnd ?? 0);
+    const cursorLine = editorValue.slice(0, Math.max(0, cursor)).split("\n").length - 1;
+    const scrollLine = Math.floor(Math.max(0, els.editor.scrollTop - topPadding) / lineHeight);
+    const currentLine = clamp(preferCursor && els.editor.hasFocus ? cursorLine : scrollLine, 0, Math.max(0, totalLines - 1));
+    const anchors = state.previewAnchors || [];
     if (anchors.length >= 2) {
       let previous = anchors[0];
       let next = anchors[anchors.length - 1];
@@ -3236,12 +3845,21 @@ function syncPreviewToEditor() {
 
 function syncPreviewSourceAnchors(source) {
   const lines = String(source || "").replace(/\r\n/g, "\n").split("\n");
+  const explicit = [...els.preview.querySelectorAll("[data-source-line]")]
+    .map((element) => ({ element, line: Number(element.dataset.sourceLine) }))
+    .filter((anchor) => Number.isFinite(anchor.line) && anchor.line >= 0)
+    .sort((a, b) => a.line - b.line);
+  if (explicit.length) {
+    state.previewAnchors = explicit;
+    return;
+  }
   const normalize = (value) => String(value || "")
     .replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1")
     .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
     .replace(/[\s`*_~#>|{}()[\]]+/g, "")
     .toLowerCase();
   let cursor = 0;
+  const anchors = [];
   [...els.preview.children].forEach((element) => {
     const text = normalize(element.textContent).slice(0, 180);
     if (!text) return;
@@ -3255,9 +3873,11 @@ function syncPreviewSourceAnchors(source) {
     }
     if (found >= 0) {
       element.dataset.sourceLine = String(found);
+      anchors.push({ element, line: found });
       cursor = found + 1;
     }
   });
+  state.previewAnchors = anchors.sort((a, b) => a.line - b.line);
 }
 
 function attachImageDeleteButtons(root = els.preview) {
@@ -3316,10 +3936,30 @@ function renderCurrentPreview() {
   return renderCurrentPreviewAsync();
 }
 
+// 降低全量替换 innerHTML 造成的视觉抖动：先微降不透明度，rAF 写回内容后恢复，
+// 用淡入掩盖 DOM 重建瞬间，避免心流编辑被打断。
+// 保留滚动位置：innerHTML 重建会重置 scrollTop，导致表格操作等增量编辑后预览跳至文档尾部。
+let _previewSwapScheduled = false;
+function swapPreviewHtml(html) {
+  const preview = els.preview;
+  if (!preview) return;
+  const savedScroll = preview.scrollTop;
+  // 仅做极轻微的透明度过渡（0.75），降低插入样式时的闪烁抖动，不打断心流。
+  preview.style.opacity = "0.75";
+  preview.innerHTML = html;
+  preview.scrollTop = savedScroll;
+  if (_previewSwapScheduled) return;
+  _previewSwapScheduled = true;
+  requestAnimationFrame(() => {
+    _previewSwapScheduled = false;
+    if (els.preview) els.preview.style.opacity = "";
+  });
+}
+
 function renderCurrentPreviewNow(content = state.currentContent) {
   if (!state.previewVisible || state.mode !== "edit") return;
   const nextContent = String(content || els.editor.value || state.currentContent || "");
-  els.preview.innerHTML = renderMarkdown(nextContent);
+  swapPreviewHtml(cachedRenderMarkdown(nextContent, { editTools: true }));
   syncPreviewSourceAnchors(nextContent);
   attachImageDeleteButtons();
   els.preview.classList.remove("preview-pending");
@@ -3336,15 +3976,15 @@ async function renderCurrentPreviewAsync(content = state.currentContent, seq = +
     return;
   }
   try {
-    const html = renderMarkdown(content);
+    const html = cachedRenderMarkdown(content, { editTools: true });
     if (seq !== state.previewRenderSeq || content !== state.currentContent) return;
-    els.preview.innerHTML = html;
+    swapPreviewHtml(html);
     syncPreviewSourceAnchors(content);
     attachImageDeleteButtons();
   } catch (error) {
     console.error(error);
     if (seq !== state.previewRenderSeq || content !== state.currentContent) return;
-    els.preview.innerHTML = renderMarkdown(content);
+    swapPreviewHtml(cachedRenderMarkdown(content, { editTools: true }));
     syncPreviewSourceAnchors(content);
     attachImageDeleteButtons();
   }
@@ -3354,6 +3994,19 @@ async function renderCurrentPreviewAsync(content = state.currentContent, seq = +
 }
 
 let previewRafScheduled = false;
+function queuePreviewRender(content, seq) {
+  state.previewPending = { content, seq };
+  if (previewRafScheduled) return;
+  previewRafScheduled = true;
+  requestAnimationFrame(() => {
+    previewRafScheduled = false;
+    const pending = state.previewPending;
+    state.previewPending = null;
+    if (!pending) return;
+    renderCurrentPreviewAsync(pending.content, pending.seq);
+  });
+}
+
 function schedulePreviewUpdate({ immediate = false, forceContent = state.currentContent } = {}) {
   clearTimeout(state.previewTimer);
   if (!state.previewVisible || state.mode !== "edit") return;
@@ -3363,22 +4016,10 @@ function schedulePreviewUpdate({ immediate = false, forceContent = state.current
   const nextSeq = ++state.previewRenderSeq;
   els.preview.classList.toggle("preview-pending", state.previewLastContent !== content);
   if (wait === 0) {
-    if (!previewRafScheduled) {
-      previewRafScheduled = true;
-      requestAnimationFrame(() => {
-        previewRafScheduled = false;
-        renderCurrentPreviewAsync(content, nextSeq);
-      });
-    }
+    queuePreviewRender(content, nextSeq);
   } else {
     state.previewTimer = setTimeout(() => {
-      if (!previewRafScheduled) {
-        previewRafScheduled = true;
-        requestAnimationFrame(() => {
-          previewRafScheduled = false;
-          renderCurrentPreviewAsync(content, nextSeq);
-        });
-      }
+      queuePreviewRender(content, nextSeq);
     }, wait);
   }
   scheduleEditorOutlineUpdate(content);
@@ -3625,12 +4266,44 @@ async function runSearch() {
   }
   const { results } = await api.get(`/api/search?q=${encodeURIComponent(query)}`);
   if (seq !== state.searchSeq) return;
-  els.searchResults.innerHTML = results.length
-    ? results.map((item) => {
-        const file = state.flatFiles.find((entry) => entry.path === item.path) || item;
-        return `<button class="search-item" data-path="${escapeHtml(item.path)}" data-query="${escapeHtml(query)}"><strong>${escapeHtml(displayName(file))}</strong><span>${escapeHtml(item.snippet || item.path)}</span></button>`;
-      }).join("")
-    : `<div class="search-item"><strong>${text.emptyResult}</strong><span>${text.retryKeyword}</span></div>`;
+  const fragment = document.createDocumentFragment();
+  if (results.length) {
+    const fileByPath = new Map(state.flatFiles.map((entry) => [entry.path, entry]));
+    const visible = results.slice(0, 80);
+    for (const item of visible) {
+      const file = fileByPath.get(item.path) || item;
+      const button = document.createElement("button");
+      button.className = "search-item";
+      button.dataset.path = item.path;
+      button.dataset.query = query;
+      const title = document.createElement("strong");
+      title.textContent = displayName(file);
+      const snippet = document.createElement("span");
+      snippet.textContent = item.snippet || item.path;
+      button.append(title, snippet);
+      fragment.appendChild(button);
+    }
+    if (results.length > visible.length) {
+      const more = document.createElement("div");
+      more.className = "search-item search-more";
+      const title = document.createElement("strong");
+      title.textContent = `已显示 ${visible.length} 条`;
+      const detail = document.createElement("span");
+      detail.textContent = `还有 ${results.length - visible.length} 条结果，继续输入可缩小范围`;
+      more.append(title, detail);
+      fragment.appendChild(more);
+    }
+  } else {
+    const empty = document.createElement("div");
+    empty.className = "search-item";
+    const title = document.createElement("strong");
+    title.textContent = text.emptyResult;
+    const detail = document.createElement("span");
+    detail.textContent = text.retryKeyword;
+    empty.append(title, detail);
+    fragment.appendChild(empty);
+  }
+  els.searchResults.replaceChildren(fragment);
 }
 
 function currentParent() {
@@ -3831,10 +4504,21 @@ function closeSearchWhenIdle(event) {
 
 function resizeCanvas() {
   const rect = els.canvas.getBoundingClientRect();
-  const ratio = Math.min(2, window.devicePixelRatio || 1);
+  const deviceRatio = window.devicePixelRatio || 1;
+  const area = Math.max(1, rect.width * rect.height);
+  const pixelBudget = state.graphView.visibleNodes.length > 600 ? 2200000 : 3000000;
+  const ratio = clamp(Math.min(deviceRatio, 1.5, Math.sqrt(pixelBudget / area)), 1, 1.5);
   els.canvas.width = Math.max(1, Math.floor(rect.width * ratio));
   els.canvas.height = Math.max(1, Math.floor(rect.height * ratio));
   els.canvas.getContext("2d").setTransform(ratio, 0, 0, ratio, 0, 0);
+}
+
+function releaseGraphCanvas() {
+  if (state.graphView.frame) cancelAnimationFrame(state.graphView.frame);
+  state.graphView.frame = 0;
+  els.canvas.width = 1;
+  els.canvas.height = 1;
+  els.canvas.getContext("2d").setTransform(1, 0, 0, 1, 0, 0);
 }
 
 async function initGraph(force = false) {
@@ -4640,7 +5324,7 @@ function queueGraphSimulation(delay = 0) {
 function startGraphSimulation() {
   const now = performance.now();
   if ((!state.graphView.dynamic && now > state.graphView.chainUntil && now > state.graphView.reboundUntil) || graphMotionReduced()) return;
-  if (state.mode !== "graph" || document.hidden) return;
+  if (state.mode !== "graph" || document.hidden || !state.graphView.pageActive) return;
   const urgent = Boolean(state.graphDrag) || now < state.graphView.chainUntil || now < state.graphView.reboundUntil;
   if (urgent && state.graphView.simulationTimer) {
     clearTimeout(state.graphView.simulationTimer);
@@ -4654,7 +5338,7 @@ function runGraphSimulation(timestamp) {
   state.graphView.simulationFrame = 0;
   const temporaryChain = timestamp < state.graphView.chainUntil;
   const rebound = timestamp < state.graphView.reboundUntil;
-  if ((!state.graphView.dynamic && !temporaryChain && !rebound) || state.mode !== "graph" || document.hidden || graphMotionReduced()) return;
+  if ((!state.graphView.dynamic && !temporaryChain && !rebound) || state.mode !== "graph" || document.hidden || !state.graphView.pageActive || graphMotionReduced()) return;
   const nodes = state.graphView.visibleNodes;
   if (!nodes.length) return;
   const cache = getGraphSimulationCache(nodes, state.graphView.visibleEdges);
@@ -4781,6 +5465,10 @@ function drawGraph() {
   ctx.clearRect(0, 0, els.canvas.width, els.canvas.height);
   ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
   const nodes = state.graphView.visibleNodes;
+  const crowdedGraph = nodes.length > 280;
+  const denseGraph = nodes.length > 600;
+  const edgeOpacityScale = denseGraph ? 0.52 : crowdedGraph ? 0.72 : 1;
+  const glowScale = denseGraph ? 0.22 : crowdedGraph ? 0.48 : 1;
   if (!nodes.length) {
     ctx.fillStyle = getGraphPalette().muted;
     ctx.font = `500 13px ${getComputedStyle(document.body).fontFamily}`;
@@ -4833,10 +5521,10 @@ function drawGraph() {
     // document/topic nodes. Energy from an active drag can still brighten a
     // local chain, while idle connections stay deliberately subdued.
     const baseAlpha = edge.backbone ? (edge.type === "link" ? 0.48 : 0.3) : (edge.type === "link" ? 0.11 : 0.045);
-    ctx.globalAlpha = focused && queryRelated ? Math.min(0.78, baseAlpha + energy * 0.24) : 0.022;
+    ctx.globalAlpha = focused && queryRelated ? Math.min(0.78, (baseAlpha + energy * 0.24) * edgeOpacityScale) : 0.022 * edgeOpacityScale;
     ctx.lineWidth = (edge.backbone ? 0.86 : 0.34) + Math.min(1.35, edge.weight * (edge.backbone ? 0.14 : 0.055)) + energy * 0.8;
     ctx.shadowColor = edge.backbone && focused ? ctx.strokeStyle : "transparent";
-    ctx.shadowBlur = edge.backbone && focused ? 3 + energy * 6 : 0;
+    ctx.shadowBlur = edge.backbone && focused ? (3 + energy * 6) * glowScale : 0;
     const dx = pb.x - pa.x;
     const dy = pb.y - pa.y;
     const distance = Math.max(1, Math.hypot(dx, dy));
@@ -4882,7 +5570,7 @@ function drawGraph() {
     ctx.strokeStyle = active || hovered ? palette.active : node.kind === "doc" ? palette.docBorder : kindColor;
     ctx.lineWidth = active || hovered ? 2.6 : 1.2;
     ctx.shadowColor = active || hovered ? palette.active : energy > 0.08 ? kindColor : "transparent";
-    ctx.shadowBlur = active || hovered ? 14 : energy > 0.08 ? 5 + energy * 9 : 0;
+    ctx.shadowBlur = active || hovered ? 14 * glowScale : energy > 0.08 ? (5 + energy * 9) * glowScale : 0;
     ctx.beginPath();
     if (node.kind === "tag") {
       ctx.moveTo(p.x, p.y - radius);
@@ -4973,6 +5661,26 @@ function updateGraphTooltip(node, event) {
   els.graphTooltip.classList.remove("hidden");
 }
 
+let graphHoverFrame = 0;
+let graphHoverPoint = null;
+function scheduleGraphHover(clientX, clientY) {
+  graphHoverPoint = { clientX, clientY };
+  if (graphHoverFrame) return;
+  graphHoverFrame = requestAnimationFrame(() => {
+    graphHoverFrame = 0;
+    if (!graphHoverPoint || state.mode !== "graph" || state.graphDrag) return;
+    const eventLike = graphHoverPoint;
+    graphHoverPoint = null;
+    const node = hitGraph(eventLike);
+    const nextId = node?.id || "";
+    if (nextId !== state.graphView.hoveredId) {
+      state.graphView.hoveredId = nextId;
+      scheduleGraphDraw();
+    }
+    updateGraphTooltip(node, eventLike);
+  });
+}
+
 async function activateGraphNode(node) {
   if (!node) return;
   if (node.kind === "doc") {
@@ -4990,11 +5698,57 @@ async function activateGraphNode(node) {
   scheduleGraphDraw();
 }
 
+async function replaceEditorRange(value, start, end, selectionMode = "end") {
+  const replacement = String(value ?? "");
+  const before = els.editor.value;
+  const clamp = (position) => Math.max(0, Math.min(before.length, Number(position) || 0));
+  const from = clamp(start);
+  const to = Math.max(from, clamp(end));
+  const expected = `${before.slice(0, from)}${replacement}${before.slice(to)}`;
+  const scrollTop = els.editor.scrollTop;
+  const scrollLeft = els.editor.scrollLeft;
+
+  try {
+    els.editor.setRangeText(replacement, from, to, selectionMode);
+  } catch (_) {
+    return false;
+  }
+
+  // The CodeMirror adapter normally commits the transaction above. Keep a
+  // narrow fallback for a rare native bridge no-op without risking a second edit.
+  if (els.editor.value === before && expected !== before) {
+    try {
+      els.editor.view?.dispatch?.({ changes: { from, to, insert: replacement } });
+    } catch (_) { /* The post-condition below reports a failed write. */ }
+  }
+  if (els.editor.value !== expected) return false;
+
+  els.editor.focus();
+  els.editor.scrollTop = scrollTop;
+  els.editor.scrollLeft = scrollLeft;
+  requestAnimationFrame(() => {
+    els.editor.scrollTop = scrollTop;
+    els.editor.scrollLeft = scrollLeft;
+  });
+  els.editor.dispatchEvent(new Event("input", { bubbles: true }));
+  // AI actions are explicit user decisions, so persist them immediately.
+  return saveCurrentDoc({ keepEditorState: true, renderAfterSave: false });
+}
+
 function insertAtCursor(value) {
+  const text = String(value ?? "");
   const start = els.editor.selectionStart ?? els.editor.value.length;
   const end = els.editor.selectionEnd ?? start;
-  els.editor.setRangeText(value, start, end);
-  const next = start + value.length;
+  const before = els.editor.value;
+  els.editor.setRangeText(text, start, end);
+  // 安全校验：封装 setRangeText 对超大单次插入偶发静默失败，
+  // 检测到内容未变化时回退到 CodeMirror 原生事务，避免粘贴整体丢失。
+  if (text && els.editor.value === before) {
+    try {
+      els.editor.view?.dispatch?.({ changes: { from: start, to: end, insert: text } });
+    } catch (_) { /* 已尽力兜底，忽略 */ }
+  }
+  const next = start + text.length;
   els.editor.setSelectionRange(next, next);
   els.editor.dispatchEvent(new Event("input", { bubbles: true }));
 }
@@ -5178,7 +5932,17 @@ function cursorInsideFence(value, position) {
 function shouldWrapPastedCode(text) {
   if (!text || text.includes("```")) return false;
   if (!text.includes("\n")) return false;
-  return /[{};=<>]|\b(function|const|let|var|class|import|export|return|SELECT|FROM|WHERE|def|public|private)\b/.test(text);
+  // 超长文本交由 CodeMirror 原生粘贴，避免大事务插入异常导致整段丢失。
+  if (text.length > 20000) return false;
+  const lines = text.split("\n");
+  if (lines.length < 3) return false;
+  const KEYWORDS = /\b(function|const|let|var|class|import|export|return|interface|namespace|package|func|fn|require|module|SELECT|FROM|WHERE|def|public|private)\b/;
+  const hasKeyword = KEYWORDS.test(text);
+  const keywordHits = (text.match(KEYWORDS) || []).length;
+  const hasStructure = /[{};]/.test(text) && /[{(]/.test(text);
+  // 需同时命中关键字与结构特征，或关键字多次出现，才判定为代码；
+  // 避免含 = / < 的长篇中文文案被误判为代码后整段丢失。
+  return hasKeyword && (hasStructure || keywordHits >= 2);
 }
 
 function detectPastedCodeLanguage(source) {
@@ -5287,6 +6051,58 @@ function insertMarkdownTable() {
   els.editor.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
+// 编辑模式预览中表格行/列扩展：根据预览按钮记录的起始行定位源码表格块，
+// 改写 Markdown 后回填编辑器，保留光标位置。
+function expandMarkdownTable(startLine, action) {
+  const start = Number(startLine);
+  if (!Number.isInteger(start) || start < 0) return;
+  const value = els.editor.value;
+  const lines = value.split("\n");
+  if (start >= lines.length) return;
+  let end = start;
+  while (end < lines.length && splitMarkdownTableRow(lines[end]).length >= 2) end += 1;
+  const tableLines = lines.slice(start, end);
+  if (tableLines.length < 2) return;
+  const rows = tableLines.map(splitMarkdownTableRow);
+  const colCount = rows[0].length;
+  let nextLines;
+  if (action === "addRow") {
+    const cells = Array.from({ length: colCount }, () => "内容");
+    nextLines = [...tableLines, `| ${cells.join(" | ")} |`];
+  } else if (action === "addCol") {
+    nextLines = rows.map((cells, idx) => {
+      const isDivider = idx === 1 && cells.every((c) => markdownTableAlignment(c));
+      const extra = isDivider ? "---" : (idx === 0 ? "新列" : "内容");
+      return `| ${[...cells, extra].join(" | ")} |`;
+    });
+  } else if (action === "removeCol") {
+    if (colCount <= 1) return;
+    nextLines = rows.map((cells) => `| ${cells.slice(0, -1).join(" | ")} |`);
+  } else {
+    return;
+  }
+  const blockStart = lines.slice(0, start).reduce((n, l) => n + l.length + 1, 0);
+  const blockEnd = blockStart + lines.slice(start, end).join("\n").length;
+  const replacement = nextLines.join("\n");
+  // 保留编辑器与预览滚动位置，避免表格增删行列后预览跳转至文档尾部干扰编辑。
+  const savedEditorTop = els.editor.scrollTop;
+  const savedEditorLeft = els.editor.scrollLeft;
+  const savedPreviewTop = els.preview.scrollTop;
+  els.editor.setRangeText(replacement, blockStart, blockEnd);
+  const next = blockStart + replacement.length;
+  els.editor.setSelectionRange(next, next);
+  els.editor.focus();
+  els.editor.scrollTop = savedEditorTop;
+  els.editor.scrollLeft = savedEditorLeft;
+  els.preview.scrollTop = savedPreviewTop;
+  requestAnimationFrame(() => {
+    els.editor.scrollTop = savedEditorTop;
+    els.editor.scrollLeft = savedEditorLeft;
+    els.preview.scrollTop = savedPreviewTop;
+  });
+  els.editor.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
 function moveSelectedLines(direction) {
   const range = selectedLineRange();
   const scrollTop = els.editor.scrollTop;
@@ -5357,8 +6173,19 @@ function blobToDataUrl(blob) {
   });
 }
 
+async function createBoundedImageBitmap(source, maxSide) {
+  try {
+    return await createImageBitmap(source, {
+      resizeWidth: Math.max(1, Math.round(maxSide)),
+      resizeQuality: "high",
+    });
+  } catch {
+    return createImageBitmap(source);
+  }
+}
+
 async function compressImage(file) {
-  const bitmap = await createImageBitmap(file);
+  const bitmap = await createBoundedImageBitmap(file, 1600);
   const maxSide = 1600;
   const ratio = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
   const canvas = document.createElement("canvas");
@@ -5368,6 +6195,8 @@ async function compressImage(file) {
   ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
   const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/webp", 0.82));
   bitmap.close?.();
+  canvas.width = 1;
+  canvas.height = 1;
   return blob || file;
 }
 
@@ -5838,6 +6667,7 @@ if (els.workspaceBtn) {
     save: () => saveCurrentDoc(),
     workspace: () => openWorkspaceModal(),
     "export-pdf": () => exportCurrentDocToPdf(),
+    "export-ppt": () => exportCurrentDocToPpt(),
     "export-wechat": () => copyCurrentDocAsWechat(),
     settings: () => openSettings(),
     "toggle-edit": () => state.currentPath && setMode("edit"),
@@ -5981,6 +6811,14 @@ els.preview.addEventListener("click", (event) => {
     toggleMarkdownTask(taskInput);
     return;
   }
+  const tableTool = event.target.closest("[data-table-action]");
+  if (tableTool) {
+    event.stopPropagation();
+    const tools = tableTool.closest(".md-table-tools");
+    const start = tools?.dataset.tableStart;
+    if (start != null) expandMarkdownTable(start, tableTool.dataset.tableAction);
+    return;
+  }
   const copy = event.target.closest(".code-copy");
   if (!copy) return;
   const code = copy.closest(".code-block")?.querySelector("code")?.innerText || "";
@@ -6013,16 +6851,20 @@ els.editor.addEventListener("input", () => {
   setSaveStatus("\u672a\u4fdd\u5b58", true);
   schedulePreviewUpdate();
   scheduleAutoSave();
+  hideAiEditHintPopover();
+  scheduleAiEditHint();
 });
 els.editor.addEventListener("compositionstart", () => {
   state.autoSave.composing = true;
+  clearAiEditHintTimer();
 });
 els.editor.addEventListener("compositionend", () => {
   state.autoSave.composing = false;
   scheduleAutoSave();
+  scheduleAiEditHint();
 });
-els.editor.addEventListener("scroll", syncPreviewToEditor, { passive: true });
-els.editor.addEventListener("select", syncPreviewToEditor, { passive: true });
+els.editor.addEventListener("scroll", () => { hideAiEditHintPopover(); syncPreviewToEditor(false); }, { passive: true });
+els.editor.addEventListener("select", () => { syncPreviewToEditor(); scheduleAiEditHint(); }, { passive: true });
 
 function addLineCursor(direction) {
   const value = els.editor.value;
@@ -6177,12 +7019,19 @@ els.editor.addEventListener("keydown", (event) => {
       const end = els.editor.selectionEnd;
       const lineStart = value.lastIndexOf("\n", start - 1) + 1;
       const lineEnd = value.indexOf("\n", end);
-      const before = value.substring(0, lineStart);
-      const after = lineEnd === -1 ? "" : value.substring(lineEnd + 1);
-      els.editor.value = before + after;
-      const newCursorPos = Math.max(0, before.length);
-      els.editor.selectionStart = newCursorPos;
-      els.editor.selectionEnd = newCursorPos;
+      const removeEnd = lineEnd === -1 ? value.length : lineEnd + 1;
+      // 保留编辑器滚动位置，避免删行后光标跳行与界面闪烁打断心流。
+      const savedScrollTop = els.editor.scrollTop;
+      const savedScrollLeft = els.editor.scrollLeft;
+      els.editor.setRangeText("", lineStart, removeEnd, "start");
+      const newCursorPos = Math.max(0, Math.min(els.editor.value.length, lineStart));
+      els.editor.setSelectionRange(newCursorPos, newCursorPos);
+      els.editor.scrollTop = savedScrollTop;
+      els.editor.scrollLeft = savedScrollLeft;
+      requestAnimationFrame(() => {
+        els.editor.scrollTop = savedScrollTop;
+        els.editor.scrollLeft = savedScrollLeft;
+      });
       els.editor.dispatchEvent(new Event("input", { bubbles: true }));
       return true;
     }
@@ -6360,6 +7209,10 @@ els.aiClearBtn?.addEventListener("click", () => {
   renderAiMessages();
   showToast("本地对话已清理");
 });
+els.aiRewriteBtn?.addEventListener("click", () => {
+  state.ai.selection = null;
+  runAiTransform("rewrite");
+});
 els.aiForm?.addEventListener("submit", submitAiQuestion);
 els.aiQuestion?.addEventListener("keydown", (event) => {
   if (event.key === "Enter" && !event.shiftKey) {
@@ -6381,6 +7234,7 @@ els.aiTransformCancelBtn?.addEventListener("click", closeAiTransformModal);
 els.aiTransformModal?.addEventListener("click", (event) => {
   if (event.target === els.aiTransformModal) closeAiTransformModal();
 });
+els.aiTransformGenerateBtn?.addEventListener("click", () => runAiTransform("rewrite", { preserveInstruction: true }));
 els.aiTransformInsertBtn?.addEventListener("click", insertAiTransform);
 els.aiTransformCreateBtn?.addEventListener("click", createAiTransformDocument);
 document.addEventListener("selectionchange", debounce(refreshAiSelectionMenu, 80));
@@ -6447,6 +7301,12 @@ async function checkLicenseStatus() {
     return result;
   } catch (err) {
     console.error("License check failed:", err);
+    els.licenseActivated?.classList.add("hidden");
+    els.licenseUnactivated?.classList.remove("hidden");
+    if (els.licenseWarning) {
+      els.licenseWarning.textContent = "授权状态暂时无法确认，请稍后重试";
+      els.licenseWarning.classList.remove("hidden");
+    }
     return { activated: false };
   }
 }
@@ -6497,7 +7357,10 @@ if (els.activateLicenseBtn) {
       if (result.valid) {
         els.licenseStatus.textContent = "激活成功！";
         els.licenseStatus.className = "license-status success";
-        setTimeout(() => checkLicenseStatus(), 800);
+        await checkLicenseStatus();
+        if (startupLicensePending) {
+          clearLicenseGate();
+        }
       } else {
         els.licenseStatus.textContent = result.error || "激活失败";
         els.licenseStatus.className = "license-status error";
@@ -6514,15 +7377,23 @@ if (els.activateLicenseBtn) {
 if (els.deactivateLicenseBtn) {
   els.deactivateLicenseBtn.addEventListener("click", async () => {
     if (!await customConfirm("确定要解除当前设备的授权吗？", { title: "解除授权", danger: true })) return;
+    els.deactivateLicenseBtn.disabled = true;
     try {
-      // 通过删除 .license 文件解除授权（通过 API）
-      await api.post("/api/license/activate", { licenseKey: "" });
-    } catch (_) { /* ignore */ }
-    checkLicenseStatus();
+      await api.post("/api/license/deactivate", {});
+      const result = await checkLicenseStatus();
+      if (result.activated) throw new Error("授权凭据仍然有效，请重试");
+      showToast("授权已解除，请重新授权");
+      els.settingsModal?.classList.add("hidden");
+      showLicenseGate("授权已解除，请重新授权");
+    } catch (err) {
+      showToast(`解除授权失败：${err.message}`);
+    } finally {
+      els.deactivateLicenseBtn.disabled = false;
+    }
   });
 }
 
-[els.aiBaseUrl, els.aiEmbeddingModel, els.aiChatModel].filter(Boolean).forEach((input) => {
+[els.aiBaseUrl, els.aiEmbeddingModel, els.aiChatModel, els.aiDeepseekApiKey, els.aiDeepseekBaseUrl, els.aiDeepseekChatModel].filter(Boolean).forEach((input) => {
   input.addEventListener("input", () => {
     state.ai.configDirty = true;
   });
@@ -6533,12 +7404,14 @@ function aiCurrentProvider() {
 }
 
 function aiConfigPayload(embeddingModel) {
+  const deepseekApiKey = els.aiDeepseekApiKey?.value.trim() || "";
   return {
     baseUrl: els.aiBaseUrl.value.trim(),
     embeddingModel: embeddingModel ?? els.aiEmbeddingModel.value.trim(),
     chatModel: els.aiChatModel.value.trim(),
     chatProvider: aiCurrentProvider(),
-    deepseekApiKey: els.aiDeepseekApiKey?.value.trim() || "",
+    // An empty password field means "keep the saved key", never erase it by accident.
+    ...(deepseekApiKey ? { deepseekApiKey } : {}),
     deepseekBaseUrl: els.aiDeepseekBaseUrl?.value.trim() || "https://api.deepseek.com",
     deepseekChatModel: els.aiDeepseekChatModel?.value.trim() || "deepseek-chat",
     enabled: true,
@@ -6617,6 +7490,12 @@ els.aiSaveBtn?.addEventListener("click", async () => {
     const result = await api.post("/api/ai/config", aiConfigPayload());
     state.ai.configDirty = false;
     setAiStatus(result.status);
+    if (els.aiDeepseekApiKey) {
+      els.aiDeepseekApiKey.value = "";
+      els.aiDeepseekApiKey.placeholder = result.status?.deepseekApiKeyConfigured
+        ? "已配置，留空则保持不变"
+        : "sk-...";
+    }
     showToast(result.rebuildRequired ? "配置已保存，正在重建语义索引" : "AI 配置已保存");
   } catch (error) {
     els.aiSettingsStatus.textContent = error.message || "保存失败";
@@ -6708,8 +7587,8 @@ async function loadAboutInfo() {
     if (result.releaseDate) {
       els.aboutDate.textContent = "发布日期：" + result.releaseDate;
     }
-    if (result.releaseNotes) {
-      els.aboutReleaseNotes.textContent = result.releaseNotes;
+    if (result.latestReleaseNotes || result.releaseNotes) {
+      els.aboutReleaseNotes.textContent = result.latestReleaseNotes || result.releaseNotes;
     }
   } catch (error) {
     els.aboutVersion.textContent = "1.0.0";
@@ -6861,8 +7740,12 @@ if (els.kmEnableReminder) {
   });
 }
 
-els.closeSettingsBtn.addEventListener("click", () => els.settingsModal.classList.add("hidden"));
+els.closeSettingsBtn.addEventListener("click", () => {
+  if (startupLicensePending) return;
+  els.settingsModal.classList.add("hidden");
+});
 els.settingsModal.addEventListener("click", (event) => {
+  if (startupLicensePending) return;
   if (event.target === els.settingsModal) els.settingsModal.classList.add("hidden");
 });
 
@@ -6895,8 +7778,10 @@ if (resetEditorLayoutBtn) {
 els.checkUpdateBtn?.addEventListener("click", async () => {
   showToast("正在检查更新...");
   try {
+    await api.post("/api/update/check", {});
     await api.get("/api/version?refresh=1");
     await loadAboutInfo();
+    showToast("已请求桌面启动器强制检查升级，稍后将显示升级提示");
   } catch (error) {
     showToast(error.message || "检查更新失败");
   }
@@ -6957,11 +7842,17 @@ function initPdfExportSettings() {
   els.pdfShowDate.checked = saved.showDate !== false;
   els.pdfShowAuthor.checked = saved.showAuthor !== false;
   els.pdfShowFooter.checked = saved.showFooter !== false;
+  if (els.pdfAuthorText) els.pdfAuthorText.value = saved.authorText || "郑堃逢";
+  if (els.pdfFooterText) els.pdfFooterText.value = saved.footerText || "MyTemple Knowledge · 本地 Markdown 知识库";
+  if (els.pdfWatermarkText) els.pdfWatermarkText.value = saved.watermarkText || "MyTemple Knowledge";
   const persist = () => {
     const next = {
       showDate: els.pdfShowDate.checked,
       showAuthor: els.pdfShowAuthor.checked,
+      authorText: (els.pdfAuthorText?.value || "").trim() || "郑堃逢",
       showFooter: els.pdfShowFooter.checked,
+      footerText: (els.pdfFooterText?.value || "").trim() || "MyTemple Knowledge · 本地 Markdown 知识库",
+      watermarkText: (els.pdfWatermarkText?.value || "").trim() || "MyTemple Knowledge",
     };
     localStorage.setItem("pdfExportSettings", JSON.stringify(next));
     if (els.pdfSettingsStatus) {
@@ -6972,9 +7863,33 @@ function initPdfExportSettings() {
   els.pdfShowDate.addEventListener("change", persist);
   els.pdfShowAuthor.addEventListener("change", persist);
   els.pdfShowFooter.addEventListener("change", persist);
+  els.pdfAuthorText?.addEventListener("change", persist);
+  els.pdfFooterText?.addEventListener("change", persist);
+  els.pdfWatermarkText?.addEventListener("change", persist);
+}
+
+function readPdfExportSettings() {
+  const saved = JSON.parse(localStorage.getItem("pdfExportSettings") || "{}");
+  return {
+    showDate: saved.showDate !== false,
+    showAuthor: saved.showAuthor !== false,
+    authorText: saved.authorText || "郑堃逢",
+    showFooter: saved.showFooter !== false,
+    footerText: saved.footerText || "MyTemple Knowledge · 本地 Markdown 知识库",
+    watermarkText: saved.watermarkText || "MyTemple Knowledge",
+  };
+}
+
+// 强制水印层：PDF/幻灯片导出叠加轻度斜向水印，保护软件推广，不可关闭。
+function buildExportWatermark(text) {
+  const label = escapeHtml(String(text || "MyTemple Knowledge")).slice(0, 40);
+  // 用重复的固定定位层在每页铺满，透明度极低，不遮挡正文。
+  const layer = `<div class="print-watermark" aria-hidden="true">${label}</div>`;
+  return layer;
 }
 
 initPdfExportSettings();
+initAiEditHintSettings();
 
 function initEditorSplitters() {
   if (!els.editorBody) return;
@@ -7107,7 +8022,7 @@ els.bgImageInput.addEventListener("change", async () => {
   const file = els.bgImageInput.files?.[0];
   if (!file) return;
   try {
-    const bitmap = await createImageBitmap(file);
+  const bitmap = await createBoundedImageBitmap(file, 1920);
     const maxSide = 1920;
     const ratio = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
     const canvas = document.createElement("canvas");
@@ -7117,6 +8032,8 @@ els.bgImageInput.addEventListener("change", async () => {
     ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
     bitmap.close?.();
     const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/webp", 0.85));
+    canvas.width = 1;
+    canvas.height = 1;
     const compressedFile = blob || file;
     const reader = new FileReader();
     reader.onload = () => {
@@ -7145,6 +8062,47 @@ els.bgImageInput.addEventListener("change", async () => {
     reader.readAsDataURL(file);
   }
 });
+// 图片主题文字明暗切换：浅色文字适配深色背景图，深色文字适配浅色背景图。
+els.imageTextMode?.addEventListener("change", () => {
+  localStorage.setItem("imageTextMode", els.imageTextMode.value);
+  applySettings();
+});
+// 从背景图取色：采样图片主色调并应用为强调色，让界面配色与图片协调。
+els.pickImageColorBtn?.addEventListener("click", async () => {
+  const bg = localStorage.getItem("docBgImage");
+  if (!bg) return showToast("请先上传背景图片");
+  try {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.src = bg;
+    await img.decode();
+    const size = 32;
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d", { alpha: true });
+    ctx.drawImage(img, 0, 0, size, size);
+    const { data } = ctx.getImageData(0, 0, size, size);
+    let r = 0, g = 0, b = 0, count = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      const a = data[i + 3];
+      if (a < 32) continue;
+      r += data[i]; g += data[i + 1]; b += data[i + 2]; count += 1;
+    }
+    if (!count) return showToast("无法从图片取色");
+    r = Math.round(r / count); g = Math.round(g / count); b = Math.round(b / count);
+    // 提升饱和度形成强调色，避免取到灰调。
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+    let accent = `#${[r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("")}`;
+    if (max - min < 30) accent = lum < 96 ? "#e15048" : "#c9302c";
+    document.documentElement.style.setProperty("--accent", accent);
+    localStorage.setItem("imageAccentColor", accent);
+    showToast(`已取色：${accent}（已应用为强调色）`);
+  } catch (e) {
+    showToast("取色失败，请重试");
+  }
+});
 els.globalFontSize.addEventListener("input", () => {
   localStorage.setItem("docFontSize", els.globalFontSize.value);
   applySettings();
@@ -7164,6 +8122,23 @@ els.globalFontFamily.addEventListener("change", () => {
   localStorage.setItem("docFontFamily", els.globalFontFamily.value);
   applySettings();
 });
+const markdownColorInputs = [
+  ["heading", els.mdColorHeading],
+  ["link", els.mdColorLink],
+  ["code", els.mdColorCode],
+  ["quote", els.mdColorQuote],
+  ["table", els.mdColorTable],
+  ["tag", els.mdColorTag],
+];
+markdownColorInputs.forEach(([key, input]) => {
+  input?.addEventListener("input", () => {
+    const settings = loadSettings();
+    settings.markdownColors = { ...(settings.markdownColors || {}), [key]: input.value };
+    localStorage.setItem("markdownColors", JSON.stringify(settings.markdownColors));
+    applySettings(settings);
+  });
+});
+els.aiPptBtn?.addEventListener("click", () => exportCurrentDocToPpt());
 els.normalizeMdBtn.addEventListener("click", openNormalizeMdModal);
 if (els.semanticTagsBtn) els.semanticTagsBtn.addEventListener("click", openSemanticTagsModal);
 if (els.cancelSemanticTagsBtn) els.cancelSemanticTagsBtn.addEventListener("click", closeSemanticTagsModal);
@@ -7242,6 +8217,11 @@ els.editorOutline?.addEventListener("click", (event) => {
   }
   const button = event.target.closest("[data-heading-text]");
   if (!button) return;
+  const lineAttr = parseInt(button.dataset.headingLine, 10);
+  if (Number.isFinite(lineAttr) && lineAttr >= 0) {
+    els.editor.scrollToLine?.(lineAttr + 1);
+    return;
+  }
   scrollEditorToHeading(button.dataset.headingText);
 });
 els.deleteBtn.addEventListener("click", deleteSelected);
@@ -7330,8 +8310,17 @@ els.graphDynamic.addEventListener("change", () => {
   }
 });
 document.addEventListener("visibilitychange", () => {
+  state.graphView.pageActive = !document.hidden;
   if (document.hidden) stopGraphSimulation();
   else startGraphSimulation();
+});
+window.addEventListener("blur", () => {
+  state.graphView.pageActive = false;
+  stopGraphSimulation();
+});
+window.addEventListener("focus", () => {
+  state.graphView.pageActive = true;
+  startGraphSimulation();
 });
 const graphMotionPreference = window.matchMedia?.("(prefers-reduced-motion: reduce)");
 graphMotionPreference?.addEventListener?.("change", () => {
@@ -7371,13 +8360,7 @@ els.canvas.addEventListener("pointerdown", (event) => {
 });
 els.canvas.addEventListener("pointermove", (event) => {
   if (!state.graphDrag) {
-    const node = hitGraph(event);
-    const nextId = node?.id || "";
-    if (nextId !== state.graphView.hoveredId) {
-      state.graphView.hoveredId = nextId;
-      scheduleGraphDraw();
-    }
-    updateGraphTooltip(node, event);
+    scheduleGraphHover(event.clientX, event.clientY);
     return;
   }
   const drag = state.graphDrag;
@@ -7452,9 +8435,6 @@ window.addEventListener("resize", debounce(() => {
     resizeCanvas();
     fitGraphView();
   }
-  if (document.body.getAttribute("data-theme") === "eye") {
-    applyPaperTexture();
-  }
 }, 200));
 
 if (els.recentDocs) {
@@ -7476,22 +8456,53 @@ async function bootstrap(refresh = false) {
     els.docCount.textContent = `${data.count || 0} ${text.docsUnit} / ${state.workspaces.filter((ws) => ws.visible).length} 个工作路径`;
     renderWorkspaceSummary();
     renderTree(state.tree);
+    // 恢复上次打开的文档，保留用户工作上下文。
+    if (!refresh) {
+      try {
+        const lastDoc = localStorage.getItem("lastOpenedDoc");
+        if (lastDoc && state.flatFiles.some((file) => file.path === lastDoc)) {
+          openDoc(lastDoc).catch((e) => console.warn("restore last doc failed:", e));
+        }
+      } catch (_) {}
+    }
   } catch (err) {
     console.error("Bootstrap failed:", err);
     els.docCount.textContent = "加载失败";
   }
 }
 
-// 启动初始化——先播放启动动画视频，再启动 splash 进度，再执行其他可能抛错的初始化
-let startupLicensePending = false;
+// 启动初始化——显示开机图片 logo.png，在图片展示期间并行加载服务，加载完成后直接进入应用
+let startupLicensePending = true;
+document.body.classList.add("license-locked");
 const appSplash = document.querySelector("#appSplash");
-const splashVideo = document.querySelector("#splashVideo");
-const splashLoading = document.querySelector("#splashLoading");
 const splashProgressFill = document.querySelector("#splashProgressFill");
 const splashProgressPct = document.querySelector("#splashProgressPct");
 const splashProgressText = document.querySelector("#splashProgressText");
 
 let _splashProgress = 0;
+function showLicenseGate(message = "软件未授权，请完成授权后继续使用") {
+  startupLicensePending = true;
+  document.body.classList.add("license-locked");
+  els.settingsModal?.classList.add("hidden");
+  if (els.licenseStatus && message) {
+    els.licenseStatus.textContent = message;
+    els.licenseStatus.className = "license-status error";
+  }
+  els.licenseModal?.classList.remove("hidden");
+  els.licenseModal?.classList.add("startup-block");
+}
+
+function clearLicenseGate() {
+  startupLicensePending = false;
+  document.body.classList.remove("license-locked");
+  els.licenseModal?.classList.remove("startup-block");
+  els.licenseModal?.classList.add("hidden");
+}
+
+window.addEventListener("license-required", (event) => {
+  showLicenseGate(event.detail?.error || "授权已失效，请重新授权");
+});
+
 function setSplashProgress(pct, text) {
   _splashProgress = pct;
   if (splashProgressFill) splashProgressFill.style.width = pct + "%";
@@ -7499,7 +8510,6 @@ function setSplashProgress(pct, text) {
   if (text && splashProgressText) splashProgressText.textContent = text;
 }
 
-// 预加载设置但不启动加载流程，等视频播放完毕再开始
 try { applySettings(); } catch (e) { console.error("applySettings failed:", e); }
 try { restoreWindowZoom(); } catch (e) { console.error("restoreWindowZoom failed:", e); }
 try { restoreSidebarWidth(); } catch (e) { console.error("restoreSidebarWidth failed:", e); }
@@ -7513,39 +8523,10 @@ _deferIdle(() => {
   try { renderRecentDocs(); } catch (e) { console.error("renderRecentDocs failed:", e); }
 });
 
-// 启动动画流程：播放视频 → 显示加载界面 → 执行加载 → 进入应用
-function playStartupVideo() {
-  const video = splashVideo;
-  if (!video) { beginLoading(); return; }
-
-  const videoEnded = () => { beginLoading(); };
-  video.addEventListener("ended", videoEnded, { once: true });
-
-  video.addEventListener("error", () => { beginLoading(); }, { once: true });
-
-  // 超时保护：如果视频超过8秒未结束，直接进入加载
-  const timeout = setTimeout(() => {
-    video.removeEventListener("ended", videoEnded);
-    beginLoading();
-  }, 8000);
-
-  video.addEventListener("ended", () => { clearTimeout(timeout); }, { once: true });
-
-  // 尝试播放，如果自动播放被阻止则直接进入加载
-  video.muted = true;
-  video.play().catch(() => {
-    clearTimeout(timeout);
-    video.removeEventListener("ended", videoEnded);
-    beginLoading();
-  });
-}
-
-function beginLoading() {
-  // 隐藏视频，显示加载界面
-  if (splashVideo) splashVideo.style.display = "none";
-  if (splashLoading) splashLoading.classList.remove("hidden");
-  // 开始加载流程
-  startupLicenseCheck();
+// 启动流程：开机图片 logo.png 立即显示，后台并行加载服务，加载完成后直接进入应用。
+async function beginLoading() {
+  // 直接启动授权与文档库加载，与开机图片并行进行。
+  await startupLicenseCheck();
 }
 
 function hideSplash() {
@@ -7553,11 +8534,10 @@ function hideSplash() {
   if (typeof window.__markAppStarted === "function") window.__markAppStarted();
   if (appSplash && !appSplash.classList.contains("hidden")) {
     setSplashProgress(100, "加载完成");
-    setTimeout(() => {
-      appSplash.classList.add("hidden");
-      setTimeout(() => appSplash.remove(), 400);
-      showWelcomeIfNeeded();
-    }, 300);
+    // 立即移除启动图层，避免窗口缩放时 WebView 重新合成出旧的背景图。
+    appSplash.classList.add("hidden");
+    appSplash.remove();
+    showWelcomeIfNeeded();
   } else {
     showWelcomeIfNeeded();
   }
@@ -7598,34 +8578,29 @@ async function startupLicenseCheck() {
   setSplashProgress(15, "正在初始化…");
 
   const licensePromise = checkLicenseStatus();
-  const bootstrapPromise = bootstrap();
-
   const result = await licensePromise;
   setSplashProgress(55, result.activated ? "正在加载文档库…" : "等待授权…");
 
   if (result.activated) {
-    await bootstrapPromise;
+    await bootstrap();
+    clearLicenseGate();
     setSplashProgress(85, "正在完成初始化…");
     await Promise.resolve();
     setSplashProgress(100, "加载完成");
-    setTimeout(() => hideSplash(), 200);
+    // 加载完成后直接隐藏开机图片，进入应用。
+    hideSplash();
   } else {
-    await bootstrapPromise;
     state.tree = [];
     state.flatFiles = [];
     renderTree([]);
-    startupLicensePending = true;
-    els.licenseModal.classList.remove("hidden");
-    els.licenseModal.classList.add("startup-block");
+    showLicenseGate();
     hideSplash();
     await new Promise((resolve) => {
       const check = setInterval(async () => {
         const r = await checkLicenseStatus();
         if (r.activated) {
           clearInterval(check);
-          startupLicensePending = false;
-          els.licenseModal.classList.remove("startup-block");
-          els.licenseModal.classList.add("hidden");
+          clearLicenseGate();
           resolve();
         }
       }, 1500);
@@ -7634,5 +8609,5 @@ async function startupLicenseCheck() {
   }
 }
 
-// 启动入口：先播放视频动画，再进入加载流程
-playStartupVideo();
+// 启动入口：开机图片已在 HTML 中直接渲染显示，立即并行加载后台服务。
+beginLoading();

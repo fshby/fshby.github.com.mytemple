@@ -6,6 +6,7 @@ using System.Net;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Text;
 using System.Windows.Forms;
 using System.Runtime.InteropServices;
 using Microsoft.Web.WebView2.Core;
@@ -17,7 +18,7 @@ internal static class MyTempleLauncher
     private const string AppTitle = "MyTemple Knowledge";
     private const string MutexName = "MyTempleKnowledge.SingleInstance";
     private const int DefaultPort = 4173;
-    private const string UpdateUrl = "https://raw.githubusercontent.com/fshby/fshby.github.com.mytemple/main/version.json";
+        private const string UpdateUrl = "https://mytemple.fshby.cc/version.json";
     private const string WindowProfileFolder = "launcher-profile";
 
     [STAThread]
@@ -95,10 +96,16 @@ internal static class MyTempleLauncher
         private volatile bool shuttingDown;
         private volatile bool restarting;
         private int port;
+        private int uiThreadId;
+        private SynchronizationContext uiContext;
         private string currentVersion = "1.0.0";
+        private int startupUpdateCheckStarted;
+        private int updateCheckRunning;
 
         public LauncherContext()
         {
+            uiThreadId = Thread.CurrentThread.ManagedThreadId;
+            uiContext = SynchronizationContext.Current ?? new WindowsFormsSynchronizationContext();
             installDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
             if (string.IsNullOrWhiteSpace(installDir))
             {
@@ -143,7 +150,6 @@ internal static class MyTempleLauncher
             watchdogTimer.Tick += WatchdogTick;
             watchdogTimer.Start();
             LaunchBrowserWindow();
-            ThreadPool.QueueUserWorkItem(delegate { SafeCheckForUpdates(false); });
         }
 
         protected override void ExitThreadCore()
@@ -232,11 +238,24 @@ internal static class MyTempleLauncher
                     : "";
                 if (storedVersion == currentVersion) return;
 
-                string webviewCacheDir = Path.Combine(dataDir, WindowProfileFolder, "webview2");
-                if (Directory.Exists(webviewCacheDir))
+                // 仅清理 HTTP/Service Worker 缓存子目录，保留 Local Storage / IndexedDB / Cookies，
+                // 避免版本升级时清空用户习惯（主题、字体、缩放、最近文档、AI 设置、图片主题背景等）。
+                string webviewProfile = Path.Combine(dataDir, WindowProfileFolder, "webview2");
+                if (Directory.Exists(webviewProfile))
                 {
-                    WriteLog("info", "Clearing WebView2 cache due to version change (" + storedVersion + " -> " + currentVersion + ").");
-                    DeleteDirectorySafe(webviewCacheDir);
+                    WriteLog("info", "Clearing WebView2 HTTP cache only (preserving user data) due to version change (" + storedVersion + " -> " + currentVersion + ").");
+                    string[] cacheSubDirs = System.IO.Directory.GetDirectories(webviewProfile, "*", System.IO.SearchOption.AllDirectories);
+                    foreach (string sub in cacheSubDirs)
+                    {
+                        string name = System.IO.Path.GetFileName(sub);
+                        if (name.IndexOf("Cache", StringComparison.OrdinalIgnoreCase) >= 0
+                            || name.IndexOf("Service Worker", StringComparison.OrdinalIgnoreCase) >= 0
+                            || name.IndexOf("GPUCache", StringComparison.OrdinalIgnoreCase) >= 0
+                            || name.IndexOf("Code Cache", StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            DeleteDirectorySafe(sub);
+                        }
+                    }
                 }
                 File.WriteAllText(versionStampPath, currentVersion ?? "");
             }
@@ -371,9 +390,12 @@ internal static class MyTempleLauncher
                 psi.CreateNoWindow = true;
                 psi.RedirectStandardOutput = true;
                 psi.RedirectStandardError = true;
+                psi.StandardOutputEncoding = Encoding.UTF8;
+                psi.StandardErrorEncoding = Encoding.UTF8;
                 psi.EnvironmentVariables["PORT"] = port.ToString();
                 psi.EnvironmentVariables["HOST"] = "127.0.0.1";
                 psi.EnvironmentVariables["DATA_DIR"] = dataDir;
+                psi.EnvironmentVariables["MYTEMPLE_DATA_ROOT"] = dataDir;
                 psi.EnvironmentVariables["NODE_ENV"] = "production";
 
                 var process = new Process();
@@ -444,6 +466,11 @@ internal static class MyTempleLauncher
 
         private void LaunchBrowserWindow()
         {
+            if (Thread.CurrentThread.ManagedThreadId != uiThreadId)
+            {
+                uiContext.Post(delegate { LaunchBrowserWindow(); }, null);
+                return;
+            }
             lock (gate)
             {
                 if (mainWindow != null)
@@ -460,6 +487,7 @@ internal static class MyTempleLauncher
                 int winX = screenRect.X + (screenRect.Width - winW) / 2;
                 int winY = screenRect.Y + (screenRect.Height - winH) / 2;
 
+                var formBg = Color.FromArgb(15, 23, 42);
                 mainWindow = new AppForm
                 {
                     Text = AppTitle,
@@ -467,13 +495,74 @@ internal static class MyTempleLauncher
                     StartPosition = FormStartPosition.Manual,
                     Location = new Point(winX, winY),
                     Size = new Size(winW, winH),
-                    MinimumSize = new Size(960, 640),
-                    BackColor = Color.FromArgb(15, 23, 42),
+                    MinimumSize = new Size(640, 480),
+                    BackColor = formBg,
                     FormBorderStyle = FormBorderStyle.Sizable,
                     ShowInTaskbar = true,
                 };
-                webView = new WebView2 { Dock = DockStyle.Fill, CreationProperties = null };
+                // splashBox 只负责遮住 WebView2 的初始化空白，首个页面完成后立即隐藏。
+                // 不能把开机图长期留在 WebView2 后面，否则窗口快速缩放时 GPU 重绘间隙
+                // 会把开机图重新合成出来，造成主题背景穿帮。
+                var splashBox = new PictureBox
+                {
+                    Dock = DockStyle.None,
+                    SizeMode = PictureBoxSizeMode.Zoom,
+                    BackColor = formBg,
+                    CausesValidation = false,
+                };
+                try
+                {
+                    string logoPath = Path.Combine(installDir, "logo.png");
+                    if (File.Exists(logoPath)) splashBox.Image = Image.FromFile(logoPath);
+                }
+                catch { }
+                mainWindow.Controls.Add(splashBox);
+                splashBox.BringToFront();
+                splashBox.Bounds = mainWindow.ClientRectangle;
+
+                webView = new WebView2 { Dock = DockStyle.Fill, CreationProperties = null, BackColor = formBg };
                 mainWindow.Controls.Add(webView);
+                webView.BringToFront();
+                splashBox.BringToFront();
+
+                // Resize 防抖：窗口拖拽过程中每帧都触发 Resize，Chromium 无法跟上。
+                // 原生图层只在启动期间存在，后续缩放不会再次显示开机图。
+                System.Windows.Forms.Timer resizeDebouncer = null;
+                mainWindow.Resize += delegate
+                {
+                    if (splashBox != null && !splashBox.IsDisposed && splashBox.Visible)
+                    {
+                        splashBox.Bounds = mainWindow.ClientRectangle;
+                        splashBox.Invalidate();
+                    }
+                    if (resizeDebouncer == null)
+                    {
+                        resizeDebouncer = new System.Windows.Forms.Timer { Interval = 150 };
+                        resizeDebouncer.Tick += (st, ev) =>
+                        {
+                            resizeDebouncer.Stop();
+                            if (webView != null && !webView.IsDisposed && webView.Handle != IntPtr.Zero)
+                            {
+                                mainWindow.SuspendLayout();
+                                webView.PerformLayout();
+                                webView.Invalidate();
+                                mainWindow.ResumeLayout();
+                            }
+                        };
+                    }
+                    resizeDebouncer.Stop();
+                    resizeDebouncer.Start();
+                };
+                mainWindow.SizeChanged += delegate
+                {
+                    if (mainWindow.WindowState == FormWindowState.Minimized) return;
+                    if (splashBox != null && !splashBox.IsDisposed && splashBox.Visible)
+                    {
+                        splashBox.Bounds = mainWindow.ClientRectangle;
+                        splashBox.Invalidate();
+                    }
+                };
+
                 mainWindow.FormClosing += delegate(object sender, FormClosingEventArgs args)
                 {
                     if (!shuttingDown)
@@ -482,37 +571,50 @@ internal static class MyTempleLauncher
                         mainWindow.Hide();
                     }
                 };
-                mainWindow.Resize += delegate
-                {
-                    if (webView != null && !webView.IsDisposed)
-                    {
-                        webView.Width = mainWindow.ClientSize.Width;
-                        webView.Height = mainWindow.ClientSize.Height;
-                    }
-                };
                 mainWindow.Show();
-                InitializeWebViewAsync();
+                InitializeWebViewAsync(splashBox, formBg);
             }
         }
 
-        private async void InitializeWebViewAsync()
+        private async void InitializeWebViewAsync(PictureBox splashBox, Color formBg)
         {
             try
             {
-                string profile = Path.Combine(dataDir, WindowProfileFolder, "webview2");
+                string profile = Path.Combine(dataDir, WindowProfileFolder, "webview2", Process.GetCurrentProcess().Id.ToString());
                 Directory.CreateDirectory(profile);
                 CoreWebView2Environment environment = await CoreWebView2Environment.CreateAsync(null, profile);
                 await webView.EnsureCoreWebView2Async(environment);
                 webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = true;
                 webView.CoreWebView2.Settings.IsStatusBarEnabled = false;
+                // WebView2 使用与窗体一致的纯色底，避免启动图隐藏后露出黑底。
+                webView.DefaultBackgroundColor = formBg;
                 webView.ZoomFactor = 1.0;
+                webView.CoreWebView2.NavigationCompleted += delegate
+                {
+                    if (splashBox == null || splashBox.IsDisposed) return;
+                    splashBox.Visible = false;
+                    splashBox.Dispose();
+                    if (Interlocked.Exchange(ref startupUpdateCheckStarted, 1) == 0)
+                    {
+                        ThreadPool.QueueUserWorkItem(delegate
+                        {
+                            Thread.Sleep(1200);
+                            SafeCheckForUpdates(false);
+                        });
+                    }
+                };
                 webView.CoreWebView2.Navigate(appUrl);
                 WriteLog("info", "WebView2 native window started.");
             }
             catch (Exception ex)
             {
                 WriteLog("error", "WebView2 initialization failed: " + ex);
+                if (splashBox != null && !splashBox.IsDisposed)
+                {
+                    splashBox.Visible = false;
+                }
                 MessageBox.Show("WebView2 初始化失败，请安装 Microsoft Edge WebView2 Runtime。" + Environment.NewLine + ex.Message, AppTitle, MessageBoxButtons.OK, MessageBoxIcon.Error);
+                CloseBrowserWindow();
             }
         }
 
@@ -582,6 +684,13 @@ internal static class MyTempleLauncher
         {
             if (shuttingDown || restarting) return;
 
+            string requestPath = Path.Combine(dataDir, "update-check-request.txt");
+            if (File.Exists(requestPath))
+            {
+                try { File.Delete(requestPath); } catch { }
+                ThreadPool.QueueUserWorkItem(delegate { SafeCheckForUpdates(true); });
+            }
+
             if (nodeProcess == null || nodeProcess.HasExited)
             {
                 RestartAll();
@@ -591,40 +700,80 @@ internal static class MyTempleLauncher
 
         private void SafeCheckForUpdates(bool force)
         {
+            if (Interlocked.Exchange(ref updateCheckRunning, 1) == 1) return;
             try
             {
                 string lastCheckPath = Path.Combine(dataDir, "last-update-check.txt");
+                string deferredPath = Path.Combine(dataDir, "update-deferred.txt");
                 if (!force && File.Exists(lastCheckPath))
                 {
+                    string[] lastCheckLines = File.ReadAllLines(lastCheckPath);
                     DateTime lastCheck;
-                    if (DateTime.TryParse(File.ReadAllText(lastCheckPath), out lastCheck))
+                    string checkedVersion = lastCheckLines.Length > 1 ? lastCheckLines[1].Trim() : "";
+                    if (DateTime.TryParse(lastCheckLines.Length > 0 ? lastCheckLines[0] : "", out lastCheck)
+                        && string.Equals(checkedVersion, currentVersion, StringComparison.OrdinalIgnoreCase))
                     {
-                        if ((DateTime.Now - lastCheck).TotalHours < 24) return;
+                        if ((DateTime.Now - lastCheck).TotalHours < 24)
+                        {
+                            WriteLog("info", "Update check skipped by 24-hour cache for version " + currentVersion + ".");
+                            return;
+                        }
                     }
                 }
 
-                File.WriteAllText(lastCheckPath, DateTime.Now.ToString("o"));
+                File.WriteAllText(lastCheckPath, DateTime.Now.ToString("o") + Environment.NewLine + currentVersion);
                 string json = DownloadString(UpdateUrl);
-                if (string.IsNullOrWhiteSpace(json)) return;
+                if (string.IsNullOrWhiteSpace(json))
+                {
+                    WriteLog("warn", "Update check returned no metadata from " + UpdateUrl + ".");
+                    return;
+                }
                 string latestVersion = ParseJsonString(json, "version");
                 string downloadUrl = ParseJsonString(json, "downloadUrl");
-                if (string.IsNullOrWhiteSpace(latestVersion) || string.IsNullOrWhiteSpace(downloadUrl)) return;
-                if (CompareVersions(currentVersion, latestVersion) >= 0) return;
+                if (string.IsNullOrWhiteSpace(latestVersion) || string.IsNullOrWhiteSpace(downloadUrl))
+                {
+                    WriteLog("warn", "Update metadata is incomplete.");
+                    return;
+                }
+                int comparison = CompareVersions(currentVersion, latestVersion);
+                WriteLog("info", "Update check completed. current=" + currentVersion + ", latest=" + latestVersion + ".");
+                if (comparison >= 0) return;
 
-                var result = MessageBox.Show(
-                    "New version found: " + latestVersion + Environment.NewLine + "Current version: " + currentVersion + Environment.NewLine + Environment.NewLine + "Download now?",
-                    AppTitle + " - Update",
-                    MessageBoxButtons.YesNo,
-                    MessageBoxIcon.Information);
+                if (!force && File.Exists(deferredPath))
+                {
+                    string[] deferred = File.ReadAllLines(deferredPath);
+                    DateTime deferredAt;
+                    string deferredVersion = deferred.Length > 1 ? deferred[1].Trim() : "";
+                    if (DateTime.TryParse(deferred.Length > 0 ? deferred[0] : "", out deferredAt)
+                        && string.Equals(deferredVersion, latestVersion, StringComparison.OrdinalIgnoreCase)
+                        && (DateTime.Now - deferredAt).TotalHours < 24)
+                    {
+                        WriteLog("info", "Update prompt deferred for 24 hours for version " + latestVersion + ".");
+                        return;
+                    }
+                }
+
+                string releaseNotes = ParseJsonString(json, "latestReleaseNotes");
+                if (string.IsNullOrWhiteSpace(releaseNotes)) releaseNotes = ParseJsonString(json, "releaseNotes");
+                var result = ShowUpdatePrompt(latestVersion, ParseJsonString(json, "releaseDate"), releaseNotes);
 
                 if (result == DialogResult.Yes)
                 {
-                    OpenExternal(downloadUrl);
+                    DownloadAndInstallUpdate(downloadUrl, latestVersion);
+                }
+                else if (result == DialogResult.No)
+                {
+                    File.WriteAllText(deferredPath, DateTime.Now.ToString("o") + Environment.NewLine + latestVersion);
+                    WriteLog("info", "User deferred update " + latestVersion + " for 24 hours.");
                 }
             }
             catch (Exception ex)
             {
                 WriteLog("warn", "Update check failed: " + ex.Message);
+            }
+            finally
+            {
+                Volatile.Write(ref updateCheckRunning, 0);
             }
         }
 
@@ -664,6 +813,99 @@ internal static class MyTempleLauncher
                     Process.Start(psi);
                 }
                 catch { }
+            }
+        }
+
+        private DialogResult ShowUpdatePrompt(string latestVersion, string releaseDate, string releaseNotes)
+        {
+            DialogResult result = DialogResult.Cancel;
+            Action show = delegate
+            {
+                using (var form = new UpdatePromptForm(AppTitle, currentVersion, latestVersion, releaseDate, releaseNotes, ExtractIcon()))
+                {
+                    result = form.ShowDialog(mainWindow);
+                }
+            };
+            try
+            {
+                if (mainWindow != null && !mainWindow.IsDisposed && mainWindow.InvokeRequired) mainWindow.Invoke(show);
+                else show();
+            }
+            catch (Exception ex) { WriteLog("warn", "Update prompt failed: " + ex.Message); }
+            return result;
+        }
+
+        private void DownloadAndInstallUpdate(string url, string latestVersion)
+        {
+            string updateDir = Path.Combine(dataDir, "updates");
+            Directory.CreateDirectory(updateDir);
+            string installerPath = Path.Combine(updateDir, AppName + "_Setup_v" + latestVersion + ".exe");
+            try
+            {
+                bool downloaded = false;
+                Action show = delegate
+                {
+                    using (var form = new UpdateDownloadForm(AppTitle, latestVersion, ExtractIcon()))
+                    {
+                        form.Shown += delegate
+                        {
+                            ThreadPool.QueueUserWorkItem(delegate
+                            {
+                                try
+                                {
+                                    DownloadFile(url, installerPath, form);
+                                    downloaded = true;
+                                    form.Complete("下载完成，正在启动安装程序…");
+                                }
+                                catch (Exception ex)
+                                {
+                                    try { if (File.Exists(installerPath)) File.Delete(installerPath); } catch { }
+                                    form.Fail("下载失败：" + ex.Message);
+                                }
+                            });
+                        };
+                        form.ShowDialog(mainWindow);
+                    }
+                };
+                if (mainWindow != null && !mainWindow.IsDisposed && mainWindow.InvokeRequired) mainWindow.Invoke(show); else show();
+                if (!downloaded || shuttingDown) return;
+                var psi = new ProcessStartInfo(installerPath, "/update") { UseShellExecute = true, WorkingDirectory = updateDir };
+                Process.Start(psi);
+                WriteLog("info", "Downloaded update installer: " + installerPath);
+                if (mainWindow != null && !mainWindow.IsDisposed)
+                    mainWindow.BeginInvoke((MethodInvoker)delegate { ExitThread(); });
+                else
+                    ExitThread();
+            }
+            catch (Exception ex)
+            {
+                WriteLog("warn", "Update installation failed: " + ex.Message);
+                MessageBox.Show("升级安装启动失败：" + ex.Message, AppTitle, MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void DownloadFile(string url, string targetPath, UpdateDownloadForm form)
+        {
+            Uri uri = new Uri(url);
+            if (uri.Scheme != Uri.UriSchemeHttps || !string.Equals(uri.Host, "mytemple.fshby.cc", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("升级地址不是受信任的官方地址。");
+            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+            var request = (HttpWebRequest)WebRequest.Create(uri);
+            request.Timeout = 30000;
+            using (var response = (HttpWebResponse)request.GetResponse())
+            using (var input = response.GetResponseStream())
+            using (var output = File.Create(targetPath))
+            {
+                long total = response.ContentLength;
+                long received = 0;
+                byte[] buffer = new byte[64 * 1024];
+                int read;
+                while ((read = input.Read(buffer, 0, buffer.Length)) > 0)
+                {
+                    output.Write(buffer, 0, read);
+                    received += read;
+                    form.Progress(received, total);
+                }
             }
         }
 
@@ -747,6 +989,190 @@ internal static class MyTempleLauncher
         public AppForm()
         {
             SetStyle(ControlStyles.ResizeRedraw | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
+        }
+    }
+
+    private sealed class UpdatePromptForm : Form
+    {
+        public UpdatePromptForm(string appTitle, string current, string latest, string date, string notes, Icon icon)
+        {
+            Text = appTitle + " 更新提示";
+            Icon = icon;
+            ClientSize = new Size(560, 430);
+            FormBorderStyle = FormBorderStyle.FixedDialog;
+            MaximizeBox = false;
+            MinimizeBox = false;
+            StartPosition = FormStartPosition.CenterParent;
+            BackColor = Color.White;
+
+            var title = new Label
+            {
+                Text = appTitle + " 有新版本可用",
+                Location = new Point(28, 24),
+                Size = new Size(490, 34),
+                Font = new Font("Microsoft YaHei UI", 15F, FontStyle.Bold),
+                ForeColor = Color.FromArgb(31, 41, 55)
+            };
+            Controls.Add(title);
+            var version = new Label
+            {
+                Text = "当前版本  " + current + "    →    最新版本  " + latest + (string.IsNullOrWhiteSpace(date) ? "" : "    " + date),
+                Location = new Point(30, 66),
+                Size = new Size(500, 28),
+                Font = new Font("Microsoft YaHei UI", 9.5F),
+                ForeColor = Color.FromArgb(79, 70, 229)
+            };
+            Controls.Add(version);
+            var noteLabel = new Label
+            {
+                Text = "本次更新内容",
+                Location = new Point(30, 108),
+                Size = new Size(490, 24),
+                Font = new Font("Microsoft YaHei UI", 10F, FontStyle.Bold),
+                ForeColor = Color.FromArgb(55, 65, 81)
+            };
+            Controls.Add(noteLabel);
+            var noteBox = new TextBox
+            {
+                Multiline = true,
+                ReadOnly = true,
+                ScrollBars = ScrollBars.Vertical,
+                Text = string.IsNullOrWhiteSpace(notes) ? "完善稳定性与使用体验。" : notes,
+                Location = new Point(30, 136),
+                Size = new Size(500, 200),
+                BackColor = Color.FromArgb(249, 250, 251),
+                BorderStyle = BorderStyle.FixedSingle,
+                Font = new Font("Microsoft YaHei UI", 9F),
+                ForeColor = Color.FromArgb(75, 85, 99)
+            };
+            Controls.Add(noteBox);
+
+            var confirm = new Button
+            {
+                Text = "确认升级并下载安装",
+                DialogResult = DialogResult.Yes,
+                Width = 150,
+                Height = 36,
+                BackColor = Color.FromArgb(79, 70, 229),
+                ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Bold)
+            };
+            confirm.FlatAppearance.BorderSize = 0;
+            var later = new Button
+            {
+                Text = "暂不升级（24小时后提醒）",
+                DialogResult = DialogResult.No,
+                Width = 170,
+                Height = 36,
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font("Microsoft YaHei UI", 9F)
+            };
+            var cancel = new Button
+            {
+                Text = "取消",
+                DialogResult = DialogResult.Cancel,
+                Width = 70,
+                Height = 36,
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font("Microsoft YaHei UI", 9F)
+            };
+            var buttons = new FlowLayoutPanel
+            {
+                Location = new Point(30, 360),
+                Size = new Size(500, 44),
+                FlowDirection = FlowDirection.RightToLeft,
+                WrapContents = false
+            };
+            buttons.Controls.Add(cancel);
+            buttons.Controls.Add(later);
+            buttons.Controls.Add(confirm);
+            Controls.Add(buttons);
+            AcceptButton = confirm;
+            CancelButton = cancel;
+        }
+    }
+
+    private sealed class UpdateDownloadForm : Form
+    {
+        private readonly Label status;
+        private readonly ProgressBar progress;
+
+        public UpdateDownloadForm(string appTitle, string latest, Icon icon)
+        {
+            Text = appTitle + " 正在升级";
+            Icon = icon;
+            ClientSize = new Size(470, 190);
+            FormBorderStyle = FormBorderStyle.FixedDialog;
+            MaximizeBox = false;
+            MinimizeBox = false;
+            ControlBox = false;
+            StartPosition = FormStartPosition.CenterParent;
+            BackColor = Color.White;
+            Controls.Add(new Label
+            {
+                Text = appTitle + " · 版本 " + latest,
+                Location = new Point(28, 24),
+                Size = new Size(410, 28),
+                Font = new Font("Microsoft YaHei UI", 12F, FontStyle.Bold),
+                ForeColor = Color.FromArgb(31, 41, 55)
+            });
+            status = new Label
+            {
+                Text = "正在下载升级包…",
+                Location = new Point(28, 62),
+                Size = new Size(410, 24),
+                Font = new Font("Microsoft YaHei UI", 9F),
+                ForeColor = Color.FromArgb(75, 85, 99)
+            };
+            Controls.Add(status);
+            progress = new ProgressBar
+            {
+                Location = new Point(28, 102),
+                Size = new Size(410, 22),
+                Minimum = 0,
+                Maximum = 100,
+                Style = ProgressBarStyle.Continuous
+            };
+            Controls.Add(progress);
+        }
+
+        public void Progress(long received, long total)
+        {
+            if (IsDisposed) return;
+            BeginInvoke((MethodInvoker)delegate
+            {
+                int value = total > 0 ? (int)Math.Min(100, received * 100 / total) : 0;
+                progress.Value = value;
+                status.Text = total > 0
+                    ? "正在下载升级包… " + value + "%"
+                    : "正在下载升级包… " + (received / 1024) + " KB";
+            });
+        }
+
+        public void Complete(string text)
+        {
+            if (IsDisposed) return;
+            BeginInvoke((MethodInvoker)delegate
+            {
+                progress.Value = 100;
+                status.Text = text;
+                var timer = new System.Windows.Forms.Timer { Interval = 500 };
+                timer.Tick += delegate { timer.Stop(); timer.Dispose(); DialogResult = DialogResult.OK; Close(); };
+                timer.Start();
+            });
+        }
+
+        public void Fail(string text)
+        {
+            if (IsDisposed) return;
+            BeginInvoke((MethodInvoker)delegate
+            {
+                status.Text = text;
+                var timer = new System.Windows.Forms.Timer { Interval = 1200 };
+                timer.Tick += delegate { timer.Stop(); timer.Dispose(); DialogResult = DialogResult.Cancel; Close(); };
+                timer.Start();
+            });
         }
     }
 }
