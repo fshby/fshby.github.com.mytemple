@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "knowledgeVersion": "e6bbc437085c4cff19798a3e1abfe1049353cdd8",
-  "generatedAt": "2026-08-10T13:10:30.030Z",
+  "knowledgeVersion": "d4895c9292da83c3487f3e02313361c3aa81bd05",
+  "generatedAt": "2026-08-10T14:13:11.494Z",
   "purpose": "供 AI 大模型快速定位本地知识库文档、标签、语义概念和图谱关系；命中候选后再读取 absolutePath 对应原文。",
   "aiUsage": [
     "先检索 documents 的 title、tags、headings、keywords 和 excerpt。",
@@ -11,11 +11,11 @@
   "library": {
     "defaultWorkspaceId": "default",
     "workspaceCount": 2,
-    "documentCount": 18,
-    "nodeCount": 100,
-    "edgeCount": 140,
-    "tagCount": 47,
-    "semanticConceptCount": 12,
+    "documentCount": 20,
+    "nodeCount": 104,
+    "edgeCount": 146,
+    "tagCount": 48,
+    "semanticConceptCount": 13,
     "missingLinkCount": 23
   },
   "workspaces": [
@@ -29,7 +29,7 @@
       "id": "ws_e3b7584c8d",
       "name": "codex",
       "root": "C:\\Users\\kfzheng\\Desktop\\codex",
-      "documentCount": 8
+      "documentCount": 10
     }
   ],
   "documents": [
@@ -39,7 +39,7 @@
       "workspace": "docs",
       "relativePath": ".mytemple/AGENTS.md",
       "absolutePath": "E:\\codex\\mytemple\\docs\\.mytemple\\AGENTS.md",
-      "title": "AI 知识库维护规则",
+      "title": "AGENTS",
       "tags": [],
       "headings": [
         {
@@ -140,7 +140,11 @@
       "relativePath": "功能简介.md",
       "absolutePath": "E:\\codex\\mytemple\\docs\\功能简介.md",
       "title": "功能简介",
-      "tags": [],
+      "tags": [
+        "模式",
+        "编辑",
+        "知识"
+      ],
       "headings": [
         {
           "level": 1,
@@ -274,9 +278,9 @@
       "backlinks": [],
       "missingLinks": [],
       "excerpt": "功能简介 🌟 MyTemple Knowledge —— 下一代个人知识管理利器 🚀 产品亮点 📚 智能文档管理 多工作区支持 ：自由导入本地文件夹，构建专属知识仓库 文件树导航 ：层级分明的文件组织，快速定位目标文档 智能搜索 ：全文检索，毫秒级定位关键信息 ✍️ 沉浸式编辑体验 三模式切换 ：阅读模式、编辑模式、知识图谱模式无缝切换 实时预览 ：所见即所得的Markdown渲染，编辑同步预览 自动保存 ：智能自动保存机制，告别意外丢失 ⌨️ 高效快捷键体系 Ctrl+; 快速插入日期 Ctrl+' 快速插入时间 Ctrl+S 手动保存文档 Ctrl+C 复制成功提示 🎨 精美视觉设计 响应式布局 ：适配各种屏幕尺寸 主题…",
-      "bytes": 3841,
-      "modifiedAt": "2026-08-10T12:46:25.880Z",
-      "contentSha256": "741700d1986b510b99ece83322eeaa87fc99e0e0b83e04edc5eb515c0c6db2a2"
+      "bytes": 3816,
+      "modifiedAt": "2026-08-10T14:04:40.150Z",
+      "contentSha256": "2965be97ff42cfd4d3dc6c17bb2140b577e6f115e0157b1f745eb3e78f229f02"
     },
     {
       "id": "ws_258316e94f:文档编写与管理规范.md",
@@ -490,7 +494,7 @@
       ],
       "excerpt": "文档编写与管理规范 这套规范的目标是减少寻找、分类和维护文档的成本。规则应当足够简单，让新文档可以快速创建，也能在几个月后继续读懂和管理。 一、文件夹结构 按稳定领域分类 优先按照长期不变的职责或主题建立一级文件夹，不要按照临时人员、月份或短期任务创建大量顶层目录。 数字前缀不是必须的，但可以让常用目录保持稳定顺序。目录层级建议不超过三级。 使用索引代替过深目录 当一个目录包含大量文档时，创建主题索引文档，不要继续增加五六层子目录。 二、文件命名 推荐使用能够独立表达主题的名称： 避免： 日期适合会议、日报和事件记录；长期维护的知识文档不必在文件名中加入日期。 三、标题结构 每篇文档只保留一个一级标题 ； 二级标题 表示主要章节；…",
       "bytes": 5587,
-      "modifiedAt": "2026-08-08T13:30:24.854Z",
+      "modifiedAt": "2026-08-10T14:04:40.205Z",
       "contentSha256": "af73695ad3145a26ec77e289f56927cdd6d3a93d648ed29eab1e31820638be2e"
     },
     {
@@ -499,7 +503,7 @@
       "workspace": "docs",
       "relativePath": "知识库编写规范与AI蒸馏指南.md",
       "absolutePath": "E:\\codex\\mytemple\\docs\\知识库编写规范与AI蒸馏指南.md",
-      "title": "知识库编写规范与 AI 蒸馏指南",
+      "title": "知识库编写规范与AI蒸馏指南",
       "tags": [
         "知识库管理",
         "写作规范",
@@ -690,6 +694,7 @@
       "semanticConcepts": [
         "标签",
         "标题",
+        "冲突",
         "来源",
         "ai"
       ],
@@ -708,9 +713,9 @@
         "Docker资源限制"
       ],
       "excerpt": "知识库编写规范与 AI 蒸馏指南 一、规范目标 本规范用于统一 Markdown 知识库的写法，使文档同时满足以下目标： 1. 人可以快速阅读、搜索和维护； 2. 图谱能够稳定识别标签、领域和双向链接； 3. RAG 可以准确切分、召回并定位原文； 4. AI 可以在不丢失证据的前提下摘要、合并和蒸馏文档； 5. 原始资料、推断结论和待确认内容能够明确区分； 6. 后续批量处理可以重复执行、检查差异并安全回滚。 本规范是 AI 处理知识库时的内容规则，不授予 AI 额外文件权限。AI 的实际读写范围仍由 .mytemple/AGENTS.md 和应用安全策略决定。 二、核心原则 1. 一篇文档解决一个主要问题 文档标题应能独立说明主…",
-      "bytes": 16142,
-      "modifiedAt": "2026-08-10T10:49:39.428Z",
-      "contentSha256": "ac80e91e9a509480914953a9332178a7891f9881ed0a1daaa5569772ab879122"
+      "bytes": 15613,
+      "modifiedAt": "2026-08-10T14:04:40.221Z",
+      "contentSha256": "70fd24cbe4cf9a1e72975ad7d2a048e09cddc012e337ce67edb4cef0ecc6c547"
     },
     {
       "id": "ws_258316e94f:知识库主清单说明.md",
@@ -1030,7 +1035,7 @@
       ],
       "excerpt": "知识神经网络与文档标记指南 知识神经网络不是把所有标题堆成标签，而是把文档、显式标签、语义概念和文档链接组织成可探索的关系网络。标记越准确，网络主干越清晰。 一、认识图谱元素 文档节点 文档节点代表一篇本地 Markdown 文档。点击文档节点可以打开正文，节点连接数越高，说明它与其他知识的联系越多。 显式标签节点 显式标签来自 frontmatter 的 tags 字段或正文中的 标签 。它表达作者主动确认的分类关系，适合表示稳定主题、领域和用途。 也可以在正文末尾使用： 语义概念节点 语义概念由系统根据全库词频和文档内容自动提取。它用来发现尚未手工标记的潜在关系，不等于显式标签，也不会把所有 Markdown 标题识别成标签。…",
       "bytes": 6092,
-      "modifiedAt": "2026-08-08T13:30:24.910Z",
+      "modifiedAt": "2026-08-10T14:04:40.254Z",
       "contentSha256": "0a603d3738fc017544f217ecce0932ac015fa25ac940e14e846d43ed482d61cd"
     },
     {
@@ -1039,7 +1044,7 @@
       "workspace": "docs",
       "relativePath": "AI语义问答与维护规则.md",
       "absolutePath": "E:\\codex\\mytemple\\docs\\AI语义问答与维护规则.md",
-      "title": "AI 语义问答与维护规则",
+      "title": "AI语义问答与维护规则",
       "tags": [
         "ai",
         "rag",
@@ -1142,7 +1147,7 @@
       "workspace": "docs",
       "relativePath": "MyTempleKnowledge详细功能介绍与推广文案.md",
       "absolutePath": "E:\\codex\\mytemple\\docs\\MyTempleKnowledge详细功能介绍与推广文案.md",
-      "title": "MyTemple Knowledge 详细功能介绍与推广文案",
+      "title": "MyTempleKnowledge详细功能介绍与推广文案",
       "tags": [
         "产品介绍",
         "使用指南",
@@ -1348,7 +1353,7 @@
       ],
       "excerpt": "MyTemple Knowledge 详细功能介绍与推广文案 让散落在硬盘里的 Markdown 文档，变成能搜索、能关联、能追溯、能持续生长的本地知识库。 MyTemple Knowledge 是一款以本地 Markdown 文件为核心的个人知识管理工具。它不改变原有文件格式，不要求把资料上传到云端，而是在普通文件夹之上提供阅读、编辑、全文检索、标签整理、双向链接、知识神经图谱和本地 AI 问答能力。 适合技术人员、内容创作者、项目管理者、研究人员，以及任何需要长期积累和复用资料的人。 一、你可能正在面对这些问题 1. 文档存了很多，真正需要时却找不到 资料可能分散在多个硬盘、项目目录和历史文件夹中。文件名记不清、关键词不准确时，…",
       "bytes": 19318,
-      "modifiedAt": "2026-08-10T13:08:15.180Z",
+      "modifiedAt": "2026-08-10T14:04:40.313Z",
       "contentSha256": "0d1b79509bcbc75cf40860d170a464ee37305176f560283d55ef6d0181e9fcf0"
     },
     {
@@ -1357,7 +1362,7 @@
       "workspace": "docs",
       "relativePath": "README.md",
       "absolutePath": "E:\\codex\\mytemple\\docs\\README.md",
-      "title": "MyTemple Knowledge 使用手册",
+      "title": "README",
       "tags": [
         "项目说明",
         "使用指南",
@@ -1477,7 +1482,7 @@
       "missingLinks": [],
       "excerpt": "MyTemple Knowledge 使用手册 MyTemple Knowledge 是一个以本地 Markdown 为核心的文档知识库。文档仍然保存在普通文件夹中，应用负责阅读、编辑、检索、标签整理和知识神经网络展示。 功能目录 文档使用 在左侧目录切换工作区、文件夹和文档。 使用顶部搜索框检索标题、路径和正文内容。 在阅读模式查看正文目录，三级目录默认折叠在二级目录下。 在修改模式编辑 Markdown、实时预览并自动保存。 使用沉浸模式隐藏非必要导航，专注于当前文档。 知识整理 知识神经网络与文档标记指南 图谱节点和连接线代表什么； 标签、语义概念和文档双链的区别； 全局图谱、当前文档邻域与领域深度的使用方法； 怎样编写能生成…",
       "bytes": 3007,
-      "modifiedAt": "2026-08-08T13:30:24.950Z",
+      "modifiedAt": "2026-08-10T14:04:40.345Z",
       "contentSha256": "91968b74bdabb52105b1a70c650e103dd57b81c5df9889e87b33144816649fc7"
     },
     {
@@ -1486,7 +1491,7 @@
       "workspace": "codex",
       "relativePath": ".mytemple/AGENTS.md",
       "absolutePath": "C:\\Users\\kfzheng\\Desktop\\codex\\.mytemple\\AGENTS.md",
-      "title": "AI 知识库维护规则",
+      "title": "AGENTS",
       "tags": [],
       "headings": [
         {
@@ -1638,7 +1643,8 @@
         "编辑",
         "知识",
         "安装",
-        "目录"
+        "目录",
+        "模式"
       ],
       "headings": [
         {
@@ -1767,9 +1773,9 @@
       "backlinks": [],
       "missingLinks": [],
       "excerpt": "知识库文档缺陷 在 e:\\codex\\mytemple 目录下执行 hello how are 又！ 缺陷： 1.前置条件：编辑模式隐藏预览，显示大纲的状态，点击隐藏大纲编辑栏也会跟随消失 2.前置条件：编辑模式显示预览，显示大纲的状态，点击隐藏大纲编辑栏会变窄，预览栏右侧会出现大片空白 3.长文档导出pdf时显示不完整，仅显示一页内容 新增 1.将设置界面 工具栏中的沟通交流群按钮移动到tab栏放在【许可】下面并直接显示不需要按钮跳转； 2.取消设置界面 关于栏中的关于文档跳转按钮，关于内容直接展示在关于栏界面 3.在设置AI与索引功能栏中新增AI的deepseek模型接入方式，AI功能兼容deepseek模型，兼容AI处理选中功…",
-      "bytes": 12970,
-      "modifiedAt": "2026-08-09T15:47:43.199Z",
-      "contentSha256": "38a68676b9ead616a2453317441c9890c206da5a47df00039e3f6911822e3fd7"
+      "bytes": 12981,
+      "modifiedAt": "2026-08-10T14:04:40.367Z",
+      "contentSha256": "da146e612dfc114b3356c86a6b6fc99cc68a6236e1473c8955039134038ce9ce"
     },
     {
       "id": "ws_e3b7584c8d:知识库主题设计.md",
@@ -1874,7 +1880,7 @@
       "missingLinks": [],
       "excerpt": "知识库主题设计 核心哲学映射 将卦象罗盘与太极阴阳的哲学意象转化为 Markdown 编辑器主题，本质上是用 东方宇宙观 重构代码编辑器的视觉语言——让每一个 UI 元素都成为“道”的具象化。下面是一套完整的主题设计方案，包含色彩体系、布局隐喻、动态反馈和 VS Code 配置示例。 一、核心哲学映射 哲学概念 编辑器映射 设计意图 太极（阴阳鱼） 编辑器背景 vs 侧边栏 阴中有阳，阳中有阴，背景与 UI 互相渗透 八卦（乾坤震巽坎离艮兑） 8 种语法高亮色 每种卦象对应一种语义色，赋予代码结构以天地能量 罗盘（方位） 光标位置、缩进、对齐 代码的“风水”——方向感、平衡感、流动感 五行（金木水火土） 主题色温、对比度、饱和度 相…",
       "bytes": 11884,
-      "modifiedAt": "2026-08-08T15:25:53.793Z",
+      "modifiedAt": "2026-08-10T14:04:40.422Z",
       "contentSha256": "03f57771055cbf2d79d740a3f3b394a3de653eedeb6a1083c04fcb5c578fd645"
     },
     {
@@ -1958,7 +1964,7 @@
       "workspace": "codex",
       "relativePath": "ConfyUI.md",
       "absolutePath": "C:\\Users\\kfzheng\\Desktop\\codex\\ConfyUI.md",
-      "title": "1. 下载 ComfyUI_windows_portable_nvidia.7z",
+      "title": "ConfyUI",
       "tags": [
         "模型",
         "工作"
@@ -2107,7 +2113,9 @@
           "count": 2
         }
       ],
-      "semanticConcepts": [],
+      "semanticConcepts": [
+        "冲突"
+      ],
       "outgoingLinks": [],
       "backlinks": [],
       "missingLinks": [],
@@ -2187,13 +2195,61 @@
       "bytes": 4781,
       "modifiedAt": "2026-08-08T06:34:26.815Z",
       "contentSha256": "0487d55ecc46726c074e62867b5f2924e277fd9df2db91bd8384fb1e440eef2e"
+    },
+    {
+      "id": "ws_e3b7584c8d:source/1.md",
+      "workspaceId": "ws_e3b7584c8d",
+      "workspace": "codex",
+      "relativePath": "source/1.md",
+      "absolutePath": "C:\\Users\\kfzheng\\Desktop\\codex\\source\\1.md",
+      "title": "1",
+      "tags": [],
+      "headings": [
+        {
+          "level": 1,
+          "title": "1"
+        }
+      ],
+      "keywords": [],
+      "semanticConcepts": [],
+      "outgoingLinks": [],
+      "backlinks": [],
+      "missingLinks": [],
+      "excerpt": "1",
+      "bytes": 138,
+      "modifiedAt": "2026-08-10T14:13:10.825Z",
+      "contentSha256": "f2e6fdf070871736885b3415a03cb3bd04d7e4737e5b03798422782fa7b18986"
+    },
+    {
+      "id": "ws_e3b7584c8d:source/测试.md",
+      "workspaceId": "ws_e3b7584c8d",
+      "workspace": "codex",
+      "relativePath": "source/测试.md",
+      "absolutePath": "C:\\Users\\kfzheng\\Desktop\\codex\\source\\测试.md",
+      "title": "测试",
+      "tags": [],
+      "headings": [
+        {
+          "level": 1,
+          "title": "测试"
+        }
+      ],
+      "keywords": [],
+      "semanticConcepts": [],
+      "outgoingLinks": [],
+      "backlinks": [],
+      "missingLinks": [],
+      "excerpt": "测试",
+      "bytes": 146,
+      "modifiedAt": "2026-08-10T14:05:43.768Z",
+      "contentSha256": "c00b412cc74dfa26a5b2ae95c273abef5deb110afbfa3bfa10c3982bfff9c33f"
     }
   ],
   "graph": {
     "nodes": [
       {
         "id": "ws_258316e94f:.mytemple/AGENTS.md",
-        "label": "AI 知识库维护规则",
+        "label": "AGENTS",
         "kind": "doc",
         "group": "docs",
         "weight": 3,
@@ -2216,10 +2272,10 @@
         "label": "功能简介",
         "kind": "doc",
         "group": "docs",
-        "weight": 4,
-        "degree": 3,
+        "weight": 7,
+        "degree": 6,
         "orphan": false,
-        "modified": 1786365985880.3152
+        "modified": 1786370680150.4646
       },
       {
         "id": "ws_258316e94f:文档编写与管理规范.md",
@@ -2229,17 +2285,17 @@
         "weight": 15,
         "degree": 14,
         "orphan": false,
-        "modified": 1786195824854.2808
+        "modified": 1786370680205.6582
       },
       {
         "id": "ws_258316e94f:知识库编写规范与AI蒸馏指南.md",
-        "label": "知识库编写规范与 AI 蒸馏指南",
+        "label": "知识库编写规范与AI蒸馏指南",
         "kind": "doc",
         "group": "docs",
-        "weight": 19,
-        "degree": 18,
+        "weight": 20,
+        "degree": 19,
         "orphan": false,
-        "modified": 1786358979428.3699
+        "modified": 1786370680221.451
       },
       {
         "id": "ws_258316e94f:知识库主清单说明.md",
@@ -2259,11 +2315,11 @@
         "weight": 20,
         "degree": 19,
         "orphan": false,
-        "modified": 1786195824910.0452
+        "modified": 1786370680254.218
       },
       {
         "id": "ws_258316e94f:AI语义问答与维护规则.md",
-        "label": "AI 语义问答与维护规则",
+        "label": "AI语义问答与维护规则",
         "kind": "doc",
         "group": "docs",
         "weight": 9,
@@ -2273,27 +2329,27 @@
       },
       {
         "id": "ws_258316e94f:MyTempleKnowledge详细功能介绍与推广文案.md",
-        "label": "MyTemple Knowledge 详细功能介绍与推广文案",
+        "label": "MyTempleKnowledge详细功能介绍与推广文案",
         "kind": "doc",
         "group": "docs",
         "weight": 15,
         "degree": 14,
         "orphan": false,
-        "modified": 1786367295180.6208
+        "modified": 1786370680313.5676
       },
       {
         "id": "ws_258316e94f:README.md",
-        "label": "MyTemple Knowledge 使用手册",
+        "label": "README",
         "kind": "doc",
         "group": "docs",
         "weight": 14,
         "degree": 13,
         "orphan": false,
-        "modified": 1786195824950.2817
+        "modified": 1786370680345.3286
       },
       {
         "id": "ws_e3b7584c8d:.mytemple/AGENTS.md",
-        "label": "AI 知识库维护规则",
+        "label": "AGENTS",
         "kind": "doc",
         "group": "codex",
         "weight": 3,
@@ -2316,10 +2372,10 @@
         "label": "知识库文档缺陷",
         "kind": "doc",
         "group": "codex",
-        "weight": 10,
-        "degree": 9,
+        "weight": 11,
+        "degree": 10,
         "orphan": false,
-        "modified": 1786290463199.9214
+        "modified": 1786370680367.0972
       },
       {
         "id": "ws_e3b7584c8d:知识库主题设计.md",
@@ -2329,7 +2385,7 @@
         "weight": 24,
         "degree": 23,
         "orphan": false,
-        "modified": 1786202753793.528
+        "modified": 1786370680422.523
       },
       {
         "id": "ws_e3b7584c8d:codex.md",
@@ -2343,7 +2399,7 @@
       },
       {
         "id": "ws_e3b7584c8d:ConfyUI.md",
-        "label": "1. 下载 ComfyUI_windows_portable_nvidia.7z",
+        "label": "ConfyUI",
         "kind": "doc",
         "group": "codex",
         "weight": 5,
@@ -2356,9 +2412,9 @@
         "label": "github",
         "kind": "doc",
         "group": "codex",
-        "weight": 1,
-        "degree": 0,
-        "orphan": true,
+        "weight": 2,
+        "degree": 1,
+        "orphan": false,
         "modified": 1786100063245.4358
       },
       {
@@ -2370,6 +2426,26 @@
         "degree": 2,
         "orphan": false,
         "modified": 1786170866815.413
+      },
+      {
+        "id": "ws_e3b7584c8d:source/1.md",
+        "label": "1",
+        "kind": "doc",
+        "group": "codex",
+        "weight": 1,
+        "degree": 0,
+        "orphan": true,
+        "modified": 1786371190825.6497
+      },
+      {
+        "id": "ws_e3b7584c8d:source/测试.md",
+        "label": "测试",
+        "kind": "doc",
+        "group": "codex",
+        "weight": 1,
+        "degree": 0,
+        "orphan": true,
+        "modified": 1786370743768.0613
       },
       {
         "id": "missing:ws_258316e94f:需求说明",
@@ -2612,6 +2688,16 @@
         "modified": 0
       },
       {
+        "id": "tag:知识",
+        "label": "#知识",
+        "kind": "tag",
+        "group": "标签",
+        "weight": 4,
+        "degree": 3,
+        "orphan": false,
+        "modified": 0
+      },
+      {
         "id": "tag:目录",
         "label": "#目录",
         "kind": "tag",
@@ -2628,6 +2714,26 @@
         "group": "标签",
         "weight": 4,
         "degree": 3,
+        "orphan": false,
+        "modified": 0
+      },
+      {
+        "id": "tag:模式",
+        "label": "#模式",
+        "kind": "tag",
+        "group": "标签",
+        "weight": 3,
+        "degree": 2,
+        "orphan": false,
+        "modified": 0
+      },
+      {
+        "id": "tag:编辑",
+        "label": "#编辑",
+        "kind": "tag",
+        "group": "标签",
+        "weight": 3,
+        "degree": 2,
         "orphan": false,
         "modified": 0
       },
@@ -2674,16 +2780,6 @@
       {
         "id": "tag:知识图谱",
         "label": "#知识图谱",
-        "kind": "tag",
-        "group": "标签",
-        "weight": 3,
-        "degree": 2,
-        "orphan": false,
-        "modified": 0
-      },
-      {
-        "id": "tag:知识",
-        "label": "#知识",
         "kind": "tag",
         "group": "标签",
         "weight": 3,
@@ -2834,16 +2930,6 @@
       {
         "id": "tag:知识库",
         "label": "#知识库",
-        "kind": "tag",
-        "group": "标签",
-        "weight": 2,
-        "degree": 1,
-        "orphan": false,
-        "modified": 0
-      },
-      {
-        "id": "tag:编辑",
-        "label": "#编辑",
         "kind": "tag",
         "group": "标签",
         "weight": 2,
@@ -3190,6 +3276,16 @@
         "degree": 2,
         "orphan": false,
         "modified": 0
+      },
+      {
+        "id": "keyword:冲突",
+        "label": "冲突",
+        "kind": "keyword",
+        "group": "语义",
+        "weight": 20,
+        "degree": 2,
+        "orphan": false,
+        "modified": 0
       }
     ],
     "edges": [
@@ -3418,6 +3514,27 @@
         "directed": false
       },
       {
+        "source": "ws_258316e94f:功能简介.md",
+        "target": "tag:知识",
+        "type": "tag",
+        "weight": 2,
+        "directed": false
+      },
+      {
+        "source": "ws_258316e94f:知识库主清单说明.md",
+        "target": "tag:知识",
+        "type": "tag",
+        "weight": 2,
+        "directed": false
+      },
+      {
+        "source": "ws_e3b7584c8d:知识库文档缺陷.md",
+        "target": "tag:知识",
+        "type": "tag",
+        "weight": 2,
+        "directed": false
+      },
+      {
         "source": "ws_258316e94f:文档编写与管理规范.md",
         "target": "tag:目录",
         "type": "tag",
@@ -3455,6 +3572,34 @@
       {
         "source": "ws_e3b7584c8d:shotlab.md",
         "target": "tag:模型",
+        "type": "tag",
+        "weight": 2,
+        "directed": false
+      },
+      {
+        "source": "ws_258316e94f:功能简介.md",
+        "target": "tag:模式",
+        "type": "tag",
+        "weight": 2,
+        "directed": false
+      },
+      {
+        "source": "ws_e3b7584c8d:知识库文档缺陷.md",
+        "target": "tag:模式",
+        "type": "tag",
+        "weight": 2,
+        "directed": false
+      },
+      {
+        "source": "ws_258316e94f:功能简介.md",
+        "target": "tag:编辑",
+        "type": "tag",
+        "weight": 2,
+        "directed": false
+      },
+      {
+        "source": "ws_e3b7584c8d:知识库文档缺陷.md",
+        "target": "tag:编辑",
         "type": "tag",
         "weight": 2,
         "directed": false
@@ -3525,20 +3670,6 @@
       {
         "source": "ws_258316e94f:知识神经网络与文档标记指南.md",
         "target": "tag:知识图谱",
-        "type": "tag",
-        "weight": 2,
-        "directed": false
-      },
-      {
-        "source": "ws_258316e94f:知识库主清单说明.md",
-        "target": "tag:知识",
-        "type": "tag",
-        "weight": 2,
-        "directed": false
-      },
-      {
-        "source": "ws_e3b7584c8d:知识库文档缺陷.md",
-        "target": "tag:知识",
         "type": "tag",
         "weight": 2,
         "directed": false
@@ -3658,13 +3789,6 @@
       {
         "source": "ws_258316e94f:README.md",
         "target": "tag:知识库",
-        "type": "tag",
-        "weight": 2,
-        "directed": false
-      },
-      {
-        "source": "ws_e3b7584c8d:知识库文档缺陷.md",
-        "target": "tag:编辑",
         "type": "tag",
         "weight": 2,
         "directed": false
@@ -4057,6 +4181,20 @@
       {
         "source": "ws_e3b7584c8d:ConfyUI.md",
         "target": "keyword:comfyui",
+        "type": "keyword",
+        "weight": 6,
+        "directed": false
+      },
+      {
+        "source": "ws_258316e94f:知识库编写规范与AI蒸馏指南.md",
+        "target": "keyword:冲突",
+        "type": "keyword",
+        "weight": 6,
+        "directed": false
+      },
+      {
+        "source": "ws_e3b7584c8d:github.md",
+        "target": "keyword:冲突",
         "type": "keyword",
         "weight": 6,
         "directed": false

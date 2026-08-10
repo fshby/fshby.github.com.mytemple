@@ -18,7 +18,6 @@ doc_type: standard
 owner: knowledge-base
 ---
 
-
 ![screenshot-1786284866974](/source/ws_258316e94f/screenshot-1786284866974.webp)
 
 # 知识库编写规范与 AI 蒸馏指南

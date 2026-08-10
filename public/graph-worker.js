@@ -81,11 +81,12 @@ function buildNeuralBackbone(nodes, edges) {
   const connected = components.filter((component) => component.length > 1);
   connected.forEach((component) => {
     const componentIds = new Set(component.map((node) => node.id));
-    const root = [...component].sort((a, b) => {
-      const docBiasA = a.kind === "doc" ? 0.18 : 0;
-      const docBiasB = b.kind === "doc" ? 0.18 : 0;
-      return b.centrality + docBiasB - a.centrality - docBiasA;
-    })[0];
+    // 中心节点优先选取组件内最新修改的文档（modified 最大），使最新知识
+    // 自然落入图谱视觉中心；组件内无文档时回退到中心度最高的概念节点。
+    const docNodes = component.filter((node) => node.kind === "doc");
+    const root = docNodes.length
+      ? docNodes.reduce((best, node) => ((node.modified || 0) > (best?.modified || 0) ? node : best), null)
+      : [...component].sort((a, b) => b.centrality - a.centrality)[0];
     root.layoutRoot = true;
     const children = new Map(component.map((node) => [node.id, []]));
     const depth = new Map([[root.id, 0]]);
@@ -157,6 +158,12 @@ function layoutGraph(graph) {
   const byId = new Map(nodes.map((node, index) => [node.id, { node, index }]));
   const springs = edges.map((edge) => ({ edge, a: byId.get(edge.source)?.index, b: byId.get(edge.target)?.index }))
     .filter((item) => item.a !== undefined && item.b !== undefined);
+  // 预计算直接相连的节点对，用于排斥力按"联系紧密/松散"分级调节。
+  const neighborSets = Array.from({ length: nodes.length }, () => new Set());
+  for (const spring of springs) {
+    neighborSets[spring.a].add(spring.b);
+    neighborSets[spring.b].add(spring.a);
+  }
   const iterations = nodes.length < 120 ? 72 : nodes.length < 420 ? 44 : 24;
   const fx = new Float64Array(nodes.length);
   const fy = new Float64Array(nodes.length);
@@ -187,7 +194,10 @@ function layoutGraph(graph) {
           }
           if (distanceSq > 26000) continue;
           const distance = Math.sqrt(distanceSq);
-          const force = 1120 / (distanceSq + 90);
+          // 有直接链接的节点对引力已主导，减弱排斥让它们靠得更近；
+          // 联系松散（无直接边）的节点对增强排斥，使知识网络自然分层散开。
+          const repelScale = neighborSets[index].has(otherIndex) ? 0.5 : 1.2;
+          const force = (1120 / (distanceSq + 90)) * repelScale;
           const pushX = (dx / distance) * force;
           const pushY = (dy / distance) * force;
           fx[index] -= pushX; fy[index] -= pushY;
@@ -201,8 +211,9 @@ function layoutGraph(graph) {
       const dx = b.x - a.x;
       const dy = b.y - a.y;
       const distance = Math.max(1, Math.hypot(dx, dy));
-      const desired = spring.edge.type === "tag" ? 72 : spring.edge.type === "keyword" ? 88 : 104;
-      const strength = spring.edge.backbone ? (spring.edge.type === "link" ? 0.02 : 0.014) : 0.0014;
+      const desired = spring.edge.type === "tag" ? 68 : spring.edge.type === "keyword" ? 84 : 96;
+      // 有链接的文档对引力更强（backbone 主干尤为紧密），让强关联聚集成核心集群。
+      const strength = spring.edge.backbone ? (spring.edge.type === "link" ? 0.032 : 0.022) : 0.0022;
       const pull = (distance - desired) * strength * Math.min(2, 0.7 + spring.edge.weight * 0.18);
       const pullX = (dx / distance) * pull;
       const pullY = (dy / distance) * pull;
