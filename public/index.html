@@ -18,9 +18,9 @@
       body.license-locked #licenseModal,
       body.license-locked #settingsModal { pointer-events: auto; }
     </style>
-    <link rel="stylesheet" href="/styles.css?v=20260810-eye-care-dark-v1" />
+    <link rel="stylesheet" href="/styles.css?v=20260811-glow-graph-v1" />
     <link rel="modulepreload" href="/editor-core.js?v=20260807-v1" />
-    <link rel="modulepreload" href="/app.js?v=20260810-graph-2" />
+    <link rel="modulepreload" href="/app.js?v=20260811-glow-graph-v1" />
   </head>
   <body>
     <div id="appSplash" class="app-splash">
@@ -393,6 +393,13 @@
                   <button type="button" data-theme="glow">柔光</button>
                   <button type="button" data-theme="image">图片</button>
                 </div>
+                <label class="setting-row" id="glowAccentRow" style="display:none">
+                  <span>柔光强调色</span>
+                  <div class="inline-actions">
+                    <input type="color" id="glowAccentColor" value="#b08560" title="自定义柔光主题强调色">
+                    <button type="button" id="resetGlowAccentBtn" title="恢复默认">重置</button>
+                  </div>
+                </label>
                 <label class="setting-row">
                   <span>自定义背景</span>
                   <input id="bgImageInput" type="file" accept="image/*" />
@@ -651,6 +658,33 @@
                   <li>定期回到本页查看健康度，温习标记为陈旧的文档。</li>
                 </ol>
               </section>
+              <section class="settings-section graph-physics-section">
+                <strong>图谱物理参数</strong>
+                <p class="muted">调节知识图谱的引力、排斥与动态行为；不查看图谱时不占用资源。</p>
+                <label class="setting-row">
+                  <span>排斥强度（松散节点间距）</span>
+                  <input id="graphRepulsion" type="range" min="0.4" max="2.5" step="0.1" value="1.25" />
+                  <span id="graphRepulsionValue" class="range-value">1.25</span>
+                </label>
+                <label class="setting-row">
+                  <span>引力强度（紧密节点聚拢）</span>
+                  <input id="graphAttraction" type="range" min="0.3" max="2.0" step="0.1" value="1.0" />
+                  <span id="graphAttractionValue" class="range-value">1.0</span>
+                </label>
+                <label class="setting-row">
+                  <span>呼吸幅度（游离动态）</span>
+                  <input id="graphBreathing" type="range" min="0" max="2.0" step="0.1" value="1.0" />
+                  <span id="graphBreathingValue" class="range-value">1.0</span>
+                </label>
+                <label class="setting-row">
+                  <span>复原速度（拖拽后回弹）</span>
+                  <input id="graphRestore" type="range" min="0.3" max="2.5" step="0.1" value="1.0" />
+                  <span id="graphRestoreValue" class="range-value">1.0</span>
+                </label>
+                <div class="inline-actions">
+                  <button type="button" id="resetGraphPhysicsBtn">恢复默认</button>
+                </div>
+              </section>
             </section>
 
             <section class="settings-panel" data-settings-panel="tools">
@@ -695,6 +729,16 @@
                   <div><code>F3 / Ctrl/Cmd + G</code><span>查找下一个匹配</span></div>
                   <div><code>Ctrl/Cmd + Alt + ↑/↓</code><span>在相邻行添加多处光标</span></div>
                   <div><code>Ctrl/Cmd + Shift + L</code><span>选中当前词的全部匹配项</span></div>
+                </div>
+              </details>
+              <details class="settings-section shortcut-settings-section">
+                <summary><strong>AI 快捷键</strong><span class="muted">编辑器内调用 AI 辅助功能</span></summary>
+                <div class="shortcut-grid">
+                  <div><code>Ctrl/Cmd + Shift + A</code><span>AI 代码补全（根据光标处上下文）</span></div>
+                  <div><code>Ctrl/Cmd + Shift + /</code><span>AI 生成注释（为选中代码/文本加注释）</span></div>
+                  <div><code>Ctrl/Cmd + Shift + P</code><span>AI 润色（优化选中文字表达）</span></div>
+                  <div><code>Ctrl/Cmd + Shift + X</code><span>AI 续写（基于选中内容继续扩展）</span></div>
+                  <div><code>双击 Shift</code><span>打开全局搜索</span></div>
                 </div>
               </details>
             </section>
@@ -942,6 +986,8 @@
       <button type="button" data-ai-transform="polish">润色</button>
       <button type="button" data-ai-transform="continue">续写</button>
       <button type="button" data-ai-transform="translate">翻译</button>
+      <button type="button" data-ai-transform="code">代码补全</button>
+      <button type="button" data-ai-transform="comment">生成注释</button>
     </div>
     <div id="aiTransformModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="aiTransformTitle">
       <div class="modal-dialog ai-transform-dialog">
@@ -1145,7 +1191,7 @@
         }, 15000);
       })();
     </script>
-    <script src="/app.js?v=20260810-graph-2" type="module"></script>
+    <script src="/app.js?v=20260811-glow-graph-v1" type="module"></script>
 
     <div class="menu-dropdowns" id="menuDropdowns">
       <div class="menu-dropdown hidden" data-dropdown="file" role="menu">

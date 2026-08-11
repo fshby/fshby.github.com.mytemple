@@ -887,7 +887,63 @@ textarea {
 
 .downloads {
   padding-top: 28px;
+  padding-bottom: 60px;
+}
+
+/* 内置使用文档 */
+.builtin-docs {
+  padding-top: 20px;
   padding-bottom: 120px;
+}
+.builtin-docs .docs-content {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 24px;
+}
+.builtin-docs .doc-section {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 24px 28px;
+}
+.builtin-docs .doc-section h3 {
+  font-size: 17px;
+  font-weight: 600;
+  margin: 0 0 14px;
+  color: var(--text);
+}
+.builtin-docs .doc-section ul,
+.builtin-docs .doc-section ol {
+  margin: 0;
+  padding-left: 18px;
+  line-height: 1.85;
+  font-size: 14px;
+  color: var(--text-soft);
+}
+.builtin-docs .doc-section li {
+  margin-bottom: 6px;
+}
+.builtin-docs .doc-section code {
+  background: var(--surface-1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: var(--mono);
+}
+.builtin-docs .doc-section kbd {
+  display: inline-block;
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 12px;
+  font-family: var(--mono);
+  margin: 0 1px;
+}
+@media (max-width: 768px) {
+  .builtin-docs .docs-content {
+    grid-template-columns: 1fr;
+  }
 }
 
 .download-grid {
@@ -992,6 +1048,9 @@ textarea {
   .hero {
     grid-template-columns: 1fr;
     min-height: auto;
+    gap: 32px;
+    padding-top: 48px;
+    padding-bottom: 32px;
   }
 
   .hero-visual {
@@ -1090,7 +1149,28 @@ textarea {
   }
 
   .hero {
-    padding-top: 52px;
+    padding-top: 40px;
+    padding-bottom: 32px;
+    min-height: auto;
+    gap: 28px;
+  }
+
+  .hero-visual {
+    min-height: 280px;
+  }
+
+  .features,
+  .screens,
+  .themes,
+  .docs,
+  .downloads,
+  .builtin-docs {
+    padding-top: 32px;
+    padding-bottom: 32px;
+  }
+
+  .builtin-docs {
+    padding-bottom: 80px;
   }
 
   .hero h1 {

@@ -15,7 +15,7 @@ const LARGE_PREVIEW_DELAY = 700;
 const GRAPH_WORKER_URL = "/graph-worker.js?v=20260810-graph-1";
 const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20260809-worker-4";
 const AI_HISTORY_KEY = "mytemple.ai.history.v1";
-const AI_TRANSFORM_LABELS = { summary: "摘要", keypoints: "要点", terms: "术语解释", polish: "润色", continue: "续写", rewrite: "代写", translate: "翻译", hint: "编辑提示" };
+const AI_TRANSFORM_LABELS = { summary: "摘要", keypoints: "要点", terms: "术语解释", polish: "润色", continue: "续写", rewrite: "代写", translate: "翻译", hint: "编辑提示", code: "代码补全", comment: "生成注释" };
 
 const state = {
   tree: [],
@@ -61,6 +61,12 @@ const state = {
     reboundAnimation: 0,
     pageActive: true,
     fitted: false,
+    physics: {
+      repulsion: parseFloat(localStorage.getItem("graphRepulsion")) || 1.25,
+      attraction: parseFloat(localStorage.getItem("graphAttraction")) || 1.0,
+      breathing: parseFloat(localStorage.getItem("graphBreathing")) || 1.0,
+      restore: parseFloat(localStorage.getItem("graphRestore")) || 1.0,
+    },
   },
   selectedNode: "",
   selectedFolder: "",
@@ -241,6 +247,18 @@ const els = {
   bgImageInput: document.querySelector("#bgImageInput"),
   imageTextMode: document.querySelector("#imageTextMode"),
   pickImageColorBtn: document.querySelector("#pickImageColorBtn"),
+  glowAccentRow: document.querySelector("#glowAccentRow"),
+  glowAccentColor: document.querySelector("#glowAccentColor"),
+  resetGlowAccentBtn: document.querySelector("#resetGlowAccentBtn"),
+  graphRepulsion: document.querySelector("#graphRepulsion"),
+  graphRepulsionValue: document.querySelector("#graphRepulsionValue"),
+  graphAttraction: document.querySelector("#graphAttraction"),
+  graphAttractionValue: document.querySelector("#graphAttractionValue"),
+  graphBreathing: document.querySelector("#graphBreathing"),
+  graphBreathingValue: document.querySelector("#graphBreathingValue"),
+  graphRestore: document.querySelector("#graphRestore"),
+  graphRestoreValue: document.querySelector("#graphRestoreValue"),
+  resetGraphPhysicsBtn: document.querySelector("#resetGraphPhysicsBtn"),
   globalFontSize: document.querySelector("#globalFontSize"),
   globalFontSizeValue: document.querySelector("#globalFontSizeValue"),
   docFontSize: document.querySelector("#docFontSize"),
@@ -777,8 +795,23 @@ function applySettings(settings = loadSettings()) {
   if (settings.theme === "image") {
     const savedAccent = localStorage.getItem("imageAccentColor");
     if (savedAccent) document.documentElement.style.setProperty("--accent", savedAccent);
+  } else if (settings.theme === "glow") {
+    // 柔光主题支持自定义强调色，持久化恢复
+    const savedGlowAccent = localStorage.getItem("glowAccentColor");
+    if (savedGlowAccent) {
+      document.documentElement.style.setProperty("--accent", savedGlowAccent);
+      document.documentElement.style.setProperty("--accent-strong", savedGlowAccent);
+      if (els.glowAccentColor) els.glowAccentColor.value = savedGlowAccent;
+    } else if (els.glowAccentColor) {
+      els.glowAccentColor.value = "#b08560";
+    }
   } else {
     document.documentElement.style.removeProperty("--accent");
+    document.documentElement.style.removeProperty("--accent-strong");
+  }
+  // 柔光强调色控件仅在柔光主题下显示
+  if (els.glowAccentRow) {
+    els.glowAccentRow.style.display = settings.theme === "glow" ? "flex" : "none";
   }
   const currentScale = parseFloat(document.documentElement.style.getPropertyValue("--app-scale")) || 1;
   document.documentElement.style.setProperty("--app-font-size", `${Math.round(settings.fontSize * currentScale)}px`);
@@ -1166,9 +1199,21 @@ function renderEditorOutline(content) {
     els.editorOutline.innerHTML = '<p class="editor-outline-empty">暂无标题</p>';
     return;
   }
+  // 计算每个标题在文档中的出现次数（用于同名标题区分）
+  const titleCountMap = new Map();
+  const titleOccurrenceMap = new Map();
+  for (const item of outline) {
+    const key = item.title.toLowerCase();
+    titleCountMap.set(key, (titleCountMap.get(key) || 0) + 1);
+  }
   const itemButton = (item) => {
+    const key = item.title.toLowerCase();
+    const occurrence = titleOccurrenceMap.get(key) || 0;
+    titleOccurrenceMap.set(key, occurrence + 1);
     const indent = Math.max(0, item.level - 1) * 14;
-    return `<button class="editor-outline-item level-${item.level}" data-heading-text="${escapeHtml(item.title)}" data-heading-line="${Number.isFinite(item.line) ? item.line : -1}" style="margin-left:${indent}px" title="${escapeHtml(item.title)}">${escapeHtml(compactName(item.title, 15))}</button>`;
+    const hasDuplicate = titleCountMap.get(key) > 1;
+    const dupLabel = hasDuplicate ? ` (${occurrence + 1}/${titleCountMap.get(key)})` : "";
+    return `<button class="editor-outline-item level-${item.level}" data-heading-text="${escapeHtml(item.title)}" data-heading-line="${Number.isFinite(item.line) ? item.line : -1}" data-heading-occurrence="${occurrence}" style="margin-left:${indent}px" title="${escapeHtml(item.title)}${escapeHtml(dupLabel)}">${escapeHtml(compactName(item.title, 15))}${escapeHtml(dupLabel)}</button>`;
   };
   // level <= 2 的标题作为可折叠分组父级，其后紧跟的 level > 2 子标题收进折叠区。
   const rows = [];
@@ -1221,24 +1266,32 @@ function setEditorOutlineVisible(visible) {
   });
 }
 
-function findHeadingLineInEditor(headingText) {
+function findHeadingLineInEditor(headingText, occurrence = 0) {
   const value = els.editor.value;
   if (!headingText) return -1;
   const lines = value.split("\n");
   const target = plainText(headingText).toLowerCase();
+  let matchCount = 0;
   for (let index = 0; index < lines.length; index += 1) {
     const match = lines[index].match(/^(\s*)(#{1,6})\s+(.+)$/);
-    if (match && plainText(match[3]).toLowerCase() === target) return index;
+    if (match && plainText(match[3]).toLowerCase() === target) {
+      if (matchCount === occurrence) return index;
+      matchCount += 1;
+    }
     const autoMatch = lines[index].match(/^(\s*)([一二三四五六七八九十]{1,4}[、.．]\s*.+)$/);
-    if (autoMatch && plainText(autoMatch[2]).toLowerCase() === target) return index;
+    if (autoMatch && plainText(autoMatch[2]).toLowerCase() === target) {
+      if (matchCount === occurrence) return index;
+      matchCount += 1;
+    }
   }
   return -1;
 }
 
-function scrollEditorToHeading(headingText) {
-  const lineIndex = findHeadingLineInEditor(headingText);
+function scrollEditorToHeading(headingText, occurrence = 0) {
+  const lineIndex = findHeadingLineInEditor(headingText, occurrence);
   if (lineIndex < 0) return;
   els.editor.scrollToLine?.(lineIndex + 1);
+  els.editor.focus?.();
 }
 
 function stripFrontmatter(markdown) {
@@ -2946,6 +2999,7 @@ function setMode(mode) {
     state.readerScrollRatio = readerMax > 0 ? els.markdownView.scrollTop / readerMax : 0;
   }
   state.mode = mode;
+  try { localStorage.setItem("lastMode", mode); } catch (_) {}
   document.body.classList.toggle("graph-mode", mode === "graph");
   lastInputLength = els.editor.value.length;
   lastInputValue = els.editor.value;
@@ -3068,7 +3122,15 @@ async function openDoc(docPath, options = {}) {
   els.docTitle.title = doc.title || displayName(item);
   els.markdownView.classList.remove("empty-state");
   await renderReaderContent(doc.content, { searchTerm: options.searchTerm || "" });
-  els.editor.value = doc.content;
+  // 检查是否有未保存的草稿，如果有则恢复
+  const draftContent = restoreDraft(doc.path);
+  const effectiveContent = (draftContent != null && draftContent !== doc.content) ? draftContent : doc.content;
+  els.editor.value = effectiveContent;
+  if (draftContent != null && draftContent !== doc.content) {
+    state.currentContent = draftContent;
+    setSaveStatus("\u672a\u4fdd\u5b58", true);
+    scheduleAutoSave();
+  }
   els.preview.classList.remove("preview-pending");
   if (state.largeDocument) {
     clearTimeout(state.previewTimer);
@@ -3229,6 +3291,31 @@ function renderAiMessages() {
     bubble.className = "ai-message-bubble";
     bubble.textContent = message.content;
     item.append(bubble);
+    // 助手回复增加快捷操作：润色、续写、插入到文档。仅在编辑模式且当前有文档时显示。
+    if (message.role === "assistant" && state.currentPath) {
+      const actions = document.createElement("div");
+      actions.className = "ai-message-actions";
+      const polishBtn = document.createElement("button");
+      polishBtn.type = "button";
+      polishBtn.className = "ai-action-btn";
+      polishBtn.textContent = "润色";
+      polishBtn.title = "将此回答润色为更流畅的表达";
+      polishBtn.addEventListener("click", () => runAiTransformOnText(message.content, "polish"));
+      const continueBtn = document.createElement("button");
+      continueBtn.type = "button";
+      continueBtn.className = "ai-action-btn";
+      continueBtn.textContent = "续写";
+      continueBtn.title = "基于此回答继续扩展内容";
+      continueBtn.addEventListener("click", () => runAiTransformOnText(message.content, "continue"));
+      const insertBtn = document.createElement("button");
+      insertBtn.type = "button";
+      insertBtn.className = "ai-action-btn";
+      insertBtn.textContent = "插入文档";
+      insertBtn.title = "将此回答插入到当前编辑器光标位置";
+      insertBtn.addEventListener("click", () => insertTextAtCursor(message.content));
+      actions.append(polishBtn, continueBtn, insertBtn);
+      item.append(actions);
+    }
     if (message.sources?.length) {
       const sources = document.createElement("div");
       sources.className = "ai-sources";
@@ -3278,6 +3365,31 @@ async function jumpToAiSource(source) {
       .find((heading) => !source.heading || heading.textContent.trim() === source.heading.trim() || heading.textContent.includes(source.heading.trim()));
     scrollReaderToElement(target, "smooth");
   });
+}
+
+// 将指定文本以指定模式进行 AI 转换（润色/续写等），结果在转换弹窗中展示。
+async function runAiTransformOnText(text, mode) {
+  if (!text || !text.trim()) return showToast("没有可处理的内容");
+  // 构造一个虚拟选区，让 runAiTransform 直接处理这段文本。
+  state.ai.selection = { text: text.trim(), source: "editor", start: 0, end: 0, path: state.currentPath };
+  await runAiTransform(mode);
+}
+
+// 在编辑器当前光标位置插入文本（用于 AI 回答快速插入）。
+async function insertTextAtCursor(text) {
+  if (!text || !state.currentPath) return;
+  if (state.mode !== "edit") setMode("edit");
+  const content = text.trim();
+  if (!content) return;
+  const cursorPos = els.editor.selectionStart ?? els.editor.value.length;
+  const prefix = cursorPos > 0 && els.editor.value[cursorPos - 1] !== "\n" ? "\n\n" : "";
+  const suffix = els.editor.value[cursorPos] && els.editor.value[cursorPos] !== "\n" ? "\n\n" : "";
+  const insert = `${prefix}${content}${suffix}`;
+  if (await replaceEditorRange(insert, cursorPos, cursorPos, "end")) {
+    showToast("已插入到当前光标位置");
+  } else {
+    showToast("插入失败，请重试");
+  }
 }
 
 async function submitAiQuestion(event) {
@@ -3365,8 +3477,9 @@ async function runAiTransform(mode, { preserveInstruction = false } = {}) {
   const requestId = ++aiTransformRequestSeq;
   const selection = state.ai.selection || getAiSelection();
   const isRewrite = mode === "rewrite";
-  // 代写模式允许无选区（基于写作要求生成新文档），其余模式需选中文本。
-  if (!isRewrite && !selection?.text) return showToast("请先选中一段文本");
+  // 代写、代码补全、生成注释模式允许无选区（基于上下文/光标位置生成），其余模式需选中文本。
+  const allowEmpty = isRewrite || mode === "code" || mode === "comment";
+  if (!allowEmpty && !selection?.text) return showToast("请先选中一段文本");
   state.ai.selection = selection || { source: "editor", text: "", start: 0, end: 0 };
   els.aiSelectionMenu?.classList.add("hidden");
   els.aiTransformModal?.classList.remove("hidden");
@@ -3399,10 +3512,11 @@ async function runAiTransform(mode, { preserveInstruction = false } = {}) {
   const sourceText = selection?.text || "";
   els.aiTransformSource.textContent = sourceText
     ? `${selection.source === "editor" ? "编辑器选区" : "阅读器选区"} · ${sourceText.length} 字`
-    : "代写模式：根据写作要求生成新文档";
+    : (mode === "code" ? "代码补全：根据光标处上下文生成代码" : mode === "comment" ? "生成注释：为当前段落添加注释" : "代写模式：根据写作要求生成新文档");
   els.aiTransformResult.value = isRewrite ? "正在根据要求生成文档…" : "正在处理选中文本…";
   els.aiTransformResult.disabled = true;
-  els.aiTransformInsertBtn.disabled = isRewrite || selection?.source !== "editor";
+  // 代写模式禁用插入（只支持新建文档）；代码补全/生成注释允许在编辑器中插入。
+  els.aiTransformInsertBtn.disabled = isRewrite || (selection?.source !== "editor" && mode !== "code" && mode !== "comment");
   els.aiTransformCreateBtn.disabled = true;
   const instruction = isRewrite ? (els.aiTransformInstruction?.value || "").trim() : "";
   if (isRewrite && !instruction) {
@@ -3414,6 +3528,15 @@ async function runAiTransform(mode, { preserveInstruction = false } = {}) {
   try {
     const payload = { text: sourceText, mode };
     if (instruction) payload.instruction = instruction;
+    // 代码补全/生成注释模式：无选区时，传入光标附近上下文作为生成依据。
+    if ((mode === "code" || mode === "comment") && !sourceText && state.mode === "edit") {
+      const para = currentEditorParagraph();
+      if (para?.text) {
+        payload.text = para.text;
+        payload.context = els.editor.value.slice(Math.max(0, para.start - 400), para.start)
+          + "[[CURSOR]]" + els.editor.value.slice(para.end, para.end + 400);
+      }
+    }
     const result = await api.post("/api/ai/transform", payload);
     if (requestId !== aiTransformRequestSeq) return;
     els.aiTransformResult.value = result.content || "";
@@ -3437,13 +3560,23 @@ async function insertAiTransform() {
   const transform = state.ai.transform;
   const content = els.aiTransformResult.value.trim();
   if (!transform || transform.source !== "editor" || !content) return;
-  const range = resolveAiEditorRange(transform);
-  if (!range) return showToast("原文已变化，请重新生成 AI 结果后再插入");
-  if (content === els.editor.value.slice(range.start, range.end).trim()) {
+  // 代码补全/生成注释模式在无选区时，在当前光标位置插入（而非替换开头）。
+  const hasSelection = Boolean(transform.text);
+  const range = hasSelection ? resolveAiEditorRange(transform) : null;
+  if (hasSelection && !range) return showToast("原文已变化，请重新生成 AI 结果后再插入");
+  if (hasSelection && content === els.editor.value.slice(range.start, range.end).trim()) {
     return showToast("AI 结果与原文相同，请重新生成后再插入");
   }
-  if (!await replaceEditorRange(content, range.start, range.end, "end")) {
-    return showToast("AI 结果未能写入编辑器，请重试");
+  if (hasSelection) {
+    if (!await replaceEditorRange(content, range.start, range.end, "end")) {
+      return showToast("AI 结果未能写入编辑器，请重试");
+    }
+  } else {
+    // 无选区时在光标处插入，光标位置可能已变化，取当前 selectionStart。
+    const cursorPos = els.editor.selectionStart ?? els.editor.value.length;
+    if (!await replaceEditorRange(content, cursorPos, cursorPos, "end")) {
+      return showToast("AI 结果未能写入编辑器，请重试");
+    }
   }
   closeAiTransformModal();
   showToast("AI 结果已插入当前位置");
@@ -4092,6 +4225,7 @@ async function saveCurrentDoc({ refreshTree = false, keepEditorState = true, ren
   state.currentContent = editorUnchanged ? content : latestContent;
   updateLargeDocumentState(state.currentContent);
   state.lastSavedContent = content;
+  clearDraft(state.currentPath);
   if (renderAfterSave && editorUnchanged && state.mode === "read") {
     await renderReaderContent(content);
   } else if (renderAfterSave && editorUnchanged && state.previewVisible) {
@@ -4184,6 +4318,35 @@ function scheduleAutoSave() {
   const { idle, max } = getAutoSaveDelays(els.editor.value);
   state.autoSave.idleTimer = setTimeout(() => requestAutoSaveRun(2800), idle);
   if (!state.autoSave.maxTimer) state.autoSave.maxTimer = setTimeout(() => requestAutoSaveRun(1200), max);
+}
+
+// 草稿保存：将未保存的编辑内容暂存到 localStorage，防止意外关闭丢失
+let draftSaveTimer = 0;
+function saveDraft() {
+  if (!state.currentPath || state.mode !== "edit") return;
+  clearTimeout(draftSaveTimer);
+  draftSaveTimer = setTimeout(() => {
+    try {
+      const content = els.editor.value;
+      if (content !== state.lastSavedContent) {
+        localStorage.setItem("draft:" + state.currentPath, content);
+      } else {
+        localStorage.removeItem("draft:" + state.currentPath);
+      }
+    } catch (_) {}
+  }, 800);
+}
+
+function restoreDraft(docPath) {
+  try {
+    const draft = localStorage.getItem("draft:" + docPath);
+    if (draft != null) return draft;
+  } catch (_) {}
+  return null;
+}
+
+function clearDraft(docPath) {
+  try { localStorage.removeItem("draft:" + docPath); } catch (_) {}
 }
 
 async function normalizeAllToMarkdown() {
@@ -4726,10 +4889,18 @@ function buildNeuralBackbone(nodes, edges) {
 
   connected.forEach((component) => {
     const componentIds = new Set(component.map((node) => node.id));
+    // 计算组件内文档的时间范围，用于"最新文档居中"的偏好打分。
+    const docNodes = component.filter((node) => node.kind === "doc" && node.modified);
+    const newestMtime = docNodes.length ? Math.max(...docNodes.map((node) => node.modified)) : 0;
+    const oldestMtime = docNodes.length ? Math.min(...docNodes.map((node) => node.modified)) : 0;
+    const timeSpan = Math.max(1, newestMtime - oldestMtime);
     const root = [...component].sort((a, b) => {
       const docBiasA = a.kind === "doc" ? 0.18 : 0;
       const docBiasB = b.kind === "doc" ? 0.18 : 0;
-      return b.centrality + docBiasB - a.centrality - docBiasA;
+      // 最新文档获得额外加分，使其更可能成为中心节点。
+      const recencyA = a.kind === "doc" && a.modified ? (a.modified - oldestMtime) / timeSpan * 0.22 : 0;
+      const recencyB = b.kind === "doc" && b.modified ? (b.modified - oldestMtime) / timeSpan * 0.22 : 0;
+      return b.centrality + docBiasB + recencyB - a.centrality - docBiasA - recencyA;
     })[0];
     root.layoutRoot = true;
     const children = new Map(component.map((node) => [node.id, []]));
@@ -5273,6 +5444,9 @@ function exciteGraphNode(source, dragDx = 0, dragDy = 0) {
 }
 
 function graphMotionReduced() {
+  // 用户显式开启动态时优先用户偏好，否则遵循系统减少动画设置。
+  // 集成显卡笔记本常被系统自动标记为 reduce，导致图谱无动态，这里让用户能强制启用。
+  if (state.graphView.dynamic && localStorage.getItem("graphDynamicOverride") === "1") return false;
   return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
 }
 
@@ -5368,7 +5542,7 @@ function runGraphSimulation(timestamp) {
           const distance = Math.sqrt(distanceSq);
           // 联系紧密（有直接链接）的节点对减弱排斥，让引力把它们聚拢；
           // 联系松散的节点对增强排斥，使无关节点彼此散开、层级清晰。
-          const repelScale = cache.neighborSets[index].has(otherIndex) ? 0.4 : 1.25;
+          const repelScale = (cache.neighborSets[index].has(otherIndex) ? 0.4 : 1.25) * state.graphView.physics.repulsion;
           const force = (24 / (1 + distanceSq / 900)) * repelScale;
           const pushX = (dx / distance) * force;
           const pushY = (dy / distance) * force;
@@ -5389,7 +5563,7 @@ function runGraphSimulation(timestamp) {
     const distance = Math.max(1, Math.hypot(dx, dy));
     const desired = edge.type === "tag" ? 74 : edge.type === "keyword" ? 88 : 104;
     // 有链接的文档对引力更强，强关联聚集成核心集群，松散连接只维持弱牵引。
-    const strength = edge.backbone ? 0.052 : 0.008;
+    const strength = (edge.backbone ? 0.052 : 0.008) * state.graphView.physics.attraction;
     const pull = clamp((distance - desired) * strength, -5, 5);
     const pullX = (dx / distance) * pull;
     const pullY = (dy / distance) * pull;
@@ -5410,14 +5584,14 @@ function runGraphSimulation(timestamp) {
     }
     const phase = cache.phases[index];
     // 游离呼吸幅度收束到自然和谐区间，避免长时间观察时的晃动疲劳。
-    const drift = node.layoutRoot ? 0.014 : 0.034;
+    const drift = (node.layoutRoot ? 0.014 : 0.034) * state.graphView.physics.breathing;
     fx[index] += Math.sin(timestamp * 0.00047 + phase) * drift;
     fy[index] += Math.cos(timestamp * 0.00039 + phase * 1.31) * drift;
     // 拖拽复原期以引力规则缓慢拉回平衡位置（target），轨迹由物理自然产生，
     // 而非固定时长插值；强度刻意压低以呈现"缓慢复原"的舒缓感。
-    const returnStrength = rebound
+    const returnStrength = (rebound
       ? (node.layoutRoot ? 0.02 : 0.014)
-      : (node.layoutRoot ? 0.006 : 0.0014);
+      : (node.layoutRoot ? 0.006 : 0.0014)) * state.graphView.physics.restore;
     fx[index] += (node.targetX - node.x) * returnStrength;
     fy[index] += (node.targetY - node.y) * returnStrength;
     node.vx = (node.vx + fx[index] * dt) * 0.86;
@@ -5894,12 +6068,21 @@ function expandSequenceOnEnter(event) {
       newLines[row.lineIndex] = `${row.prefix}${targetMdPrefix}${newNumStr}${row.sep}${sepSpace}`.trimEnd();
     }
     const newValue = newLines.join("\n");
+    // 使用 CodeMirror 原生 dispatch 做原子替换，避免 value setter 导致光标跳动
+    const oldDocLength = els.editor.value.length;
+    try {
+      els.editor.view?.dispatch?.({
+        changes: { from: 0, to: oldDocLength, insert: newValue },
+        selection: { anchor: start },
+        scrollIntoView: true,
+      });
+    } catch (_) {
+      els.editor.value = newValue;
+    }
     let offset = 0;
     for (let i = 0; i < headerLineIdx; i++) offset += newLines[i].length + 1;
     offset += Math.min(start - lineStart, newLines[headerLineIdx].length);
-    els.editor.value = newValue;
-    els.editor.selectionStart = offset;
-    els.editor.selectionEnd = offset;
+    els.editor.setSelectionRange(offset, offset);
     els.editor.dispatchEvent(new Event("input", { bubbles: true }));
     const nextMarker = isArabic ? `${indent}${rows.length + 1}${separator} ` : `${indent}${targetMdPrefix}${numberToChinese(rows.length + 1)}${separator} `;
     insertAtCursor(`\n${nextMarker}`);
@@ -6841,6 +7024,7 @@ els.editor.addEventListener("input", () => {
   setSaveStatus("\u672a\u4fdd\u5b58", true);
   schedulePreviewUpdate();
   scheduleAutoSave();
+  saveDraft();
   hideAiEditHintPopover();
   scheduleAiEditHint();
 });
@@ -7000,6 +7184,18 @@ els.editor.addEventListener("keydown", (event) => {
       event.stopPropagation();
       saveCurrentDoc({ refreshTree: true });
       return true;
+    }
+    // AI 快捷键：Ctrl+Shift+A 代码补全 / Ctrl+Shift+/ 生成注释 / Ctrl+Shift+P 润色 / Ctrl+Shift+X 续写
+    if (mod && event.shiftKey) {
+      const aiKey = event.key.toLowerCase();
+      // Shift+/ 在多数键盘上产出 "?"，两者均识别为"生成注释"。
+      const aiMode = { a: "code", "/": "comment", "?": "comment", p: "polish", x: "continue" }[aiKey];
+      if (aiMode) {
+        event.preventDefault();
+        event.stopPropagation();
+        runAiTransform(aiMode);
+        return true;
+      }
     }
     if (mod && event.key.toLowerCase() === "m") {
       event.preventDefault();
@@ -8057,6 +8253,21 @@ els.imageTextMode?.addEventListener("change", () => {
   localStorage.setItem("imageTextMode", els.imageTextMode.value);
   applySettings();
 });
+// 柔光主题强调色自定义：实时应用并持久化，重置按钮恢复默认值。
+els.glowAccentColor?.addEventListener("input", (event) => {
+  const accent = event.target.value;
+  document.documentElement.style.setProperty("--accent", accent);
+  document.documentElement.style.setProperty("--accent-strong", accent);
+  localStorage.setItem("glowAccentColor", accent);
+});
+els.resetGlowAccentBtn?.addEventListener("click", () => {
+  document.documentElement.style.removeProperty("--accent");
+  document.documentElement.style.removeProperty("--accent-strong");
+  localStorage.removeItem("glowAccentColor");
+  if (els.glowAccentColor) els.glowAccentColor.value = "#b08560";
+  applySettings();
+  showToast("柔光强调色已恢复默认");
+});
 // 从背景图取色：采样图片主色调并应用为强调色，让界面配色与图片协调。
 els.pickImageColorBtn?.addEventListener("click", async () => {
   const bg = localStorage.getItem("docBgImage");
@@ -8208,11 +8419,28 @@ els.editorOutline?.addEventListener("click", (event) => {
   const button = event.target.closest("[data-heading-text]");
   if (!button) return;
   const lineAttr = parseInt(button.dataset.headingLine, 10);
+  const occurrence = parseInt(button.dataset.headingOccurrence, 10) || 0;
   if (Number.isFinite(lineAttr) && lineAttr >= 0) {
-    els.editor.scrollToLine?.(lineAttr + 1);
+    // 验证行号对应的标题文本是否匹配，防止文档编辑后行号过期
+    const value = els.editor.value;
+    const lines = value.split("\n");
+    if (lineAttr < lines.length) {
+      const line = lines[lineAttr];
+      const heading = line.match(/^(\s*)(#{1,6})\s+(.+)$/);
+      const autoHeading = line.match(/^(\s*)([一二三四五六七八九十]{1,4}[、.．]\s*.+)$/);
+      const target = plainText(button.dataset.headingText).toLowerCase();
+      if ((heading && plainText(heading[3]).toLowerCase() === target) ||
+          (autoHeading && plainText(autoHeading[2]).toLowerCase() === target)) {
+        els.editor.scrollToLine?.(lineAttr + 1);
+        els.editor.focus?.();
+        return;
+      }
+    }
+    // 行号过期，回退到按出现次序查找
+    scrollEditorToHeading(button.dataset.headingText, occurrence);
     return;
   }
-  scrollEditorToHeading(button.dataset.headingText);
+  scrollEditorToHeading(button.dataset.headingText, occurrence);
 });
 els.deleteBtn.addEventListener("click", deleteSelected);
 els.exportPdfBtn?.addEventListener("click", exportCurrentDocToPdf);
@@ -8292,17 +8520,73 @@ els.graphDynamic.addEventListener("change", () => {
   state.graphView.dynamic = els.graphDynamic.checked;
   localStorage.setItem("graphDynamic", state.graphView.dynamic ? "1" : "0");
   if (state.graphView.dynamic) {
-    if (graphMotionReduced()) showToast("系统已开启减少动画，动态图谱保持暂停");
+    // 系统标记为 reduce 但用户显式开启动态时，记录覆盖意图，让图谱恢复运动。
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      localStorage.setItem("graphDynamicOverride", "1");
+      showToast("已强制启用动态图谱（覆盖系统减少动画设置）");
+    }
     startGraphSimulation();
   } else {
+    localStorage.removeItem("graphDynamicOverride");
     stopGraphSimulation();
     scheduleGraphDraw();
   }
 });
+// 图谱物理参数调节：实时应用并持久化，重置按钮恢复默认值。
+const graphPhysicsDefaults = { repulsion: 1.25, attraction: 1.0, breathing: 1.0, restore: 1.0 };
+function syncGraphPhysicsControls() {
+  const p = state.graphView.physics;
+  if (els.graphRepulsion) els.graphRepulsion.value = p.repulsion;
+  if (els.graphRepulsionValue) els.graphRepulsionValue.textContent = p.repulsion.toFixed(2);
+  if (els.graphAttraction) els.graphAttraction.value = p.attraction;
+  if (els.graphAttractionValue) els.graphAttractionValue.textContent = p.attraction.toFixed(2);
+  if (els.graphBreathing) els.graphBreathing.value = p.breathing;
+  if (els.graphBreathingValue) els.graphBreathingValue.textContent = p.breathing.toFixed(2);
+  if (els.graphRestore) els.graphRestore.value = p.restore;
+  if (els.graphRestoreValue) els.graphRestoreValue.textContent = p.restore.toFixed(2);
+}
+els.graphRepulsion?.addEventListener("input", (e) => {
+  state.graphView.physics.repulsion = parseFloat(e.target.value);
+  els.graphRepulsionValue.textContent = state.graphView.physics.repulsion.toFixed(2);
+  localStorage.setItem("graphRepulsion", String(state.graphView.physics.repulsion));
+});
+els.graphAttraction?.addEventListener("input", (e) => {
+  state.graphView.physics.attraction = parseFloat(e.target.value);
+  els.graphAttractionValue.textContent = state.graphView.physics.attraction.toFixed(2);
+  localStorage.setItem("graphAttraction", String(state.graphView.physics.attraction));
+});
+els.graphBreathing?.addEventListener("input", (e) => {
+  state.graphView.physics.breathing = parseFloat(e.target.value);
+  els.graphBreathingValue.textContent = state.graphView.physics.breathing.toFixed(2);
+  localStorage.setItem("graphBreathing", String(state.graphView.physics.breathing));
+});
+els.graphRestore?.addEventListener("input", (e) => {
+  state.graphView.physics.restore = parseFloat(e.target.value);
+  els.graphRestoreValue.textContent = state.graphView.physics.restore.toFixed(2);
+  localStorage.setItem("graphRestore", String(state.graphView.physics.restore));
+});
+els.resetGraphPhysicsBtn?.addEventListener("click", () => {
+  Object.assign(state.graphView.physics, graphPhysicsDefaults);
+  localStorage.removeItem("graphRepulsion");
+  localStorage.removeItem("graphAttraction");
+  localStorage.removeItem("graphBreathing");
+  localStorage.removeItem("graphRestore");
+  syncGraphPhysicsControls();
+  showToast("图谱物理参数已恢复默认");
+});
+syncGraphPhysicsControls();
 document.addEventListener("visibilitychange", () => {
   state.graphView.pageActive = !document.hidden;
   if (document.hidden) stopGraphSimulation();
   else startGraphSimulation();
+  // 页面隐藏时立即保存草稿
+  if (document.hidden) saveDraft();
+});
+window.addEventListener("pagehide", () => {
+  // 页面关闭前同步保存草稿
+  if (state.currentPath && state.mode === "edit" && els.editor.value !== state.lastSavedContent) {
+    try { localStorage.setItem("draft:" + state.currentPath, els.editor.value); } catch (_) {}
+  }
 });
 window.addEventListener("blur", () => {
   state.graphView.pageActive = false;
@@ -8450,7 +8734,15 @@ async function bootstrap(refresh = false) {
       try {
         const lastDoc = localStorage.getItem("lastOpenedDoc");
         if (lastDoc && state.flatFiles.some((file) => file.path === lastDoc)) {
-          openDoc(lastDoc).catch((e) => console.warn("restore last doc failed:", e));
+          openDoc(lastDoc).then(() => {
+            // 恢复上次的编辑模式
+            try {
+              const lastMode = localStorage.getItem("lastMode");
+              if (lastMode && ["view", "edit", "graph"].includes(lastMode)) {
+                setMode(lastMode);
+              }
+            } catch (_) {}
+          }).catch((e) => console.warn("restore last doc failed:", e));
         }
       } catch (_) {}
     }
