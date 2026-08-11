@@ -3377,6 +3377,45 @@ body.resizing-sidebar {
   color: var(--text);
 }
 
+.setting-row input[type="range"] {
+  width: 100%;
+  min-width: 0;
+  height: 4px;
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--soft);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+.setting-row input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--panel);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+  cursor: pointer;
+}
+.setting-row input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--panel);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+  cursor: pointer;
+}
+.range-value {
+  min-width: 36px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: var(--text);
+}
+
 .muted {
   color: var(--muted);
   font-size: 12px;
@@ -6577,6 +6616,9 @@ body[data-theme="image"] .editor-splitter::before {
 .ai-message.user { align-self: flex-end; }
 .ai-message-bubble { padding: 11px 13px; border-radius: 14px; white-space: pre-wrap; line-height: 1.6; font-size: 13px; background: var(--surface-2); }
 .ai-message.user .ai-message-bubble { background: color-mix(in srgb, var(--accent) 17%, var(--surface-2)); }
+.ai-message-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.ai-action-btn { padding: 4px 10px; font-size: 11px; color: var(--muted); border: 1px solid var(--hairline); border-radius: 8px; background: transparent; cursor: pointer; transition: all 0.15s ease; }
+.ai-action-btn:hover { color: var(--accent); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
 .ai-sources { display: grid; gap: 6px; }
 .ai-source { display: grid; gap: 3px; width: 100%; padding: 8px 10px; color: var(--text); text-align: left; border: 1px solid var(--hairline); border-radius: 10px; background: transparent; }
 .ai-source:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
