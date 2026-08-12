@@ -6219,6 +6219,7 @@ body[data-theme="image"] .editor-splitter::before {
   z-index: 80;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
   max-width: min(96vw, 520px);
   padding: 7px 8px;
@@ -6226,6 +6227,7 @@ body[data-theme="image"] .editor-splitter::before {
   border-radius: 14px;
   background: var(--surface-1);
   box-shadow: var(--shadow-lg);
+  overflow: hidden;
 }
 .ai-local-note {
   margin-inline-start: auto;
@@ -6238,6 +6240,9 @@ body[data-theme="image"] .editor-splitter::before {
   color: var(--muted);
   font-size: 12px;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
 }
 .ai-selection-menu button {
   height: 30px;
@@ -6288,7 +6293,15 @@ body[data-theme="image"] .editor-splitter::before {
   cursor: pointer;
   line-height: 1;
 }
-.ai-edit-hint-text { margin: 0 0 10px; line-height: 1.6; color: var(--text); }
+.ai-edit-hint-text {
+  margin: 0 0 10px;
+  line-height: 1.6;
+  color: var(--text);
+  max-height: 160px;
+  overflow-y: auto;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
 .ai-edit-hint-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .ai-edit-hint-actions button {
   border: 1px solid var(--line);
@@ -7610,4 +7623,73 @@ body:not([data-theme="image"]):not([data-theme="eye"]):not([data-theme="glow"]) 
 body:not([data-theme="image"]):not([data-theme="eye"]):not([data-theme="glow"]) .app-shell {
   background: var(--bg) !important;
   background-image: none !important;
+}
+
+/* CodeMirror search panel styling */
+.cm-editor .cm-panels {
+  border-bottom: 1px solid var(--line) !important;
+  padding: 6px 8px !important;
+  font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif) !important;
+  font-size: 13px !important;
+}
+.cm-editor .cm-panels.cm-panels-top {
+  border-bottom: 1px solid var(--line) !important;
+  border-top: none !important;
+}
+.cm-editor .cm-search input,
+.cm-editor .cm-search button {
+  font-family: inherit !important;
+  font-size: inherit !important;
+}
+.cm-editor .cm-search input[type="text"] {
+  border: 1px solid var(--line) !important;
+  background: var(--surface-2) !important;
+  color: var(--text) !important;
+  border-radius: 4px !important;
+  padding: 4px 8px !important;
+  min-width: 140px !important;
+  outline: none !important;
+}
+.cm-editor .cm-search input[type="text"]:focus {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent) !important;
+}
+.cm-editor .cm-search button {
+  border: 1px solid var(--line) !important;
+  background: var(--surface-2) !important;
+  color: var(--text) !important;
+  border-radius: 4px !important;
+  padding: 4px 8px !important;
+  cursor: pointer !important;
+  margin: 0 2px !important;
+  min-width: 30px !important;
+  line-height: 1 !important;
+}
+.cm-editor .cm-search button:hover {
+  background: var(--surface-3) !important;
+  border-color: var(--accent) !important;
+}
+.cm-editor .cm-search button:disabled {
+  opacity: 0.4 !important;
+  cursor: not-allowed !important;
+}
+.cm-editor .cm-search label {
+  color: var(--text) !important;
+  user-select: none !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 3px !important;
+  cursor: pointer !important;
+}
+.cm-editor .cm-search label input[type="checkbox"] {
+  accent-color: var(--accent) !important;
+}
+.cm-editor .cm-search .cm-search-match-info {
+  color: var(--text) !important;
+  opacity: 0.8 !important;
+  margin: 0 6px !important;
+}
+.cm-editor .cm-search .cm-search-actions {
+  display: inline-flex !important;
+  gap: 2px !important;
 }

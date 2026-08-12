@@ -1186,7 +1186,7 @@ function scheduleEditorOutlineUpdate(content = els.editor.value) {
   if (!state.editorOutlineVisible || state.mode !== "edit") return;
   clearTimeout(state.editorOutlineTimer);
   const value = String(content || "");
-  const wait = value.length > 100000 ? 600 : value.length > 20000 ? 260 : 120;
+  const wait = value.length > 100000 ? 450 : value.length > 20000 ? 180 : 80;
   state.editorOutlineTimer = setTimeout(() => {
     renderEditorOutline(value);
   }, wait);
@@ -1267,10 +1267,30 @@ function setEditorOutlineVisible(visible) {
 }
 
 function findHeadingLineInEditor(headingText, occurrence = 0) {
-  const value = els.editor.value;
   if (!headingText) return -1;
-  const lines = value.split("\n");
   const target = plainText(headingText).toLowerCase();
+  const doc = els.editor.view?.state?.doc;
+  if (doc) {
+    const totalLines = doc.lines;
+    let matchCount = 0;
+    for (let index = 0; index < totalLines; index += 1) {
+      const line = doc.line(index + 1);
+      const text = line.text;
+      const match = text.match(/^(\s*)(#{1,6})\s+(.+)$/);
+      if (match && plainText(match[3]).toLowerCase() === target) {
+        if (matchCount === occurrence) return index;
+        matchCount += 1;
+      }
+      const autoMatch = text.match(/^(\s*)([一二三四五六七八九十]{1,4}[、.．]\s*.+)$/);
+      if (autoMatch && plainText(autoMatch[2]).toLowerCase() === target) {
+        if (matchCount === occurrence) return index;
+        matchCount += 1;
+      }
+    }
+    return -1;
+  }
+  const value = els.editor.value;
+  const lines = value.split("\n");
   let matchCount = 0;
   for (let index = 0; index < lines.length; index += 1) {
     const match = lines[index].match(/^(\s*)(#{1,6})\s+(.+)$/);
@@ -3025,6 +3045,9 @@ function setMode(mode) {
     renderCurrentPreviewNow(state.currentContent);
     setEditorOutlineVisible(state.editorOutlineVisible);
     setPreviewVisible(state.previewVisible);
+    if (state.editorOutlineVisible) {
+      renderEditorOutline(els.editor.value);
+    }
     requestAnimationFrame(() => {
       const editorMax = Math.max(1, els.editor.scrollHeight - els.editor.clientHeight);
       els.editor.scrollTop = Math.round(editorMax * (state.readerScrollRatio || 0));
@@ -3152,12 +3175,26 @@ async function openDoc(docPath, options = {}) {
   state.syncPreviewScroll.ratio = 0;
   resetUndo(doc.content);
   lastInputLength = doc.content.length;
-  lastInputValue = doc.content;
+  lastInputValue = effectiveContent;
   setSaveStatus("\u4fdd\u5b58", false);
   syncTreeSelectionState();
+  if (state.mode === "edit" && state.editorOutlineVisible) {
+    renderEditorOutline(effectiveContent);
+  }
   if (state.mode === "graph") scheduleGraphDraw();
   if (options.searchTerm) {
     requestAnimationFrame(() => scrollReaderToElement(els.markdownView.querySelector(".search-hit"), "auto"));
+    if (state.mode === "edit" && els.editor.searchInEditor) {
+      const term = String(options.searchTerm).trim();
+      if (term) {
+        requestAnimationFrame(() => {
+          const result = els.editor.searchInEditor(term);
+          if (result.total > 0 && result.matches && result.matches[0]) {
+            els.editor.jumpToMatch(result.matches[0].from, result.matches[0].to);
+          }
+        });
+      }
+    }
   }
   addRecentDoc(doc.path);
   try { localStorage.setItem("lastOpenedDoc", doc.path); } catch (_) {}
@@ -3515,8 +3552,8 @@ async function runAiTransform(mode, { preserveInstruction = false } = {}) {
     : (mode === "code" ? "代码补全：根据光标处上下文生成代码" : mode === "comment" ? "生成注释：为当前段落添加注释" : "代写模式：根据写作要求生成新文档");
   els.aiTransformResult.value = isRewrite ? "正在根据要求生成文档…" : "正在处理选中文本…";
   els.aiTransformResult.disabled = true;
-  // 代写模式禁用插入（只支持新建文档）；代码补全/生成注释允许在编辑器中插入。
-  els.aiTransformInsertBtn.disabled = isRewrite || (selection?.source !== "editor" && mode !== "code" && mode !== "comment");
+  const canInsertFromEditor = selection?.source === "editor" || mode === "code" || mode === "comment" || isRewrite;
+  els.aiTransformInsertBtn.disabled = !canInsertFromEditor;
   els.aiTransformCreateBtn.disabled = true;
   const instruction = isRewrite ? (els.aiTransformInstruction?.value || "").trim() : "";
   if (isRewrite && !instruction) {
@@ -3559,27 +3596,33 @@ async function runAiTransform(mode, { preserveInstruction = false } = {}) {
 async function insertAiTransform() {
   const transform = state.ai.transform;
   const content = els.aiTransformResult.value.trim();
-  if (!transform || transform.source !== "editor" || !content) return;
-  // 代码补全/生成注释模式在无选区时，在当前光标位置插入（而非替换开头）。
+  if (!transform || !content) return;
+  const mode = transform.mode;
   const hasSelection = Boolean(transform.text);
+  const isComment = mode === "comment";
+  const isRewrite = mode === "rewrite";
   const range = hasSelection ? resolveAiEditorRange(transform) : null;
   if (hasSelection && !range) return showToast("原文已变化，请重新生成 AI 结果后再插入");
-  if (hasSelection && content === els.editor.value.slice(range.start, range.end).trim()) {
+  if (hasSelection && !isComment && content === els.editor.value.slice(range.start, range.end).trim()) {
     return showToast("AI 结果与原文相同，请重新生成后再插入");
   }
-  if (hasSelection) {
+  if (isComment && hasSelection) {
+    const commentText = content.startsWith("\n>") ? content : `\n> ${content.split("\n").join("\n> ")}\n`;
+    if (!await replaceEditorRange(commentText, range.end, range.end, "end")) {
+      return showToast("注释未能写入编辑器，请重试");
+    }
+  } else if (hasSelection) {
     if (!await replaceEditorRange(content, range.start, range.end, "end")) {
       return showToast("AI 结果未能写入编辑器，请重试");
     }
   } else {
-    // 无选区时在光标处插入，光标位置可能已变化，取当前 selectionStart。
     const cursorPos = els.editor.selectionStart ?? els.editor.value.length;
     if (!await replaceEditorRange(content, cursorPos, cursorPos, "end")) {
       return showToast("AI 结果未能写入编辑器，请重试");
     }
   }
   closeAiTransformModal();
-  showToast("AI 结果已插入当前位置");
+  showToast(isComment ? "注释已插入" : isRewrite ? "AI 代写内容已插入当前位置" : "AI 结果已插入当前位置");
 }
 
 async function createAiTransformDocument() {
@@ -6416,6 +6459,15 @@ function resolveScreenshotWorkspaceId() {
 }
 
 els.searchInput.addEventListener("input", debounce(runSearch, 160));
+els.searchInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && state.mode === "edit" && els.editor.openSearchPanelWithQuery) {
+    const term = els.searchInput.value.trim();
+    if (term) {
+      e.preventDefault();
+      els.editor.openSearchPanelWithQuery(term);
+    }
+  }
+});
 els.tree.addEventListener("dragover", allowRootDrop);
 els.tree.addEventListener("dragleave", clearRootDrop);
 els.tree.addEventListener("drop", dropOnRoot);
@@ -8449,13 +8501,12 @@ els.editorOutline?.addEventListener("click", (event) => {
   const lineAttr = parseInt(button.dataset.headingLine, 10);
   const occurrence = parseInt(button.dataset.headingOccurrence, 10) || 0;
   if (Number.isFinite(lineAttr) && lineAttr >= 0) {
-    // 验证行号对应的标题文本是否匹配，防止文档编辑后行号过期
-    const value = els.editor.value;
-    const lines = value.split("\n");
-    if (lineAttr < lines.length) {
-      const line = lines[lineAttr];
-      const heading = line.match(/^(\s*)(#{1,6})\s+(.+)$/);
-      const autoHeading = line.match(/^(\s*)([一二三四五六七八九十]{1,4}[、.．]\s*.+)$/);
+    const doc = els.editor.view?.state?.doc;
+    if (doc && lineAttr < doc.lines) {
+      const line = doc.line(lineAttr + 1);
+      const text = line.text;
+      const heading = text.match(/^(\s*)(#{1,6})\s+(.+)$/);
+      const autoHeading = text.match(/^(\s*)([一二三四五六七八九十]{1,4}[、.．]\s*.+)$/);
       const target = plainText(button.dataset.headingText).toLowerCase();
       if ((heading && plainText(heading[3]).toLowerCase() === target) ||
           (autoHeading && plainText(autoHeading[2]).toLowerCase() === target)) {
@@ -8464,7 +8515,6 @@ els.editorOutline?.addEventListener("click", (event) => {
         return;
       }
     }
-    // 行号过期，回退到按出现次序查找
     scrollEditorToHeading(button.dataset.headingText, occurrence);
     return;
   }

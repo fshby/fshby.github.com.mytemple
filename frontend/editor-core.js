@@ -22,7 +22,7 @@ import {
 } from "@codemirror/language";
 import { markdown } from "@codemirror/lang-markdown";
 import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
-import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
+import { highlightSelectionMatches, searchKeymap, search, SearchQuery, SearchCursor, getSearchQuery, setSearchQuery, openSearchPanel, findNext, findPrevious } from "@codemirror/search";
 import { tags } from "@lezer/highlight";
 
 const markdownHighlightStyle = HighlightStyle.define([
@@ -104,6 +104,15 @@ const editorTheme = EditorView.theme({
     backgroundColor: "var(--surface-1)",
     color: "var(--text)",
     border: "1px solid var(--line)",
+  },
+  ".cm-searchMatch": {
+    backgroundColor: "color-mix(in srgb, var(--accent) 40%, transparent) !important",
+    borderRadius: "2px",
+    boxShadow: "0 0 0 1px color-mix(in srgb, var(--accent-strong) 50%, transparent)",
+  },
+  ".cm-searchMatch.cm-searchMatch-selected": {
+    backgroundColor: "color-mix(in srgb, var(--accent-strong) 55%, transparent) !important",
+    boxShadow: "0 0 0 2px var(--accent-strong)",
   },
 });
 
@@ -260,6 +269,7 @@ class MarkdownEditorAdapter {
           syntaxHighlighting(markdownHighlightStyle, { fallback: true }),
           highlightActiveLine(),
           highlightSelectionMatches(),
+          search(),
           keymap.of(professionalKeymap),
           EditorView.lineWrapping,
           editorTheme,
@@ -447,6 +457,48 @@ class MarkdownEditorAdapter {
       scrollIntoView: true,
     });
     this.view.focus();
+  }
+
+  searchInEditor(query) {
+    const term = String(query || "").trim();
+    if (!term) return { total: 0, current: 0, matches: [] };
+    const searchQuery = new SearchQuery({ search: term });
+    const cursor = searchQuery.getCursor(this.view.state);
+    const matches = [];
+    while (true) {
+      const result = cursor.next();
+      if (result.done) break;
+      matches.push({ from: result.value.from, to: result.value.to });
+    }
+    return { total: matches.length, matches };
+  }
+
+  jumpToMatch(from, to) {
+    this.view.dispatch({
+      selection: EditorSelection.single(from, to),
+      scrollIntoView: true,
+    });
+    this.view.focus();
+  }
+
+  openSearchPanelWithQuery(query) {
+    const term = String(query || "");
+    this.view.focus();
+    if (term) {
+      const searchQuery = new SearchQuery({ search: term });
+      this.view.dispatch({
+        effects: setSearchQuery.of(searchQuery),
+      });
+    }
+    openSearchPanel(this.view);
+  }
+
+  findNext() {
+    findNext(this.view);
+  }
+
+  findPrevious() {
+    findPrevious(this.view);
   }
 
   addEventListener(type, listener, options) {

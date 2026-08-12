@@ -214,6 +214,8 @@ try {
             "WebView2Loader.dll",
             "public/index.html",
             "public/app.js",
+            "public/editor-core.js",
+            "public/styles.css",
             "public/logo.png",
             "public/boot.webp",
             "public/qqqun.webp",
