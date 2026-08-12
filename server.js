@@ -2615,10 +2615,17 @@ async function serveStatic(res, pathname) {
   try {
     const body = await readFile(absolute);
     const extension = path.extname(absolute).toLowerCase();
-    const cacheable = [".css", ".js", ".webp", ".mp4"].includes(extension);
-    send(res, 200, body, mimeTypes[extension] || "application/octet-stream", cacheable ? {
-      "Cache-Control": "public, max-age=31536000, immutable",
-    } : undefined);
+    // HTML/JS/CSS 入口文件用 no-cache：允许缓存但每次重新验证，
+    // 确保版本号变更后 WebView2 立即加载新文件，避免 immutable 缓存锁死旧代码。
+    // 媒体资源（webp/mp4）体积大且不常变更，保留 immutable 长缓存。
+    const revalidate = [".html", ".js", ".css"].includes(extension);
+    const immutableAsset = [".webp", ".mp4"].includes(extension);
+    const headers = revalidate
+      ? { "Cache-Control": "no-cache" }
+      : immutableAsset
+        ? { "Cache-Control": "public, max-age=31536000, immutable" }
+        : undefined;
+    send(res, 200, body, mimeTypes[extension] || "application/octet-stream", headers);
   } catch {
     send(res, 404, "Not found", "text/plain; charset=utf-8");
   }

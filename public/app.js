@@ -1,4 +1,4 @@
-import { createMarkdownEditor } from "/editor-core.js?v=20260807-v1";
+import { createMarkdownEditor } from "/editor-core.js?v=20260812-v1";
 
 const text = {
   emptyResult: "\u6ca1\u6709\u5339\u914d\u7ed3\u679c",
@@ -778,8 +778,8 @@ function restoreWindowZoom() {
 
 function applySettings(settings = loadSettings()) {
   document.body.dataset.theme = settings.theme;
-  const themeColorMap = { dark: "#252827", eye: "#ede8df", glow: "#f3ede4", image: "#1a1a2e" };
-  const themeBgMap = { dark: "#252827", eye: "#ede8df", glow: "#f3ede4", image: "#1a1a2e" };
+  const themeColorMap = { dark: "#252827", eye: "#ede8df", glow: "#f3f1e7", image: "#1a1a2e" };
+  const themeBgMap = { dark: "#252827", eye: "#ede8df", glow: "#f3f1e7", image: "#1a1a2e" };
   const metaThemeColor = document.querySelector('meta[name="theme-color"]');
   if (metaThemeColor) {
     metaThemeColor.content = themeColorMap[settings.theme] || "#fafafa";
@@ -801,7 +801,7 @@ function applySettings(settings = loadSettings()) {
     if (savedGlowAccent) {
       document.documentElement.style.setProperty("--accent", savedGlowAccent);
       document.documentElement.style.setProperty("--accent-strong", savedGlowAccent);
-      if (els.glowAccentColor) els.glowAccentColor.value = savedGlowAccent;
+      if (els.glowAccentColor) els.glowAccentColor.value = "#88a956";savedGlowAccent;
     } else if (els.glowAccentColor) {
       els.glowAccentColor.value = "#b08560";
     }
@@ -7185,6 +7185,34 @@ els.editor.addEventListener("keydown", (event) => {
       saveCurrentDoc({ refreshTree: true });
       return true;
     }
+    // Ctrl+D 向下复制选中行（多行选区复制全部所选行）。
+    // 直接在捕获阶段处理，避免 CodeMirror keymap 与搜索扩展的 Mod-d 冲突。
+    if (mod && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "d") {
+      event.preventDefault();
+      event.stopPropagation();
+      const value = els.editor.value;
+      const start = els.editor.selectionStart;
+      const end = els.editor.selectionEnd;
+      // 选区落在下一行行首时归属上一行，避免多复制一条空行。
+      const effectiveEnd = Math.max(start, end - 1);
+      const firstLineStart = value.lastIndexOf("\n", Math.max(0, start - 1)) + 1;
+      let lastLineEnd = value.indexOf("\n", effectiveEnd);
+      if (lastLineEnd === -1) lastLineEnd = value.length;
+      const text = value.slice(firstLineStart, lastLineEnd);
+      const insert = "\n" + text;
+      // 在最后一行行尾插入复制内容，保留滚动位置避免闪烁。
+      const savedScrollTop = els.editor.scrollTop;
+      const savedScrollLeft = els.editor.scrollLeft;
+      els.editor.setRangeText(insert, lastLineEnd, lastLineEnd, "end");
+      els.editor.scrollTop = savedScrollTop;
+      els.editor.scrollLeft = savedScrollLeft;
+      requestAnimationFrame(() => {
+        els.editor.scrollTop = savedScrollTop;
+        els.editor.scrollLeft = savedScrollLeft;
+      });
+      els.editor.dispatchEvent(new Event("input", { bubbles: true }));
+      return true;
+    }
     // AI 快捷键：Ctrl+Shift+A 代码补全 / Ctrl+Shift+/ 生成注释 / Ctrl+Shift+P 润色 / Ctrl+Shift+X 续写
     if (mod && event.shiftKey) {
       const aiKey = event.key.toLowerCase();
@@ -8264,7 +8292,7 @@ els.resetGlowAccentBtn?.addEventListener("click", () => {
   document.documentElement.style.removeProperty("--accent");
   document.documentElement.style.removeProperty("--accent-strong");
   localStorage.removeItem("glowAccentColor");
-  if (els.glowAccentColor) els.glowAccentColor.value = "#b08560";
+  if (els.glowAccentColor) els.glowAccentColor.value = "#88a956";"#88a956";
   applySettings();
   showToast("柔光强调色已恢复默认");
 });

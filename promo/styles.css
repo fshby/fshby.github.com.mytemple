@@ -23,16 +23,24 @@
 
 html {
   scroll-behavior: smooth;
+  /* 抑制移动端原生下拉刷新导致的空白区与背景撕裂。 */
+  overscroll-behavior-y: none;
 }
 
 body {
   margin: 0;
   color: var(--text);
   font: 400 16px/1.7 "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-  background:
+  /* 背景色作为兜底，避免下拉/overscroll 时露出白色空白。 */
+  background-color: #f3f1e7;
+  background-image:
     radial-gradient(circle at top left, rgba(181, 203, 132, 0.22), transparent 26%),
     radial-gradient(circle at right 18%, rgba(215, 224, 186, 0.28), transparent 22%),
     linear-gradient(180deg, #f7f5ec 0%, #f1efe4 100%);
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+  /* 阻止 body 自身的回弹下拉刷新，避免与页面滚动叠加产生空白。 */
+  overscroll-behavior-y: none;
 }
 
 a {
@@ -47,7 +55,8 @@ textarea {
 }
 
 .site-shell.shell-clip {
-  overflow: clip;
+  /* 改用 visible，避免 clip 在移动端下拉时裁掉背景与内容造成空白。 */
+  overflow: visible;
 }
 
 .section-wrap {
@@ -188,7 +197,8 @@ textarea {
   grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
   align-items: center;
   gap: 56px;
-  min-height: calc(100vh - 84px);
+  /* 使用 svh（small viewport height）避免移动端地址栏伸缩导致 100vh 抖动出现空白。 */
+  min-height: calc(100svh - 84px);
   padding: 72px 0 48px;
 }
 
@@ -984,6 +994,24 @@ textarea {
   margin-top: 18px;
   color: var(--green-deep);
   font-weight: 600;
+}
+
+/* download-card 列表内的链接统一为强调色，并在悬停时给到柔和底色反馈。 */
+.download-card ul a {
+  color: var(--green-deep);
+  text-decoration: none;
+  border-bottom: 1px dashed rgba(110, 141, 59, 0.4);
+  padding-bottom: 1px;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.download-card ul a:hover {
+  color: var(--green);
+  border-bottom-color: var(--green);
+}
+.download-card ul a:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+  border-radius: 3px;
 }
 
 .site-footer {

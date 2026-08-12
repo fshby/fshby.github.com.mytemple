@@ -112,12 +112,16 @@ const professionalKeymap = [
     key: "Mod-d",
     run(view) {
       const changes = view.state.changeByRange((range) => {
-        const line = view.state.doc.lineAt(range.head);
-        const text = view.state.sliceDoc(line.from, line.to);
+        const doc = view.state.doc;
+        const first = doc.lineAt(range.from);
+        // 选中多行时复制全部所选行；选区落在下一行行首时归属上一行，
+        // 与 moveCurrentLine 行为一致，避免多复制一条空行。
+        const last = doc.lineAt(Math.max(range.from, range.to - 1));
+        const text = doc.sliceDoc(first.from, last.to);
         const insert = `\n${text}`;
         return {
-          changes: { from: line.to, insert },
-          range: EditorSelection.cursor(line.to + insert.length),
+          changes: { from: last.to, insert },
+          range: EditorSelection.cursor(last.to + insert.length),
         };
       });
       view.dispatch(changes);
@@ -146,7 +150,9 @@ const professionalKeymap = [
   { key: "Alt-c", run: toggleTaskLine, preventDefault: true },
   ...closeBracketsKeymap,
   ...foldKeymap,
-  ...searchKeymap,
+  // 移除 searchKeymap 中的 Mod-d（selectNextOccurrence），
+  // 避免与上方自定义的「向下复制选中行」冲突；保留其余搜索快捷键。
+  ...searchKeymap.filter((binding) => binding.key !== "Mod-d"),
   ...defaultKeymap.filter((binding) => !/^(Mod-z|Mod-y|Mod-Shift-z|Tab|Mod-b|Mod-i)$/.test(binding.key || "")),
 ];
 
