@@ -24,7 +24,7 @@
         <a href="#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.2.exe" download>下载 v1.8.2</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.3.exe" download>下载 v1.8.3</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -32,11 +32,11 @@
     <main id="top">
       <section class="hero section-wrap" aria-labelledby="hero-title">
         <div class="hero-copy reveal">
-          <p class="eyebrow"><span class="status-dot"></span> 本地优先的 Markdown 工作区 <em>v1.8.2 桌面版</em></p>
+          <p class="eyebrow"><span class="status-dot"></span> 本地优先的 Markdown 工作区 <em>v1.8.3 桌面版</em></p>
           <h1 id="hero-title">把文档整理成<br><span>顺手、耐看、能长期维护的知识库</span></h1>
           <p class="hero-lede">以本地 Markdown 文件为中心，把阅读、修改、目录、图谱、主题和检索放进同一套工作区。界面克制，层级清楚，长时间使用不累眼。</p>
           <div class="hero-actions">
-            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.2.exe" download>下载 Windows 安装包</a>
+            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.3.exe" download>下载 Windows 安装包</a>
             <a class="button button-soft" href="#docs">查看使用文档</a>
           </div>
           <p class="hero-note">Windows 桌面端 · 本地文件优先 · 内容助手为可选接入，不干扰核心编辑体验</p>
@@ -232,11 +232,11 @@ npm run build
           <h2>入口清楚，文档够用，<span>不会把新用户扔进一堆术语里</span></h2>
         </div>
         <div class="doc-grid">
-          <a class="doc-card reveal" href="README.md">
+          <a class="doc-card reveal" href="#builtin-docs">
             <span class="doc-num">01</span>
             <strong>安装与启动</strong>
             <p>包含环境要求、运行方式与桌面版说明。</p>
-            <em>打开 →</em>
+            <em>查看 →</em>
           </a>
           <a class="doc-card reveal reveal-delay-1" href="privacy.html">
             <span class="doc-num">02</span>
@@ -267,17 +267,18 @@ npm run build
         <div class="download-grid">
           <article class="download-card primary reveal">
             <span class="download-badge">当前稳定版</span>
-            <h3>v1.8.2</h3>
+            <h3>v1.8.3</h3>
             <p>当前稳定桌面版，包含本地工作区、阅读/修改双模式、图谱、主题、增量索引与可选内容助手能力。</p>
-            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.2.exe" download>下载安装包</a>
+            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.3.exe" download>下载安装包</a>
           </article>
           <article class="download-card reveal reveal-delay-1">
             <span class="download-badge soft">更新日志</span>
             <h3>最近更新</h3>
             <ul>
-              <li>知识神经图谱规则重构，最新文档自动居中。</li>
-              <li>图谱节点呼吸幅度收束至自然和谐区间。</li>
-              <li>新增「柔光」核心色彩主题，暖琥珀金强调色。</li>
+              <li>修复大纲同名标题跳转与编辑回车光标跳动问题。</li>
+              <li>柔光主题精细打磨，支持自定义强调色。</li>
+              <li>知识图谱参数化，不查看时不占用 GPU。</li>
+              <li>新增 AI 代码补全、生成注释与快捷键适配。</li>
             </ul>
             <a class="text-link" href="#builtin-docs">查看更新日志 →</a>
           </article>
@@ -340,7 +341,8 @@ npm run build
             <ul>
               <li>仅在编辑模式下手动触发，不干扰核心编辑与阅读体验。</li>
               <li>支持本地或云端模型接入，模型配置在设置中填写。</li>
-              <li>提供选中翻译、智能编辑提示等辅助功能。</li>
+              <li>提供选中翻译、智能编辑提示、代码补全与生成注释等辅助功能。</li>
+              <li>问答侧栏助手回复可一键润色、续写或插入到当前文档。</li>
               <li>所有 AI 功能默认关闭，用户按需开启。</li>
             </ul>
           </article>
@@ -351,6 +353,21 @@ npm run build
               <li><kbd>Ctrl+1/2/3</kbd> 一/二/三级标题 · <kbd>Ctrl+S</kbd> 保存</li>
               <li><kbd>Ctrl+Shift+F</kbd> 沉浸编辑 · <kbd>Esc</kbd> 退出沉浸</li>
               <li><kbd>Tab</kbd> 缩进 · <kbd>Ctrl+Shift+7/8</kbd> 有序/无序列表</li>
+              <li><kbd>Ctrl+Shift+A</kbd> AI 代码补全 · <kbd>Ctrl+Shift+/</kbd> 生成注释</li>
+              <li><kbd>Ctrl+Shift+P</kbd> AI 润色 · <kbd>Ctrl+Shift+X</kbd> AI 续写</li>
+            </ul>
+          </article>
+          <article class="doc-section">
+            <h3>v1.8.3 更新日志</h3>
+            <ul>
+              <li>修复大纲同名标题跳转与编辑回车光标跳动问题。</li>
+              <li>未保存内容自动写入本地草稿，重启可恢复。</li>
+              <li>柔光主题精细打磨，支持自定义强调色并持久化。</li>
+              <li>知识图谱参数化，可调节排斥/引力/呼吸/复原四项参数。</li>
+              <li>不查看图谱时不占用 GPU，集成显卡设备可强制开启动态。</li>
+              <li>Web 推荐页移动端兼容适配，去除所有外链，文档内置。</li>
+              <li>新增 AI 代码补全、生成注释、对话润色与续写功能。</li>
+              <li>新增 AI 快捷键：代码补全、生成注释、润色、续写。</li>
             </ul>
           </article>
         </div>
