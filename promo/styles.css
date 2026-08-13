@@ -297,166 +297,14 @@ textarea {
   font-size: 0.92rem;
 }
 
-.visual-frame {
-  padding: 16px;
+.mock-canvas-wrap {
+  position: relative;
+  height: 520px;
+  padding: 18px;
   border: 1px solid rgba(126, 150, 85, 0.18);
   border-radius: 30px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.68), rgba(245, 247, 238, 0.92));
   box-shadow: var(--shadow);
-}
-
-.mock-window {
-  overflow: hidden;
-  border: 1px solid rgba(126, 150, 85, 0.18);
-  border-radius: 26px;
-  background: rgba(249, 250, 244, 0.98);
-}
-
-.mock-window-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 18px;
-  background: linear-gradient(180deg, #95b75c 0%, #84a94d 100%);
-}
-
-.mock-title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: #fff;
-  font-weight: 600;
-}
-
-.mock-title img {
-  width: 24px;
-  height: 24px;
-}
-
-.mock-controls {
-  display: flex;
-  gap: 8px;
-}
-
-.mock-controls i {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.8);
-}
-
-.mock-window-body {
-  display: grid;
-  grid-template-columns: 240px 1fr;
-  height: 520px;
-}
-
-.mock-sidebar {
-  padding: 22px 18px;
-  border-right: 1px solid rgba(126, 150, 85, 0.12);
-  background: linear-gradient(180deg, rgba(241, 243, 232, 0.96), rgba(237, 240, 226, 0.8));
-}
-
-.mock-vault {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 14px 16px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.46);
-}
-
-.mock-vault-icon {
-  display: grid;
-  place-items: center;
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
-  background: rgba(136, 169, 86, 0.18);
-  color: var(--green-deep);
-}
-
-.mock-vault strong,
-.mock-file strong {
-  display: block;
-  font-size: 0.96rem;
-}
-
-.mock-vault small,
-.mock-file small {
-  color: var(--text-2);
-  font-size: 0.84rem;
-}
-
-.mock-search {
-  margin-top: 18px;
-  padding: 12px 16px;
-  border: 1px solid rgba(126, 150, 85, 0.14);
-  border-radius: 16px;
-  color: #94a08f;
-  background: rgba(255, 255, 255, 0.7);
-}
-
-.mock-file {
-  margin-top: 14px;
-  padding: 16px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.44);
-}
-
-.mock-file.active {
-  border: 1px solid rgba(136, 169, 86, 0.26);
-  background: rgba(223, 233, 203, 0.56);
-}
-
-.mock-tabs {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-top: 18px;
-}
-
-.mock-tabs span {
-  padding: 8px 12px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.52);
-  color: var(--text-2);
-  font-size: 0.84rem;
-}
-
-.mock-tabs span.active {
-  background: rgba(136, 169, 86, 0.2);
-  color: var(--green-deep);
-}
-
-.mock-main {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  height: 100%;
-  background: linear-gradient(180deg, rgba(251, 252, 247, 0.95), rgba(244, 246, 238, 0.92));
-}
-
-.mock-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 16px 20px;
-  border-bottom: 1px solid rgba(126, 150, 85, 0.12);
-  color: var(--text-2);
-  font-size: 0.92rem;
-}
-
-.mock-toolbar .active {
-  color: var(--green-deep);
-  font-weight: 700;
-}
-
-.mock-canvas-wrap {
-  position: relative;
-  flex: 1;
-  min-height: 0;
-  padding: 18px;
 }
 
 #neural-canvas {
@@ -1156,7 +1004,6 @@ textarea {
 
 @media (max-width: 1100px) {
   .hero,
-  .mock-window-body,
   .feature-grid,
   .theme-grid,
   .doc-grid,
@@ -1182,10 +1029,6 @@ textarea {
 
   .hero-visual {
     max-width: 860px;
-  }
-
-  .mock-window-body {
-    grid-template-columns: 220px 1fr;
   }
 
   .doc-grid {
@@ -1261,21 +1104,12 @@ textarea {
   }
 
   .preview-reading,
-  .preview-columns,
-  .mock-window-body {
+  .preview-columns {
     grid-template-columns: 1fr;
   }
 
-  .mock-window-body {
-    height: auto;
-  }
-
-  .mock-sidebar {
-    border-right: 0;
-    border-bottom: 1px solid rgba(126, 150, 85, 0.12);
-  }
-
   #neural-canvas {
+    height: 320px;
     min-height: 320px;
   }
 
@@ -1340,21 +1174,10 @@ textarea {
     border-radius: 20px;
   }
 
-  .visual-frame {
-    padding: 10px;
-    border-radius: 24px;
-  }
-
-  .mock-window {
-    border-radius: 20px;
-  }
-
-  .mock-window-bar,
-  .mock-toolbar,
-  .mock-canvas-wrap,
-  .mock-sidebar {
+  .mock-canvas-wrap {
     padding-left: 14px;
     padding-right: 14px;
+    border-radius: 24px;
   }
 
   .card-main,
@@ -1386,6 +1209,7 @@ textarea {
   }
 
   #neural-canvas {
+    height: 260px;
     min-height: 260px;
   }
 
