@@ -284,6 +284,17 @@ try {
     Write-Host "Generic installer: $genericInstaller"
     Write-Host "Versioned installer: $versionedInstaller"
     Write-Host "Checksums: $(Join-Path $distDir 'checksums.sha256')"
+
+    Write-Step "Publishing installer to promo/downloads"
+    $promoDownloadsDir = Join-Path $projectRoot "promo\downloads"
+    if (-not (Test-Path -LiteralPath $promoDownloadsDir -PathType Container)) {
+        New-Item -ItemType Directory -Path $promoDownloadsDir -Force | Out-Null
+    }
+    $promoGeneric = Join-Path $promoDownloadsDir "MyTempleKnowledge_Setup.exe"
+    $promoVersioned = Join-Path $promoDownloadsDir "MyTempleKnowledge_Setup_v$version.exe"
+    Copy-FileSafe $installerOutput $promoGeneric
+    Copy-FileSafe $installerOutput $promoVersioned
+    Write-Host "Promo downloads updated: $promoVersioned" -ForegroundColor Green
 } catch {
     Write-Host "`nBuild failed: $($_.Exception.Message)" -ForegroundColor Red
     exit 1

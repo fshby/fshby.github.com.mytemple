@@ -2240,6 +2240,7 @@ body.resizing-sidebar {
   overflow: hidden;
   height: 100%;
   width: 100%;
+  position: relative;
 }
 
 .editor-body > #editorOutline { grid-column: 1; min-width: 0; }
@@ -2509,6 +2510,7 @@ body.resizing-sidebar {
   font-family: "Cascadia Code", Consolas, monospace;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+  position: relative;
 }
 
 #editor .cm-editor {
@@ -7692,4 +7694,283 @@ body:not([data-theme="image"]):not([data-theme="eye"]):not([data-theme="glow"]) 
 .cm-editor .cm-search .cm-search-actions {
   display: inline-flex !important;
   gap: 2px !important;
+}
+
+#editor .cm-placeholder {
+  color: var(--muted);
+  font-style: italic;
+  pointer-events: none;
+  user-select: none;
+  font-family: "Cascadia Code", Consolas, "JetBrains Mono", monospace;
+  font-size: 14px;
+  line-height: 1.6;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+#editor .cm-placeholder.visible {
+  opacity: 1;
+}
+
+#editor .cm-placeholder .kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  margin: 0 2px;
+  border-radius: 4px;
+  background: var(--soft);
+  color: var(--accent-strong);
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 0.85em;
+  font-weight: 600;
+  border: 1px solid var(--line);
+}
+
+.ai-inline-dialog {
+  position: absolute;
+  z-index: 200;
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 14px 10px 44px;
+  background: color-mix(in srgb, var(--panel) 85%, transparent);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  font-size: 14px;
+  backdrop-filter: blur(4px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  opacity: 0;
+}
+
+.ai-inline-dialog.visible {
+  display: flex;
+  opacity: 1;
+}
+
+.ai-inline-dialog .ai-inline-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  flex-shrink: 0;
+  color: var(--accent);
+  font-size: 16px;
+}
+
+.ai-inline-dialog .ai-inline-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ai-inline-dialog .ai-inline-input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: inherit;
+  outline: none;
+  line-height: 1.5;
+}
+
+.ai-inline-dialog .ai-inline-input::placeholder {
+  color: var(--muted);
+  opacity: 0.75;
+}
+
+.ai-inline-dialog .ai-inline-submit {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.ai-inline-dialog .ai-inline-submit:hover {
+  background: var(--accent-strong);
+}
+
+.ai-inline-dialog .ai-inline-submit:active {
+  transform: scale(0.94);
+}
+
+.ai-inline-dialog .ai-inline-submit:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.ai-inline-dialog .ai-inline-hint {
+  text-align: left;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.ai-inline-dialog .ai-inline-hint kbd {
+  display: inline-block;
+  padding: 0 5px;
+  border-radius: 3px;
+  background: var(--soft);
+  border: 1px solid var(--line);
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-strong);
+}
+
+.ai-inline-dialog .ai-inline-status {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--muted);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-inline-dialog .ai-inline-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--line);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: ai-spin 0.6s linear infinite;
+}
+
+@keyframes ai-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ===== 编辑器关键字检索弹窗 ===== */
+.editor-search-popup {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 300;
+  width: 420px;
+  max-width: calc(100% - 24px);
+  max-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel, #fff);
+  border: 1px solid var(--line, rgba(0,0,0,0.1));
+  border-radius: 10px;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.18);
+  overflow: hidden;
+  animation: editorSearchSlide 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.editor-search-popup.hidden { display: none; }
+@keyframes editorSearchSlide {
+  from { opacity: 0; transform: translateY(-10px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.editor-search-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line, rgba(0,0,0,0.08));
+  background: var(--soft, rgba(0,0,0,0.02));
+}
+.editor-search-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--muted, #888);
+}
+.editor-search-header input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 14px;
+  color: var(--text, #333);
+}
+.editor-search-header input::placeholder {
+  color: var(--muted, #999);
+}
+.editor-search-count {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--muted, #888);
+  white-space: nowrap;
+}
+.editor-search-close {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--muted, #888);
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: background 0.15s, color 0.15s;
+}
+.editor-search-close:hover {
+  background: var(--line, rgba(0,0,0,0.08));
+  color: var(--text, #333);
+}
+.editor-search-results {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+.editor-search-results:empty::after {
+  content: "输入关键字以检索文档行…";
+  display: block;
+  text-align: center;
+  padding: 20px;
+  font-size: 13px;
+  color: var(--muted, #999);
+}
+.editor-search-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 7px 14px;
+  cursor: pointer;
+  transition: background 0.12s;
+  border-left: 2px solid transparent;
+}
+.editor-search-item:hover,
+.editor-search-item.selected {
+  background: var(--soft, rgba(0,0,0,0.04));
+  border-left-color: var(--accent, #8a7c5c);
+}
+.editor-search-item-line {
+  flex-shrink: 0;
+  min-width: 32px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent, #8a7c5c);
+  font-family: "Cascadia Code", Consolas, monospace;
+  padding-top: 1px;
+}
+.editor-search-item-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text, #333);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.editor-search-item-text mark {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
 }
