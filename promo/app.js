@@ -51,11 +51,11 @@
   function resize() {
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    state.width = rect.width;
-    state.height = rect.height;
+    state.width = Math.max(1, Math.min(rect.width, 2000));
+    state.height = Math.max(1, Math.min(rect.height, 2000));
     state.dpr = Math.min(window.devicePixelRatio || 1, 1.35);
-    canvas.width = Math.max(1, Math.floor(rect.width * state.dpr));
-    canvas.height = Math.max(1, Math.floor(rect.height * state.dpr));
+    canvas.width = Math.max(1, Math.floor(state.width * state.dpr));
+    canvas.height = Math.max(1, Math.floor(state.height * state.dpr));
   }
 
   function draw(now = 0) {

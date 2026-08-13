@@ -23,24 +23,22 @@
 
 html {
   scroll-behavior: smooth;
-  /* 抑制移动端原生下拉刷新导致的空白区与背景撕裂。 */
-  overscroll-behavior-y: none;
+  overscroll-behavior-y: contain;
 }
 
 body {
   margin: 0;
   color: var(--text);
   font: 400 16px/1.7 "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-  /* 背景色作为兜底，避免下拉/overscroll 时露出白色空白。 */
   background-color: #f3f1e7;
   background-image:
     radial-gradient(circle at top left, rgba(181, 203, 132, 0.22), transparent 26%),
     radial-gradient(circle at right 18%, rgba(215, 224, 186, 0.28), transparent 22%),
     linear-gradient(180deg, #f7f5ec 0%, #f1efe4 100%);
-  background-attachment: fixed;
+  background-attachment: scroll;
   background-repeat: no-repeat;
-  /* 阻止 body 自身的回弹下拉刷新，避免与页面滚动叠加产生空白。 */
-  overscroll-behavior-y: none;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
 }
 
 a {
@@ -350,7 +348,7 @@ textarea {
 .mock-window-body {
   display: grid;
   grid-template-columns: 240px 1fr;
-  min-height: 560px;
+  height: 520px;
 }
 
 .mock-sidebar {
@@ -435,6 +433,7 @@ textarea {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  height: 100%;
   background: linear-gradient(180deg, rgba(251, 252, 247, 0.95), rgba(244, 246, 238, 0.92));
 }
 
@@ -549,7 +548,7 @@ textarea {
 }
 
 .section-intro {
-  padding-top: 104px;
+  padding-top: 72px;
 }
 
 .section-intro h2 {
@@ -1004,7 +1003,7 @@ textarea {
   gap: 24px;
 }
 .builtin-docs .doc-section {
-  background: var(--surface-2);
+  background: rgba(255, 255, 251, 0.72);
   border: 1px solid var(--line);
   border-radius: 14px;
   padding: 24px 28px;
@@ -1021,26 +1020,26 @@ textarea {
   padding-left: 18px;
   line-height: 1.85;
   font-size: 14px;
-  color: var(--text-soft);
+  color: var(--text-2);
 }
 .builtin-docs .doc-section li {
   margin-bottom: 6px;
 }
 .builtin-docs .doc-section code {
-  background: var(--surface-1);
+  background: rgba(239, 243, 231, 0.72);
   padding: 2px 6px;
   border-radius: 4px;
   font-size: 13px;
-  font-family: var(--mono);
+  font-family: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
 }
 .builtin-docs .doc-section kbd {
   display: inline-block;
-  background: var(--surface-1);
+  background: rgba(239, 243, 231, 0.72);
   border: 1px solid var(--line);
   border-radius: 4px;
   padding: 1px 6px;
   font-size: 12px;
-  font-family: var(--mono);
+  font-family: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
   margin: 0 1px;
 }
 @media (max-width: 768px) {
@@ -1267,6 +1266,10 @@ textarea {
     grid-template-columns: 1fr;
   }
 
+  .mock-window-body {
+    height: auto;
+  }
+
   .mock-sidebar {
     border-right: 0;
     border-bottom: 1px solid rgba(126, 150, 85, 0.12);
@@ -1274,6 +1277,14 @@ textarea {
 
   #neural-canvas {
     min-height: 320px;
+  }
+
+  .section-intro {
+    padding-top: 48px;
+  }
+
+  .builtin-docs {
+    padding-bottom: 60px;
   }
 }
 
@@ -1293,18 +1304,22 @@ textarea {
     min-height: 280px;
   }
 
+  .section-intro {
+    padding-top: 36px;
+  }
+
   .features,
   .screens,
   .themes,
   .docs,
   .downloads,
   .builtin-docs {
-    padding-top: 32px;
+    padding-top: 20px;
     padding-bottom: 32px;
   }
 
   .builtin-docs {
-    padding-bottom: 80px;
+    padding-bottom: 60px;
   }
 
   .hero h1 {
@@ -1368,6 +1383,18 @@ textarea {
 
   .screen-preview img {
     border-radius: 18px;
+  }
+
+  #neural-canvas {
+    min-height: 260px;
+  }
+
+  .mock-canvas-wrap {
+    padding: 14px;
+  }
+
+  .download-card {
+    min-height: auto;
   }
 }
 
