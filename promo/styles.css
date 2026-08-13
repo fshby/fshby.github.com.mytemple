@@ -297,14 +297,9 @@ textarea {
   font-size: 0.92rem;
 }
 
-.mock-canvas-wrap {
+.hero-visual {
   position: relative;
   height: 520px;
-  padding: 18px;
-  border: 1px solid rgba(126, 150, 85, 0.18);
-  border-radius: 30px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.68), rgba(245, 247, 238, 0.92));
-  box-shadow: var(--shadow);
 }
 
 #neural-canvas {
@@ -1174,12 +1169,6 @@ textarea {
     border-radius: 20px;
   }
 
-  .mock-canvas-wrap {
-    padding-left: 14px;
-    padding-right: 14px;
-    border-radius: 24px;
-  }
-
   .card-main,
   .card-side {
     position: static;
@@ -1211,10 +1200,6 @@ textarea {
   #neural-canvas {
     height: 260px;
     min-height: 260px;
-  }
-
-  .mock-canvas-wrap {
-    padding: 14px;
   }
 
   .download-card {
