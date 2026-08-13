@@ -1,4 +1,4 @@
-import { createMarkdownEditor } from "/editor-core.js?v=20260812-v1";
+import { createMarkdownEditor } from "/editor-core.js?v=20260813-v9";
 
 const text = {
   emptyResult: "\u6ca1\u6709\u5339\u914d\u7ed3\u679c",
@@ -135,6 +135,12 @@ const state = {
     configDirty: false,
     statusTimer: 0,
     chatProvider: "ollama",
+  },
+  aiInline: {
+    visible: false,
+    history: [],
+    historyIndex: -1,
+    inflight: false,
   },
 };
 
@@ -337,6 +343,9 @@ const els = {
   aiSaveBtn: document.querySelector("#aiSaveBtn"),
   aiReindexBtn: document.querySelector("#aiReindexBtn"),
   aiDisableEmbeddingBtn: document.querySelector("#aiDisableEmbeddingBtn"),
+  editorAiDialog: document.querySelector("#editorAiDialog"),
+  editorAiDialogInput: document.querySelector("#editorAiDialogInput"),
+  editorAiDialogSubmit: document.querySelector("#editorAiDialogSubmit"),
   aiEditHintToggle: document.querySelector("#aiEditHintToggle"),
   aiEditHintDelay: document.querySelector("#aiEditHintDelay"),
   aiSettingsStatus: document.querySelector("#aiSettingsStatus"),
@@ -365,11 +374,109 @@ const els = {
   frontmatterAfter: document.querySelector("#frontmatterAfter"),
   cancelFrontmatterBtn: document.querySelector("#cancelFrontmatterBtn"),
   applyFrontmatterBtn: document.querySelector("#applyFrontmatterBtn"),
+  editorSearchPopup: document.querySelector("#editorSearchPopup"),
+  editorSearchInput: document.querySelector("#editorSearchInput"),
+  editorSearchResults: document.querySelector("#editorSearchResults"),
+  editorSearchCount: document.querySelector("#editorSearchCount"),
+  editorSearchClose: document.querySelector("#editorSearchClose"),
 };
 
 els.editor = createMarkdownEditor(els.editor);
 
 if (els.graphDynamic) els.graphDynamic.checked = state.graphView.dynamic;
+
+let _placeholderIdleTimer = null;
+
+function _cancelPlaceholderTimer() {
+  if (_placeholderIdleTimer) {
+    clearTimeout(_placeholderIdleTimer);
+    _placeholderIdleTimer = null;
+  }
+}
+
+function _isCursorLineBlank() {
+  const value = els.editor.value || "";
+  const cursorPos = els.editor.selectionStart ?? 0;
+  const lineStart = value.lastIndexOf("\n", cursorPos - 1) + 1;
+  const lineEndIdx = value.indexOf("\n", cursorPos);
+  const lineEnd = lineEndIdx === -1 ? value.length : lineEndIdx;
+  const lineText = value.substring(lineStart, lineEnd);
+  return lineText.trim().length === 0;
+}
+
+function _showPlaceholder() {
+  const placeholder = document.getElementById("editorPlaceholder");
+  if (!placeholder) return;
+  if (state.mode !== "edit" || !state.currentPath) return;
+  if (!_isCursorLineBlank()) return;
+  const view = els.editor.view;
+  if (!view) return;
+  const cursorPos = els.editor.selectionStart ?? 0;
+  const editorEl = document.getElementById("editor");
+  if (!editorEl) return;
+  const editorRect = editorEl.getBoundingClientRect();
+  try {
+    const coords = view.coordsAtPos(cursorPos);
+    if (coords) {
+      placeholder.style.top = `${coords.top - editorRect.top + 2}px`;
+      placeholder.style.left = `${coords.left - editorRect.left + 8}px`;
+      placeholder.style.right = "8px";
+      placeholder.style.display = "block";
+    } else {
+      placeholder.style.display = "block";
+    }
+  } catch (e) {
+    placeholder.style.display = "block";
+  }
+  requestAnimationFrame(() => {
+    placeholder.classList.add("visible");
+  });
+}
+
+function updateEditorPlaceholder() {
+  const placeholder = document.getElementById("editorPlaceholder");
+  if (!placeholder) return;
+  const cursorLineBlank = _isCursorLineBlank();
+  const shouldShow = state.mode === "edit" && cursorLineBlank && !!state.currentPath;
+  _cancelPlaceholderTimer();
+  if (!shouldShow) {
+    placeholder.classList.remove("visible");
+    placeholder.style.display = "none";
+    return;
+  }
+  if (placeholder.classList.contains("visible")) {
+    placeholder.classList.remove("visible");
+    placeholder.style.display = "none";
+  }
+  _placeholderIdleTimer = setTimeout(() => {
+    _showPlaceholder();
+  }, 5000);
+}
+
+els.editor.addEventListener("input", () => {
+  updateEditorPlaceholder();
+});
+
+els.editor.addEventListener("keyup", (e) => {
+  if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","Home","End","PageUp","PageDown"].includes(e.key)) {
+    updateEditorPlaceholder();
+  }
+});
+
+els.editor.addEventListener("click", () => {
+  updateEditorPlaceholder();
+});
+
+const _editorPlaceholderEl = document.createElement("div");
+_editorPlaceholderEl.id = "editorPlaceholder";
+_editorPlaceholderEl.className = "cm-placeholder";
+_editorPlaceholderEl.innerHTML = '试试 <span class="kbd">Ctrl U</span> 用AI智能检索，<span class="kbd">Ctrl I</span> 与AI一起编辑文档';
+_editorPlaceholderEl.style.position = "absolute";
+_editorPlaceholderEl.style.pointerEvents = "none";
+_editorPlaceholderEl.style.zIndex = "5";
+_editorPlaceholderEl.style.whiteSpace = "pre-wrap";
+_editorPlaceholderEl.style.display = "none";
+document.getElementById("editor")?.appendChild(_editorPlaceholderEl);
 
 const api = {
   async get(path) {
@@ -3065,6 +3172,7 @@ function setMode(mode) {
     releaseGraphCanvas();
   }
   if (mode === "graph") requestAnimationFrame(() => initGraph());
+  updateEditorPlaceholder();
 }
 
 function resetUndo(content) {
@@ -3198,6 +3306,7 @@ async function openDoc(docPath, options = {}) {
   }
   addRecentDoc(doc.path);
   try { localStorage.setItem("lastOpenedDoc", doc.path); } catch (_) {}
+  updateEditorPlaceholder();
 }
 
 function debounce(fn, wait = 180) {
@@ -3428,6 +3537,390 @@ async function insertTextAtCursor(text) {
     showToast("插入失败，请重试");
   }
 }
+
+function positionAiInlineDialog() {
+  if (!els.editorAiDialog) return;
+  const view = els.editor.view;
+  if (!view) return;
+  const cursorPos = els.editor.selectionStart ?? 0;
+  const parentEl = els.editorAiDialog.parentElement;
+  if (!parentEl) return;
+  const parentRect = parentEl.getBoundingClientRect();
+  const editorEl = document.getElementById("editor");
+  if (!editorEl) return;
+  const editorRect = editorEl.getBoundingClientRect();
+  const editorWidth = editorEl.clientWidth;
+  try {
+    const coords = view.coordsAtPos(cursorPos);
+    if (coords) {
+      const top = coords.top - parentRect.top + 4;
+      const left = editorRect.left - parentRect.left + 4;
+      els.editorAiDialog.style.top = `${top}px`;
+      els.editorAiDialog.style.left = `${left}px`;
+      els.editorAiDialog.style.width = `${Math.max(200, editorWidth - 8)}px`;
+      return;
+    }
+  } catch (e) { }
+  const lineHeight = 22;
+  const valueUntilCursor = (els.editor.value || "").substring(0, cursorPos);
+  const lineCount = valueUntilCursor.split("\n").length;
+  const top = editorRect.top - parentRect.top + Math.max(0, (lineCount - 1) * lineHeight) + 4;
+  const left = editorRect.left - parentRect.left + 4;
+  els.editorAiDialog.style.top = `${top}px`;
+  els.editorAiDialog.style.left = `${left}px`;
+  els.editorAiDialog.style.width = `${editorWidth - 8}px`;
+}
+
+function openAiInlineDialog() {
+  if (!els.editorAiDialog || !els.editorAiDialogInput) return;
+  if (state.mode !== "edit" || !state.currentPath) return;
+  if (!_isCursorLineBlank()) {
+    showToast("请将光标放在空白行上再使用 AI 对话");
+    return;
+  }
+  if (state.aiInline.visible) {
+    closeAiInlineDialog();
+    return;
+  }
+  state.aiInline.visible = true;
+  els.editorAiDialog.classList.add("visible");
+  els.editorAiDialog.setAttribute("aria-hidden", "false");
+  els.editorAiDialogInput.value = "";
+  positionAiInlineDialog();
+  requestAnimationFrame(() => {
+    els.editorAiDialogInput.focus();
+    els.editorAiDialogInput.select();
+  });
+}
+
+function closeAiInlineDialog() {
+  state.aiInline.visible = false;
+  state.aiInline.historyIndex = -1;
+  els.editorAiDialog?.classList.remove("visible");
+  els.editorAiDialog?.setAttribute("aria-hidden", "true");
+  if (state.aiInline.inflight) {
+    state.aiInline.inflight = false;
+    els.editorAiDialogSubmit?.classList.remove("ai-inline-spinner");
+    if (els.editorAiDialogSubmit) els.editorAiDialogSubmit.textContent = "↑";
+  }
+  els.editor.focus();
+}
+
+async function submitAiInlineDialog() {
+  if (!els.editorAiDialogInput) return;
+  const text = els.editorAiDialogInput.value.trim();
+  if (!text || state.aiInline.inflight) return;
+  state.aiInline.inflight = true;
+  if (els.editorAiDialogSubmit) {
+    els.editorAiDialogSubmit.classList.add("ai-inline-spinner");
+    els.editorAiDialogSubmit.textContent = "";
+  }
+  els.editorAiDialogInput.value = text;
+  if (!state.aiInline.history.length || state.aiInline.history[state.aiInline.history.length - 1] !== text) {
+    state.aiInline.history.push(text);
+    if (state.aiInline.history.length > 30) state.aiInline.history.shift();
+  }
+  state.aiInline.historyIndex = -1;
+  try {
+    const result = await api.post("/api/ai/query", {
+      question: text,
+      scope: "all",
+      path: state.currentPath,
+    });
+    if (result?.answer) {
+      await insertTextAtCursor(result.answer);
+      closeAiInlineDialog();
+    } else if (result?.error) {
+      showToast(result.error);
+    }
+  } catch (err) {
+    showToast("AI 检索失败：" + (err.message || err));
+  } finally {
+    state.aiInline.inflight = false;
+    if (els.editorAiDialogSubmit) {
+      els.editorAiDialogSubmit.classList.remove("ai-inline-spinner");
+      els.editorAiDialogSubmit.textContent = "↑";
+    }
+  }
+}
+
+els.editorAiDialogInput?.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    submitAiInlineDialog();
+    return;
+  }
+  if (event.key === "Escape") {
+    event.preventDefault();
+    closeAiInlineDialog();
+    return;
+  }
+  if (event.key === "ArrowUp") {
+    event.preventDefault();
+    if (!state.aiInline.history.length) return;
+    const idx = state.aiInline.historyIndex === -1
+      ? state.aiInline.history.length - 1
+      : Math.max(0, state.aiInline.historyIndex - 1);
+    state.aiInline.historyIndex = idx;
+    els.editorAiDialogInput.value = state.aiInline.history[idx];
+    els.editorAiDialogInput.setSelectionRange(els.editorAiDialogInput.value.length, els.editorAiDialogInput.value.length);
+    return;
+  }
+  if (event.key === "ArrowDown") {
+    event.preventDefault();
+    if (!state.aiInline.history.length) return;
+    if (state.aiInline.historyIndex === -1) return;
+    const idx = state.aiInline.historyIndex + 1;
+    if (idx >= state.aiInline.history.length) {
+      state.aiInline.historyIndex = -1;
+      els.editorAiDialogInput.value = "";
+    } else {
+      state.aiInline.historyIndex = idx;
+      els.editorAiDialogInput.value = state.aiInline.history[idx];
+    }
+    els.editorAiDialogInput.setSelectionRange(els.editorAiDialogInput.value.length, els.editorAiDialogInput.value.length);
+    return;
+  }
+});
+
+els.editorAiDialogSubmit?.addEventListener("click", () => {
+  submitAiInlineDialog();
+});
+
+els.editor?.addEventListener("scroll", () => {
+  if (state.aiInline.visible) {
+    const view = els.editor.view;
+    if (view) {
+      try {
+        const cursorPos = els.editor.selectionStart ?? 0;
+        const coords = view.coordsAtPos(cursorPos);
+        const editorEl = document.getElementById("editor");
+        if (coords && editorEl) {
+          const editorRect = editorEl.getBoundingClientRect();
+          if (coords.top < editorRect.top || coords.top > editorRect.bottom) {
+            closeAiInlineDialog();
+          } else {
+            positionAiInlineDialog();
+          }
+        }
+      } catch (e) { positionAiInlineDialog(); }
+    }
+  }
+  const ph = document.getElementById("editorPlaceholder");
+  if (ph && state.mode === "edit" && state.currentPath) {
+    const cursorLineBlank = _isCursorLineBlank();
+    const view = els.editor.view;
+    const cursorPos = els.editor.selectionStart ?? 0;
+    if (!cursorLineBlank) {
+      ph.classList.remove("visible");
+      ph.style.display = "none";
+      return;
+    }
+    if (!view) return;
+    try {
+      const coords = view.coordsAtPos(cursorPos);
+      const editorEl = document.getElementById("editor");
+      if (coords && editorEl) {
+        const editorRect = editorEl.getBoundingClientRect();
+        if (coords.top < editorRect.top || coords.top > editorRect.bottom - 20) {
+          ph.classList.remove("visible");
+          ph.style.display = "none";
+          return;
+        }
+        ph.style.top = `${coords.top - editorRect.top + 2}px`;
+        ph.style.left = `${coords.left - editorRect.left + 8}px`;
+        ph.style.right = "8px";
+        ph.style.display = "block";
+        ph.classList.add("visible");
+      }
+    } catch (e) {}
+  }
+}, { passive: true });
+
+window.addEventListener("resize", () => {
+  if (state.aiInline.visible) positionAiInlineDialog();
+  const ph = document.getElementById("editorPlaceholder");
+  if (ph && ph.classList.contains("visible") && state.mode === "edit" && state.currentPath) {
+    _showPlaceholder();
+  }
+});
+
+// ===== 编辑器关键字检索弹窗 =====
+const _editorSearch = { selectedIndex: -1, results: [], debounceTimer: null };
+
+function openEditorSearch() {
+  if (!els.editorSearchPopup) return;
+  els.editorSearchPopup.classList.remove("hidden");
+  els.editorSearchPopup.setAttribute("aria-hidden", "false");
+  els.editorSearchInput.value = "";
+  els.editorSearchResults.innerHTML = "";
+  els.editorSearchCount.textContent = "";
+  _editorSearch.results = [];
+  _editorSearch.selectedIndex = -1;
+  requestAnimationFrame(() => els.editorSearchInput.focus());
+}
+
+function closeEditorSearch() {
+  if (!els.editorSearchPopup) return;
+  els.editorSearchPopup.classList.add("hidden");
+  els.editorSearchPopup.setAttribute("aria-hidden", "true");
+  if (_editorSearch.debounceTimer) {
+    clearTimeout(_editorSearch.debounceTimer);
+    _editorSearch.debounceTimer = null;
+  }
+  els.editor.focus();
+}
+
+function _escapeHtml(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function _highlightKeyword(text, keyword) {
+  if (!keyword) return _escapeHtml(text);
+  const lowerText = text.toLowerCase();
+  const lowerKey = keyword.toLowerCase();
+  let result = "";
+  let lastIdx = 0;
+  let idx = lowerText.indexOf(lowerKey);
+  while (idx !== -1) {
+    result += _escapeHtml(text.slice(lastIdx, idx));
+    result += "<mark>" + _escapeHtml(text.slice(idx, idx + keyword.length)) + "</mark>";
+    lastIdx = idx + keyword.length;
+    idx = lowerText.indexOf(lowerKey, lastIdx);
+  }
+  result += _escapeHtml(text.slice(lastIdx));
+  return result;
+}
+
+function _performEditorSearch(keyword) {
+  if (!keyword) {
+    _editorSearch.results = [];
+    _editorSearch.selectedIndex = -1;
+    els.editorSearchResults.innerHTML = "";
+    els.editorSearchCount.textContent = "";
+    return;
+  }
+  const doc = els.editor.view?.state?.doc;
+  const results = [];
+  if (doc) {
+    const totalLines = doc.lines;
+    const lowerKey = keyword.toLowerCase();
+    for (let i = 1; i <= totalLines; i++) {
+      const line = doc.line(i);
+      if (line.text.toLowerCase().includes(lowerKey)) {
+        const trimmed = line.text.trim();
+        const preview = trimmed.length > 80 ? trimmed.slice(0, 80) + "…" : trimmed || "(空行)";
+        results.push({ lineNum: i, text: line.text, preview });
+      }
+    }
+  } else {
+    const lines = els.editor.value.split("\n");
+    const lowerKey = keyword.toLowerCase();
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].toLowerCase().includes(lowerKey)) {
+        const trimmed = lines[i].trim();
+        const preview = trimmed.length > 80 ? trimmed.slice(0, 80) + "…" : trimmed || "(空行)";
+        results.push({ lineNum: i + 1, text: lines[i], preview });
+      }
+    }
+  }
+  _editorSearch.results = results;
+  _editorSearch.selectedIndex = results.length > 0 ? 0 : -1;
+  els.editorSearchCount.textContent = results.length > 0 ? `${results.length} 个匹配` : "无匹配";
+  _renderEditorSearchResults(keyword);
+}
+
+function _renderEditorSearchResults(keyword) {
+  const container = els.editorSearchResults;
+  if (!container) return;
+  if (_editorSearch.results.length === 0) {
+    container.innerHTML = '<div style="text-align:center;padding:16px;font-size:13px;color:var(--muted,#999);">未找到匹配行</div>';
+    return;
+  }
+  const items = _editorSearch.results.map((r, i) => {
+    const cls = i === _editorSearch.selectedIndex ? "editor-search-item selected" : "editor-search-item";
+    return `<div class="${cls}" data-line="${r.lineNum}" data-index="${i}">
+      <span class="editor-search-item-line">${r.lineNum}</span>
+      <span class="editor-search-item-text">${_highlightKeyword(r.preview, keyword)}</span>
+    </div>`;
+  }).join("");
+  container.innerHTML = items;
+  const selected = container.querySelector(".selected");
+  if (selected) selected.scrollIntoView({ block: "nearest" });
+}
+
+function _jumpToSearchLine(lineNum) {
+  if (!lineNum || lineNum < 1) return;
+  els.editor.scrollToLine?.(lineNum);
+  const view = els.editor.view;
+  if (view) {
+    const doc = view.state.doc;
+    if (lineNum <= doc.lines) {
+      const line = doc.line(lineNum);
+      view.dispatch({ selection: { anchor: line.from }, scrollIntoView: true });
+    }
+  }
+  els.editor.focus();
+}
+
+els.editorSearchInput?.addEventListener("input", () => {
+  if (_editorSearch.debounceTimer) clearTimeout(_editorSearch.debounceTimer);
+  const keyword = els.editorSearchInput.value.trim();
+  _editorSearch.debounceTimer = setTimeout(() => _performEditorSearch(keyword), 150);
+});
+
+els.editorSearchInput?.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    event.preventDefault();
+    closeEditorSearch();
+    return;
+  }
+  if (event.key === "ArrowDown") {
+    event.preventDefault();
+    if (_editorSearch.results.length === 0) return;
+    _editorSearch.selectedIndex = (_editorSearch.selectedIndex + 1) % _editorSearch.results.length;
+    _renderEditorSearchResults(els.editorSearchInput.value.trim());
+    return;
+  }
+  if (event.key === "ArrowUp") {
+    event.preventDefault();
+    if (_editorSearch.results.length === 0) return;
+    _editorSearch.selectedIndex = _editorSearch.selectedIndex <= 0
+      ? _editorSearch.results.length - 1
+      : _editorSearch.selectedIndex - 1;
+    _renderEditorSearchResults(els.editorSearchInput.value.trim());
+    return;
+  }
+  if (event.key === "Enter") {
+    event.preventDefault();
+    if (_editorSearch.selectedIndex >= 0 && _editorSearch.results[_editorSearch.selectedIndex]) {
+      _jumpToSearchLine(_editorSearch.results[_editorSearch.selectedIndex].lineNum);
+    }
+    return;
+  }
+});
+
+els.editorSearchResults?.addEventListener("click", (event) => {
+  const item = event.target.closest(".editor-search-item");
+  if (!item) return;
+  const lineNum = parseInt(item.dataset.line, 10);
+  _jumpToSearchLine(lineNum);
+});
+
+els.editorSearchClose?.addEventListener("click", closeEditorSearch);
+
+els.editorSearchPopup?.addEventListener("mousedown", (event) => {
+  event.stopPropagation();
+});
+
+document.addEventListener("mousedown", (event) => {
+  if (!state.aiInline.visible) return;
+  if (els.editorAiDialog && !els.editorAiDialog.contains(event.target)) {
+    if (event.target === els.editor || els.editor?.contains?.(event.target)) {
+      closeAiInlineDialog();
+    }
+  }
+});
 
 async function submitAiQuestion(event) {
   event?.preventDefault();
@@ -4675,6 +5168,16 @@ function deleteTreeItem(path) {
   state.deleteTarget = path;
   els.deleteTarget.textContent = path;
   els.deleteModal.classList.remove("hidden");
+}
+
+async function renameCurrentDoc() {
+  if (!state.currentPath) return showToast("请先打开一篇文档");
+  // 重命名前先保存未提交的编辑，避免重命名后丢失草稿内容
+  if (state.mode === "edit" && els.editor.value !== state.lastSavedContent) {
+    const saved = await saveCurrentDoc({ keepEditorState: true, renderAfterSave: false });
+    if (!saved) return;
+  }
+  await renameTreeItem(state.currentPath);
 }
 
 async function renameTreeItem(path) {
@@ -6643,6 +7146,23 @@ document.addEventListener("keydown", (event) => {
   const target = event.target;
   const editableTarget = target && typeof target.closest === "function"
     && (target.closest(".cm-editor") || target.closest("input, textarea, select, [contenteditable='true']"));
+  const inFormField = target && typeof target.closest === "function"
+    && target.closest("input, textarea, select, [contenteditable='true']");
+  if (event.key === "F2" && !inFormField && !event.defaultPrevented) {
+    event.preventDefault();
+    renameCurrentDoc();
+    return;
+  }
+  if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "u") {
+    event.preventDefault();
+    toggleAiDrawer(!state.ai.open);
+    return;
+  }
+  if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "i" && state.mode === "edit") {
+    event.preventDefault();
+    openAiInlineDialog();
+    return;
+  }
   if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "f") {
     if (editableTarget) return;
     event.preventDefault();
@@ -6845,8 +7365,22 @@ if (els.workspaceBtn) {
 
   function positionDropdown(item, dropdown) {
     const itemRect = item.getBoundingClientRect();
-    dropdown.style.left = Math.round(itemRect.left) + "px";
-    dropdown.style.top = Math.round(itemRect.bottom + 4) + "px";
+    const dropdownWidth = dropdown.offsetWidth || 220;
+    const dropdownHeight = dropdown.offsetHeight || 0;
+    const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+    const viewportHeight = document.documentElement.clientHeight || window.innerHeight;
+    let left = Math.round(itemRect.left);
+    // 右侧溢出时向左收束，保证下拉菜单完整可见
+    if (left + dropdownWidth > viewportWidth - 8) {
+      left = Math.max(8, Math.round(viewportWidth - dropdownWidth - 8));
+    }
+    let top = Math.round(itemRect.bottom + 4);
+    // 底部溢出时上移贴近视口底部
+    if (dropdownHeight > 0 && top + dropdownHeight > viewportHeight - 8) {
+      top = Math.max(8, Math.round(viewportHeight - dropdownHeight - 8));
+    }
+    dropdown.style.left = left + "px";
+    dropdown.style.top = top + "px";
   }
 
   menuItems.forEach((item) => {
@@ -6886,10 +7420,14 @@ if (els.workspaceBtn) {
     if (e.key === "Escape") closeAllMenus();
   });
 
+  // 窗口尺寸变化后菜单项位置会偏移，直接关闭已展开的下拉，避免错位
+  window.addEventListener("resize", closeAllMenus, { passive: true });
+
   const actions = {
     "new-doc": () => openCreateModal("doc"),
     "new-folder": () => openCreateModal("folder"),
     save: () => saveCurrentDoc(),
+    "rename-doc": () => renameCurrentDoc(),
     workspace: () => openWorkspaceModal(),
     "export-pdf": () => exportCurrentDocToPdf(),
     "export-ppt": () => exportCurrentDocToPpt(),
@@ -6904,7 +7442,7 @@ if (els.workspaceBtn) {
     "zoom-reset": () => applyWindowZoom(100),
     undo: () => { const ed = els.editor; if (ed) document.execCommand("undo"); },
     redo: () => { const ed = els.editor; if (ed) document.execCommand("redo"); },
-    find: () => els.searchInput?.focus(),
+    find: () => { if (state.mode === "edit" && state.currentPath) openEditorSearch(); else els.searchInput?.focus(); },
     replace: () => els.searchInput?.focus(),
     "go-doc": () => els.searchInput?.focus(),
     "go-symbol": () => showToast("进入知识库标题导航模式"),
@@ -7143,6 +7681,16 @@ function selectAllMatchingWords() {
 els.editor.addEventListener("keydown", (event) => {
   const mod = event.ctrlKey || event.metaKey;
   const handled = (() => {
+    if (mod && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "f") {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!els.editorSearchPopup.classList.contains("hidden")) {
+        closeEditorSearch();
+      } else {
+        openEditorSearch();
+      }
+      return true;
+    }
     if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "f") {
       event.preventDefault();
       event.stopPropagation();
@@ -7187,9 +7735,20 @@ els.editor.addEventListener("keydown", (event) => {
     }
     if (mod && !event.altKey) {
       const key = event.key.toLowerCase();
+      if (key === "i" && !event.shiftKey) {
+        event.preventDefault();
+        event.stopPropagation();
+        openAiInlineDialog();
+        return true;
+      }
+      if (key === "u" && !event.shiftKey) {
+        event.preventDefault();
+        event.stopPropagation();
+        toggleAiDrawer(!state.ai.open);
+        return true;
+      }
       const format = {
         b: "bold",
-        i: "italic",
         k: "link",
         "`": "code",
         "1": "h1",

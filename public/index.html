@@ -18,9 +18,9 @@
       body.license-locked #licenseModal,
       body.license-locked #settingsModal { pointer-events: auto; }
     </style>
-    <link rel="stylesheet" href="/styles.css?v=20260812-v5" />
-    <link rel="modulepreload" href="/editor-core.js?v=20260812-v5" />
-    <link rel="modulepreload" href="/app.js?v=20260812-v5" />
+    <link rel="stylesheet" href="/styles.css?v=20260813-v9" />
+<link rel="modulepreload" href="/editor-core.js?v=20260813-v9" />
+<link rel="modulepreload" href="/app.js?v=20260813-v9" />
   </head>
   <body>
     <div id="appSplash" class="app-splash">
@@ -228,6 +228,23 @@
             <aside id="editorOutline" class="editor-outline hidden" aria-label="editor outline"></aside>
             <div id="outlineSplitter" class="editor-splitter" role="separator" aria-label="resize outline" aria-orientation="vertical"></div>
             <div id="editor" role="textbox" aria-multiline="true"></div>
+            <div id="editorAiDialog" class="ai-inline-dialog" role="dialog" aria-label="AI 行内对话框" aria-hidden="true">
+              <span class="ai-inline-icon" aria-hidden="true">💬</span>
+              <div class="ai-inline-hint">按 <kbd>↑</kbd> 查看历史输入，按 <kbd>ESC</kbd> 关闭</div>
+              <div class="ai-inline-input-row">
+                <input id="editorAiDialogInput" class="ai-inline-input" type="text" placeholder="与 AI 对话，结果将直接插入文档…" autocomplete="off" />
+                <button id="editorAiDialogSubmit" class="ai-inline-submit" type="submit" title="提交 (Enter)">↑</button>
+              </div>
+            </div>
+            <div id="editorSearchPopup" class="editor-search-popup hidden" role="dialog" aria-label="编辑器关键字检索" aria-hidden="true">
+              <div class="editor-search-header">
+                <svg class="editor-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                <input id="editorSearchInput" type="text" placeholder="输入关键字检索行…" autocomplete="off" spellcheck="false" />
+                <span class="editor-search-count" id="editorSearchCount"></span>
+                <button id="editorSearchClose" class="editor-search-close" title="关闭 (Esc)">✕</button>
+              </div>
+              <div id="editorSearchResults" class="editor-search-results"></div>
+            </div>
             <div id="previewSplitter" class="editor-splitter" role="separator" aria-label="resize preview" aria-orientation="vertical"></div>
             <article id="preview" class="markdown-body"></article>
           </div>
@@ -725,6 +742,7 @@
                   <div><code>Ctrl/Cmd + ;</code><span>插入日期</span></div>
                   <div><code>Ctrl/Cmd + '</code><span>插入时间</span></div>
                   <div><code>Ctrl/Cmd + Shift + F</code><span>切换沉浸编辑</span></div>
+                  <div><code>Ctrl/Cmd + F</code><span>编辑器内关键字检索（行浏览目录）</span></div>
                   <div><code>Escape</code><span>退出沉浸或多光标状态</span></div>
                   <div><code>F3 / Ctrl/Cmd + G</code><span>查找下一个匹配</span></div>
                   <div><code>Ctrl/Cmd + Alt + ↑/↓</code><span>在相邻行添加多处光标</span></div>
@@ -1191,13 +1209,14 @@
         }, 15000);
       })();
     </script>
-    <script src="/app.js?v=20260812-v5" type="module"></script>
+    <script src="/app.js?v=20260813-v9" type="module"></script>
 
     <div class="menu-dropdowns" id="menuDropdowns">
       <div class="menu-dropdown hidden" data-dropdown="file" role="menu">
         <button class="menu-option" data-action="new-doc"><span class="menu-option-icon">📄</span>新建文档<kbd>Ctrl+N</kbd></button>
         <button class="menu-option" data-action="new-folder"><span class="menu-option-icon">📁</span>新建文件夹</button>
         <button class="menu-option" data-action="save"><span class="menu-option-icon">💾</span>保存<kbd>Ctrl+S</kbd></button>
+        <button class="menu-option" data-action="rename-doc"><span class="menu-option-icon">✏️</span>重命名文档<kbd>F2</kbd></button>
         <div class="menu-separator"></div>
         <button class="menu-option" data-action="workspace"><span class="menu-option-icon">🗂️</span>工作路径<kbd>Ctrl+Shift+P</kbd></button>
         <button class="menu-option" data-action="export-pdf"><span class="menu-option-icon">📕</span>导出 PDF<kbd>Ctrl+Shift+E</kbd></button>
@@ -1234,3 +1253,4 @@
     </div>
   </body>
 </html>
+

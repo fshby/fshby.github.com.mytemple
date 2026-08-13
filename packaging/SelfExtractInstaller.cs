@@ -30,7 +30,7 @@ namespace MyTempleInstaller
     {
         public const string APP_NAME = "MyTempleKnowledge";
         public const string APP_TITLE = "MyTemple Knowledge";
-        public const string APP_VERSION = "1.8.0";
+        public const string APP_VERSION = "1.8.21";
         public static readonly string InstallDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), APP_NAME);
         public static readonly string UserDataDir = Path.Combine(
@@ -687,7 +687,7 @@ namespace MyTempleInstaller
                     key.SetValue("NoModify", 1, RegistryValueKind.DWord);
                     key.SetValue("NoRepair", 1, RegistryValueKind.DWord);
                     key.SetValue("Publisher", "MyTemple");
-                    key.SetValue("UrlInfoAbout", "https://github.com");
+                    key.SetValue("UrlInfoAbout", "https://mytemple.fshby.cc");
                 }
             }
             catch { }
