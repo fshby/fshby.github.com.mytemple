@@ -179,6 +179,7 @@ try {
     Copy-PayloadItem "server.js"
     Copy-PayloadItem "package.json"
     Copy-PayloadItem "server"
+    Copy-PayloadItem "node_modules"
     Copy-PayloadItem "version.json"
     Copy-PayloadItem "public"
     Copy-PayloadItem "docs"
@@ -204,6 +205,14 @@ try {
             "server/frontmatter.js",
             "server/agent-policy.js",
             "server/license.js",
+            "server/converter.js",
+            "server/doc-views.js",
+            "node_modules/mammoth/lib/index.js",
+            "node_modules/turndown/lib/turndown.cjs.js",
+            "node_modules/xlsx/xlsx.mjs",
+            "node_modules/marked/lib/marked.esm.js",
+            "node_modules/pdf-parse/dist/node/cjs/index.cjs",
+            "node_modules/html-to-docx/dist/html-to-docx.esm.js",
             "version.json",
             "MyTempleKnowledge.exe",
             "logo1.ico",

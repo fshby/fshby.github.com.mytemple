@@ -454,9 +454,20 @@ class MarkdownEditorAdapter {
     const line = doc.line(target);
     this.view.dispatch({
       selection: EditorSelection.single(line.from),
-      scrollIntoView: true,
+      scrollIntoView: { y: "center" },
     });
     this.view.focus();
+    requestAnimationFrame(() => {
+      const coords = this.view.coordsAtPos(line.from);
+      if (!coords) return;
+      const editorRect = this.view.scrollDOM.getBoundingClientRect();
+      const lineCenter = coords.top + (coords.bottom - coords.top) / 2;
+      const editorCenter = editorRect.top + this.view.scrollDOM.clientHeight / 2;
+      const offset = lineCenter - editorCenter;
+      if (Math.abs(offset) > 5) {
+        this.view.scrollDOM.scrollTop += offset;
+      }
+    });
   }
 
   searchInEditor(query) {
@@ -471,6 +482,25 @@ class MarkdownEditorAdapter {
       matches.push({ from: result.value.from, to: result.value.to });
     }
     return { total: matches.length, matches };
+  }
+
+  replaceAll(searchText, replacementText) {
+    const term = String(searchText || "").trim();
+    if (!term) return 0;
+    const replacement = String(replacementText ?? "");
+    const searchQuery = new SearchQuery({ search: term });
+    const cursor = searchQuery.getCursor(this.view.state);
+    const changes = [];
+    while (true) {
+      const result = cursor.next();
+      if (result.done) break;
+      changes.push({ from: result.value.from, to: result.value.to, insert: replacement });
+    }
+    if (changes.length > 0) {
+      this.view.dispatch({ changes });
+    }
+    this.view.focus();
+    return changes.length;
   }
 
   jumpToMatch(from, to) {
