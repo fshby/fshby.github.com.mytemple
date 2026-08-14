@@ -11,9 +11,9 @@
   --green-deep: #6e8d3b;
   --green-soft: #dfe9cb;
   --mint: #b9cf95;
-  --shadow: 0 18px 50px rgba(84, 98, 56, 0.08);
-  --shadow-soft: 0 10px 30px rgba(84, 98, 56, 0.06);
-  --radius: 24px;
+  --shadow: 0 8px 24px rgba(84, 98, 56, 0.06);
+  --shadow-soft: 0 4px 14px rgba(84, 98, 56, 0.04);
+  --radius: 14px;
   --max: 1200px;
 }
 
@@ -71,7 +71,7 @@ textarea {
   justify-content: space-between;
   gap: 18px;
   width: 100%;
-  min-height: 78px;
+  min-height: 64px;
   padding: 0 24px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.22);
   background: rgba(136, 169, 86, 0.95);
@@ -194,10 +194,9 @@ textarea {
   display: grid;
   grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
   align-items: center;
-  gap: 56px;
-  /* 使用 svh（small viewport height）避免移动端地址栏伸缩导致 100vh 抖动出现空白。 */
-  min-height: calc(100svh - 84px);
-  padding: 72px 0 48px;
+  gap: 48px;
+  min-height: calc(100svh - 70px);
+  padding: 48px 0 36px;
 }
 
 .eyebrow {
@@ -232,7 +231,7 @@ textarea {
 }
 
 .hero h1 {
-  font-size: clamp(2.8rem, 5vw, 4.4rem);
+  font-size: clamp(2rem, 3.5vw, 2.8rem);
   font-weight: 700;
 }
 
@@ -278,12 +277,13 @@ textarea {
   border: 1px solid var(--line);
   background: rgba(255, 255, 251, 0.72);
   box-shadow: var(--shadow-soft);
+  border-radius: var(--radius);
 }
 
 .hero-metrics div {
-  min-height: 108px;
-  padding: 18px 18px 16px;
-  border-radius: 20px;
+  min-height: 90px;
+  padding: 14px 16px 12px;
+  border-radius: var(--radius);
 }
 
 .hero-metrics strong {
@@ -299,7 +299,7 @@ textarea {
 
 .hero-visual {
   position: relative;
-  height: 520px;
+  height: 440px;
 }
 
 #neural-canvas {
@@ -307,7 +307,7 @@ textarea {
   width: 100%;
   height: 100%;
   min-height: 420px;
-  border-radius: 22px;
+  border-radius: var(--radius);
   background:
     radial-gradient(circle at top left, rgba(188, 210, 149, 0.34), transparent 26%),
     linear-gradient(180deg, rgba(250, 251, 247, 0.92), rgba(239, 243, 231, 0.96));
@@ -318,9 +318,9 @@ textarea {
 .mock-status {
   position: absolute;
   border: 1px solid rgba(126, 150, 85, 0.12);
-  border-radius: 18px;
+  border-radius: var(--radius);
   background: rgba(255, 255, 255, 0.78);
-  box-shadow: 0 10px 22px rgba(93, 109, 65, 0.07);
+  box-shadow: 0 6px 16px rgba(93, 109, 65, 0.05);
 }
 
 .mock-card {
@@ -366,8 +366,8 @@ textarea {
   justify-content: space-between;
   gap: 24px;
   margin-top: 8px;
-  padding: 18px 22px;
-  border-radius: 20px;
+  padding: 16px 20px;
+  border-radius: var(--radius);
 }
 
 .proof-strip p {
@@ -391,11 +391,11 @@ textarea {
 }
 
 .section-intro {
-  padding-top: 72px;
+  padding-top: 52px;
 }
 
 .section-intro h2 {
-  font-size: clamp(2.2rem, 4vw, 3.4rem);
+  font-size: clamp(1.5rem, 2.5vw, 2rem);
   font-weight: 700;
 }
 
@@ -414,9 +414,9 @@ textarea {
 }
 
 .feature-card {
-  min-height: 220px;
-  padding: 26px 24px;
-  border-radius: 24px;
+  min-height: 180px;
+  padding: 20px 20px;
+  border-radius: var(--radius);
 }
 
 .feature-index,
@@ -440,8 +440,8 @@ textarea {
 .screen-head h3,
 .theme-card h3,
 .download-card h3 {
-  margin: 18px 0 10px;
-  font-size: 1.3rem;
+  margin: 14px 0 8px;
+  font-size: 1.1rem;
   line-height: 1.3;
 }
 
@@ -467,8 +467,8 @@ textarea {
 }
 
 .screen-card {
-  padding: 22px;
-  border-radius: 24px;
+  padding: 18px;
+  border-radius: var(--radius);
 }
 
 .screen-head {
@@ -484,10 +484,10 @@ textarea {
 }
 
 .screen-preview {
-  margin-top: 18px;
+  margin-top: 14px;
   overflow: hidden;
   border: 1px solid rgba(126, 150, 85, 0.12);
-  border-radius: 22px;
+  border-radius: var(--radius);
   background: linear-gradient(180deg, rgba(251, 252, 246, 0.98), rgba(240, 244, 233, 0.96));
 }
 
@@ -496,7 +496,7 @@ textarea {
   width: 100%;
   height: auto;
   object-fit: cover;
-  border-radius: 22px;
+  border-radius: var(--radius);
   transition: transform 0.3s ease;
 }
 
@@ -511,7 +511,7 @@ textarea {
 }
 
 .assist-intro h3 {
-  font-size: clamp(1.5rem, 2.8vw, 2.2rem);
+  font-size: clamp(1.2rem, 2vw, 1.6rem);
   margin: 0;
   line-height: 1.2;
   letter-spacing: -0.03em;
@@ -538,8 +538,8 @@ textarea {
 .assist-card {
   border: 1px solid var(--line);
   background: rgba(255, 255, 251, 0.72);
-  border-radius: 20px;
-  padding: 18px;
+  border-radius: var(--radius);
+  padding: 16px;
   box-shadow: var(--shadow-soft);
   opacity: 0.88;
   transition: opacity 0.2s ease, box-shadow 0.2s ease;
@@ -775,9 +775,9 @@ textarea {
   display: flex;
   align-items: flex-start;
   gap: 18px;
-  min-height: 170px;
-  padding: 24px;
-  border-radius: 24px;
+  min-height: 140px;
+  padding: 20px;
+  border-radius: var(--radius);
 }
 
 .theme-card.selected {
@@ -814,9 +814,9 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  min-height: 220px;
-  padding: 24px;
-  border-radius: 24px;
+  min-height: 180px;
+  padding: 20px;
+  border-radius: var(--radius);
 }
 
 .doc-card strong {
@@ -897,9 +897,9 @@ textarea {
 }
 
 .download-card {
-  min-height: 280px;
-  padding: 28px 26px;
-  border-radius: 24px;
+  min-height: 240px;
+  padding: 22px 22px;
+  border-radius: var(--radius);
 }
 
 .download-card.primary {
@@ -1152,7 +1152,7 @@ textarea {
   }
 
   .hero h1 {
-    font-size: 2.4rem;
+    font-size: 1.8rem;
   }
 
   .hero-lede,
@@ -1165,8 +1165,8 @@ textarea {
   .theme-card,
   .doc-card,
   .download-card {
-    padding: 22px 18px;
-    border-radius: 20px;
+    padding: 18px 16px;
+    border-radius: var(--radius);
   }
 
   .card-main,
@@ -1184,8 +1184,8 @@ textarea {
   }
 
   .assist-card {
-    padding: 16px;
-    border-radius: 18px;
+    padding: 14px;
+    border-radius: var(--radius);
   }
 
   .assist-intro {
@@ -1194,7 +1194,7 @@ textarea {
   }
 
   .screen-preview img {
-    border-radius: 18px;
+    border-radius: var(--radius);
   }
 
   #neural-canvas {
@@ -1220,5 +1220,142 @@ textarea {
 
   .button {
     transition: none;
+  }
+}
+
+/* ── 精简版列表/段落布局（替代部分卡片） ── */
+.feature-list {
+  margin-top: 24px;
+}
+
+.feature-rows,
+.doc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.feature-rows li {
+  padding: 14px 18px;
+  border-left: 3px solid var(--green);
+  background: var(--paper);
+  border-radius: 0 10px 10px 0;
+  line-height: 1.7;
+  color: var(--text);
+}
+
+.feature-rows li strong {
+  color: var(--green-deep);
+  font-weight: 600;
+}
+
+.doc-list li {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.doc-list li:last-child {
+  border-bottom: none;
+}
+
+.doc-list li a {
+  display: block;
+  color: var(--text);
+  line-height: 1.7;
+}
+
+.doc-list li a:hover strong,
+.doc-list li a:focus-visible strong {
+  color: var(--green-deep);
+}
+
+.doc-list li strong {
+  color: var(--text);
+  font-weight: 600;
+  margin-right: 4px;
+}
+
+.download-block {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: 28px;
+  margin-top: 24px;
+  padding: 24px;
+  background: var(--paper);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-soft);
+}
+
+.download-primary {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-right: 24px;
+  border-right: 1px solid var(--line);
+}
+
+.download-primary .download-badge {
+  align-self: flex-start;
+  background: var(--green-soft);
+  color: var(--green-deep);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 999px;
+}
+
+.download-primary p {
+  margin: 0;
+  color: var(--text-2);
+  line-height: 1.7;
+}
+
+.download-secondary h3 {
+  margin: 0 0 12px;
+  font-size: 16px;
+  color: var(--text);
+}
+
+.download-secondary ul {
+  margin: 0 0 14px;
+  padding-left: 18px;
+  color: var(--text-2);
+  line-height: 1.8;
+  font-size: 14px;
+}
+
+.download-secondary ul li {
+  margin-bottom: 4px;
+}
+
+.download-links {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-2);
+}
+
+.download-links a {
+  color: var(--green-deep);
+}
+
+.download-links a:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 760px) {
+  .download-block {
+    grid-template-columns: 1fr;
+    gap: 18px;
+    padding: 18px;
+  }
+
+  .download-primary {
+    padding-right: 0;
+    padding-bottom: 18px;
+    border-right: none;
+    border-bottom: 1px solid var(--line);
   }
 }

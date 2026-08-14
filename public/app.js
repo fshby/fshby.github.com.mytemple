@@ -1,4 +1,4 @@
-import { createMarkdownEditor } from "/editor-core.js?v=20260813-v9";
+import { createMarkdownEditor } from "/editor-core.js?v=20260814-v1";
 
 const text = {
   emptyResult: "\u6ca1\u6709\u5339\u914d\u7ed3\u679c",
@@ -22,6 +22,7 @@ const state = {
   flatFiles: [],
   currentPath: "",
   currentContent: "",
+  currentDocCreated: 0,
   mode: "view",
   graph: { nodes: [], edges: [] },
   graphSource: null,
@@ -379,6 +380,24 @@ const els = {
   editorSearchResults: document.querySelector("#editorSearchResults"),
   editorSearchCount: document.querySelector("#editorSearchCount"),
   editorSearchClose: document.querySelector("#editorSearchClose"),
+  editorSearchReplace: document.querySelector("#editorSearchReplace"),
+  editorSearchReplaceAll: document.querySelector("#editorSearchReplaceAll"),
+  statusDocNameText: document.querySelector("#statusDocNameText"),
+  statusWordCountText: document.querySelector("#statusWordCountText"),
+  statusCursorText: document.querySelector("#statusCursorText"),
+  statusLastSaveText: document.querySelector("#statusLastSaveText"),
+  statusCreatedText: document.querySelector("#statusCreatedText"),
+  statusSystemTimeText: document.querySelector("#statusSystemTimeText"),
+  statusPomodoro: document.querySelector("#statusPomodoro"),
+  statusPomodoroText: document.querySelector("#statusPomodoroText"),
+  importModal: document.querySelector("#importModal"),
+  importDropZone: document.querySelector("#importDropZone"),
+  importFileInput: document.querySelector("#importFileInput"),
+  importFileList: document.querySelector("#importFileList"),
+  closeImportBtn: document.querySelector("#closeImportBtn"),
+  cancelImportBtn: document.querySelector("#cancelImportBtn"),
+  browseImportBtn: document.querySelector("#browseImportBtn"),
+  confirmImportBtn: document.querySelector("#confirmImportBtn"),
 };
 
 els.editor = createMarkdownEditor(els.editor);
@@ -455,16 +474,19 @@ function updateEditorPlaceholder() {
 
 els.editor.addEventListener("input", () => {
   updateEditorPlaceholder();
+  updateStatusWordCount();
 });
 
 els.editor.addEventListener("keyup", (e) => {
   if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","Home","End","PageUp","PageDown"].includes(e.key)) {
     updateEditorPlaceholder();
+    updateStatusCursor();
   }
 });
 
 els.editor.addEventListener("click", () => {
   updateEditorPlaceholder();
+  updateStatusCursor();
 });
 
 const _editorPlaceholderEl = document.createElement("div");
@@ -1614,6 +1636,45 @@ const PRINT_STYLES = `html,body{margin:0;padding:0;background:#fff;}
 .print-footer{margin-top:36px;padding-top:14px;border-top:1px solid #e5e7eb;text-align:center;font-size:11px;color:#9ca3af;}
 .print-watermark{position:fixed;top:0;left:0;width:100%;height:100%;display:flex;justify-content:center;align-items:center;font-size:52px;color:rgba(15,23,42,0.05);pointer-events:none;transform:rotate(-30deg);z-index:9999;letter-spacing:6px;white-space:nowrap;font-weight:700;}
 @page{margin:18mm 16mm;}`;
+
+async function exportCurrentDoc(format) {
+  if (!state.currentPath && !state.currentContent) {
+    showToast("请先打开一个文档");
+    return;
+  }
+  const content = state.currentContent || "";
+  const title = state.currentTitle || state.currentPath?.split("/").pop()?.replace(/\.md$/i, "") || "导出文档";
+  const pdfSettings = readPdfExportSettings();
+  const author = pdfSettings.showAuthor ? (pdfSettings.authorText || "") : "";
+  const watermark = pdfSettings.watermarkText || "";
+
+  showToast(`正在导出 ${format.toUpperCase()}...`);
+  try {
+    const resp = await fetch("/api/export", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content, format, title, author, watermark }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      showToast(err.error || `导出失败`);
+      return;
+    }
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${title.replace(/[\\/:*?"<>|]/g, "_")}.${format === "md" ? "md" : format}`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    showToast(`已导出 ${format.toUpperCase()}`);
+  } catch (e) {
+    console.error("Export failed:", e);
+    showToast(`导出失败: ${e.message}`);
+  }
+}
 
 async function exportCurrentDocToPdf() {
   if (!state.currentPath && !state.currentContent) {
@@ -3173,6 +3234,7 @@ function setMode(mode) {
   }
   if (mode === "graph") requestAnimationFrame(() => initGraph());
   updateEditorPlaceholder();
+  refreshStatusBar();
 }
 
 function resetUndo(content) {
@@ -3242,6 +3304,7 @@ async function openDoc(docPath, options = {}) {
   state.currentPath = doc.path;
   state.currentContent = doc.content;
   state.currentVersion = doc.contentSha256 || "";
+  state.currentDocCreated = doc.created || item?.created || 0;
   updateLargeDocumentState(doc.content, true);
   state.lastSavedContent = doc.content;
   state.selectedNode = doc.path;
@@ -3307,6 +3370,9 @@ async function openDoc(docPath, options = {}) {
   addRecentDoc(doc.path);
   try { localStorage.setItem("lastOpenedDoc", doc.path); } catch (_) {}
   updateEditorPlaceholder();
+  updateStatusDocName(els.docTitle?.textContent || "");
+  updateStatusCreated(state.currentDocCreated);
+  refreshStatusBar();
 }
 
 function debounce(fn, wait = 180) {
@@ -3320,7 +3386,186 @@ function debounce(fn, wait = 180) {
 function setSaveStatus(label, active = false) {
   els.saveBtn.textContent = label;
   els.saveBtn.classList.toggle("active", active);
+  updateStatusLastSave(label);
 }
+
+// ============ 编辑器底部状态栏 ============
+const _pomodoroState = {
+  mode: "idle", // idle | focus | break
+  remaining: 0, // 秒
+  timer: 0,
+  focusMinutes: 25,
+  breakMinutes: 5,
+};
+
+function _formatTime(totalSeconds) {
+  const s = Math.max(0, Math.floor(totalSeconds));
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}`;
+}
+
+function _formatDateTime(ms) {
+  if (!ms || !Number.isFinite(ms)) return "--";
+  try {
+    const d = new Date(ms);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mi = String(d.getMinutes()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
+  } catch (_) {
+    return "--";
+  }
+}
+
+function _formatClock(d) {
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mi = String(d.getMinutes()).padStart(2, "0");
+  const ss = String(d.getSeconds()).padStart(2, "0");
+  return `${hh}:${mi}:${ss}`;
+}
+
+function _setStatusField(field, text) {
+  document.querySelectorAll(`[data-status-field="${field}"]`).forEach((el) => {
+    el.textContent = text;
+  });
+}
+
+function _setStatusItemState(field, className, on) {
+  document.querySelectorAll(`[data-status-field="${field}"]`).forEach((el) => {
+    el.classList.toggle(className, !!on);
+  });
+}
+
+function _countVisibleChars(text) {
+  return String(text || "")
+    .replace(/^---[\s\S]*?---\n?/, "")
+    .replace(/[#>*_`~\[\]()!|-]/g, "")
+    .replace(/\s+/g, "")
+    .length;
+}
+
+function updateStatusDocName(name) {
+  _setStatusField("docNameText", name || "未选择文档");
+}
+
+function updateStatusWordCount() {
+  let count = 0;
+  if (state.currentPath) {
+    const source = state.mode === "edit"
+      ? (els.editor.value || "")
+      : (state.currentContent || els.markdownView?.innerText || "");
+    count = _countVisibleChars(source);
+  }
+  _setStatusField("wordCountText", `${count} 字`);
+}
+
+function updateStatusCursor() {
+  let text = "行 1, 列 1";
+  if (state.mode === "edit" && state.currentPath) {
+    const value = els.editor.value || "";
+    const pos = els.editor.selectionStart ?? 0;
+    const before = value.substring(0, pos);
+    const line = before.split("\n").length;
+    const col = pos - (before.lastIndexOf("\n") + 1) + 1;
+    text = `行 ${line}, 列 ${col}`;
+  }
+  _setStatusField("cursorText", text);
+}
+
+function updateStatusLastSave(label) {
+  let text;
+  if (!state.currentPath) {
+    text = "未保存";
+  } else {
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2, "0");
+    const mi = String(now.getMinutes()).padStart(2, "0");
+    text = label === "已保存" || label === "已自动保存"
+      ? `${label} ${hh}:${mi}`
+      : (label || "未保存");
+  }
+  _setStatusField("lastSaveText", text);
+}
+
+function updateStatusCreated(createdMs) {
+  _setStatusField("createdText", createdMs ? `创建于 ${_formatDateTime(createdMs)}` : "创建于 --");
+}
+
+function updateStatusSystemTime() {
+  _setStatusField("systemTimeText", _formatClock(new Date()));
+}
+
+function updateSidebarDocCount() {
+  _setStatusField("docCountText", els.docCount?.textContent || "--");
+}
+
+function _renderPomodoro() {
+  _setStatusField("pomodoroText", _formatTime(_pomodoroState.remaining));
+  _setStatusItemState("pomodoro", "running", _pomodoroState.mode === "focus");
+  _setStatusItemState("pomodoro", "break", _pomodoroState.mode === "break");
+  const focusLabel = _pomodoroState.mode === "focus" ? "专注中" : (_pomodoroState.mode === "break" ? "休息中" : "空闲");
+  document.querySelectorAll('[data-status-field="pomodoro"]').forEach((el) => {
+    el.title = `番茄钟 · ${focusLabel}（点击切换启动/停止）`;
+  });
+}
+
+function _tickPomodoro() {
+  if (_pomodoroState.mode === "idle") return;
+  _pomodoroState.remaining = Math.max(0, _pomodoroState.remaining - 1);
+  if (_pomodoroState.remaining === 0) {
+    if (_pomodoroState.mode === "focus") {
+      _pomodoroState.mode = "break";
+      _pomodoroState.remaining = _pomodoroState.breakMinutes * 60;
+      showToast(`专注完成，进入 ${_pomodoroState.breakMinutes} 分钟休息`);
+    } else {
+      _pomodoroState.mode = "focus";
+      _pomodoroState.remaining = _pomodoroState.focusMinutes * 60;
+      showToast(`休息结束，进入 ${_pomodoroState.focusMinutes} 分钟专注`);
+    }
+  }
+  _renderPomodoro();
+}
+
+function _togglePomodoro() {
+  if (_pomodoroState.mode === "idle") {
+    _pomodoroState.mode = "focus";
+    _pomodoroState.remaining = _pomodoroState.focusMinutes * 60;
+    if (_pomodoroState.timer) clearInterval(_pomodoroState.timer);
+    _pomodoroState.timer = setInterval(_tickPomodoro, 1000);
+    showToast(`番茄钟启动：${_pomodoroState.focusMinutes} 分钟专注`);
+  } else {
+    _pomodoroState.mode = "idle";
+    _pomodoroState.remaining = 0;
+    if (_pomodoroState.timer) {
+      clearInterval(_pomodoroState.timer);
+      _pomodoroState.timer = 0;
+    }
+    showToast("番茄钟已停止");
+  }
+  _renderPomodoro();
+}
+
+function refreshStatusBar() {
+  updateStatusDocName(els.docTitle?.textContent || "");
+  updateStatusWordCount();
+  updateStatusCursor();
+  updateStatusLastSave(els.saveBtn?.textContent || "未保存");
+  updateStatusSystemTime();
+  updateSidebarDocCount();
+  _renderPomodoro();
+}
+
+// 系统时间每秒刷新
+setInterval(updateStatusSystemTime, 1000);
+// 番茄钟按钮：绑定到所有状态栏中的番茄钟项
+document.querySelectorAll('[data-action="toggle-pomodoro"]').forEach((el) => {
+  el.addEventListener("click", _togglePomodoro);
+});
+// 初始渲染
+refreshStatusBar();
 
 function friendlyAiError(value, embeddingModel = "") {
   const message = String(value || "").trim();
@@ -3753,6 +3998,7 @@ function openEditorSearch() {
   els.editorSearchPopup.classList.remove("hidden");
   els.editorSearchPopup.setAttribute("aria-hidden", "false");
   els.editorSearchInput.value = "";
+  if (els.editorSearchReplace) els.editorSearchReplace.value = "";
   els.editorSearchResults.innerHTML = "";
   els.editorSearchCount.textContent = "";
   _editorSearch.results = [];
@@ -3852,15 +4098,6 @@ function _renderEditorSearchResults(keyword) {
 function _jumpToSearchLine(lineNum) {
   if (!lineNum || lineNum < 1) return;
   els.editor.scrollToLine?.(lineNum);
-  const view = els.editor.view;
-  if (view) {
-    const doc = view.state.doc;
-    if (lineNum <= doc.lines) {
-      const line = doc.line(lineNum);
-      view.dispatch({ selection: { anchor: line.from }, scrollIntoView: true });
-    }
-  }
-  els.editor.focus();
 }
 
 els.editorSearchInput?.addEventListener("input", () => {
@@ -3900,6 +4137,10 @@ els.editorSearchInput?.addEventListener("keydown", (event) => {
   }
 });
 
+els.editorSearchResults?.addEventListener("mousedown", (event) => {
+  event.preventDefault();
+});
+
 els.editorSearchResults?.addEventListener("click", (event) => {
   const item = event.target.closest(".editor-search-item");
   if (!item) return;
@@ -3908,6 +4149,25 @@ els.editorSearchResults?.addEventListener("click", (event) => {
 });
 
 els.editorSearchClose?.addEventListener("click", closeEditorSearch);
+
+els.editorSearchReplaceAll?.addEventListener("mousedown", (event) => {
+  event.preventDefault();
+});
+
+els.editorSearchReplaceAll?.addEventListener("click", () => {
+  const keyword = els.editorSearchInput.value.trim();
+  if (!keyword) return;
+  const replacement = els.editorSearchReplace?.value ?? "";
+  if (typeof els.editor.replaceAll !== "function") return;
+  const count = els.editor.replaceAll(keyword, replacement);
+  if (count > 0) {
+    els.editorSearchCount.textContent = `已替换 ${count} 处`;
+    _performEditorSearch(keyword);
+    els.editor.dispatchEvent(new Event("input"));
+  } else {
+    els.editorSearchCount.textContent = "无匹配";
+  }
+});
 
 els.editorSearchPopup?.addEventListener("mousedown", (event) => {
   event.stopPropagation();
@@ -5147,6 +5407,9 @@ async function confirmDeleteSelected() {
     els.preview.innerHTML = "";
     resetUndo("");
     state.graphReady = false;
+    state.currentDocCreated = 0;
+    updateStatusDocName("");
+    updateStatusCreated(0);
     await bootstrap(true);
     setMode("view");
     closeDeleteModal();
@@ -7163,6 +7426,12 @@ document.addEventListener("keydown", (event) => {
     openAiInlineDialog();
     return;
   }
+  if ((event.ctrlKey || event.metaKey) && event.shiftKey && !event.altKey && event.key.toLowerCase() === "i") {
+    if (inFormField) return;
+    event.preventDefault();
+    openImportModal();
+    return;
+  }
   if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "f") {
     if (editableTarget) return;
     event.preventDefault();
@@ -7429,8 +7698,12 @@ if (els.workspaceBtn) {
     save: () => saveCurrentDoc(),
     "rename-doc": () => renameCurrentDoc(),
     workspace: () => openWorkspaceModal(),
+    "export-html": () => exportCurrentDoc("html"),
+    "export-docx": () => exportCurrentDoc("docx"),
     "export-pdf": () => exportCurrentDocToPdf(),
     "export-ppt": () => exportCurrentDocToPpt(),
+    "export-txt": () => exportCurrentDoc("txt"),
+    "export-md": () => exportCurrentDoc("md"),
     "export-wechat": () => copyCurrentDocAsWechat(),
     settings: () => openSettings(),
     "toggle-edit": () => state.currentPath && setMode("edit"),
@@ -7444,10 +7717,11 @@ if (els.workspaceBtn) {
     redo: () => { const ed = els.editor; if (ed) document.execCommand("redo"); },
     find: () => { if (state.mode === "edit" && state.currentPath) openEditorSearch(); else els.searchInput?.focus(); },
     replace: () => els.searchInput?.focus(),
-    "go-doc": () => els.searchInput?.focus(),
-    "go-symbol": () => showToast("进入知识库标题导航模式"),
-    "go-back": () => history.back(),
-    "go-forward": () => history.forward(),
+    "import-file": () => openImportModal(),
+    "import-txt": () => openImportModal("txt"),
+    "import-html": () => openImportModal("html"),
+    "import-csv": () => openImportModal("csv"),
+    "import-json": () => openImportModal("json"),
   };
 
   document.querySelectorAll(".menu-option").forEach((option) => {
@@ -7459,6 +7733,419 @@ if (els.workspaceBtn) {
     });
   });
 })();
+
+let importFiles = [];
+
+function openImportModal(format) {
+  importFiles = [];
+  renderImportFileList();
+  els.importModal?.classList.remove("hidden");
+}
+
+function closeImportModal() {
+  importFiles = [];
+  renderImportFileList();
+  els.importModal?.classList.add("hidden");
+}
+
+function formatFileSize(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function getFileIcon(filename) {
+  const ext = (filename.split(".").pop() || "").toLowerCase();
+  const icons = {
+    pdf: "📄", docx: "📝", doc: "📝", html: "🌐", htm: "🌐",
+    pptx: "📊", ppt: "📊", xlsx: "📗", xls: "📗", csv: "📊",
+    odt: "📝", rtf: "📝", epub: "📘", txt: "📝", md: "📄",
+    tex: "📐", png: "🖼️", jpg: "🖼️", jpeg: "🖼️", webp: "🖼️", gif: "🖼️",
+    json: "📋",
+  };
+  return icons[ext] || "📄";
+}
+
+function renderImportFileList() {
+  if (!els.importFileList) return;
+  els.importFileList.innerHTML = "";
+  importFiles.forEach((file, idx) => {
+    const item = document.createElement("div");
+    item.className = "import-file-item";
+    item.innerHTML = `
+      <span class="import-file-item-icon">${getFileIcon(file.name)}</span>
+      <span class="import-file-item-name" title="${file.name}">${file.name}</span>
+      <span class="import-file-item-size">${formatFileSize(file.size)}</span>
+      <button class="import-file-item-remove" title="移除" data-idx="${idx}">×</button>
+    `;
+    els.importFileList.appendChild(item);
+  });
+  els.confirmImportBtn.disabled = importFiles.length === 0;
+}
+
+function addImportFiles(fileList) {
+  for (const file of fileList) {
+    if (file.size > 50 * 1024 * 1024) {
+      showToast(`文件 ${file.name} 超过 50MB，已跳过`);
+      continue;
+    }
+    importFiles.push(file);
+  }
+  renderImportFileList();
+}
+
+function removeImportFile(idx) {
+  importFiles.splice(idx, 1);
+  renderImportFileList();
+}
+
+function convertFileToMarkdown(file) {
+  const ext = (file.name.split(".").pop() || "").toLowerCase();
+  const baseName = file.name.replace(/\.[^.]+$/, "");
+
+  const binaryExts = ["pdf", "docx", "doc", "pptx", "ppt", "xlsx", "xls", "odt", "rtf", "epub", "tex"];
+  const imageExts = ["png", "jpg", "jpeg", "webp", "gif"];
+
+  if (binaryExts.includes(ext)) {
+    const content = `# ${baseName}\n\n> 此文件为 .${ext.toUpperCase()} 格式，已创建占位文档。如需转换为 Markdown，请使用专业工具（如 pandoc）转换后再导入。\n\n\`\`\`\n[原始文件: ${file.name}]\n大小: ${formatFileSize(file.size)}\n\`\`\``;
+    return Promise.resolve({ title: baseName, content, ext });
+  }
+
+  if (imageExts.includes(ext)) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const content = await imageToMarkdown(file, reader.result, baseName);
+          resolve({ title: baseName, content, ext });
+        } catch (e) {
+          reject(e);
+        }
+      };
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+  }
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        let content = "";
+        let title = baseName;
+
+        if (["txt", "md"].includes(ext)) {
+          content = reader.result;
+          if (ext === "txt") {
+            content = `# ${baseName}\n\n${content}`;
+          }
+        } else if (ext === "csv") {
+          content = csvToMarkdown(reader.result);
+        } else if (["html", "htm"].includes(ext)) {
+          content = htmlToMarkdown(reader.result);
+        } else if (ext === "json") {
+          try {
+            const parsed = JSON.parse(reader.result);
+            content = `# ${baseName}\n\n\`\`\`json\n${JSON.stringify(parsed, null, 2)}\n\`\`\``;
+          } catch {
+            content = `# ${baseName}\n\n\`\`\`json\n${reader.result}\n\`\`\``;
+          }
+        } else {
+          content = `# ${baseName}\n\n${reader.result}`;
+        }
+
+        resolve({ title, content, ext });
+      } catch (e) {
+        reject(e);
+      }
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsText(file);
+  });
+}
+
+function csvToMarkdown(csv) {
+  const lines = csv.replace(/\r\n/g, "\n").split("\n").filter((l) => l.trim());
+  if (lines.length === 0) return "";
+
+  const parseRow = (line) => {
+    const cells = [];
+    let cell = "";
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') {
+        if (inQuotes && line[i + 1] === '"') {
+          cell += '"';
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (ch === "," && !inQuotes) {
+        cells.push(cell.trim());
+        cell = "";
+      } else {
+        cell += ch;
+      }
+    }
+    cells.push(cell.trim());
+    return cells;
+  };
+
+  const headers = parseRow(lines[0]);
+  let md = "| " + headers.join(" | ") + " |\n";
+  md += "| " + headers.map(() => "---").join(" | ") + " |\n";
+  for (let i = 1; i < lines.length; i++) {
+    const row = parseRow(lines[i]);
+    md += "| " + row.map((c) => c || " ").join(" | ") + " |\n";
+  }
+  return md;
+}
+
+function htmlToMarkdown(html) {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  let md = "";
+
+  const convertNode = (node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      md += node.textContent;
+      return;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+
+    const tag = node.tagName.toLowerCase();
+    const children = Array.from(node.childNodes);
+
+    switch (tag) {
+      case "h1": md += "\n# "; break;
+      case "h2": md += "\n## "; break;
+      case "h3": md += "\n### "; break;
+      case "h4": md += "\n#### "; break;
+      case "h5": md += "\n##### "; break;
+      case "h6": md += "\n###### "; break;
+      case "p": md += "\n\n"; break;
+      case "br": md += "\n"; break;
+      case "strong":
+      case "b": md += "**"; break;
+      case "em":
+      case "i": md += "*"; break;
+      case "code": md += "`"; break;
+      case "a": {
+        const href = node.getAttribute("href") || "";
+        md += "[";
+        children.forEach(convertNode);
+        md += `](${href})`;
+        return;
+      }
+      case "img": {
+        const src = node.getAttribute("src") || "";
+        const alt = node.getAttribute("alt") || "";
+        md += `![${alt}](${src})`;
+        return;
+      }
+      case "ul":
+      case "ol": {
+        md += "\n";
+        const items = node.querySelectorAll(":scope > li");
+        items.forEach((li, i) => {
+          md += tag === "ol" ? `${i + 1}. ` : "- ";
+          md += li.textContent.trim() + "\n";
+        });
+        return;
+      }
+      case "table": {
+        md += "\n";
+        const trs = node.querySelectorAll("tr");
+        trs.forEach((tr, ri) => {
+          const tds = tr.querySelectorAll("th,td");
+          md += "| " + Array.from(tds).map((td) => td.textContent.trim()).join(" | ") + " |\n";
+          if (ri === 0) {
+            md += "| " + Array.from(tds).map(() => "---").join(" | ") + " |\n";
+          }
+        });
+        return;
+      }
+      case "blockquote": md += "\n> "; break;
+      case "pre": md += "\n```\n"; break;
+      case "script":
+      case "style":
+      case "head":
+      case "meta":
+      case "link":
+      case "title":
+        return;
+      default: break;
+    }
+
+    children.forEach(convertNode);
+
+    switch (tag) {
+      case "strong":
+      case "b": md += "**"; break;
+      case "em":
+      case "i": md += "*"; break;
+      case "code": md += "`"; break;
+      case "pre": md += "\n```\n"; break;
+      case "p": md += "\n"; break;
+      case "blockquote": md += "\n"; break;
+      case "h1": case "h2": case "h3": case "h4": case "h5": case "h6":
+        md += "\n"; break;
+    }
+  };
+
+  convertNode(doc.body || doc.documentElement);
+  return md.trim();
+}
+
+async function imageToMarkdown(file, dataUrl, baseName) {
+  const ext = (file.name.split(".").pop() || "").toLowerCase();
+  const assetDir = `source`;
+  const fileName = `${Date.now()}_${baseName}.${ext}`;
+  try {
+    const resp = await fetch("/api/asset", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dataUrl }),
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      const assetPath = data.path || `${assetDir}/${fileName}`;
+      return `![${baseName}](${assetPath})`;
+    }
+  } catch {}
+  return `![${baseName}](${dataUrl})`;
+}
+
+async function confirmImport() {
+  if (importFiles.length === 0) return;
+  els.confirmImportBtn.disabled = true;
+  els.confirmImportBtn.textContent = "导入中...";
+
+  const visibleWorkspaces = state.workspaces.filter((ws) => ws.visible);
+  const workspaceId =
+    state.activeWorkspaceId ||
+    state.defaultWorkspaceId ||
+    (visibleWorkspaces.length > 0 ? visibleWorkspaces[0].id : null);
+  if (!workspaceId) {
+    showToast("没有可用的工作路径");
+    els.confirmImportBtn.disabled = false;
+    els.confirmImportBtn.textContent = "导入";
+    return;
+  }
+
+  let importedCount = 0;
+  let failedCount = 0;
+
+  for (const file of importFiles) {
+    try {
+      const fileData = await readFileAsBase64(file);
+      const resp = await fetch("/api/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileName: file.name, fileData, workspaceId }),
+      });
+      if (resp.ok) {
+        importedCount++;
+      } else {
+        const err = await resp.json().catch(() => ({}));
+        console.error("Import failed for", file.name, err.error);
+        failedCount++;
+      }
+    } catch (e) {
+      console.error("Import failed for", file.name, e);
+      failedCount++;
+    }
+  }
+
+  closeImportModal();
+
+  if (importedCount > 0) {
+    try {
+      await bootstrap(true);
+    } catch (e) {
+      console.warn("Bootstrap after import failed:", e);
+    }
+    showToast(`成功导入 ${importedCount} 个文档`);
+  }
+  if (failedCount > 0) {
+    showToast(`${failedCount} 个文件导入失败`);
+  }
+}
+
+function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      const base64 = result.split(",")[1] || result;
+      resolve(base64);
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+if (els.importDropZone) {
+  els.importDropZone.addEventListener("click", () => {
+    els.importFileInput?.click();
+  });
+
+  els.importDropZone.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    els.importDropZone.classList.add("dragover");
+  });
+
+  els.importDropZone.addEventListener("dragleave", () => {
+    els.importDropZone.classList.remove("dragover");
+  });
+
+  els.importDropZone.addEventListener("drop", (e) => {
+    e.preventDefault();
+    els.importDropZone.classList.remove("dragover");
+    if (e.dataTransfer.files.length > 0) {
+      addImportFiles(e.dataTransfer.files);
+    }
+  });
+}
+
+if (els.importFileInput) {
+  els.importFileInput.addEventListener("change", (e) => {
+    if (e.target.files.length > 0) {
+      addImportFiles(e.target.files);
+    }
+    e.target.value = "";
+  });
+}
+
+if (els.importFileList) {
+  els.importFileList.addEventListener("click", (e) => {
+    if (e.target.classList.contains("import-file-item-remove")) {
+      const idx = parseInt(e.target.dataset.idx, 10);
+      removeImportFile(idx);
+    }
+  });
+}
+
+if (els.closeImportBtn) {
+  els.closeImportBtn.addEventListener("click", closeImportModal);
+}
+if (els.cancelImportBtn) {
+  els.cancelImportBtn.addEventListener("click", closeImportModal);
+}
+if (els.browseImportBtn) {
+  els.browseImportBtn.addEventListener("click", () => {
+    els.importFileInput?.click();
+  });
+}
+if (els.confirmImportBtn) {
+  els.confirmImportBtn.addEventListener("click", confirmImport);
+}
+if (els.importModal) {
+  els.importModal.addEventListener("click", (e) => {
+    if (e.target === els.importModal) closeImportModal();
+  });
+}
+
 if (els.cancelWorkspaceBtn) {
   els.cancelWorkspaceBtn.addEventListener("click", closeWorkspaceModal);
 }
@@ -9364,6 +10051,7 @@ async function bootstrap(refresh = false) {
     if (data.workspaces && data.workspaces.length) state.workspaces = data.workspaces;
     if (data.defaultWorkspaceId) state.defaultWorkspaceId = data.defaultWorkspaceId;
     els.docCount.textContent = `${data.count || 0} ${text.docsUnit} / ${state.workspaces.filter((ws) => ws.visible).length} 个工作路径`;
+    if (typeof updateSidebarDocCount === "function") updateSidebarDocCount();
     renderWorkspaceSummary();
     renderTree(state.tree);
     // 恢复上次打开的文档，保留用户工作上下文。
@@ -9386,6 +10074,7 @@ async function bootstrap(refresh = false) {
   } catch (err) {
     console.error("Bootstrap failed:", err);
     els.docCount.textContent = "加载失败";
+    if (typeof updateSidebarDocCount === "function") updateSidebarDocCount();
   }
 }
 

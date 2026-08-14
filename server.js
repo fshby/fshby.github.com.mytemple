@@ -9,6 +9,7 @@ import { agentPolicyPath, appendAuditRecord, defaultAgentRules, loadAgentPolicy,
 import { RagService } from "./server/rag.js";
 import { DocViewStore } from "./server/doc-views.js";
 import { getMachineCode, verifyLicense, getLicenseStatus } from "./server/license.js";
+import { importToMarkdown, exportFromMarkdown } from "./server/converter.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DOCS_ROOT = process.env.MYTEMPLE_DOCS_ROOT || path.join(__dirname, "docs");
@@ -72,7 +73,13 @@ let knowledgeIndexSyncTimer = 0;
 let knowledgeIndexVersion = "";
 let knowledgeIndexLoaded = false;
 const MAX_ASSET_BYTES = 5 * 1024 * 1024;
-const MAX_REQUEST_BODY = 10 * 1024 * 1024;
+const MAX_REQUEST_BODY = 20 * 1024 * 1024;
+
+function formatFileSize(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
 
 let workspacesCache = null;
 let workspacesCacheStamp = 0;
@@ -428,6 +435,7 @@ async function walk(workspace, dir = workspace.root, prefix = "") {
             encoding: "",
             size: stats.size,
             modified: stats.mtimeMs,
+            created: stats.birthtimeMs,
           });
         } else {
           const stats = await stat(absolute);
@@ -442,6 +450,7 @@ async function walk(workspace, dir = workspace.root, prefix = "") {
             root: workspace.root,
             size: stats.size,
             modified: stats.mtimeMs,
+            created: stats.birthtimeMs,
           });
         }
       } catch (e) {
@@ -2215,7 +2224,7 @@ async function handleApi(req, res, url) {
       }
     }
     docViews.record(target.path);
-    return json(res, 200, { path: target.path, title: target.title, content: target.content, tags: target.tags, terms: target.terms, contentSha256: target.contentSha256 || "" });
+    return json(res, 200, { path: target.path, title: target.title, content: target.content, tags: target.tags, terms: target.terms, contentSha256: target.contentSha256 || "", created: target.created || 0, modified: target.modified || 0 });
   }
   if (url.pathname === "/api/knowledge/health") {
     const days = Math.max(1, Math.min(365, Number(url.searchParams.get("days")) || 30));
@@ -2291,6 +2300,69 @@ async function handleApi(req, res, url) {
       missingLinks: missingLinks.slice(0, 200),
       staleDocs: staleDocs.slice(0, 200),
     });
+  }
+  if (url.pathname === "/api/import" && req.method === "POST") {
+    const payload = await readJson(req);
+    const { fileName, fileData, workspaceId } = payload;
+    if (!fileName || !fileData) return json(res, 400, { error: "缺少文件数据" });
+
+    const buffer = Buffer.from(fileData, "base64");
+
+    let markdown, safeName;
+    try {
+      const result = await importToMarkdown(fileName, buffer);
+      markdown = result.markdown;
+      safeName = result.title;
+    } catch (e) {
+      log("error", `Import conversion failed: ${e.message}`);
+      return json(res, 500, { error: `文件转换失败: ${e.message}` });
+    }
+
+    const wsId = String(workspaceId || "").trim();
+    if (!wsId) return json(res, 400, { error: "缺少工作路径" });
+
+    const docPath = `${wsId}/${safeName}.md`;
+    let normalized;
+    try {
+      normalized = await normalizeDocPath(docPath);
+    } catch (e) {
+      return json(res, 400, { error: `无效的文档路径: ${e.message}` });
+    }
+
+    try {
+      await mkdir(path.dirname(normalized.absolute), { recursive: true });
+      await writeFile(normalized.absolute, markdown, "utf8");
+      log("info", `Imported document: ${normalized.absolute}`);
+    } catch (e) {
+      return json(res, 500, { error: `保存文件失败: ${e.message}` });
+    }
+
+    queueSavedDocumentRefresh(normalized, markdown);
+    return json(res, 200, { ok: true, path: normalized.ref, title: safeName });
+  }
+  if (url.pathname === "/api/export" && req.method === "POST") {
+    const payload = await readJson(req);
+    const { content, format, title, author, watermark } = payload;
+    if (!content) return json(res, 400, { error: "缺少文档内容" });
+    const supportedFormats = ["html", "docx", "txt", "md"];
+    if (!supportedFormats.includes(format)) return json(res, 400, { error: `不支持的导出格式: ${format}` });
+
+    let result;
+    try {
+      result = await exportFromMarkdown(content, format, { title: title || "导出文档", author: author || "", watermark: watermark || "" });
+    } catch (e) {
+      log("error", `Export conversion failed: ${e.message}`);
+      return json(res, 500, { error: `导出失败: ${e.message}` });
+    }
+
+    const exportFileName = `${(title || "导出文档").replace(/[\\/:*?"<>|]/g, "_")}.${result.ext}`;
+    res.writeHead(200, {
+      "Content-Type": result.mimeType,
+      "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(exportFileName)}`,
+      "Content-Length": result.buffer.length,
+    });
+    res.end(result.buffer);
+    return;
   }
   if (url.pathname === "/api/save" && req.method === "POST") {
     const payload = await readJson(req);

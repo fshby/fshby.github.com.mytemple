@@ -1,6 +1,6 @@
 {
   "name": "mytemple-knowledge",
-  "version": "1.8.21",
+  "version": "1.8.31",
   "private": true,
   "type": "module",
   "scripts": {
@@ -20,7 +20,13 @@
     "@codemirror/search": "^6.7.1",
     "@codemirror/state": "^6.7.1",
     "@codemirror/view": "^6.43.7",
-    "@lezer/highlight": "^1.2.3"
+    "@lezer/highlight": "^1.2.3",
+    "html-to-docx": "^1.8.0",
+    "mammoth": "^1.12.1",
+    "marked": "^18.0.9",
+    "pdf-parse": "^2.4.5",
+    "turndown": "^7.2.4",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "esbuild": "^0.28.1"
