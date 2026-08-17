@@ -230,9 +230,12 @@
 
         <section id="editorPanel" class="editor-panel hidden">
           <div id="editorToolbar" class="editor-toolbar" aria-label="editor tools">
-            <button data-format="h1" title="一级标题 (Ctrl+1)">H1</button>
-            <button data-format="h2" title="二级标题 (Ctrl+2)">H2</button>
-            <button data-format="h3" title="三级标题 (Ctrl+3)">H3</button>
+            <select id="headingSelect" class="heading-select" title="标题级别 (Ctrl+1/Ctrl+2/Ctrl+3)">
+              <option value="" disabled selected>标题 ▾</option>
+              <option value="h1">一级标题</option>
+              <option value="h2">二级标题</option>
+              <option value="h3">三级标题</option>
+            </select>
             <button data-format="bold" title="bold">B</button>
             <button data-format="italic" title="斜体 (Ctrl+I)">I</button>
             <button data-format="underline" title="underline">U</button>
@@ -266,6 +269,7 @@
             <button data-format="size" title="apply size">&#23383;&#21495;</button>
             <button id="formatBtn" title="format document" class="format-btn">Fmt</button>
             <button id="outlineToggleBtn" title="切换目录大纲" aria-pressed="false">大纲</button>
+            <button id="editorHideBtn" title="隐藏编辑器" aria-pressed="false">隐藏编辑器</button>
             <button id="previewToggleBtn" title="切换实时预览" aria-pressed="true">隐藏预览</button>
             <span class="toolbar-separator" aria-hidden="true"></span>
             <button id="focusModeBtn" title="沉浸编辑 (Ctrl+Shift+F)" aria-pressed="false">沉浸</button>

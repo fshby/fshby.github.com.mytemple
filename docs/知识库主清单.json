@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "knowledgeVersion": "54b6d50b5fb25ac76482b5057a29941f65bc5298",
-  "generatedAt": "2026-08-11T12:18:48.244Z",
+  "knowledgeVersion": "3c5ad9be22e4669f5070d760f30234ba3f367678",
+  "generatedAt": "2026-08-17T09:26:44.587Z",
   "purpose": "供 AI 大模型快速定位本地知识库文档、标签、语义概念和图谱关系；命中候选后再读取 absolutePath 对应原文。",
   "aiUsage": [
     "先检索 documents 的 title、tags、headings、keywords 和 excerpt。",
@@ -11,28 +11,458 @@
   "library": {
     "defaultWorkspaceId": "default",
     "workspaceCount": 2,
-    "documentCount": 97,
-    "nodeCount": 163,
-    "edgeCount": 233,
-    "tagCount": 33,
-    "semanticConceptCount": 28,
-    "missingLinkCount": 5
+    "documentCount": 101,
+    "nodeCount": 173,
+    "edgeCount": 254,
+    "tagCount": 35,
+    "semanticConceptCount": 30,
+    "missingLinkCount": 7
   },
   "workspaces": [
-    {
-      "id": "ws_d4de96b28d",
-      "name": "新建文件夹",
-      "root": "C:\\Users\\fshby\\Desktop\\新建文件夹",
-      "documentCount": 3
-    },
     {
       "id": "ws_25a724bd6b",
       "name": "temple",
       "root": "O:\\temple",
-      "documentCount": 94
+      "documentCount": 98
+    },
+    {
+      "id": "default",
+      "name": "默认 docs",
+      "root": "C:\\Users\\fshby\\AppData\\Local\\MyTempleKnowledgeData\\docs",
+      "documentCount": 3
     }
   ],
   "documents": [
+    {
+      "id": "default:功能简介.md",
+      "workspaceId": "default",
+      "workspace": "默认 docs",
+      "relativePath": "功能简介.md",
+      "absolutePath": "C:\\Users\\fshby\\AppData\\Local\\MyTempleKnowledgeData\\docs\\功能简介.md",
+      "title": "功能简介",
+      "tags": [],
+      "headings": [
+        {
+          "level": 1,
+          "title": "功能简介"
+        },
+        {
+          "level": 1,
+          "title": "🌟 MyTemple Knowledge —— 下一代个人知识管理利器"
+        },
+        {
+          "level": 2,
+          "title": "🚀 产品亮点"
+        },
+        {
+          "level": 3,
+          "title": "📚 智能文档管理"
+        },
+        {
+          "level": 3,
+          "title": "✍️ 沉浸式编辑体验"
+        },
+        {
+          "level": 3,
+          "title": "⌨️ 高效快捷键体系"
+        },
+        {
+          "level": 3,
+          "title": "🎨 精美视觉设计"
+        },
+        {
+          "level": 3,
+          "title": "🗺️ 知识图谱可视化"
+        },
+        {
+          "level": 2,
+          "title": "🔧 截图快速粘贴转发压缩实时显示，便捷调整显示大小"
+        },
+        {
+          "level": 3,
+          "title": "🏗️ 模块化架构，轻量化设计整体代码量不足460KB"
+        },
+        {
+          "level": 3,
+          "title": "💻 技术栈优势"
+        },
+        {
+          "level": 3,
+          "title": "📈 扩展能力"
+        },
+        {
+          "level": 3,
+          "title": "🛡️ 稳定性保障"
+        },
+        {
+          "level": 2,
+          "title": "📊 适用场景"
+        },
+        {
+          "level": 2,
+          "title": "💡 未来规划"
+        },
+        {
+          "level": 2,
+          "title": "📦 快速开始"
+        },
+        {
+          "level": 1,
+          "title": "启动服务"
+        },
+        {
+          "level": 1,
+          "title": "访问应用"
+        }
+      ],
+      "keywords": [
+        {
+          "term": "日志",
+          "count": 14
+        },
+        {
+          "term": "管理",
+          "count": 5
+        },
+        {
+          "term": "系统",
+          "count": 5
+        },
+        {
+          "term": "个人",
+          "count": 4
+        },
+        {
+          "term": "知识",
+          "count": 4
+        },
+        {
+          "term": "api",
+          "count": 4
+        },
+        {
+          "term": "查询",
+          "count": 4
+        },
+        {
+          "term": "团队",
+          "count": 4
+        },
+        {
+          "term": "mytemple",
+          "count": 3
+        },
+        {
+          "term": "设计",
+          "count": 3
+        },
+        {
+          "term": "扩展",
+          "count": 3
+        },
+        {
+          "term": "场景",
+          "count": 3
+        }
+      ],
+      "semanticConcepts": [
+        "系统"
+      ],
+      "outgoingLinks": [],
+      "backlinks": [],
+      "missingLinks": [],
+      "excerpt": "功能简介 🌟 MyTemple Knowledge —— 下一代个人知识管理利器 == text == 🔧 截图快速粘贴转发压缩实时显示，便捷调整显示大小 大 中 小 🏗️ 模块化架构，轻量化设计整体代码量不足460KB 前后端分离 ：RESTful API设计，便于多端扩展 组件化前端 ：代码结构清晰，易于维护 插件化设计 ：预留扩展接口，支持功能定定制 💻 技术栈优势 Node.js服务端 ：高性能异步处理，适合I/O密集型场景 原生前端技术 ：零框架依赖，轻量高效 文件系统存储 ：无需数据库，部署简单 📈 扩展能力 工作区管理API ：支持动态增删工作区 文档操作API ：完整的CRUD接口 搜索API ：支持关键词…",
+      "bytes": 5238,
+      "modifiedAt": "2026-08-13T07:02:13.809Z",
+      "contentSha256": "f4d8c73568e4f0abef038ca00a652347db677984d1d7a2dfb185fadf471562b7"
+    },
+    {
+      "id": "default:default/codex基础讲解(1).md",
+      "workspaceId": "default",
+      "workspace": "默认 docs",
+      "relativePath": "default/codex基础讲解(1).md",
+      "absolutePath": "C:\\Users\\fshby\\AppData\\Local\\MyTempleKnowledgeData\\docs\\default\\codex基础讲解(1).md",
+      "title": "codex基础讲解(1)",
+      "tags": [],
+      "headings": [
+        {
+          "level": 2,
+          "title": "一、Codex 适合什么样的场景？"
+        },
+        {
+          "level": 2,
+          "title": "二、如何安装 Codex ？"
+        },
+        {
+          "level": 3,
+          "title": "1\\. 环境要求"
+        },
+        {
+          "level": 3,
+          "title": "2\\. 安装 CLI"
+        },
+        {
+          "level": 3,
+          "title": "3\\. App 安装"
+        },
+        {
+          "level": 3,
+          "title": "4\\. 云端版"
+        },
+        {
+          "level": 3,
+          "title": "5\\. IDE 插件"
+        },
+        {
+          "level": 2,
+          "title": "三、在 CLI 端使用 Codex"
+        },
+        {
+          "level": 3,
+          "title": "1\\. 启动"
+        },
+        {
+          "level": 3,
+          "title": "2\\. 登录方式"
+        },
+        {
+          "level": 3,
+          "title": "3\\. 模型选择"
+        },
+        {
+          "level": 1,
+          "title": "30 秒上手"
+        },
+        {
+          "level": 3,
+          "title": "5\\. 常用命令"
+        },
+        {
+          "level": 2,
+          "title": "四、在 App 端使用 Codex"
+        },
+        {
+          "level": 3,
+          "title": "1\\. 启动"
+        },
+        {
+          "level": 3,
+          "title": "2\\. 基础使用"
+        },
+        {
+          "level": 2,
+          "title": "五、在云端使用 Codex"
+        },
+        {
+          "level": 3,
+          "title": "1\\. 初始化 Git 仓库"
+        },
+        {
+          "level": 3,
+          "title": "2\\. 创建 GitHub 远程仓库"
+        },
+        {
+          "level": 3,
+          "title": "3\\. 连接 Codex 到 GitHub"
+        },
+        {
+          "level": 2,
+          "title": "六、IDE 端使用 Codex"
+        },
+        {
+          "level": 2,
+          "title": "七、进阶用法"
+        },
+        {
+          "level": 3,
+          "title": "1\\. AGENTS.md 配置文件"
+        },
+        {
+          "level": 3,
+          "title": "2\\. 常用场景"
+        },
+        {
+          "level": 3,
+          "title": "3\\. 安全模式"
+        },
+        {
+          "level": 2,
+          "title": "八、接入国内大模型"
+        },
+        {
+          "level": 3,
+          "title": "1\\. 支持的平台"
+        },
+        {
+          "level": 3,
+          "title": "2\\. 配置方法"
+        },
+        {
+          "level": 3,
+          "title": "3\\. 验证国内模型是否生效"
+        },
+        {
+          "level": 2,
+          "title": "九、常见问题"
+        },
+        {
+          "level": 3,
+          "title": "大家安装和使用Codex的过程中，未必是一帆风顺的，小灰在此列出几个Codex使用的常见问题和解决方案："
+        },
+        {
+          "level": 3,
+          "title": "1\\. Codex 登录失败"
+        }
+      ],
+      "keywords": [
+        {
+          "term": "codex",
+          "count": 57
+        },
+        {
+          "term": "qwen3",
+          "count": 20
+        },
+        {
+          "term": "代码",
+          "count": 19
+        },
+        {
+          "term": "项目",
+          "count": 18
+        },
+        {
+          "term": "模型",
+          "count": 15
+        },
+        {
+          "term": "执行",
+          "count": 15
+        },
+        {
+          "term": "安装",
+          "count": 13
+        },
+        {
+          "term": "适合",
+          "count": 13
+        },
+        {
+          "term": "github",
+          "count": 13
+        },
+        {
+          "term": "仓库",
+          "count": 13
+        },
+        {
+          "term": "app",
+          "count": 12
+        },
+        {
+          "term": "打开",
+          "count": 12
+        }
+      ],
+      "semanticConcepts": [],
+      "outgoingLinks": [],
+      "backlinks": [],
+      "missingLinks": [],
+      "excerpt": "操作手册 Codex 保姆级入门教程 从安装、登录到 CLI、App、云端版和 IDE 插件的完整入门流程 GPT plus日抛，接码，长期账号，英国gg卡，中转纯血GPT5.5 token链接：https://pay.ldxp.cn/shop/7H790PC5 目录 一、Codex 适合什么样的场景？ 二、如何安装 Codex ？ 三、在 CLI 端使用 Codex 30 秒上手 四、在 App 端使用 Codex 五、在云端使用 Codex 六、IDE 端使用 Codex 七、进阶用法 八、接入国内大模型 九、常见问题 一、Codex 适合什么样的场景？ 下面的五种情况，都适合选用Codex： 1\\. 已经有 ChatGPT P…",
+      "bytes": 2155197,
+      "modifiedAt": "2026-08-14T09:46:57.571Z",
+      "contentSha256": "e5d07a582b908f7a846e0b8994016084b7b7d451a7c0401ac133b2055e1b76f7"
+    },
+    {
+      "id": "default:README.md",
+      "workspaceId": "default",
+      "workspace": "默认 docs",
+      "relativePath": "README.md",
+      "absolutePath": "C:\\Users\\fshby\\AppData\\Local\\MyTempleKnowledgeData\\docs\\README.md",
+      "title": "README",
+      "tags": [
+        "markdown",
+        "knowledge"
+      ],
+      "headings": [
+        {
+          "level": 1,
+          "title": "文档知识库说明"
+        },
+        {
+          "level": 2,
+          "title": "日常查阅"
+        },
+        {
+          "level": 2,
+          "title": "文档关联"
+        }
+      ],
+      "keywords": [
+        {
+          "term": "markdown",
+          "count": 2
+        },
+        {
+          "term": "目录",
+          "count": 2
+        },
+        {
+          "term": "知识",
+          "count": 1
+        },
+        {
+          "term": "本地",
+          "count": 1
+        },
+        {
+          "term": "技术",
+          "count": 1
+        },
+        {
+          "term": "放进",
+          "count": 1
+        },
+        {
+          "term": "左侧",
+          "count": 1
+        },
+        {
+          "term": "按照",
+          "count": 1
+        },
+        {
+          "term": "结构",
+          "count": 1
+        },
+        {
+          "term": "分类",
+          "count": 1
+        },
+        {
+          "term": "knowledge",
+          "count": 1
+        },
+        {
+          "term": "github",
+          "count": 1
+        }
+      ],
+      "semanticConcepts": [],
+      "outgoingLinks": [],
+      "backlinks": [
+        "ws_25a724bd6b:文档知识库开发记录.md"
+      ],
+      "missingLinks": [
+        "架构设计",
+        "PON网关命令索引",
+        "system-design"
+      ],
+      "excerpt": "文档知识库说明 这是一个本地 Markdown 技术文档查看页面。把 .md 文件放进 docs/ 目录后，左侧目录会按照文件夹结构分类显示。 tags: markdown search graph markdown knowledge github",
+      "bytes": 856,
+      "modifiedAt": "2026-07-31T04:26:29.509Z",
+      "contentSha256": "2cbf4bc52f7422be0f93327fdd6bddd3a6cd8b5d04046733b27e124be9f87b82"
+    },
     {
       "id": "ws_25a724bd6b:4K报备.md",
       "workspaceId": "ws_25a724bd6b",
@@ -104,7 +534,7 @@
       "missingLinks": [],
       "excerpt": "【腾讯文档】2024移动机顶盒海思报备测试1012 https://docs.qq.com/sheet/DSERidnBIRGZpc0dO?tab=udqd15 1 /JenkinsTemp/FVOS product/daily/STB/git FVOS HISI 9 CMCC MAIN brn p hisi iptv fh cmccjicai 20240327/build 233 20241011173519/CMCCMAIN HG680 KY0YB 7K 202410111738 9.399212.01 1. 核对五个文件MD5，U盘插入机顶 2. 魔百盒管理工具开adb 清除deviceinfo分区 dd if=/dev/ze…",
       "bytes": 7089,
-      "modifiedAt": "2026-08-08T11:54:15.283Z",
+      "modifiedAt": "2026-08-17T08:28:29.999Z",
       "contentSha256": "cdd2d43400dc5d79719dae0352281fe3bd0c56cadb5698ccac2cad88b400db69"
     },
     {
@@ -125,6 +555,83 @@
       "bytes": 25,
       "modifiedAt": "2026-08-11T11:40:26.228Z",
       "contentSha256": "132ac5bf0c75c3efba0c382bba28db49309ce0d3d8d7160ef0030623066452d2"
+    },
+    {
+      "id": "ws_25a724bd6b:980仪表使用.md",
+      "workspaceId": "ws_25a724bd6b",
+      "workspace": "temple",
+      "relativePath": "980仪表使用.md",
+      "absolutePath": "O:\\temple\\980仪表使用.md",
+      "title": "980仪表使用",
+      "tags": [],
+      "headings": [
+        {
+          "level": 1,
+          "title": "980仪表使用"
+        },
+        {
+          "level": 2,
+          "title": "注意事项"
+        }
+      ],
+      "keywords": [
+        {
+          "term": "分辨",
+          "count": 3
+        },
+        {
+          "term": "模式",
+          "count": 3
+        },
+        {
+          "term": "980",
+          "count": 1
+        },
+        {
+          "term": "仪表",
+          "count": 1
+        },
+        {
+          "term": "入口",
+          "count": 1
+        },
+        {
+          "term": "调整",
+          "count": 1
+        },
+        {
+          "term": "画面",
+          "count": 1
+        },
+        {
+          "term": "比例",
+          "count": 1
+        },
+        {
+          "term": "大小",
+          "count": 1
+        },
+        {
+          "term": "设置",
+          "count": 1
+        },
+        {
+          "term": "模板",
+          "count": 1
+        },
+        {
+          "term": "参数",
+          "count": 1
+        }
+      ],
+      "semanticConcepts": [],
+      "outgoingLinks": [],
+      "backlinks": [],
+      "missingLinks": [],
+      "excerpt": "980仪表使用 1、机顶盒测试入口 2、调整画面比例大小 3、设置分辨率模板，顶部栏显示分辨率，色域、色深等信息 4、 查看视频播放参数和分辨码率 5、 AVI InfoFrame 辅助视频信息帧查看视频流的详细信息 注意事项 仅mode2使用严格模式，其它模式都使用兼容模式",
+      "bytes": 918,
+      "modifiedAt": "2026-08-17T09:26:44.105Z",
+      "contentSha256": "6232ce0b9e63885f05e4c46ae4b851619ebcc7c410088567714ae0f4a65f64ff"
     },
     {
       "id": "ws_25a724bd6b:安全.md",
@@ -178,9 +685,94 @@
       "backlinks": [],
       "missingLinks": [],
       "excerpt": "计算文件MD5值 md5sum 文件名 端口扫描命令 busybox netstat anutpl 全网当贝桌面盒子刷机包 https://pan.baidu.com/s/1wbFHbsf4RdqmOMZqHaK7RA znds",
-      "bytes": 187,
-      "modifiedAt": "2024-02-04T02:35:58.655Z",
-      "contentSha256": "32b370730e628dcc57f047cadf2798a7f664cf307c9039f70ffc07803a1d6741"
+      "bytes": 182,
+      "modifiedAt": "2026-08-14T05:36:16.542Z",
+      "contentSha256": "7a26678b60b59daf56ed47b4b101825760ea21ec60f22743fe348fd5192e2040"
+    },
+    {
+      "id": "ws_25a724bd6b:百度访客统计.md",
+      "workspaceId": "ws_25a724bd6b",
+      "workspace": "temple",
+      "relativePath": "百度访客统计.md",
+      "absolutePath": "O:\\temple\\百度访客统计.md",
+      "title": "百度访客统计",
+      "tags": [],
+      "headings": [
+        {
+          "level": 1,
+          "title": "百度访客统计"
+        },
+        {
+          "level": 3,
+          "title": "注册步骤"
+        },
+        {
+          "level": 3,
+          "title": "替换 ID"
+        },
+        {
+          "level": 3,
+          "title": "已完成的改动"
+        }
+      ],
+      "keywords": [
+        {
+          "term": "注册",
+          "count": 14
+        },
+        {
+          "term": "百度",
+          "count": 10
+        },
+        {
+          "term": "统计",
+          "count": 10
+        },
+        {
+          "term": "id",
+          "count": 9
+        },
+        {
+          "term": "资料",
+          "count": 9
+        },
+        {
+          "term": "提供",
+          "count": 6
+        },
+        {
+          "term": "访客",
+          "count": 4
+        },
+        {
+          "term": "获取",
+          "count": 4
+        },
+        {
+          "term": "步骤",
+          "count": 4
+        },
+        {
+          "term": "逻辑",
+          "count": 4
+        },
+        {
+          "term": "涉及",
+          "count": 4
+        },
+        {
+          "term": "具体",
+          "count": 4
+        }
+      ],
+      "semanticConcepts": [],
+      "outgoingLinks": [],
+      "backlinks": [],
+      "missingLinks": [],
+      "excerpt": "百度访客统计 接入百度统计需要你在 tongji.baidu.com 注册站点后获取的统计代码 ID。 注册步骤 1. 打开 tongji.baidu.com，用百度账号登录 2. 点击「管理」→「新增网站」，填写： 网站域名： mytemple.fshby.cc 网站名称： MyTemple Knowledge 3. 提交后百度会给你一段代码，其中有一行： 4. 复制 ? 后面那串字符（32 位十六进制） 替换 ID 将 index.html:15 中的 BAIDU TONGJI ID 替换为你获取的 ID 即可。例如： 已完成的改动 | 文件 | 改动 | | | | | index.html:12 21 | 添加百度统计异步加…",
+      "bytes": 2823,
+      "modifiedAt": "2026-08-13T12:21:18.366Z",
+      "contentSha256": "038fec1b6ecdfe24500327ada11961405f115a596709eb54d4642318dddd3190"
     },
     {
       "id": "ws_25a724bd6b:北京移动ott.md",
@@ -243,7 +835,6 @@
       ],
       "semanticConcepts": [
         "db",
-        "hardware",
         "hg680",
         "info",
         "set"
@@ -252,9 +843,9 @@
       "backlinks": [],
       "missingLinks": [],
       "excerpt": "版本链接 /JenkinsTemp/FVOS product/daily/STB/git FVOS MTK 9 CMCC BEIJING fiberhome/build 159 20250214090408/CMCCBEIJING HG680 MYGXV 1K 202502140920 5.332.333.11 北京mc产测 融合：HG680 MYGXV 7K http://192.168.1.12:8888/factorysetstb.config?type=setSTB&macadd=84:81:02:24:A0:56&stbid=0010059900E06800112184810224A056&model=HG680 MC&h…",
-      "bytes": 6259,
-      "modifiedAt": "2026-01-26T12:01:25.969Z",
-      "contentSha256": "0e01a5fa7595abcffbbbeb3fa2a93b7403038f07a51c9dc17b6deac2b33411be"
+      "bytes": 6113,
+      "modifiedAt": "2026-08-13T07:09:37.324Z",
+      "contentSha256": "8c3361a9fd1855dcc41677b660cc246d7f8e701787b28095cd23a8141cd6f9b2"
     },
     {
       "id": "ws_25a724bd6b:边界.md",
@@ -405,59 +996,65 @@
       "absolutePath": "O:\\temple\\重庆移动.md",
       "title": "重庆移动",
       "tags": [],
-      "headings": [],
+      "headings": [
+        {
+          "level": 2,
+          "title": "账号信息"
+        }
+      ],
       "keywords": [
         {
           "term": "write",
-          "count": 6
+          "count": 8
         },
         {
           "term": "hardware",
-          "count": 6
+          "count": 8
         },
         {
           "term": "info",
-          "count": 6
-        },
-        {
-          "term": "stbid",
-          "count": 4
+          "count": 8
         },
         {
           "term": "mac",
-          "count": 4
+          "count": 7
+        },
+        {
+          "term": "stbid",
+          "count": 6
         },
         {
           "term": "88",
-          "count": 3
+          "count": 6
         },
         {
           "term": "20",
-          "count": 3
+          "count": 6
         },
         {
           "term": "67",
-          "count": 3
-        },
-        {
-          "term": "iptables",
-          "count": 3
-        },
-        {
-          "term": "009923ff401912602411882067e3a8a7",
-          "count": 2
+          "count": 6
         },
         {
           "term": "e3",
-          "count": 2
+          "count": 5
         },
         {
           "term": "a8",
-          "count": 2
+          "count": 5
+        },
+        {
+          "term": "009923ff401912602411882067e3a8a9",
+          "count": 3
+        },
+        {
+          "term": "a9",
+          "count": 3
         }
       ],
       "semanticConcepts": [
-        "iptables",
+        "hardware",
+        "info",
         "mac",
         "stbid",
         "write"
@@ -465,10 +1062,10 @@
       "outgoingLinks": [],
       "backlinks": [],
       "missingLinks": [],
-      "excerpt": "重庆移动 账号一：stbid:009923FF40191260240988206792AFA6 mac:88:20:67:92:AF:A6 账号二：stbid:009923FF401912602411882067E3A8A7 mac:88:20:67:E3:A8:A7 mac:[88:20:67:92:AF:A6] stbid:[009923FF40191260240988206792AFA6] deviceid:[111019139000083] devicetype:[] devicemodel:[HG680 KX 9] hardwareversion:[HG680 NYFYX 7N] cmei:[mh1110006699919…",
-      "bytes": 2733,
-      "modifiedAt": "2025-03-14T05:46:29.650Z",
-      "contentSha256": "adbea698ec8d3b450ac6f5320e882804db82b277e3c9410ff4d4582a654eb573"
+      "excerpt": "重庆移动 vpn： 27E407E9725C33F1 公网：ETH1 专网：ETH2 vlan 2080 上 13 14 设置密码： 网络设置201218 账号信息 http://192.168.1.12:8888/factorysetstb.config?type=setSTB&macadd=88:20:67:E3:A8:A9&stbid=009923FF401912602411882067E3A8A9&model=HG680 KF 9&hardware=HG680 NYFXX 1N&deviceid=111019139000083&cmei=mh1110006652115&authkey=XRABCDHSNC8DJE7END9Q…",
+      "bytes": 3688,
+      "modifiedAt": "2026-08-12T06:21:46.641Z",
+      "contentSha256": "cc6a76b8c08ed3200a74f5b06be002d4d8dbfae67ea0d8ed0a596f3875b10cf4"
     },
     {
       "id": "ws_25a724bd6b:单片机.md",
@@ -539,12 +1136,93 @@
       "contentSha256": "a0e54bf964ba3d21dcea3f050c13e915fad2c5055a7b6fb94369da23baaeb156"
     },
     {
+      "id": "ws_25a724bd6b:电信抽检.md",
+      "workspaceId": "ws_25a724bd6b",
+      "workspace": "temple",
+      "relativePath": "电信抽检.md",
+      "absolutePath": "O:\\temple\\电信抽检.md",
+      "title": "电信抽检",
+      "tags": [],
+      "headings": [
+        {
+          "level": 1,
+          "title": "电信抽检"
+        },
+        {
+          "level": 3,
+          "title": "pms 检查缓存检查"
+        }
+      ],
+      "keywords": [
+        {
+          "term": "检查",
+          "count": 2
+        },
+        {
+          "term": "电信",
+          "count": 1
+        },
+        {
+          "term": "pms",
+          "count": 1
+        },
+        {
+          "term": "cd",
+          "count": 1
+        },
+        {
+          "term": "data",
+          "count": 1
+        },
+        {
+          "term": "system",
+          "count": 1
+        },
+        {
+          "term": "package",
+          "count": 1
+        },
+        {
+          "term": "cache",
+          "count": 1
+        },
+        {
+          "term": "ls",
+          "count": 1
+        },
+        {
+          "term": "grep",
+          "count": 1
+        },
+        {
+          "term": "systemui",
+          "count": 1
+        },
+        {
+          "term": "预期",
+          "count": 1
+        }
+      ],
+      "semanticConcepts": [
+        "data",
+        "grep",
+        "package"
+      ],
+      "outgoingLinks": [],
+      "backlinks": [],
+      "missingLinks": [],
+      "excerpt": "电信抽检 pms 检查缓存检查 cd /data/system/package cache/1 ls l|grep SystemUI 预期结果：",
+      "bytes": 337,
+      "modifiedAt": "2026-08-17T06:48:14.279Z",
+      "contentSha256": "ef197e9fcc8000effe6feb4f2c63a2a3b4c88f555b187959f3006b209032f349"
+    },
+    {
       "id": "ws_25a724bd6b:分省容灾.md",
       "workspaceId": "ws_25a724bd6b",
       "workspace": "temple",
       "relativePath": "分省容灾.md",
       "absolutePath": "O:\\temple\\分省容灾.md",
-      "title": "或者（如果是网关）",
+      "title": "分省容灾",
       "tags": [],
       "headings": [
         {
@@ -1048,7 +1726,12 @@
       "absolutePath": "O:\\temple\\广西移动KF.md",
       "title": "广西移动KF",
       "tags": [],
-      "headings": [],
+      "headings": [
+        {
+          "level": 2,
+          "title": "注意事项"
+        }
+      ],
       "keywords": [
         {
           "term": "input",
@@ -1100,9 +1783,9 @@
         }
       ],
       "semanticConcepts": [
+        "apk",
         "drop",
         "getprop",
-        "info",
         "input",
         "iptables"
       ],
@@ -1110,9 +1793,9 @@
       "backlinks": [],
       "missingLinks": [],
       "excerpt": "广西移动KF VPN @SD WAN客服小美 麻烦配置一下该线路： 广西 AB7A1A8629A9B787 eth0公网 eth2专网 武汉 27E40605717833F1 eth1公网 eth0专网 福建：AB7A1E762D99B787 ETH0公网、ETH1专网 武汉 27E40605717833F1 eth1公网 eth2专网 清除deviceinfo分区 dd if=/dev/zero of=/dev/block/by name/deviceinfo sync 执行gotofac命令，机顶盒自动重启设备进入U盘刷机模式 烧写完成后 4.重启,确认写入参数 read hardware info getprop ro.mac…",
-      "bytes": 4161,
-      "modifiedAt": "2026-08-11T08:19:02.044Z",
-      "contentSha256": "2c5418cfafa270a24348595f5ae9b0b8f995456c97376007f7cf7c6d0032dcc4"
+      "bytes": 4229,
+      "modifiedAt": "2026-08-12T01:04:15.342Z",
+      "contentSha256": "e0e8e2c772dc80f30fd3854186089db0a6a273ff5e11f6f2cf6b78f34c0dca6f"
     },
     {
       "id": "ws_25a724bd6b:广西移动MR622-CK.md",
@@ -1181,7 +1864,8 @@
       "semanticConcepts": [
         "echo",
         "grep",
-        "info"
+        "info",
+        "package"
       ],
       "outgoingLinks": [],
       "backlinks": [],
@@ -1337,7 +2021,7 @@
       "missingLinks": [],
       "excerpt": "不支持手动放装 默认DHCP， 没有手动放装 地址池暂时没有要求ipv6 陕西公网专网均可进行零配置，其他省分公网不能进行零配置 Wed Sep 24 13:03:19 CST 2025 版本vpn认证失败（KD 01版本外网无法接入） 贵州电信MK 提供不了全路由环境 家里只有公网 私网分开的 移动： VPN：贵州：27E407E3725633F1 专网：ETH1 公网：ETH2 @郑堃逢(郑堃逢)前方按照这个接法接好后，专网口打上2090的VLAN就行 电信：看下设备是否在线贵州：AB7BF5510473B788 专网：ETH0 公网：ETH1 专网固定到 vlan 2090 上 19 20 KD: http://192.168…",
       "bytes": 6628,
-      "modifiedAt": "2026-08-11T12:18:47.622Z",
+      "modifiedAt": "2026-08-12T02:33:33.206Z",
       "contentSha256": "6c3f8bc0c102b107038ebe89670cd72c711d79a161159745b01787ad6ab484a9"
     },
     {
@@ -1725,15 +2409,16 @@
         "drop",
         "input",
         "iptables",
+        "package",
         "system"
       ],
       "outgoingLinks": [],
       "backlinks": [],
       "missingLinks": [],
       "excerpt": "湖北 @所有人 请大家后续机顶盒版本提测，正文邮件中明确写明本次版本的变动信息，更新了哪些内容，修改了什么配置等等，尤其是涉及到系统层面的改动，要进行说明，比如浏览器版本有更新等 光猫超级账号： 账号CMCCAdmin 密码Bm9Ra Tx9 iptv 45 组播 4001 技服家光猫： 账号：CMCCAdmin 密码：aDm8H%MdA pppoe：13807198713 密码：888888 版本报备： 贺工，以下设备版本帮忙在平台上报备下哈！谢谢啦！ 设备型号：HG680 KF 软件版本：FH680KF.401.250310 HBA V40 软件版本：FH680KF.420.250530 HBA V42 软件版本：FH680KF…",
-      "bytes": 51860,
-      "modifiedAt": "2026-06-12T02:48:43.464Z",
-      "contentSha256": "ae73eb2e7c17873d3187367a8dd3fefeb552a9cdb401adbeee75e9e9439ef93f"
+      "bytes": 50517,
+      "modifiedAt": "2026-08-14T03:24:18.321Z",
+      "contentSha256": "043694bc0f8d1c0a570f54ca4328a10e7df5a2ca4ae50c5bf9ae139b45213a34"
     },
     {
       "id": "ws_25a724bd6b:湖北移动MC(1).md",
@@ -1741,7 +2426,7 @@
       "workspace": "temple",
       "relativePath": "湖北移动MC(1).md",
       "absolutePath": "O:\\temple\\湖北移动MC(1).md",
-      "title": "cd data/data",
+      "title": "湖北移动MC(1)",
       "tags": [
         "find"
       ],
@@ -1820,9 +2505,9 @@
       "backlinks": [],
       "missingLinks": [],
       "excerpt": "业务和平台 平台：百事通/湖北广电 业务类型：OTT/IPTV 链接 安卓4.4 V38+V39白皮书与测试用例在和彩云的链接: https://caiyun.139.com/m/i?015CcYrqC7VFZ 提取码:kEwm 安卓9 V38白皮书与测试用例在和彩云的链接: 链接: https://caiyun.139.com/m/i?015CHIZDGPrmL 提取码: yGfX V40 链接:https://caiyun.139.com/m/i?014Md2MTDitN4，提取码:YHqt 安卓9（V40.7）、安卓4（V40.6）新需求白皮书及相关的适配APK详细需求已放至中国移动云盘，链接:https://caiyun.1…",
-      "bytes": 39813,
-      "modifiedAt": "2024-10-31T00:50:07.863Z",
-      "contentSha256": "846b661ab742725e83d4923651c300ebd8c189fad2d43eb9f5aaf4df531da39a"
+      "bytes": 38757,
+      "modifiedAt": "2026-08-14T03:25:04.135Z",
+      "contentSha256": "a83f275894b829650f874f6b07a9baa8297b42f71ef92b14cbf09dbee6e875d7"
     },
     {
       "id": "ws_25a724bd6b:湖北KA.md",
@@ -1901,7 +2586,7 @@
       "workspace": "temple",
       "relativePath": "湖北LC.md",
       "absolutePath": "O:\\temple\\湖北LC.md",
-      "title": "cd data/data",
+      "title": "湖北LC",
       "tags": [
         "find"
       ],
@@ -1992,7 +2677,7 @@
       "workspace": "temple",
       "relativePath": "湖北LV.md",
       "absolutePath": "O:\\temple\\湖北LV.md",
-      "title": "或者（如果是网关）",
+      "title": "湖北LV",
       "tags": [
         "湖北移动定制化优化方案"
       ],
@@ -2085,9 +2770,9 @@
         }
       ],
       "semanticConcepts": [
+        "class",
         "drop",
         "input",
-        "iptables",
         "sys",
         "system"
       ],
@@ -2095,9 +2780,9 @@
       "backlinks": [],
       "missingLinks": [],
       "excerpt": "@所有人 请大家后续机顶盒版本提测，正文邮件中明确写明本次版本的变动信息，更新了哪些内容，修改了什么配置等等，尤其是涉及到系统层面的改动，要进行说明，比如浏览器版本有更新等 更换型号测试时，需要解绑和绑定新的工单 挂测：00480300001968004321903E7FE1965E 11月24日晚 OTT 中央一套 挂测：00480300001968004321903E7FE1965E 11月25日晚 OTT 欢笑剧场4k 挂测：00480300001968004321903E7FE1965C 11月26日晚 OTT 欢笑剧场4k 挂测：00480300001968004321903E7FE1965E 11月26日晚 OTT 4K…",
-      "bytes": 64638,
-      "modifiedAt": "2026-06-10T08:29:07.362Z",
-      "contentSha256": "fafe6c830283f555a4a0df267bdaae8248bd2239136a64c07811967d724a5b64"
+      "bytes": 63001,
+      "modifiedAt": "2026-08-14T03:25:13.681Z",
+      "contentSha256": "2ff691bd1026d34bf876caf7a2e13f7f04d17a3f91a673cb119129831f302665"
     },
     {
       "id": "ws_25a724bd6b:湖南版本更新.md",
@@ -2428,7 +3113,9 @@
           "count": 1
         }
       ],
-      "semanticConcepts": [],
+      "semanticConcepts": [
+        "移动"
+      ],
       "outgoingLinks": [],
       "backlinks": [],
       "missingLinks": [],
@@ -2768,6 +3455,89 @@
       "contentSha256": "1c99dc6a4ef8ff3f74f669a3577570f8441f7e8195b844b9e94ce0be4f9295db"
     },
     {
+      "id": "ws_25a724bd6b:机顶盒recovery升级.md",
+      "workspaceId": "ws_25a724bd6b",
+      "workspace": "temple",
+      "relativePath": "机顶盒recovery升级.md",
+      "absolutePath": "O:\\temple\\机顶盒recovery升级.md",
+      "title": "机顶盒recovery升级",
+      "tags": [],
+      "headings": [
+        {
+          "level": 1,
+          "title": "机顶盒recovery升级"
+        },
+        {
+          "level": 2,
+          "title": "提测设备"
+        },
+        {
+          "level": 3,
+          "title": "升级步骤"
+        }
+      ],
+      "keywords": [
+        {
+          "term": "升级",
+          "count": 5
+        },
+        {
+          "term": "节目",
+          "count": 3
+        },
+        {
+          "term": "红外",
+          "count": 3
+        },
+        {
+          "term": "recovery",
+          "count": 2
+        },
+        {
+          "term": "更新",
+          "count": 2
+        },
+        {
+          "term": "直播",
+          "count": 2
+        },
+        {
+          "term": "遥控",
+          "count": 2
+        },
+        {
+          "term": "步骤",
+          "count": 1
+        },
+        {
+          "term": "命名",
+          "count": 1
+        },
+        {
+          "term": "放置",
+          "count": 1
+        },
+        {
+          "term": "目录",
+          "count": 1
+        },
+        {
+          "term": "开机",
+          "count": 1
+        }
+      ],
+      "semanticConcepts": [
+        "升级"
+      ],
+      "outgoingLinks": [],
+      "backlinks": [],
+      "missingLinks": [],
+      "excerpt": "机顶盒recovery升级 提测设备 升级步骤 1、 将升级包重命名为 update.zip ,放置在U盘根目录下 2、 开机时频繁按左键跳起recovery界面，选择从U盘更新版本 3、升级后按 音量加左左右右音量加 查看版本编译时间是否更新 4、关闭待机，切换到直播节目运行切台脚本 sh hunan.sh & 后确认3min一次切台 5、 关闭遥控器红外 echo 1 /proc/inputblock/status ；确认遥控器红外按键无响应； 注意： {bg: fff3a3|{color: 75160f| 确认升级版本与盒子版本型号一致 }} 挂机前遍历一遍直播节目，查看有没有因环境问题无法启播的节目 开启红外 echo 0…",
+      "bytes": 1128,
+      "modifiedAt": "2026-08-13T08:47:13.666Z",
+      "contentSha256": "6df26e64a42e71a944a4bcc00e0e026d51bae839072507f2363214967e5959cc"
+    },
+    {
       "id": "ws_25a724bd6b:计划.md",
       "workspaceId": "ws_25a724bd6b",
       "workspace": "temple",
@@ -2902,7 +3672,8 @@
         }
       ],
       "semanticConcepts": [
-        "时间"
+        "时间",
+        "移动"
       ],
       "outgoingLinks": [],
       "backlinks": [],
@@ -2918,7 +3689,7 @@
       "workspace": "temple",
       "relativePath": "架构.md",
       "absolutePath": "O:\\temple\\架构.md",
-      "title": "Pc_uuid = getuuid()",
+      "title": "架构",
       "tags": [
         "查看是否显示彩条",
         "关闭pattern",
@@ -2931,6 +3702,30 @@
         {
           "level": 1,
           "title": "Pc_uuid = getuuid()"
+        },
+        {
+          "level": 1,
+          "title": "遥控器"
+        },
+        {
+          "level": 2,
+          "title": "数生遥控器"
+        },
+        {
+          "level": 2,
+          "title": "鸿伟源遥控器  （电信）：菜单+返回   ---恢复出厂：设置+ 桌面+ 频道-"
+        },
+        {
+          "level": 2,
+          "title": "天翼遥控器配对：首页加下键"
+        },
+        {
+          "level": 2,
+          "title": "讯飞遥控器"
+        },
+        {
+          "level": 3,
+          "title": "讯飞新遥控器（带看电视按键）"
         },
         {
           "level": 1,
@@ -3012,7 +3807,7 @@
         },
         {
           "term": "设置",
-          "count": 58
+          "count": 59
         },
         {
           "term": "data",
@@ -3042,9 +3837,84 @@
       "backlinks": [],
       "missingLinks": [],
       "excerpt": "Define SRVROOT \"O:\\Apache\\Apache24\"http://192.168.1.12:8888/factorysetstb.config?type=setSTB&macadd=90:C2:E5:70:D2:13&stbid=0010049900E06800091690C2E570D213&devicetype=LAN&hardware=MR820 CNY0BG L&deviceid=111019140000097 ServerRoot \"${SRVROOT}\" VPN固化VLAN 湖南交换机（上）1口和2口（vlan2040） 每台桌子上配置两条GPON（偶数）和两条EPON（奇数） 两条GPON口可能是从两…",
-      "bytes": 106923,
-      "modifiedAt": "2026-08-07T05:55:58.814Z",
-      "contentSha256": "df93637803f69fce7cb34bd6d8b77981e3df7a72f6feaa107b9a59cfc346fc7e"
+      "bytes": 100595,
+      "modifiedAt": "2026-08-14T01:39:07.687Z",
+      "contentSha256": "d661053abf366fdbc13c126a462452e3ab9866e65fbc9a8f470d4aafa0830d46"
+    },
+    {
+      "id": "ws_25a724bd6b:江苏电信KD省采.md",
+      "workspaceId": "ws_25a724bd6b",
+      "workspace": "temple",
+      "relativePath": "江苏电信KD省采.md",
+      "absolutePath": "O:\\temple\\江苏电信KD省采.md",
+      "title": "江苏电信KD省采",
+      "tags": [],
+      "headings": [
+        {
+          "level": 1,
+          "title": "江苏电信KD省采"
+        }
+      ],
+      "keywords": [
+        {
+          "term": "ctc",
+          "count": 2
+        },
+        {
+          "term": "android",
+          "count": 2
+        },
+        {
+          "term": "smart",
+          "count": 2
+        },
+        {
+          "term": "terminal",
+          "count": 2
+        },
+        {
+          "term": "settings",
+          "count": 2
+        },
+        {
+          "term": "江苏",
+          "count": 1
+        },
+        {
+          "term": "电信",
+          "count": 1
+        },
+        {
+          "term": "kd",
+          "count": 1
+        },
+        {
+          "term": "7d483200104727602312185e0b8e3ef1",
+          "count": 1
+        },
+        {
+          "term": "18",
+          "count": 1
+        },
+        {
+          "term": "5e",
+          "count": 1
+        },
+        {
+          "term": "0b",
+          "count": 1
+        }
+      ],
+      "semanticConcepts": [
+        "android"
+      ],
+      "outgoingLinks": [],
+      "backlinks": [],
+      "missingLinks": [],
+      "excerpt": "江苏电信KD省采 http://192.168.1.12:8888/factorysetstb.config?type=setSTB&macadd=18:5E:0B:8E:3E:F1&stbid=7D483200104727602312185E0B8E3EF1&devicetype=STB&model=HG680 KD&hardware=HG680 ND2XX 1N1 7D483200104727602312185E0B8E3EF1 18:5E:0B:8E:3E:F1 华为OTT monkey p ctc.android.smart.terminal.nativeplayer 1 am start n ctc.android.sma…",
+      "bytes": 552,
+      "modifiedAt": "2026-08-17T02:24:02.135Z",
+      "contentSha256": "2d2439ad75d737e4668eae1461a47bbd48e82076c5f94513d3981a00a769fcd9"
     },
     {
       "id": "ws_25a724bd6b:江西电信MR622-MK.md",
@@ -3311,6 +4181,7 @@
         }
       ],
       "semanticConcepts": [
+        "移动",
         "class",
         "echo",
         "hg680",
@@ -3400,7 +4271,7 @@
       "workspace": "temple",
       "relativePath": "宁夏iptv.md",
       "absolutePath": "O:\\temple\\宁夏iptv.md",
-      "title": "disabled",
+      "title": "宁夏iptv",
       "tags": [],
       "headings": [
         {
@@ -3711,7 +4582,8 @@
         }
       ],
       "semanticConcepts": [
-        "升级"
+        "升级",
+        "移动"
       ],
       "outgoingLinks": [],
       "backlinks": [],
@@ -3727,7 +4599,7 @@
       "workspace": "temple",
       "relativePath": "日志报文.md",
       "absolutePath": "O:\\temple\\日志报文.md",
-      "title": "将key.txt的内容追加到目标文件末尾",
+      "title": "日志报文",
       "tags": [
         "z标识utc格式",
         "关闭hdmi待机",
@@ -4213,8 +5085,8 @@
         }
       ],
       "semanticConcepts": [
-        "设置",
         "升级",
+        "移动",
         "mac"
       ],
       "outgoingLinks": [],
@@ -4233,27 +5105,40 @@
       "absolutePath": "O:\\temple\\陕西移动KA.md",
       "title": "陕西移动KA",
       "tags": [],
-      "headings": [],
+      "headings": [
+        {
+          "level": 2,
+          "title": "提测设备"
+        },
+        {
+          "level": 3,
+          "title": "升级步骤"
+        },
+        {
+          "level": 2,
+          "title": "办事处"
+        }
+      ],
       "keywords": [
+        {
+          "term": "升级",
+          "count": 21
+        },
         {
           "term": "ka",
           "count": 19
+        },
+        {
+          "term": "型号",
+          "count": 18
         },
         {
           "term": "0400",
           "count": 18
         },
         {
-          "term": "型号",
-          "count": 17
-        },
-        {
-          "term": "升级",
-          "count": 17
-        },
-        {
           "term": "时间",
-          "count": 16
+          "count": 17
         },
         {
           "term": "上报",
@@ -4291,10 +5176,10 @@
       "outgoingLinks": [],
       "backlinks": [],
       "missingLinks": [],
-      "excerpt": "陕西移动KA OTTX、IPTV、OTT 移动业务对接：慧娟经理 技服：胡清松经理：138 2612 8471 提测邮件要求 @所有人 通知：后续机顶盒提测邮件内容必须至少包含以下内容：1、正文：“陕西 厂家 型号 OTT OTTX(软件版本： )申请提测 2、提测类别：新入网或版本迭代 2、新入网/版本迭代需包含：版本优化更新内容（仅版本迭代）、软件版本号、硬件版本号、软件版本编译时间、MD5值、软件版本下载链接、自测报告下载链接（或附件上传自测报告） 喻航 手机：15709203918 手机：18049221660 @孙梦鸽@毛志超毛总看下能不能安排技服同事去前方挂测下 1、一个型号挂五台，挂测一周，确认下客户那边是否有足量的盒…",
-      "bytes": 19822,
-      "modifiedAt": "2026-07-27T09:33:25.941Z",
-      "contentSha256": "d318926b365b859a5d2abfdb344a26eab754ffad5fbd76fa3ce875ff1956d501"
+      "excerpt": "陕西移动KA OTTX、IPTV、OTT 移动业务对接：慧娟经理 技服：胡清松经理：138 2612 8471 提测邮件要求 @所有人 通知：后续机顶盒提测邮件内容必须至少包含以下内容：1、正文：“陕西 厂家 型号 OTT OTTX(软件版本： )申请提测 2、提测类别：新入网或版本迭代 2、新入网/版本迭代需包含：版本优化更新内容（仅版本迭代）、软件版本号、硬件版本号、软件版本编译时间、MD5值、软件版本下载链接、自测报告下载链接（或附件上传自测报告） 提测设备 升级步骤 1、 将升级包重命名为 update.zip ,放置在U盘根目录下 2、 开机时频繁按左键跳起recovery界面，选择从U盘更新版本 3、升级后按 音量加左左…",
+      "bytes": 20338,
+      "modifiedAt": "2026-08-13T08:45:46.145Z",
+      "contentSha256": "9d926b43ac3c6bb7a28aa93cb62475d22a591bfcd9bca9feabef08944605d626"
     },
     {
       "id": "ws_25a724bd6b:陕西MC.md",
@@ -4657,10 +5542,10 @@
       "outgoingLinks": [],
       "backlinks": [],
       "missingLinks": [],
-      "excerpt": "vpn： 江苏：27E2821BED9033EF ETH1公网 ETH0专网口 武汉：AB7A1E7C2D9FB787 ETH1公网 ETH4专网口 /JenkinsTemp/FVOS product/daily/STB/git FVOS HISI 9 CMCCJIANGSU brn p hisi iptv fh develop 20231205/build 12 20241127084711/CMCCJIANGSU HG680 NY23V 0N 202411270855 V.052.01 00410460B6171310241104A2F3F95801 04:A2:F3:F9:58:01 激活码：53402000838/25396…",
-      "bytes": 1600,
-      "modifiedAt": "2024-11-27T06:44:48.998Z",
-      "contentSha256": "880c38f8697215d2c17214eea55ec7923dab45c69bf10ae7a0da1f77b5ce8b0b"
+      "excerpt": "vpn： 江苏：27E2821BED9033EF ETH1公网 ETH0专网口 武汉：AB7A1E7C2D9FB787 ETH1公网 ETH4专网口 vlan 1080 下25 26 /JenkinsTemp/FVOS product/daily/STB/git FVOS HISI 9 CMCCJIANGSU brn p hisi iptv fh develop 20231205/build 12 20241127084711/CMCCJIANGSU HG680 NY23V 0N 202411270855 V.052.01 00410460B6171310241104A2F3F95801 04:A2:F3:F9:58:01 激活码：…",
+      "bytes": 1584,
+      "modifiedAt": "2026-08-12T01:31:18.789Z",
+      "contentSha256": "88cfab43e45bfe3c495fb03a56aa686c2dbe4be2bdc328786b2aef06e9bc3a7c"
     },
     {
       "id": "ws_25a724bd6b:网关.md",
@@ -4742,6 +5627,42 @@
         {
           "level": 2,
           "title": "打包方法"
+        },
+        {
+          "level": 2,
+          "title": "web界面"
+        },
+        {
+          "level": 2,
+          "title": "编辑模式"
+        },
+        {
+          "level": 2,
+          "title": "阅读模式"
+        },
+        {
+          "level": 2,
+          "title": "滚动条"
+        },
+        {
+          "level": 2,
+          "title": "主题风格"
+        },
+        {
+          "level": 2,
+          "title": "AI智能编辑"
+        },
+        {
+          "level": 2,
+          "title": "顶部栏"
+        },
+        {
+          "level": 2,
+          "title": "低部栏"
+        },
+        {
+          "level": 2,
+          "title": "导入功能"
         },
         {
           "level": 2,
@@ -4835,65 +5756,63 @@
       "keywords": [
         {
           "term": "编辑",
-          "count": 57
+          "count": 83
         },
         {
           "term": "模式",
-          "count": 26
+          "count": 40
         },
         {
           "term": "ai",
-          "count": 24
+          "count": 34
+        },
+        {
+          "term": "更新",
+          "count": 30
         },
         {
           "term": "主题",
-          "count": 15
-        },
-        {
-          "term": "工作",
-          "count": 13
-        },
-        {
-          "term": "设计",
-          "count": 13
-        },
-        {
-          "term": "设置",
-          "count": 13
+          "count": 28
         },
         {
           "term": "界面",
-          "count": 13
+          "count": 20
         },
         {
-          "term": "marking",
-          "count": 12
+          "term": "设计",
+          "count": 19
         },
         {
-          "term": "面板",
-          "count": 12
+          "term": "当前",
+          "count": 18
         },
         {
           "term": "快捷",
-          "count": 12
+          "count": 16
         },
         {
-          "term": "节点",
-          "count": 12
+          "term": "不能",
+          "count": 16
+        },
+        {
+          "term": "目录",
+          "count": 16
+        },
+        {
+          "term": "大纲",
+          "count": 16
         }
       ],
-      "semanticConcepts": [
-        "设置"
+      "semanticConcepts": [],
+      "outgoingLinks": [
+        "default:README.md"
       ],
-      "outgoingLinks": [],
       "backlinks": [],
-      "missingLinks": [
-        "README"
-      ],
-      "excerpt": "打包方法 powershell ExecutionPolicy Bypass File .\\build installer.ps1 结论 MarKing 的优势不只是功能更多，而是产品层次更完整：它把 Markdown 编辑器拆成“轻量阅读模式”和“专业编辑模式”，并围绕命令面板、专注模式、面包屑、快捷切换器、任务系统和导出能力形成完整工作流。MarKing README 当前 MyTemple 的核心优势是知识神经网络、语义检索、本地 RAG、Frontmatter 和桌面化改造，但目前更像“功能集合”，在交互统一性、编辑器稳定性和性能基线方面仍落后于专业编辑器。 需要注意：MarKing README 中的“启动小于 2 秒”“…",
-      "bytes": 19689,
-      "modifiedAt": "2026-08-11T06:08:45.580Z",
-      "contentSha256": "021e2ef6200901d70117d9ce14ea92942034a8102119561acd8e2fd1f3a55c3a"
+      "missingLinks": [],
+      "excerpt": "打包方法 powershell ExecutionPolicy Bypass File .\\build installer.ps1 重新打包安装包， 1、 更新升级路径下的安装包promo\\downloads 2、 更新web推荐页下载链接 3、 版本号+1触发 Launcher 自动清理 WebView2 4、 缓存更新版本修改点说明version.json文件，确认所有版本号一致 <! 5、 更新打包文件和脚本build installer.ps1 禁止出现github的链接跳转，功能介绍等相关文档直接内置到web推荐页内， 保留当UI配色风格，去除AI味，减少大标题和卡片式的UI使用 web界面 结合项目信息更新web推广界面…",
+      "bytes": 28683,
+      "modifiedAt": "2026-08-17T08:04:52.441Z",
+      "contentSha256": "9fa2799aeacd5122b5edf1491456d096e7f9815c681f7154ab0932db0dbbf161"
     },
     {
       "id": "ws_25a724bd6b:文字脚本.md",
@@ -5023,7 +5942,8 @@
         }
       ],
       "semanticConcepts": [
-        "时间"
+        "时间",
+        "系统"
       ],
       "outgoingLinks": [],
       "backlinks": [],
@@ -5039,7 +5959,7 @@
       "workspace": "temple",
       "relativePath": "西藏电信MR622-MK.md",
       "absolutePath": "O:\\temple\\西藏电信MR622-MK.md",
-      "title": "监听挂载点（根据你的盒子修改挂载路径）",
+      "title": "西藏电信MR622-MK",
       "tags": [],
       "headings": [
         {
@@ -5130,7 +6050,12 @@
       "absolutePath": "O:\\temple\\小说关键词.md",
       "title": "小说关键词",
       "tags": [],
-      "headings": [],
+      "headings": [
+        {
+          "level": 1,
+          "title": "The Quiet Power of a Morning Routine"
+        }
+      ],
       "keywords": [
         {
           "term": "审核",
@@ -5173,11 +6098,11 @@
           "count": 10
         },
         {
-          "term": "角色",
-          "count": 8
+          "term": "of",
+          "count": 9
         },
         {
-          "term": "情绪",
+          "term": "世界",
           "count": 8
         }
       ],
@@ -5188,9 +6113,9 @@
       "backlinks": [],
       "missingLinks": [],
       "excerpt": "小说关键词 1. 保持克制：修改时注意保留原文干净的文风，避免过度煽情 2. 留白艺术：不必解释所有专业术语，留给读者“似懂非懂”的悬疑感正是魅力所在 3. 节奏掌控：在紧张的技术描写中，可插入1 2处“寂静时刻”，如陈岩看向窗外晨曦的描写，形成张弛有度的呼吸感 辅助文档： 1、人物卡与关系图谱 2、时间线 3、世界观 4、 实力对照表 5、技巧文档 审核， 1. 去除重复段落，排查错别字体 2. 脱敏处理 创作第13章， 创作章节需要满足一下条件 1. 充分体现人物肖像细节，人物的活动表情以及动作体现出故事情节，剧情需要和故事丰富性 2. 前后章节账户金额需要能够自洽，时间节点自洽，人物逻辑自洽 3. 剧情紧紧围绕大纲进行，前后章…",
-      "bytes": 12699,
-      "modifiedAt": "2026-04-09T09:25:48.526Z",
-      "contentSha256": "0f385f3ca53648b562cd2331f92b1b5448cc33ec174c81a4117593c4491fd4bf"
+      "bytes": 13573,
+      "modifiedAt": "2026-08-13T07:12:30.941Z",
+      "contentSha256": "8d877e6351d0b8a53cb80127a537b53923d2f7d00018e49fe26f7bd30251b410"
     },
     {
       "id": "ws_25a724bd6b:新疆电信MK.md",
@@ -5418,27 +6343,51 @@
         {
           "level": 1,
           "title": "移动iot遥控PCN测试"
+        },
+        {
+          "level": 3,
+          "title": "广西"
+        },
+        {
+          "level": 3,
+          "title": "重庆KF"
         }
       ],
       "keywords": [
         {
-          "term": "移动",
-          "count": 6
-        },
-        {
           "term": "kf",
-          "count": 6
-        },
-        {
-          "term": "hg680",
-          "count": 5
+          "count": 16
         },
         {
           "term": "遥控",
-          "count": 4
+          "count": 15
+        },
+        {
+          "term": "移动",
+          "count": 13
         },
         {
           "term": "广西",
+          "count": 12
+        },
+        {
+          "term": "重庆",
+          "count": 8
+        },
+        {
+          "term": "iot",
+          "count": 7
+        },
+        {
+          "term": "hg680",
+          "count": 7
+        },
+        {
+          "term": "模式",
+          "count": 5
+        },
+        {
+          "term": "升级",
           "count": 4
         },
         {
@@ -5450,36 +6399,22 @@
           "count": 3
         },
         {
-          "term": "型号",
-          "count": 2
-        },
-        {
-          "term": "wrcb000140",
-          "count": 2
-        },
-        {
           "term": "策略",
-          "count": 2
-        },
-        {
-          "term": "iot",
-          "count": 1
-        },
-        {
-          "term": "pcn",
-          "count": 1
+          "count": 3
         }
       ],
       "semanticConcepts": [
+        "升级",
+        "移动",
         "hg680"
       ],
       "outgoingLinks": [],
       "backlinks": [],
       "missingLinks": [],
-      "excerpt": "移动iot遥控PCN测试 1. 广西/浙江/江苏移动KF遥控器型号是否相同 主测WRCB000140使用广西移动HG680 KF版本测试 进度90% 主测WRCB000140使用重庆移动HG680 KF版本测试 待测 主测WRCB000121使用江苏移动HG680 KF版本测试 待测 主测WRCB000124使用浙江移动HG680 KF版本测试 待测 2. 测试策略：主测省份 3. 测试周期 4. 内部定版，不涉及验收 遥控器型号 [ ] 浙江 [ ] 江苏 [ ] 广西 账号1：STBID：009913FF401913102411B49F4D85CE1C MAC：B4:9F:4D:85:CE:1C 遥控器配对文件 cat /dat…",
-      "bytes": 1311,
-      "modifiedAt": "2026-08-11T11:42:10.137Z",
-      "contentSha256": "a460d42b77494568032df9abab41a2e6619fe7296e6637c476f9ca78f340e10a"
+      "excerpt": "移动iot遥控PCN测试 1. 广西/浙江/江苏移动KF遥控器型号是否相同 主测iot遥控器重庆移动HG680 KF版本（版本未适配iot功能）测试 100% 解决中问题1个 主测WRCB000140使用广西移动HG680 KF版本测试 进度100% 待确认问题1个 主测WRCB000121使用江苏移动HG680 KF版本测试 待测 主测WRCB000124使用浙江移动HG680 KF版本测试 待测 主测WRCB000116使用河南移动HG680 KF版本测试 遥控器未获取 2. 测试策略：主测省份 3. 测试周期 4. 内部定版，不涉及验收 遥控器型号 [ ] 浙江 [ ] 江苏 广西 [x] 广西 账号1：STBID：00991…",
+      "bytes": 2895,
+      "modifiedAt": "2026-08-17T01:37:48.681Z",
+      "contentSha256": "d60d9ba4d6ca5be51d8e35072c9d56d4b11d6de8985011d664724c162794d717"
     },
     {
       "id": "ws_25a724bd6b:银发经济流量转化.md",
@@ -5487,7 +6422,7 @@
       "workspace": "temple",
       "relativePath": "银发经济流量转化.md",
       "absolutePath": "O:\\temple\\银发经济流量转化.md",
-      "title": "武汉政策核心来源（公开、免费、合法）",
+      "title": "银发经济流量转化",
       "tags": [],
       "headings": [
         {
@@ -5747,7 +6682,7 @@
       "workspace": "temple",
       "relativePath": "Agent接入设计方案.md",
       "absolutePath": "O:\\temple\\Agent接入设计方案.md",
-      "title": "Codex 与其他 Agent 接入设计方案",
+      "title": "Agent接入设计方案",
       "tags": [],
       "headings": [
         {
@@ -5931,74 +6866,6 @@
       "contentSha256": "93ce14b9eaf6c7c0db7ac81f7a034fb5c8509e62e301e2cba6f882c3abfb0aaa"
     },
     {
-      "id": "ws_25a724bd6b:AI提示词.md",
-      "workspaceId": "ws_25a724bd6b",
-      "workspace": "temple",
-      "relativePath": "AI提示词.md",
-      "absolutePath": "O:\\temple\\AI提示词.md",
-      "title": "AI提示词",
-      "tags": [],
-      "headings": [],
-      "keywords": [
-        {
-          "term": "ai",
-          "count": 4
-        },
-        {
-          "term": "背景",
-          "count": 4
-        },
-        {
-          "term": "产品",
-          "count": 4
-        },
-        {
-          "term": "阴影",
-          "count": 3
-        },
-        {
-          "term": "透视",
-          "count": 3
-        },
-        {
-          "term": "智能",
-          "count": 2
-        },
-        {
-          "term": "重建",
-          "count": 2
-        },
-        {
-          "term": "保持",
-          "count": 2
-        },
-        {
-          "term": "光照",
-          "count": 2
-        },
-        {
-          "term": "统一",
-          "count": 2
-        },
-        {
-          "term": "提取",
-          "count": 2
-        },
-        {
-          "term": "轮廓",
-          "count": 2
-        }
-      ],
-      "semanticConcepts": [],
-      "outgoingLinks": [],
-      "backlinks": [],
-      "missingLinks": [],
-      "excerpt": "AI提示词： 1. 糊图变4K（无损放大）：智能抹除杂物阴影，AI重建复杂背景，保持纹理透视光照统一； 2. 产品转手绘线稿：提取透视轮廓，生成工业风黑白线稿，带流体辅助线和尺寸标注； 3. 产品风格复刻：提取参考图特效蒙版，替换产品入场景，匹配环境光实现像素级融合； 4. 光效渲染（高级感）：锁定轮廓暗调背景，黑透材质显内部结构，注入霓虹动态光效； 5. 一键溶图：产品自然融入实景，匹配光影色调景深，无拼接痕迹； 6. 杂物秒消失：智能抹除杂物阴影，AI重建背景，保持纹理透视光照统一； 7. 废片变广告图：主体置纯白背景，3D渲染修复磨损，强化光感阴影，提升商业精致度～ 【腾讯文档】上语Ai资料库 https://docs.qq.…",
-      "bytes": 921,
-      "modifiedAt": "2026-07-01T07:54:36.646Z",
-      "contentSha256": "92ad93b1c44c2d1ca6c89ddd80df5461e793e2deff0fc6955a337b746ce82b4a"
-    },
-    {
       "id": "ws_25a724bd6b:aml.md",
       "workspaceId": "ws_25a724bd6b",
       "workspace": "temple",
@@ -6023,7 +6890,7 @@
       "workspace": "temple",
       "relativePath": "autotest.md",
       "absolutePath": "O:\\temple\\autotest.md",
-      "title": "运行指定测试并生成 HTML 报告",
+      "title": "autotest",
       "tags": [],
       "headings": [
         {
@@ -6142,9 +7009,9 @@
       "backlinks": [],
       "missingLinks": [],
       "excerpt": "自动化 自动化方案选型： 机顶盒测试的核心是“发指令+看画面”。针对你的需求，直接上这三套最成熟的 Python 方案： 方案一：stb tester 框架（最推荐） https://github.com/tesseract ocr/tesseract.git 这是机顶盒测试界的“正规军”，专门为机顶盒和智能电视设计，自带 OCR 和视频分析能力。 核心能力：基于 Python 编写测试脚本。它不仅能通过红外或网络发指令，还能直接对视频流做 OCR 识别和图像匹配，非常适合做 UI 自动化。 • 硬件搭配：需要一台电脑（Linux/Ubuntu 环境最佳），接上红外发射器和采集卡（用来抓盒子的画面）。 适用场景：需要长期稳定运行的回…",
-      "bytes": 15238,
-      "modifiedAt": "2026-06-24T08:20:40.671Z",
-      "contentSha256": "072a2d55d62816a6c7114a8375e4fcaa0e7c193480035fa3f84b032527035bb7"
+      "bytes": 14848,
+      "modifiedAt": "2026-08-13T07:13:29.753Z",
+      "contentSha256": "760b8a65056e5e04dbb0dc6f55e894fba75fd24fd460122503d7ce8858a51e02"
     },
     {
       "id": "ws_25a724bd6b:codex.md",
@@ -6573,7 +7440,7 @@
       "workspace": "temple",
       "relativePath": "git.md",
       "absolutePath": "O:\\temple\\git.md",
-      "title": "Git 基础命令与常用方法",
+      "title": "git",
       "tags": [],
       "headings": [
         {
@@ -6823,7 +7690,9 @@
           "count": 3
         }
       ],
-      "semanticConcepts": [],
+      "semanticConcepts": [
+        "系统"
+      ],
       "outgoingLinks": [],
       "backlinks": [],
       "missingLinks": [],
@@ -6908,7 +7777,7 @@
       "workspace": "temple",
       "relativePath": "linux脚本.md",
       "absolutePath": "O:\\temple\\linux脚本.md",
-      "title": "通过dumpsys命令获取当前焦点窗口信息",
+      "title": "linux脚本",
       "tags": [],
       "headings": [
         {
@@ -7091,6 +7960,7 @@
         }
       ],
       "semanticConcepts": [
+        "系统",
         "echo"
       ],
       "outgoingLinks": [],
@@ -7404,7 +8274,7 @@
       "workspace": "temple",
       "relativePath": "pon/PON网关H1Ne与QoS测试命令.md",
       "absolutePath": "O:\\temple\\pon\\PON网关H1Ne与QoS测试命令.md",
-      "title": "PON 网关 H1Ne 与 QoS 测试命令",
+      "title": "PON网关H1Ne与QoS测试命令",
       "tags": [
         "pon网关",
         "h1ne",
@@ -7643,8 +8513,8 @@
         }
       ],
       "semanticConcepts": [
-        "设置",
-        "时间"
+        "时间",
+        "系统"
       ],
       "outgoingLinks": [],
       "backlinks": [],
@@ -7848,236 +8718,10 @@
       "bytes": 1159,
       "modifiedAt": "2026-07-27T11:48:45.297Z",
       "contentSha256": "8489244100b707942c355ad59233393ad3854e4574f32c5ed9d111cd0863d233"
-    },
-    {
-      "id": "ws_d4de96b28d:测试.md",
-      "workspaceId": "ws_d4de96b28d",
-      "workspace": "新建文件夹",
-      "relativePath": "测试.md",
-      "absolutePath": "C:\\Users\\fshby\\Desktop\\新建文件夹\\测试.md",
-      "title": "测试",
-      "tags": [],
-      "headings": [],
-      "keywords": [
-        {
-          "term": "十大",
-          "count": 1
-        }
-      ],
-      "semanticConcepts": [],
-      "outgoingLinks": [],
-      "backlinks": [],
-      "missingLinks": [],
-      "excerpt": "[ ] [ ] [ ] [ ] [x] 十大",
-      "bytes": 229,
-      "modifiedAt": "2026-08-10T04:31:27.340Z",
-      "contentSha256": "07c3df54fddbd59d804034af0247ab02ef0b9ed7a693ea802ba75c4b6338cd9f"
-    },
-    {
-      "id": "ws_d4de96b28d:测试2.md",
-      "workspaceId": "ws_d4de96b28d",
-      "workspace": "新建文件夹",
-      "relativePath": "测试2.md",
-      "absolutePath": "C:\\Users\\fshby\\Desktop\\新建文件夹\\测试2.md",
-      "title": "测试2",
-      "tags": [],
-      "headings": [],
-      "keywords": [],
-      "semanticConcepts": [],
-      "outgoingLinks": [],
-      "backlinks": [],
-      "missingLinks": [],
-      "excerpt": "",
-      "bytes": 25,
-      "modifiedAt": "2026-08-11T11:38:06.477Z",
-      "contentSha256": "132ac5bf0c75c3efba0c382bba28db49309ce0d3d8d7160ef0030623066452d2"
-    },
-    {
-      "id": "ws_d4de96b28d:MarKing/_up_/THIRD-PARTY-NOTICES.md",
-      "workspaceId": "ws_d4de96b28d",
-      "workspace": "新建文件夹",
-      "relativePath": "MarKing/_up_/THIRD-PARTY-NOTICES.md",
-      "absolutePath": "C:\\Users\\fshby\\Desktop\\新建文件夹\\MarKing\\_up_\\THIRD-PARTY-NOTICES.md",
-      "title": "Third-Party Software Notices / 第三方软件声明",
-      "tags": [],
-      "headings": [
-        {
-          "level": 1,
-          "title": "Third-Party Software Notices / 第三方软件声明"
-        },
-        {
-          "level": 2,
-          "title": "1. Component Index / 组件索引"
-        },
-        {
-          "level": 3,
-          "title": "1.1 MIT License"
-        },
-        {
-          "level": 3,
-          "title": "1.2 MIT / Apache-2.0 Dual License"
-        },
-        {
-          "level": 3,
-          "title": "1.3 Apache-2.0 License"
-        },
-        {
-          "level": 3,
-          "title": "1.4 ISC License"
-        },
-        {
-          "level": 3,
-          "title": "1.5 MIT / Unlicense Dual License"
-        },
-        {
-          "level": 3,
-          "title": "1.6 GPL-2.0 — Bundled External Binary / 内嵌外部工具"
-        },
-        {
-          "level": 3,
-          "title": "1.7 OFL-1.1 — Embedded Fonts / 内嵌字体"
-        },
-        {
-          "level": 3,
-          "title": "1.8 BSD 3-Clause — System Dependency (NOT bundled)"
-        },
-        {
-          "level": 2,
-          "title": "2. Special Compliance Notes / 特别合规说明"
-        },
-        {
-          "level": 3,
-          "title": "2.1 DOCX Export — System Font References / 系统字体引用"
-        },
-        {
-          "level": 3,
-          "title": "2.2 Pandoc GPL-2.0 Compliance / Pandoc GPL 合规"
-        },
-        {
-          "level": 2,
-          "title": "3. Full License Texts / 完整许可证文本"
-        },
-        {
-          "level": 3,
-          "title": "3.1 MIT License"
-        },
-        {
-          "level": 3,
-          "title": "3.2 Apache License, Version 2.0"
-        },
-        {
-          "level": 3,
-          "title": "3.3 ISC License"
-        },
-        {
-          "level": 3,
-          "title": "3.4 SIL Open Font License, Version 1.1"
-        },
-        {
-          "level": 3,
-          "title": "3.5 GNU General Public License, Version 2"
-        },
-        {
-          "level": 3,
-          "title": "3.6 BSD 3-Clause License"
-        },
-        {
-          "level": 3,
-          "title": "3.7 The Unlicense"
-        }
-      ],
-      "keywords": [
-        {
-          "term": "license",
-          "count": 9
-        },
-        {
-          "term": "is",
-          "count": 8
-        },
-        {
-          "term": "pandoc",
-          "count": 8
-        },
-        {
-          "term": "marking",
-          "count": 6
-        },
-        {
-          "term": "microsoft",
-          "count": 6
-        },
-        {
-          "term": "in",
-          "count": 5
-        },
-        {
-          "term": "font",
-          "count": 5
-        },
-        {
-          "term": "gpl",
-          "count": 5
-        },
-        {
-          "term": "components",
-          "count": 4
-        },
-        {
-          "term": "of",
-          "count": 4
-        },
-        {
-          "term": "windows",
-          "count": 4
-        },
-        {
-          "term": "version",
-          "count": 4
-        }
-      ],
-      "semanticConcepts": [],
-      "outgoingLinks": [],
-      "backlinks": [],
-      "missingLinks": [],
-      "excerpt": "Third Party Software Notices / 第三方软件声明 This document contains the copyright notices and license texts for third party software components included in or distributed with MarKing . MarKing is proprietary software that incorporates open source components listed below. All third party components are used in compliance wit…",
-      "bytes": 26793,
-      "modifiedAt": "2026-07-31T09:29:50.000Z",
-      "contentSha256": "bd8638a753e61579f50f0eadecf62240749bfef22ea3ba952aaf2fd27f70dc4c"
     }
   ],
   "graph": {
     "nodes": [
-      {
-        "id": "ws_d4de96b28d:测试.md",
-        "label": "测试",
-        "kind": "doc",
-        "group": "新建文件夹",
-        "weight": 1,
-        "degree": 0,
-        "orphan": true,
-        "modified": 1786336287340.467
-      },
-      {
-        "id": "ws_d4de96b28d:测试2.md",
-        "label": "测试2",
-        "kind": "doc",
-        "group": "新建文件夹",
-        "weight": 1,
-        "degree": 0,
-        "orphan": true,
-        "modified": 1786448286477.5693
-      },
-      {
-        "id": "ws_d4de96b28d:MarKing/_up_/THIRD-PARTY-NOTICES.md",
-        "label": "THIRD-PARTY-NOTICES",
-        "kind": "doc",
-        "group": "新建文件夹",
-        "weight": 1,
-        "degree": 0,
-        "orphan": true,
-        "modified": 1785490190000
-      },
       {
         "id": "ws_25a724bd6b:4K报备.md",
         "label": "4K报备",
@@ -8086,7 +8730,7 @@
         "weight": 6,
         "degree": 5,
         "orphan": false,
-        "modified": 1786190055283.4983
+        "modified": 1786955309999.6938
       },
       {
         "id": "ws_25a724bd6b:8K集采.md",
@@ -8099,6 +8743,16 @@
         "modified": 1786448426228.1423
       },
       {
+        "id": "ws_25a724bd6b:980仪表使用.md",
+        "label": "980仪表使用",
+        "kind": "doc",
+        "group": "temple",
+        "weight": 1,
+        "degree": 0,
+        "orphan": true,
+        "modified": 1786958804105.4336
+      },
+      {
         "id": "ws_25a724bd6b:安全.md",
         "label": "安全",
         "kind": "doc",
@@ -8106,17 +8760,27 @@
         "weight": 1,
         "degree": 0,
         "orphan": true,
-        "modified": 1707014158655.006
+        "modified": 1786685776542.7708
+      },
+      {
+        "id": "ws_25a724bd6b:百度访客统计.md",
+        "label": "百度访客统计",
+        "kind": "doc",
+        "group": "temple",
+        "weight": 1,
+        "degree": 0,
+        "orphan": true,
+        "modified": 1786623678366.3247
       },
       {
         "id": "ws_25a724bd6b:北京移动ott.md",
         "label": "北京移动ott",
         "kind": "doc",
         "group": "temple",
-        "weight": 6,
-        "degree": 5,
+        "weight": 5,
+        "degree": 4,
         "orphan": false,
-        "modified": 1769428885969.2007
+        "modified": 1786604977324.0144
       },
       {
         "id": "ws_25a724bd6b:边界.md",
@@ -8143,10 +8807,10 @@
         "label": "重庆移动",
         "kind": "doc",
         "group": "temple",
-        "weight": 5,
-        "degree": 4,
+        "weight": 6,
+        "degree": 5,
         "orphan": false,
-        "modified": 1741931189650.0186
+        "modified": 1786515706641.3733
       },
       {
         "id": "ws_25a724bd6b:单片机.md",
@@ -8157,6 +8821,16 @@
         "degree": 0,
         "orphan": true,
         "modified": 1750382785012.041
+      },
+      {
+        "id": "ws_25a724bd6b:电信抽检.md",
+        "label": "电信抽检",
+        "kind": "doc",
+        "group": "temple",
+        "weight": 4,
+        "degree": 3,
+        "orphan": false,
+        "modified": 1786949294279.3887
       },
       {
         "id": "ws_25a724bd6b:分省容灾.md",
@@ -8226,15 +8900,15 @@
         "weight": 6,
         "degree": 5,
         "orphan": false,
-        "modified": 1786436342044.9246
+        "modified": 1786496655342.9302
       },
       {
         "id": "ws_25a724bd6b:广西移动MR622-CK.md",
         "label": "广西移动MR622-CK",
         "kind": "doc",
         "group": "temple",
-        "weight": 8,
-        "degree": 7,
+        "weight": 9,
+        "degree": 8,
         "orphan": false,
         "modified": 1757898158099.9397
       },
@@ -8256,7 +8930,7 @@
         "weight": 7,
         "degree": 6,
         "orphan": false,
-        "modified": 1786450727622.1626
+        "modified": 1786502013206.9749
       },
       {
         "id": "ws_25a724bd6b:贵州移动KF.md",
@@ -8313,10 +8987,10 @@
         "label": "湖北移动KF",
         "kind": "doc",
         "group": "temple",
-        "weight": 6,
-        "degree": 5,
+        "weight": 7,
+        "degree": 6,
         "orphan": false,
-        "modified": 1781232523464.2776
+        "modified": 1786677858321.0044
       },
       {
         "id": "ws_25a724bd6b:湖北移动MC(1).md",
@@ -8326,7 +9000,7 @@
         "weight": 7,
         "degree": 6,
         "orphan": false,
-        "modified": 1730335807863.3752
+        "modified": 1786677904135.5693
       },
       {
         "id": "ws_25a724bd6b:湖北KA.md",
@@ -8356,7 +9030,7 @@
         "weight": 7,
         "degree": 6,
         "orphan": false,
-        "modified": 1781080147362.5806
+        "modified": 1786677913681.2751
       },
       {
         "id": "ws_25a724bd6b:湖南版本更新.md",
@@ -8393,9 +9067,9 @@
         "label": "湖南移动路由器",
         "kind": "doc",
         "group": "temple",
-        "weight": 1,
-        "degree": 0,
-        "orphan": true,
+        "weight": 2,
+        "degree": 1,
+        "orphan": false,
         "modified": 1744943117631.109
       },
       {
@@ -8429,6 +9103,16 @@
         "modified": 1739871290148.0706
       },
       {
+        "id": "ws_25a724bd6b:机顶盒recovery升级.md",
+        "label": "机顶盒recovery升级",
+        "kind": "doc",
+        "group": "temple",
+        "weight": 2,
+        "degree": 1,
+        "orphan": false,
+        "modified": 1786610833666.9368
+      },
+      {
         "id": "ws_25a724bd6b:计划.md",
         "label": "计划",
         "kind": "doc",
@@ -8443,8 +9127,8 @@
         "label": "记录",
         "kind": "doc",
         "group": "temple",
-        "weight": 3,
-        "degree": 2,
+        "weight": 4,
+        "degree": 3,
         "orphan": false,
         "modified": 1786326868165.3665
       },
@@ -8456,7 +9140,17 @@
         "weight": 12,
         "degree": 11,
         "orphan": false,
-        "modified": 1786082158814.5305
+        "modified": 1786671547687.3403
+      },
+      {
+        "id": "ws_25a724bd6b:江苏电信KD省采.md",
+        "label": "江苏电信KD省采",
+        "kind": "doc",
+        "group": "temple",
+        "weight": 2,
+        "degree": 1,
+        "orphan": false,
+        "modified": 1786933442135.7212
       },
       {
         "id": "ws_25a724bd6b:江西电信MR622-MK.md",
@@ -8493,8 +9187,8 @@
         "label": "辽宁KF",
         "kind": "doc",
         "group": "temple",
-        "weight": 5,
-        "degree": 4,
+        "weight": 6,
+        "degree": 5,
         "orphan": false,
         "modified": 1784706255201.5503
       },
@@ -8533,8 +9227,8 @@
         "label": "青海MR622-CK",
         "kind": "doc",
         "group": "temple",
-        "weight": 2,
-        "degree": 1,
+        "weight": 3,
+        "degree": 2,
         "orphan": false,
         "modified": 1754880400800.2349
       },
@@ -8606,7 +9300,7 @@
         "weight": 3,
         "degree": 2,
         "orphan": false,
-        "modified": 1785144805941.011
+        "modified": 1786610746145.4517
       },
       {
         "id": "ws_25a724bd6b:陕西MC.md",
@@ -8656,7 +9350,7 @@
         "weight": 1,
         "degree": 0,
         "orphan": true,
-        "modified": 1732689888998.7153
+        "modified": 1786498278789.8945
       },
       {
         "id": "ws_25a724bd6b:网关.md",
@@ -8673,10 +9367,10 @@
         "label": "文档知识库开发记录",
         "kind": "doc",
         "group": "temple",
-        "weight": 3,
-        "degree": 2,
+        "weight": 2,
+        "degree": 1,
         "orphan": false,
-        "modified": 1786428525580.0752
+        "modified": 1786953892441.1765
       },
       {
         "id": "ws_25a724bd6b:文字脚本.md",
@@ -8693,8 +9387,8 @@
         "label": "问题汇总",
         "kind": "doc",
         "group": "temple",
-        "weight": 2,
-        "degree": 1,
+        "weight": 3,
+        "degree": 2,
         "orphan": false,
         "modified": 1780368789411.7903
       },
@@ -8716,7 +9410,7 @@
         "weight": 2,
         "degree": 1,
         "orphan": false,
-        "modified": 1775726748526.8596
+        "modified": 1786605150941.9087
       },
       {
         "id": "ws_25a724bd6b:新疆电信MK.md",
@@ -8753,10 +9447,10 @@
         "label": "移动iot遥控PCN测试",
         "kind": "doc",
         "group": "temple",
-        "weight": 3,
-        "degree": 2,
+        "weight": 5,
+        "degree": 4,
         "orphan": false,
-        "modified": 1786448530137.4663
+        "modified": 1786930668681.5305
       },
       {
         "id": "ws_25a724bd6b:银发经济流量转化.md",
@@ -8799,16 +9493,6 @@
         "modified": 1783903300000
       },
       {
-        "id": "ws_25a724bd6b:AI提示词.md",
-        "label": "AI提示词",
-        "kind": "doc",
-        "group": "temple",
-        "weight": 1,
-        "degree": 0,
-        "orphan": true,
-        "modified": 1782892476646.8604
-      },
-      {
         "id": "ws_25a724bd6b:aml.md",
         "label": "aml",
         "kind": "doc",
@@ -8826,7 +9510,7 @@
         "weight": 1,
         "degree": 0,
         "orphan": true,
-        "modified": 1782289240671.978
+        "modified": 1786605209753.9004
       },
       {
         "id": "ws_25a724bd6b:codex.md",
@@ -8893,9 +9577,9 @@
         "label": "HbuilderX",
         "kind": "doc",
         "group": "temple",
-        "weight": 1,
-        "degree": 0,
-        "orphan": true,
+        "weight": 2,
+        "degree": 1,
+        "orphan": false,
         "modified": 1779344286222.484
       },
       {
@@ -8913,8 +9597,8 @@
         "label": "linux脚本",
         "kind": "doc",
         "group": "temple",
-        "weight": 3,
-        "degree": 2,
+        "weight": 4,
+        "degree": 3,
         "orphan": false,
         "modified": 1785414509689.7805
       },
@@ -9019,14 +9703,34 @@
         "modified": 1785152925297.152
       },
       {
-        "id": "missing:ws_25a724bd6b:https://raw.githubusercontent.com/l06066hb/marking/main/readme.md",
-        "label": "README",
-        "kind": "missing",
-        "group": "未创建",
+        "id": "default:功能简介.md",
+        "label": "功能简介",
+        "kind": "doc",
+        "group": "默认 docs",
         "weight": 2,
         "degree": 1,
         "orphan": false,
-        "modified": 0
+        "modified": 1786604533809.4773
+      },
+      {
+        "id": "default:default/codex基础讲解(1).md",
+        "label": "codex基础讲解(1)",
+        "kind": "doc",
+        "group": "默认 docs",
+        "weight": 1,
+        "degree": 0,
+        "orphan": true,
+        "modified": 1786700817571.63
+      },
+      {
+        "id": "default:README.md",
+        "label": "README",
+        "kind": "doc",
+        "group": "默认 docs",
+        "weight": 7,
+        "degree": 6,
+        "orphan": false,
+        "modified": 1785471989509.4736
       },
       {
         "id": "missing:ws_25a724bd6b:$var == *substr*",
@@ -9061,6 +9765,36 @@
       {
         "id": "missing:ws_25a724bd6b:pon网关配置与维护命令",
         "label": "PON网关配置与维护命令",
+        "kind": "missing",
+        "group": "未创建",
+        "weight": 2,
+        "degree": 1,
+        "orphan": false,
+        "modified": 0
+      },
+      {
+        "id": "missing:default:pon网关命令索引",
+        "label": "PON网关命令索引",
+        "kind": "missing",
+        "group": "未创建",
+        "weight": 2,
+        "degree": 1,
+        "orphan": false,
+        "modified": 0
+      },
+      {
+        "id": "missing:default:架构设计",
+        "label": "架构设计",
+        "kind": "missing",
+        "group": "未创建",
+        "weight": 2,
+        "degree": 1,
+        "orphan": false,
+        "modified": 0
+      },
+      {
+        "id": "missing:default:architecture/system-design.md",
+        "label": "system-design",
         "kind": "missing",
         "group": "未创建",
         "weight": 2,
@@ -9399,6 +10133,26 @@
         "modified": 0
       },
       {
+        "id": "tag:markdown",
+        "label": "#markdown",
+        "kind": "tag",
+        "group": "标签",
+        "weight": 2,
+        "degree": 1,
+        "orphan": false,
+        "modified": 0
+      },
+      {
+        "id": "tag:knowledge",
+        "label": "#knowledge",
+        "kind": "tag",
+        "group": "标签",
+        "weight": 2,
+        "degree": 1,
+        "orphan": false,
+        "modified": 0
+      },
+      {
         "id": "keyword:system",
         "label": "system",
         "kind": "keyword",
@@ -9423,7 +10177,7 @@
         "label": "hardware",
         "kind": "keyword",
         "group": "语义",
-        "weight": 183,
+        "weight": 184,
         "degree": 10,
         "orphan": false,
         "modified": 0
@@ -9433,7 +10187,7 @@
         "label": "write",
         "kind": "keyword",
         "group": "语义",
-        "weight": 177,
+        "weight": 179,
         "degree": 10,
         "orphan": false,
         "modified": 0
@@ -9443,7 +10197,7 @@
         "label": "info",
         "kind": "keyword",
         "group": "语义",
-        "weight": 174,
+        "weight": 175,
         "degree": 10,
         "orphan": false,
         "modified": 0
@@ -9483,8 +10237,18 @@
         "label": "grep",
         "kind": "keyword",
         "group": "语义",
-        "weight": 153,
-        "degree": 8,
+        "weight": 154,
+        "degree": 9,
+        "orphan": false,
+        "modified": 0
+      },
+      {
+        "id": "keyword:mac",
+        "label": "mac",
+        "kind": "keyword",
+        "group": "语义",
+        "weight": 81,
+        "degree": 10,
         "orphan": false,
         "modified": 0
       },
@@ -9499,16 +10263,6 @@
         "modified": 0
       },
       {
-        "id": "keyword:mac",
-        "label": "mac",
-        "kind": "keyword",
-        "group": "语义",
-        "weight": 78,
-        "degree": 10,
-        "orphan": false,
-        "modified": 0
-      },
-      {
         "id": "keyword:drop",
         "label": "drop",
         "kind": "keyword",
@@ -9519,22 +10273,12 @@
         "modified": 0
       },
       {
-        "id": "keyword:iptables",
-        "label": "iptables",
-        "kind": "keyword",
-        "group": "语义",
-        "weight": 272,
-        "degree": 7,
-        "orphan": false,
-        "modified": 0
-      },
-      {
         "id": "keyword:class",
         "label": "class",
         "kind": "keyword",
         "group": "语义",
-        "weight": 113,
-        "degree": 6,
+        "weight": 183,
+        "degree": 7,
         "orphan": false,
         "modified": 0
       },
@@ -9549,12 +10293,32 @@
         "modified": 0
       },
       {
+        "id": "keyword:iptables",
+        "label": "iptables",
+        "kind": "keyword",
+        "group": "语义",
+        "weight": 192,
+        "degree": 5,
+        "orphan": false,
+        "modified": 0
+      },
+      {
+        "id": "keyword:升级",
+        "label": "升级",
+        "kind": "keyword",
+        "group": "语义",
+        "weight": 74,
+        "degree": 8,
+        "orphan": false,
+        "modified": 0
+      },
+      {
         "id": "keyword:apk",
         "label": "apk",
         "kind": "keyword",
         "group": "语义",
-        "weight": 160,
-        "degree": 5,
+        "weight": 165,
+        "degree": 6,
         "orphan": false,
         "modified": 0
       },
@@ -9573,18 +10337,18 @@
         "label": "时间",
         "kind": "keyword",
         "group": "语义",
-        "weight": 120,
+        "weight": 121,
         "degree": 6,
         "orphan": false,
         "modified": 0
       },
       {
-        "id": "keyword:升级",
-        "label": "升级",
+        "id": "keyword:data",
+        "label": "data",
         "kind": "keyword",
         "group": "语义",
-        "weight": 61,
-        "degree": 6,
+        "weight": 119,
+        "degree": 5,
         "orphan": false,
         "modified": 0
       },
@@ -9599,21 +10363,11 @@
         "modified": 0
       },
       {
-        "id": "keyword:data",
-        "label": "data",
-        "kind": "keyword",
-        "group": "语义",
-        "weight": 118,
-        "degree": 4,
-        "orphan": false,
-        "modified": 0
-      },
-      {
         "id": "keyword:hg680",
         "label": "hg680",
         "kind": "keyword",
         "group": "语义",
-        "weight": 40,
+        "weight": 42,
         "degree": 5,
         "orphan": false,
         "modified": 0
@@ -9629,6 +10383,16 @@
         "modified": 0
       },
       {
+        "id": "keyword:android",
+        "label": "android",
+        "kind": "keyword",
+        "group": "语义",
+        "weight": 35,
+        "degree": 5,
+        "orphan": false,
+        "modified": 0
+      },
+      {
         "id": "keyword:log",
         "label": "log",
         "kind": "keyword",
@@ -9639,11 +10403,11 @@
         "modified": 0
       },
       {
-        "id": "keyword:android",
-        "label": "android",
+        "id": "keyword:stbid",
+        "label": "stbid",
         "kind": "keyword",
         "group": "语义",
-        "weight": 33,
+        "weight": 19,
         "degree": 4,
         "orphan": false,
         "modified": 0
@@ -9659,21 +10423,31 @@
         "modified": 0
       },
       {
-        "id": "keyword:stbid",
-        "label": "stbid",
+        "id": "keyword:移动",
+        "label": "移动",
         "kind": "keyword",
         "group": "语义",
-        "weight": 17,
-        "degree": 4,
+        "weight": 59,
+        "degree": 6,
         "orphan": false,
         "modified": 0
       },
       {
-        "id": "keyword:设置",
-        "label": "设置",
+        "id": "keyword:系统",
+        "label": "系统",
         "kind": "keyword",
         "group": "语义",
-        "weight": 42,
+        "weight": 38,
+        "degree": 5,
+        "orphan": false,
+        "modified": 0
+      },
+      {
+        "id": "keyword:package",
+        "label": "package",
+        "kind": "keyword",
+        "group": "语义",
+        "weight": 54,
         "degree": 3,
         "orphan": false,
         "modified": 0
@@ -9682,9 +10456,9 @@
     "edges": [
       {
         "source": "ws_25a724bd6b:文档知识库开发记录.md",
-        "target": "missing:ws_25a724bd6b:https://raw.githubusercontent.com/l06066hb/marking/main/readme.md",
-        "type": "missing",
-        "weight": 12,
+        "target": "default:README.md",
+        "type": "link",
+        "weight": 18,
         "directed": true
       },
       {
@@ -9711,6 +10485,27 @@
       {
         "source": "ws_25a724bd6b:pon/PON网关H1Ne与QoS测试命令.md",
         "target": "missing:ws_25a724bd6b:pon网关配置与维护命令",
+        "type": "missing",
+        "weight": 2,
+        "directed": true
+      },
+      {
+        "source": "default:README.md",
+        "target": "missing:default:pon网关命令索引",
+        "type": "missing",
+        "weight": 2,
+        "directed": true
+      },
+      {
+        "source": "default:README.md",
+        "target": "missing:default:架构设计",
+        "type": "missing",
+        "weight": 2,
+        "directed": true
+      },
+      {
+        "source": "default:README.md",
+        "target": "missing:default:architecture/system-design.md",
         "type": "missing",
         "weight": 2,
         "directed": true
@@ -9996,6 +10791,20 @@
         "directed": false
       },
       {
+        "source": "default:README.md",
+        "target": "tag:markdown",
+        "type": "tag",
+        "weight": 2,
+        "directed": false
+      },
+      {
+        "source": "default:README.md",
+        "target": "tag:knowledge",
+        "type": "tag",
+        "weight": 2,
+        "directed": false
+      },
+      {
         "source": "ws_25a724bd6b:架构.md",
         "target": "keyword:system",
         "type": "keyword",
@@ -10199,7 +11008,7 @@
         "directed": false
       },
       {
-        "source": "ws_25a724bd6b:北京移动ott.md",
+        "source": "ws_25a724bd6b:重庆移动.md",
         "target": "keyword:hardware",
         "type": "keyword",
         "weight": 6,
@@ -10262,14 +11071,14 @@
         "directed": false
       },
       {
-        "source": "ws_25a724bd6b:新疆移动KF.md",
+        "source": "ws_25a724bd6b:重庆移动.md",
         "target": "keyword:write",
         "type": "keyword",
         "weight": 6,
         "directed": false
       },
       {
-        "source": "ws_25a724bd6b:重庆移动.md",
+        "source": "ws_25a724bd6b:新疆移动KF.md",
         "target": "keyword:write",
         "type": "keyword",
         "weight": 6,
@@ -10332,14 +11141,14 @@
         "directed": false
       },
       {
-        "source": "ws_25a724bd6b:北京移动ott.md",
+        "source": "ws_25a724bd6b:重庆移动.md",
         "target": "keyword:info",
         "type": "keyword",
         "weight": 6,
         "directed": false
       },
       {
-        "source": "ws_25a724bd6b:广西移动KF.md",
+        "source": "ws_25a724bd6b:北京移动ott.md",
         "target": "keyword:info",
         "type": "keyword",
         "weight": 6,
@@ -10577,6 +11386,55 @@
         "directed": false
       },
       {
+        "source": "ws_25a724bd6b:湖南移动MC.md",
+        "target": "keyword:mac",
+        "type": "keyword",
+        "weight": 6,
+        "directed": false
+      },
+      {
+        "source": "ws_25a724bd6b:4K报备.md",
+        "target": "keyword:mac",
+        "type": "keyword",
+        "weight": 6,
+        "directed": false
+      },
+      {
+        "source": "ws_25a724bd6b:陕西移动融合MR622-DK.md",
+        "target": "keyword:mac",
+        "type": "keyword",
+        "weight": 6,
+        "directed": false
+      },
+      {
+        "source": "ws_25a724bd6b:广东电信MR820-MK.md",
+        "target": "keyword:mac",
+        "type": "keyword",
+        "weight": 6,
+        "directed": false
+      },
+      {
+        "source": "ws_25a724bd6b:重庆移动.md",
+        "target": "keyword:mac",
+        "type": "keyword",
+        "weight": 6,
+        "directed": false
+      },
+      {
+        "source": "ws_25a724bd6b:pon/PON网关H1Ne与QoS测试命令.md",
+        "target": "keyword:mac",
+        "type": "keyword",
+        "weight": 6,
+        "directed": false
+      },
+      {
+        "source": "ws_25a724bd6b:山东移动KF.md",
+        "target": "keyword:mac",
+        "type": "keyword",
+        "weight": 6,
+        "directed": false
+      },
+      {
         "source": "ws_25a724bd6b:架构.md",
         "target": "keyword:set",
         "type": "keyword",
@@ -10621,48 +11479,6 @@
       {
         "source": "ws_25a724bd6b:青海LC.md",
         "target": "keyword:set",
-        "type": "keyword",
-        "weight": 6,
-        "directed": false
-      },
-      {
-        "source": "ws_25a724bd6b:湖南移动MC.md",
-        "target": "keyword:mac",
-        "type": "keyword",
-        "weight": 6,
-        "directed": false
-      },
-      {
-        "source": "ws_25a724bd6b:4K报备.md",
-        "target": "keyword:mac",
-        "type": "keyword",
-        "weight": 6,
-        "directed": false
-      },
-      {
-        "source": "ws_25a724bd6b:陕西移动融合MR622-DK.md",
-        "target": "keyword:mac",
-        "type": "keyword",
-        "weight": 6,
-        "directed": false
-      },
-      {
-        "source": "ws_25a724bd6b:广东电信MR820-MK.md",
-        "target": "keyword:mac",
-        "type": "keyword",
-        "weight": 6,
-        "directed": false
-      },
-      {
-        "source": "ws_25a724bd6b:pon/PON网关H1Ne与QoS测试命令.md",
-        "target": "keyword:mac",
-        "type": "keyword",
-        "weight": 6,
-        "directed": false
-      },
-      {
-        "source": "ws_25a724bd6b:山东移动KF.md",
-        "target": "keyword:mac",
         "type": "keyword",
         "weight": 6,
         "directed": false
@@ -10718,42 +11534,7 @@
       },
       {
         "source": "ws_25a724bd6b:湖北LV.md",
-        "target": "keyword:iptables",
-        "type": "keyword",
-        "weight": 6,
-        "directed": false
-      },
-      {
-        "source": "ws_25a724bd6b:分省容灾.md",
-        "target": "keyword:iptables",
-        "type": "keyword",
-        "weight": 6,
-        "directed": false
-      },
-      {
-        "source": "ws_25a724bd6b:湖北移动KF.md",
-        "target": "keyword:iptables",
-        "type": "keyword",
-        "weight": 6,
-        "directed": false
-      },
-      {
-        "source": "ws_25a724bd6b:湖北移动MC(1).md",
-        "target": "keyword:iptables",
-        "type": "keyword",
-        "weight": 6,
-        "directed": false
-      },
-      {
-        "source": "ws_25a724bd6b:广西移动KF.md",
-        "target": "keyword:iptables",
-        "type": "keyword",
-        "weight": 6,
-        "directed": false
-      },
-      {
-        "source": "ws_25a724bd6b:江西KF.md",
-        "target": "keyword:iptables",
+        "target": "keyword:class",
         "type": "keyword",
         "weight": 6,
         "directed": false
@@ -10843,6 +11624,76 @@
         "directed": false
       },
       {
+        "source": "ws_25a724bd6b:分省容灾.md",
+        "target": "keyword:iptables",
+        "type": "keyword",
+        "weight": 6,
+        "directed": false
+      },
+      {
+        "source": "ws_25a724bd6b:湖北移动KF.md",
+        "target": "keyword:iptables",
+        "type": "keyword",
+        "weight": 6,
+        "directed": false
+      },
+      {
+        "source": "ws_25a724bd6b:湖北移动MC(1).md",
+        "target": "keyword:iptables",
+        "type": "keyword",
+        "weight": 6,
+        "directed": false
+      },
+      {
+        "source": "ws_25a724bd6b:广西移动KF.md",
+        "target": "keyword:iptables",
+        "type": "keyword",
+        "weight": 6,
+        "directed": false
+      },
+      {
+        "source": "ws_25a724bd6b:江西KF.md",
+        "target": "keyword:iptables",
+        "type": "keyword",
+        "weight": 6,
+        "directed": false
+      },
+      {
+        "source": "ws_25a724bd6b:陕西移动KA.md",
+        "target": "keyword:升级",
+        "type": "keyword",
+        "weight": 6,
+        "directed": false
+      },
+      {
+        "source": "ws_25a724bd6b:陕西移动融合MR622-DK.md",
+        "target": "keyword:升级",
+        "type": "keyword",
+        "weight": 6,
+        "directed": false
+      },
+      {
+        "source": "ws_25a724bd6b:宁夏.md",
+        "target": "keyword:升级",
+        "type": "keyword",
+        "weight": 6,
+        "directed": false
+      },
+      {
+        "source": "ws_25a724bd6b:湖南电信lan-MR820-MK.md",
+        "target": "keyword:升级",
+        "type": "keyword",
+        "weight": 6,
+        "directed": false
+      },
+      {
+        "source": "ws_25a724bd6b:山东移动KF.md",
+        "target": "keyword:升级",
+        "type": "keyword",
+        "weight": 6,
+        "directed": false
+      },
+      {
         "source": "ws_25a724bd6b:宁夏iptv.md",
         "target": "keyword:apk",
         "type": "keyword",
@@ -10927,14 +11778,14 @@
         "directed": false
       },
       {
-        "source": "ws_25a724bd6b:问题汇总.md",
+        "source": "ws_25a724bd6b:陕西移动KA.md",
         "target": "keyword:时间",
         "type": "keyword",
         "weight": 6,
         "directed": false
       },
       {
-        "source": "ws_25a724bd6b:陕西移动KA.md",
+        "source": "ws_25a724bd6b:问题汇总.md",
         "target": "keyword:时间",
         "type": "keyword",
         "weight": 6,
@@ -10950,62 +11801,6 @@
       {
         "source": "ws_25a724bd6b:计划.md",
         "target": "keyword:时间",
-        "type": "keyword",
-        "weight": 6,
-        "directed": false
-      },
-      {
-        "source": "ws_25a724bd6b:陕西移动KA.md",
-        "target": "keyword:升级",
-        "type": "keyword",
-        "weight": 6,
-        "directed": false
-      },
-      {
-        "source": "ws_25a724bd6b:陕西移动融合MR622-DK.md",
-        "target": "keyword:升级",
-        "type": "keyword",
-        "weight": 6,
-        "directed": false
-      },
-      {
-        "source": "ws_25a724bd6b:宁夏.md",
-        "target": "keyword:升级",
-        "type": "keyword",
-        "weight": 6,
-        "directed": false
-      },
-      {
-        "source": "ws_25a724bd6b:湖南电信lan-MR820-MK.md",
-        "target": "keyword:升级",
-        "type": "keyword",
-        "weight": 6,
-        "directed": false
-      },
-      {
-        "source": "ws_25a724bd6b:山东移动KF.md",
-        "target": "keyword:升级",
-        "type": "keyword",
-        "weight": 6,
-        "directed": false
-      },
-      {
-        "source": "ws_25a724bd6b:MTK.md",
-        "target": "keyword:unifykeys",
-        "type": "keyword",
-        "weight": 6,
-        "directed": false
-      },
-      {
-        "source": "ws_25a724bd6b:辽宁KF.md",
-        "target": "keyword:unifykeys",
-        "type": "keyword",
-        "weight": 6,
-        "directed": false
-      },
-      {
-        "source": "ws_25a724bd6b:计划.md",
-        "target": "keyword:unifykeys",
         "type": "keyword",
         "weight": 6,
         "directed": false
@@ -11039,6 +11834,27 @@
         "directed": false
       },
       {
+        "source": "ws_25a724bd6b:MTK.md",
+        "target": "keyword:unifykeys",
+        "type": "keyword",
+        "weight": 6,
+        "directed": false
+      },
+      {
+        "source": "ws_25a724bd6b:辽宁KF.md",
+        "target": "keyword:unifykeys",
+        "type": "keyword",
+        "weight": 6,
+        "directed": false
+      },
+      {
+        "source": "ws_25a724bd6b:计划.md",
+        "target": "keyword:unifykeys",
+        "type": "keyword",
+        "weight": 6,
+        "directed": false
+      },
+      {
         "source": "ws_25a724bd6b:北京移动ott.md",
         "target": "keyword:hg680",
         "type": "keyword",
@@ -11054,6 +11870,13 @@
       },
       {
         "source": "ws_25a724bd6b:山西电信KD.md",
+        "target": "keyword:hg680",
+        "type": "keyword",
+        "weight": 6,
+        "directed": false
+      },
+      {
+        "source": "ws_25a724bd6b:移动iot遥控PCN测试.md",
         "target": "keyword:hg680",
         "type": "keyword",
         "weight": 6,
@@ -11076,6 +11899,27 @@
       {
         "source": "ws_25a724bd6b:湖南电信KD.md",
         "target": "keyword:persist",
+        "type": "keyword",
+        "weight": 6,
+        "directed": false
+      },
+      {
+        "source": "ws_25a724bd6b:四川HG680-KF.md",
+        "target": "keyword:android",
+        "type": "keyword",
+        "weight": 6,
+        "directed": false
+      },
+      {
+        "source": "ws_25a724bd6b:山西电信KD.md",
+        "target": "keyword:android",
+        "type": "keyword",
+        "weight": 6,
+        "directed": false
+      },
+      {
+        "source": "ws_25a724bd6b:河南移动MR622-CK.md",
+        "target": "keyword:android",
         "type": "keyword",
         "weight": 6,
         "directed": false
@@ -11116,22 +11960,15 @@
         "directed": false
       },
       {
-        "source": "ws_25a724bd6b:四川HG680-KF.md",
-        "target": "keyword:android",
+        "source": "ws_25a724bd6b:广东电信MR820-MK.md",
+        "target": "keyword:stbid",
         "type": "keyword",
         "weight": 6,
         "directed": false
       },
       {
-        "source": "ws_25a724bd6b:山西电信KD.md",
-        "target": "keyword:android",
-        "type": "keyword",
-        "weight": 6,
-        "directed": false
-      },
-      {
-        "source": "ws_25a724bd6b:河南移动MR622-CK.md",
-        "target": "keyword:android",
+        "source": "ws_25a724bd6b:重庆移动.md",
+        "target": "keyword:stbid",
         "type": "keyword",
         "weight": 6,
         "directed": false
@@ -11144,29 +11981,64 @@
         "directed": false
       },
       {
-        "source": "ws_25a724bd6b:广东电信MR820-MK.md",
-        "target": "keyword:stbid",
+        "source": "ws_25a724bd6b:记录.md",
+        "target": "keyword:移动",
         "type": "keyword",
         "weight": 6,
         "directed": false
       },
       {
-        "source": "ws_25a724bd6b:potplayer录屏方法.md",
-        "target": "keyword:设置",
-        "type": "keyword",
-        "weight": 6,
-        "directed": false
-      },
-      {
-        "source": "ws_25a724bd6b:文档知识库开发记录.md",
-        "target": "keyword:设置",
+        "source": "ws_25a724bd6b:移动iot遥控PCN测试.md",
+        "target": "keyword:移动",
         "type": "keyword",
         "weight": 6,
         "directed": false
       },
       {
         "source": "ws_25a724bd6b:陕西移动融合MR622-DK.md",
-        "target": "keyword:设置",
+        "target": "keyword:移动",
+        "type": "keyword",
+        "weight": 6,
+        "directed": false
+      },
+      {
+        "source": "ws_25a724bd6b:linux脚本.md",
+        "target": "keyword:系统",
+        "type": "keyword",
+        "weight": 6,
+        "directed": false
+      },
+      {
+        "source": "ws_25a724bd6b:potplayer录屏方法.md",
+        "target": "keyword:系统",
+        "type": "keyword",
+        "weight": 6,
+        "directed": false
+      },
+      {
+        "source": "ws_25a724bd6b:问题汇总.md",
+        "target": "keyword:系统",
+        "type": "keyword",
+        "weight": 6,
+        "directed": false
+      },
+      {
+        "source": "ws_25a724bd6b:HbuilderX.md",
+        "target": "keyword:系统",
+        "type": "keyword",
+        "weight": 6,
+        "directed": false
+      },
+      {
+        "source": "ws_25a724bd6b:湖北移动KF.md",
+        "target": "keyword:package",
+        "type": "keyword",
+        "weight": 6,
+        "directed": false
+      },
+      {
+        "source": "ws_25a724bd6b:广西移动MR622-CK.md",
+        "target": "keyword:package",
         "type": "keyword",
         "weight": 6,
         "directed": false
@@ -11186,13 +12058,6 @@
         "directed": false
       },
       {
-        "source": "ws_25a724bd6b:贵州电信MK.md",
-        "target": "keyword:set",
-        "type": "keyword",
-        "weight": 5,
-        "directed": false
-      },
-      {
         "source": "ws_25a724bd6b:四川HG680-KF.md",
         "target": "keyword:mac",
         "type": "keyword",
@@ -11200,14 +12065,28 @@
         "directed": false
       },
       {
-        "source": "ws_25a724bd6b:辽宁KF.md",
-        "target": "keyword:hg680",
+        "source": "ws_25a724bd6b:贵州电信MK.md",
+        "target": "keyword:set",
         "type": "keyword",
         "weight": 5,
         "directed": false
       },
       {
-        "source": "ws_25a724bd6b:移动iot遥控PCN测试.md",
+        "source": "ws_25a724bd6b:机顶盒recovery升级.md",
+        "target": "keyword:升级",
+        "type": "keyword",
+        "weight": 5,
+        "directed": false
+      },
+      {
+        "source": "ws_25a724bd6b:广西移动KF.md",
+        "target": "keyword:apk",
+        "type": "keyword",
+        "weight": 5,
+        "directed": false
+      },
+      {
+        "source": "ws_25a724bd6b:辽宁KF.md",
         "target": "keyword:hg680",
         "type": "keyword",
         "weight": 5,
@@ -11221,10 +12100,10 @@
         "directed": false
       },
       {
-        "source": "ws_25a724bd6b:重庆移动.md",
-        "target": "keyword:mac",
+        "source": "default:功能简介.md",
+        "target": "keyword:系统",
         "type": "keyword",
-        "weight": 4,
+        "weight": 5,
         "directed": false
       },
       {
@@ -11242,6 +12121,13 @@
         "directed": false
       },
       {
+        "source": "ws_25a724bd6b:移动iot遥控PCN测试.md",
+        "target": "keyword:升级",
+        "type": "keyword",
+        "weight": 4,
+        "directed": false
+      },
+      {
         "source": "ws_25a724bd6b:西藏电信MR622-MK.md",
         "target": "keyword:mnt",
         "type": "keyword",
@@ -11249,22 +12135,8 @@
         "directed": false
       },
       {
-        "source": "ws_25a724bd6b:重庆移动.md",
-        "target": "keyword:stbid",
-        "type": "keyword",
-        "weight": 4,
-        "directed": false
-      },
-      {
         "source": "ws_25a724bd6b:陕西MC.md",
         "target": "keyword:mac",
-        "type": "keyword",
-        "weight": 3,
-        "directed": false
-      },
-      {
-        "source": "ws_25a724bd6b:重庆移动.md",
-        "target": "keyword:iptables",
         "type": "keyword",
         "weight": 3,
         "directed": false
@@ -11291,10 +12163,10 @@
         "directed": false
       },
       {
-        "source": "ws_25a724bd6b:上海移动MR622-DK.md",
-        "target": "keyword:set",
+        "source": "ws_25a724bd6b:辽宁KF.md",
+        "target": "keyword:移动",
         "type": "keyword",
-        "weight": 2,
+        "weight": 3,
         "directed": false
       },
       {
@@ -11305,10 +12177,59 @@
         "directed": false
       },
       {
+        "source": "ws_25a724bd6b:上海移动MR622-DK.md",
+        "target": "keyword:set",
+        "type": "keyword",
+        "weight": 2,
+        "directed": false
+      },
+      {
+        "source": "ws_25a724bd6b:江苏电信KD省采.md",
+        "target": "keyword:android",
+        "type": "keyword",
+        "weight": 2,
+        "directed": false
+      },
+      {
         "source": "ws_25a724bd6b:湖北电信.md",
         "target": "keyword:stbid",
         "type": "keyword",
         "weight": 2,
+        "directed": false
+      },
+      {
+        "source": "ws_25a724bd6b:电信抽检.md",
+        "target": "keyword:grep",
+        "type": "keyword",
+        "weight": 1,
+        "directed": false
+      },
+      {
+        "source": "ws_25a724bd6b:电信抽检.md",
+        "target": "keyword:data",
+        "type": "keyword",
+        "weight": 1,
+        "directed": false
+      },
+      {
+        "source": "ws_25a724bd6b:湖南移动路由器.md",
+        "target": "keyword:移动",
+        "type": "keyword",
+        "weight": 1,
+        "directed": false
+      },
+      {
+        "source": "ws_25a724bd6b:青海MR622-CK.md",
+        "target": "keyword:移动",
+        "type": "keyword",
+        "weight": 1,
+        "directed": false
+      },
+      {
+        "source": "ws_25a724bd6b:电信抽检.md",
+        "target": "keyword:package",
+        "type": "keyword",
+        "weight": 1,
         "directed": false
       }
     ]

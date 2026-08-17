@@ -30,7 +30,7 @@ namespace MyTempleInstaller
     {
         public const string APP_NAME = "MyTempleKnowledge";
         public const string APP_TITLE = "MyTemple Knowledge";
-        public const string APP_VERSION = "1.8.31";
+        public const string APP_VERSION = "1.8.35";
         public static readonly string InstallDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), APP_NAME);
         public static readonly string UserDataDir = Path.Combine(
