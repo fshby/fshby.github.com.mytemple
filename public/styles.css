@@ -1136,6 +1136,12 @@ body.resizing-sidebar {
   z-index: 10;
 }
 
+.editor-status-bar {
+  position: relative;
+  grid-row: 3;
+  z-index: 10;
+}
+
 .tree.drop-root {
   background: linear-gradient(var(--hover-bg), var(--panel));
   outline: 1px dashed var(--accent);
@@ -2246,7 +2252,7 @@ body.resizing-sidebar {
   height: 100%;
   flex: 1 1 auto;
   display: grid;
-  grid-template-rows: 46px minmax(0, 1fr);
+  grid-template-rows: 46px minmax(0, 1fr) 24px;
   grid-template-columns: minmax(0, 1fr);
   position: relative;
   overflow: hidden;
@@ -2261,7 +2267,6 @@ body.resizing-sidebar {
   width: 100%;
   position: relative;
   box-sizing: border-box;
-  padding-bottom: 24px;
 }
 
 .editor-body > #editorOutline { grid-column: 1; min-width: 0; }
@@ -2712,6 +2717,55 @@ body.resizing-sidebar {
 
 .editor-panel.preview-hidden #previewSplitter {
   display: none !important;
+}
+
+.editor-panel.editor-hidden .editor-body {
+  grid-template-columns: 220px 3px 0 0 minmax(0, 1fr) !important;
+}
+
+.editor-panel.editor-hidden .editor-body.outline-hidden {
+  grid-template-columns: 0 0 0 0 minmax(0, 1fr) !important;
+}
+
+.editor-panel.editor-hidden #editor,
+.editor-panel.editor-hidden #outlineSplitter,
+.editor-panel.editor-hidden #previewSplitter,
+.editor-panel.editor-hidden #editorAiDialog,
+.editor-panel.editor-hidden #editorSearchPopup {
+  display: none !important;
+  width: 0 !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+}
+
+.editor-panel.editor-hidden #preview {
+  min-width: 0;
+}
+
+.editor-panel.editor-hidden #preview .markdown-body {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding-left: 24px;
+  padding-right: 24px;
+}
+
+.editor-toolbar .heading-select {
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  padding-right: 22px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='currentColor' d='M2 4l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+  background-size: 12px;
+  font-size: 13px;
+  min-width: 88px;
+}
+
+.editor-toolbar .heading-select:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .app-shell.immersive {
@@ -4349,7 +4403,7 @@ body.resizing-sidebar {
 
   .editor-panel {
     grid-template-columns: 1fr;
-    grid-template-rows: 46px minmax(0, 46%) minmax(0, 54%);
+    grid-template-rows: 46px minmax(0, 1fr) 24px;
   }
 
   #editor {
@@ -5531,6 +5585,38 @@ button.primary {
   -webkit-backdrop-filter: none;
 }
 
+/* ── 阅读模式大纲 / 阅读面板滚动条 ── */
+.reader-outline,
+.reader-panel > .markdown-body {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) transparent;
+}
+
+.reader-outline::-webkit-scrollbar,
+.reader-panel > .markdown-body::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.reader-outline::-webkit-scrollbar-track,
+.reader-panel > .markdown-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.reader-outline::-webkit-scrollbar-thumb,
+.reader-panel > .markdown-body::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted) 35%, transparent);
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background-clip: padding-box;
+}
+
+.reader-outline::-webkit-scrollbar-thumb:hover,
+.reader-panel > .markdown-body::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--accent) 55%, transparent);
+  background-clip: padding-box;
+}
+
 .markdown-body {
   width: min(860px, calc(100% - 56px));
   padding-top: 48px;
@@ -5614,6 +5700,43 @@ button.primary {
 #editor .cm-scroller {
   scrollbar-width: thin;
   scrollbar-color: var(--line) transparent;
+}
+
+/* ── 统一滚动条样式：工作区目录 / 编辑大纲 / 预览栏 ── */
+.tree,
+.editor-outline,
+#preview {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) transparent;
+}
+
+.tree::-webkit-scrollbar,
+.editor-outline::-webkit-scrollbar,
+#preview::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.tree::-webkit-scrollbar-track,
+.editor-outline::-webkit-scrollbar-track,
+#preview::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.tree::-webkit-scrollbar-thumb,
+.editor-outline::-webkit-scrollbar-thumb,
+#preview::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted) 35%, transparent);
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background-clip: padding-box;
+}
+
+.tree::-webkit-scrollbar-thumb:hover,
+.editor-outline::-webkit-scrollbar-thumb:hover,
+#preview::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--accent) 55%, transparent);
+  background-clip: padding-box;
 }
 
 #editor .cm-editor {
@@ -6986,7 +7109,7 @@ body[data-theme="image"] .editor-splitter::before {
   background: color-mix(in srgb, var(--surface-1) 96%, var(--surface-0));
   box-shadow: inset 0 -1px 0 var(--hairline);
 }
-.editor-panel { grid-template-rows: 42px minmax(0, 1fr); }
+.editor-panel { grid-template-rows: 42px minmax(0, 1fr) 24px; }
 .editor-toolbar button,
 .editor-toolbar select,
 .editor-toolbar label {
@@ -7106,7 +7229,7 @@ body[data-theme="image"] .editor-splitter::before {
 .settings-dialog .shortcut-grid div { padding: 9px 11px; border-radius: 9px; }
 @media (max-width: 760px) {
   .editor-toolbar { height: 40px; min-height: 40px; }
-  .editor-panel { grid-template-rows: 40px minmax(0, 1fr); }
+  .editor-panel { grid-template-rows: 40px minmax(0, 1fr) 24px; }
   .editor-toolbar button, .editor-toolbar select, .editor-toolbar label { height: 29px; min-height: 29px; }
   .settings-dialog { width: calc(100vw - 16px); padding-inline: 14px; }
   .settings-header { margin-inline: -14px; padding-inline: 14px; }

@@ -97,6 +97,7 @@ const state = {
   secondaryCursors: [],
   immersive: false,
   previewVisible: true,
+  editorHidden: false,
   previewBeforeImmersive: true,
   previewTimer: 0,
   previewLastContent: "",
@@ -211,6 +212,8 @@ const els = {
   editorToolbar: document.querySelector("#editorToolbar"),
   editorOutline: document.querySelector("#editorOutline"),
   outlineToggleBtn: document.querySelector("#outlineToggleBtn"),
+  headingSelect: document.querySelector("#headingSelect"),
+  editorHideBtn: document.querySelector("#editorHideBtn"),
   textColor: document.querySelector("#textColor"),
   bgColor: document.querySelector("#bgColor"),
   fontSize: document.querySelector("#fontSize"),
@@ -3213,6 +3216,7 @@ function setMode(mode) {
     renderCurrentPreviewNow(state.currentContent);
     setEditorOutlineVisible(state.editorOutlineVisible);
     setPreviewVisible(state.previewVisible);
+    setEditorVisible(!state.editorHidden);
     if (state.editorOutlineVisible) {
       renderEditorOutline(els.editor.value);
     }
@@ -4975,6 +4979,19 @@ function setPreviewVisible(visible, { automatic = false } = {}) {
   requestAnimationFrame(() => {
     if (typeof applyEditorSplitterLayout === "function") applyEditorSplitterLayout();
   });
+}
+
+function setEditorVisible(visible) {
+  state.editorHidden = !visible;
+  els.editorPanel.classList.toggle("editor-hidden", state.editorHidden);
+  els.editorHideBtn.textContent = state.editorHidden ? "显示编辑器" : "隐藏编辑器";
+  els.editorHideBtn.setAttribute("aria-pressed", String(state.editorHidden));
+  if (!state.editorHidden) {
+    requestAnimationFrame(() => {
+      if (typeof applyEditorSplitterLayout === "function") applyEditorSplitterLayout();
+      if (els.editor?.view?.requestMeasure) els.editor.view.requestMeasure();
+    });
+  }
 }
 
 function setImmersiveEditing(enabled) {
@@ -9701,6 +9718,16 @@ els.editorToolbar.addEventListener("wheel", (event) => {
 els.editorToolbar.addEventListener("click", (event) => {
   const button = event.target.closest("[data-format]");
   if (button) applyFormat(button.dataset.format);
+});
+els.headingSelect?.addEventListener("change", (event) => {
+  const val = event.target.value;
+  if (val) {
+    applyFormat(val);
+    event.target.selectedIndex = 0;
+  }
+});
+els.editorHideBtn?.addEventListener("click", () => {
+  setEditorVisible(state.editorHidden);
 });
 els.newFolderBtn?.addEventListener("click", () => openCreateModal("folder"));
 els.newDocBtn?.addEventListener("click", () => openCreateModal("doc"));

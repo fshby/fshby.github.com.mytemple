@@ -1,22 +1,22 @@
 ﻿{
     "product":  "MyTemple Knowledge",
-    "version":  "1.8.31",
-    "builtAt":  "2026-08-14T09:45:46.6293237Z",
+    "version":  "1.8.35",
+    "builtAt":  "2026-08-17T09:38:38.7532845Z",
     "files":  [
                   {
                       "name":  "MyTempleKnowledge.exe",
                       "bytes":  61440,
-                      "sha256":  "5a9a3522c38c514d38edba0a0b9aaeb4f1d7a3e3e4e9d44487e5153374798104"
+                      "sha256":  "64cfd6dd9cf4b390dadb9738757ed92bce4d7e5e5548e0bad221ac61140a6ff8"
                   },
                   {
                       "name":  "MyTempleKnowledge_Setup.exe",
-                      "bytes":  51689472,
-                      "sha256":  "046a4c4de11e6d0cbbe1fe12969d827aabdd8e0874daa87e831cc9bc0df7407c"
+                      "bytes":  51694080,
+                      "sha256":  "6124c8e74922f8cf8fa92b0ca68dd372c5f8b7c1fbcb84a6705cd2132a76904a"
                   },
                   {
-                      "name":  "MyTempleKnowledge_Setup_v1.8.31.exe",
-                      "bytes":  51689472,
-                      "sha256":  "046a4c4de11e6d0cbbe1fe12969d827aabdd8e0874daa87e831cc9bc0df7407c"
+                      "name":  "MyTempleKnowledge_Setup_v1.8.35.exe",
+                      "bytes":  51694080,
+                      "sha256":  "6124c8e74922f8cf8fa92b0ca68dd372c5f8b7c1fbcb84a6705cd2132a76904a"
                   }
               ]
 }
