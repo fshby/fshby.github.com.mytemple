@@ -1,7 +1,8 @@
 import { createServer } from "node:http";
 import { createHash, randomUUID } from "node:crypto";
-import { cp, readFile, writeFile, readdir, stat, mkdir, rm, rename, unlink } from "node:fs/promises";
+import { cp, readFile, writeFile, readdir, stat, mkdir, rm, rename, unlink, access } from "node:fs/promises";
 import { existsSync, readFileSync, writeFileSync, watch } from "node:fs";
+import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createDocumentTemplate, frontmatterSummary, normalizeFrontmatter } from "./server/frontmatter.js";
@@ -10,6 +11,7 @@ import { RagService } from "./server/rag.js";
 import { DocViewStore } from "./server/doc-views.js";
 import { getMachineCode, verifyLicense, getLicenseStatus } from "./server/license.js";
 import { importToMarkdown, exportFromMarkdown } from "./server/converter.js";
+import { formatFileSize, send, json, isInside, escapeRegExp, workspaceId, workspaceRef, extractIndexHeadings, createIndexExcerpt, createGraphProjection, buildGraph } from "./server/utils.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DOCS_ROOT = process.env.MYTEMPLE_DOCS_ROOT || path.join(__dirname, "docs");
@@ -74,17 +76,15 @@ let knowledgeIndexVersion = "";
 let knowledgeIndexLoaded = false;
 const MAX_ASSET_BYTES = 5 * 1024 * 1024;
 const MAX_REQUEST_BODY = 20 * 1024 * 1024;
-
-function formatFileSize(bytes) {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-}
+const MAX_VIDEO_BYTES = 500 * 1024 * 1024;
+const MAX_VIDEO_UPLOAD_BODY = 600 * 1024 * 1024;
 
 let workspacesCache = null;
 let workspacesCacheStamp = 0;
 const DEFAULT_WORKSPACE_ID = "default";
 const LOG_LEVEL = process.env.MYTEMPLE_LOG_LEVEL || "warn";
+const MAX_DOCUMENT_CACHE_ENTRIES = 200;
+const MEMORY_CHECK_INTERVAL_MS = 5 * 60 * 1000;
 
 function log(level, message) {
   const levels = { debug: 0, info: 1, warn: 2, error: 3 };
@@ -108,31 +108,19 @@ const mimeTypes = {
   ".ico": "image/x-icon",
   ".webmanifest": "application/manifest+json",
   ".mp4": "video/mp4",
+  ".webm": "video/webm",
 };
 
-function send(res, status, body, type = "application/json; charset=utf-8", headers = {}) {
-  if (res.writableEnded || res.destroyed) return;
-  const buf = typeof body === "string" ? Buffer.from(body, "utf8") : body;
-  res.writeHead(status, { "Content-Type": type, "Cache-Control": "no-store", "Content-Length": buf.length, ...headers });
-  res.end(buf);
-}
-
-function json(res, status, payload) {
-  send(res, status, JSON.stringify(payload), "application/json; charset=utf-8");
-}
-
-function isInside(root, absolute) {
-  const relative = path.relative(path.resolve(root), path.resolve(absolute));
-  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
-}
-
-function workspaceId(root) {
-  const normalized = path.resolve(root).toLowerCase();
-  return `ws_${createHash("sha1").update(normalized).digest("hex").slice(0, 10)}`;
-}
-
-function workspaceRef(id, relative = "") {
-  return `${id}:${relative}`;
+let _ffmpegAvailable = null;
+function isFfmpegAvailable() {
+  if (_ffmpegAvailable !== null) return _ffmpegAvailable;
+  try {
+    execFileSync("ffmpeg", ["-version"], { stdio: "ignore", timeout: 5000 });
+    _ffmpegAvailable = true;
+  } catch {
+    _ffmpegAvailable = false;
+  }
+  return _ffmpegAvailable;
 }
 
 function splitWorkspaceRef(input, alreadyDecoded = false) {
@@ -296,6 +284,39 @@ async function ensureDocs() {
   if (!existsSync(SOURCE_ROOT)) {
     await mkdir(SOURCE_ROOT, { recursive: true });
   }
+}
+
+function trimDocumentCache() {
+  const docCache = cache.documentCache;
+  if (!docCache || !(docCache instanceof Map)) return;
+  if (docCache.size <= MAX_DOCUMENT_CACHE_ENTRIES) return;
+  const excess = docCache.size - MAX_DOCUMENT_CACHE_ENTRIES;
+  const keys = docCache.keys();
+  for (let i = 0; i < excess; i++) {
+    const key = keys.next().value;
+    if (key === undefined) break;
+    docCache.delete(key);
+  }
+  log("debug", `Trimmed document cache: removed ${excess} entries, remaining ${docCache.size}`);
+}
+
+function startMemoryMonitor() {
+  setInterval(() => {
+    const mem = process.memoryUsage();
+    const heapMB = Math.round(mem.heapUsed / 1024 / 1024);
+    const rssMB = Math.round(mem.rss / 1024 / 1024);
+    if (rssMB > 400) {
+      log("warn", `Memory usage high: RSS=${rssMB}MB, Heap=${heapMB}MB, trimming caches`);
+      trimDocumentCache();
+      if (cache.knowledgeDocuments instanceof Map && cache.knowledgeDocuments.size > 100) {
+        cache.knowledgeDocuments.clear();
+      }
+      if (global.gc) {
+        global.gc();
+        log("info", "Manual GC triggered after cache trim");
+      }
+    }
+  }, MEMORY_CHECK_INTERVAL_MS).unref();
 }
 
 function closeWorkspaceWatchers() {
@@ -755,186 +776,6 @@ async function hydrateDocument(item, workspace, previous = null, forceRead = fal
   };
 }
 
-function buildGraph(files) {
-  const byBase = new Map(files.map((file) => [path.basename(file.relative || file.path, ".md").toLowerCase(), file]));
-  const byWorkspaceBase = new Map(files.map((file) => [`${file.workspaceId}:${path.basename(file.relative || file.path, ".md").toLowerCase()}`, file]));
-  const byPath = new Map(files.map((file) => [file.path.toLowerCase(), file]));
-  const nodes = files.map((file) => ({
-    id: file.path,
-    label: file.title,
-    kind: "doc",
-    group: file.workspaceName || file.workspaceId || "docs",
-    weight: 1,
-    modified: file.modified || 0,
-  }));
-  const edgeMap = new Map();
-  const nodeIds = new Set(nodes.map((node) => node.id));
-  const addNode = (node) => {
-    if (nodeIds.has(node.id)) return false;
-    nodeIds.add(node.id);
-    nodes.push(node);
-    return true;
-  };
-  const addEdge = (source, target, type, weight = 1, directed = false) => {
-    const sourceId = typeof source === "string" ? source : source?.path;
-    const targetId = typeof target === "string" ? target : target?.path;
-    if (!sourceId || !targetId || sourceId === targetId) return;
-    const pair = directed ? `${sourceId}|${targetId}` : [sourceId, targetId].sort().join("|");
-    const key = `${pair}|${type}`;
-    const existing = edgeMap.get(key);
-    if (existing) existing.weight += weight;
-    else edgeMap.set(key, { source: sourceId, target: targetId, type, weight, directed });
-  };
-
-  let missingCount = 0;
-  for (const file of files) {
-    for (const match of file.content.matchAll(/\[\[([^\]]+)\]\]|\]\(([^)]+\.md(?:#[^)]+)?)\)/gi)) {
-      const raw = (match[1] || match[2] || "").split("|")[0].split("#")[0].trim().replace(/\\/g, "/");
-      if (!raw) continue;
-      const rawWithExtension = raw.toLowerCase().endsWith(".md") ? raw : `${raw}.md`;
-      const rawBase = path.basename(rawWithExtension, ".md").toLowerCase();
-      const baseTarget = byWorkspaceBase.get(`${file.workspaceId}:${rawBase}`) || byBase.get(rawBase);
-      const relativeTarget = path.posix.normalize(path.posix.join(path.posix.dirname(file.relative || ""), rawWithExtension));
-      const pathTarget = byPath.get(workspaceRef(file.workspaceId, relativeTarget).toLowerCase());
-      const target = pathTarget || baseTarget;
-      if (target) {
-        addEdge(file, target, "link", 3, true);
-      } else {
-        const missingId = `missing:${file.workspaceId || "default"}:${raw.toLowerCase()}`;
-        if (nodeIds.has(missingId) || missingCount < 120) {
-          if (addNode({ id: missingId, label: path.basename(raw, ".md"), kind: "missing", group: "未创建", weight: 1 })) missingCount += 1;
-          addEdge(file, missingId, "missing", 2, true);
-        }
-      }
-    }
-  }
-
-  const tagFileMap = new Map();
-  for (const file of files) {
-    for (const tag of file.tags) {
-      if (!tagFileMap.has(tag)) tagFileMap.set(tag, []);
-      tagFileMap.get(tag).push(file);
-    }
-  }
-
-  const topTags = [...tagFileMap.entries()].sort((a, b) => b[1].length - a[1].length).slice(0, 160);
-  for (const [tag, tagFiles] of topTags) {
-    const tagId = `tag:${tag}`;
-    addNode({ id: tagId, label: `#${tag}`, kind: "tag", group: "标签", weight: tagFiles.length });
-    for (const file of tagFiles) {
-      addEdge(file, tagId, "tag", 2);
-    }
-  }
-
-  const termFileMap = new Map();
-  for (const file of files) {
-    for (const item of file.terms.slice(0, 10)) {
-      if (/^\d+$/.test(item.term) || item.term.length < 2) continue;
-      if (!termFileMap.has(item.term)) termFileMap.set(item.term, []);
-      termFileMap.get(item.term).push({ file, count: item.count });
-    }
-  }
-
-  const keywordLimit = Math.min(48, Math.max(12, Math.ceil(Math.sqrt(Math.max(1, files.length)) * 3)));
-  const keywordCandidates = [...termFileMap.entries()]
-    .filter(([, hits]) => hits.length >= 2 && hits.length <= Math.max(12, Math.ceil(files.length * 0.45)))
-    .map(([term, hits]) => ({
-      term,
-      hits,
-      score: (Math.log((files.length + 1) / (hits.length + 1)) + 1)
-        * hits.reduce((sum, hit) => sum + Math.log2(1 + hit.count), 0)
-        * (1 + Math.log2(1 + hits.length) * 0.35),
-    }))
-    .sort((a, b) => b.score - a.score || a.term.localeCompare(b.term, "zh-Hans-CN"))
-    .slice(0, keywordLimit);
-
-  const semanticDegree = new Map();
-  for (const { term, hits } of keywordCandidates) {
-    const selectedHits = hits
-      .sort((a, b) => b.count - a.count)
-      .filter((hit) => (semanticDegree.get(hit.file.path) || 0) < 5)
-      .slice(0, 10);
-    if (selectedHits.length < 2) continue;
-    const keywordId = `keyword:${term}`;
-    addNode({
-      id: keywordId,
-      label: term,
-      kind: "keyword",
-      group: "语义",
-      weight: selectedHits.reduce((sum, hit) => sum + hit.count, 0),
-    });
-    for (const hit of selectedHits) {
-      addEdge(hit.file, keywordId, "keyword", Math.max(1, Math.min(6, hit.count)));
-      semanticDegree.set(hit.file.path, (semanticDegree.get(hit.file.path) || 0) + 1);
-    }
-  }
-
-  const edgeOrder = { link: 0, missing: 1, tag: 2, keyword: 3 };
-  const edgeLimit = Math.min(2400, Math.max(240, files.length * 8));
-  const edges = [...edgeMap.values()]
-    .sort((a, b) => (edgeOrder[a.type] ?? 9) - (edgeOrder[b.type] ?? 9) || b.weight - a.weight)
-    .slice(0, edgeLimit);
-  const degree = new Map();
-  for (const edge of edges) {
-    degree.set(edge.source, (degree.get(edge.source) || 0) + 1);
-    degree.set(edge.target, (degree.get(edge.target) || 0) + 1);
-  }
-  for (const node of nodes) {
-    node.degree = degree.get(node.id) || 0;
-    node.orphan = node.kind === "doc" && (degree.get(node.id) || 0) === 0;
-    node.weight = Math.max(node.weight || 1, 1 + node.degree);
-  }
-
-  return { nodes, edges, stats: { documents: files.length, nodes: nodes.length, edges: edges.length } };
-}
-
-function extractIndexHeadings(content) {
-  return [...String(content || "").matchAll(/^\s*(#{1,6})\s+(.+?)\s*$/gm)]
-    .slice(0, 32)
-    .map((match) => ({ level: match[1].length, title: match[2].replace(/\s+#+\s*$/, "").trim() }))
-    .filter((item) => item.title);
-}
-
-function createIndexExcerpt(content, limit = 320) {
-  const text = String(content || "")
-    .replace(/^---\s*[\r\n]+[\s\S]*?^---\s*$/m, " ")
-    .replace(/```[\s\S]*?```/g, " ")
-    .replace(/!\[[^\]]*\]\([^)]+\)/g, " ")
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    .replace(/\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g, "$1")
-    .replace(/^\s{0,3}#{1,6}\s+/gm, "")
-    .replace(/[*_`>#~-]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  return text.length > limit ? `${text.slice(0, limit).trimEnd()}…` : text;
-}
-
-function createGraphProjection(graph) {
-  const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
-  const outgoingLinks = new Map();
-  const backlinks = new Map();
-  const concepts = new Map();
-  const missingLinks = new Map();
-  const pushUnique = (map, key, value) => {
-    if (!map.has(key)) map.set(key, new Set());
-    map.get(key).add(value);
-  };
-  for (const edge of graph.edges) {
-    const sourceNode = nodeById.get(edge.source);
-    const targetNode = nodeById.get(edge.target);
-    if (edge.type === "link") {
-      pushUnique(outgoingLinks, edge.source, edge.target);
-      pushUnique(backlinks, edge.target, edge.source);
-    } else if (edge.type === "missing") {
-      pushUnique(missingLinks, edge.source, targetNode?.label || edge.target);
-    } else if (edge.type === "keyword") {
-      if (sourceNode?.kind === "doc") pushUnique(concepts, sourceNode.id, targetNode?.label || targetNode?.id);
-      if (targetNode?.kind === "doc") pushUnique(concepts, targetNode.id, sourceNode?.label || sourceNode?.id);
-    }
-  }
-  return { version: 0, outgoingLinks, backlinks, concepts, missingLinks };
-}
-
 function getGraphProjection(data) {
   if (data.graphProjection?.version === data.graphVersion) return data.graphProjection;
   const projection = createGraphProjection(data.graph);
@@ -1288,6 +1129,7 @@ async function rebuildTreeCache(workspaces, defaultWorkspaceId, pending) {
       throw error;
     }
   }
+  trimDocumentCache();
   if (previousFiles.size !== documentCache.size || [...previousFiles.keys()].some((key) => !documentCache.has(key))) relationChanged = true;
   const graph = relationChanged || !cache.graph?.nodes?.length
     ? buildGraph(files)
@@ -1500,10 +1342,6 @@ function search(files, query) {
     .filter((result) => result.score > 0)
     .sort((a, b) => b.score - a.score || a.title.localeCompare(b.title, "zh-Hans-CN"))
     .slice(0, 50);
-}
-
-function escapeRegExp(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 async function uniqueDestination(folderAbsolute, baseName) {
@@ -1736,6 +1574,155 @@ async function handleApi(req, res, url) {
       log("warn", `Asset delete failed: ${rawPath}, ${e.message}`);
       return json(res, 400, { error: `无法删除图片: ${e.message}` });
     }
+  }
+
+  if (url.pathname === "/api/upload-video" && req.method === "POST") {
+    await ensureDocs();
+    const contentType = req.headers["content-type"] || "";
+    if (!contentType.includes("multipart/form-data")) {
+      return json(res, 400, { error: "需要 multipart/form-data 请求" });
+    }
+    // 解析 multipart 边界
+    const boundaryMatch = contentType.match(/boundary=(?:"([^"]+)"|([^;]+))/);
+    if (!boundaryMatch) return json(res, 400, { error: "缺少 multipart boundary" });
+    const boundary = boundaryMatch[1] || boundaryMatch[2];
+
+    // 读取原始二进制 body（视频体积大，不走 readJson）
+    const chunks = [];
+    let totalLength = 0;
+    let tooLarge = false;
+    for await (const chunk of req) {
+      totalLength += chunk.length;
+      if (totalLength > MAX_VIDEO_UPLOAD_BODY) { tooLarge = true; break; }
+      chunks.push(chunk);
+    }
+    if (tooLarge) return json(res, 413, { error: "视频文件过大（上限 600MB）" });
+    const rawBody = Buffer.concat(chunks);
+
+    // 解析 multipart：提取视频文件部分和 workspaceId 字段
+    const boundaryBuf = Buffer.from("--" + boundary);
+    let workspaceIdField = "";
+    let videoBuffer = null;
+    let videoFileName = "";
+    let videoMime = "";
+    const parts = [];
+    let start = 0;
+    while (true) {
+      const bStart = rawBody.indexOf(boundaryBuf, start);
+      if (bStart === -1) break;
+      const bEnd = rawBody.indexOf(boundaryBuf, bStart + boundaryBuf.length);
+      if (bEnd === -1) break;
+      parts.push(rawBody.slice(bStart + boundaryBuf.length, bEnd));
+      start = bEnd;
+    }
+    for (const part of parts) {
+      const headerEnd = part.indexOf("\r\n\r\n");
+      if (headerEnd === -1) continue;
+      const headerStr = part.slice(0, headerEnd).toString("utf8");
+      const bodyBuf = part.slice(headerEnd + 4, part.length - 2); // 去掉末尾 \r\n
+      const nameMatch = headerStr.match(/name="([^"]+)"/);
+      if (!nameMatch) continue;
+      const fieldName = nameMatch[1];
+      const fileMatch = headerStr.match(/filename="([^"]*)"/);
+      if (fileMatch) {
+        if (fieldName === "video") {
+          videoFileName = fileMatch[1];
+          videoBuffer = bodyBuf;
+          const mimeMatch = headerStr.match(/Content-Type:\s*([^\r\n]+)/i);
+          videoMime = mimeMatch ? mimeMatch[1].trim() : "";
+        }
+      } else {
+        if (fieldName === "workspaceId") workspaceIdField = bodyBuf.toString("utf8").trim();
+      }
+    }
+    if (!videoBuffer) return json(res, 400, { error: "未找到视频文件数据" });
+    if (videoBuffer.length > MAX_VIDEO_BYTES) return json(res, 413, { error: "视频文件过大（上限 500MB）" });
+
+    // 确定扩展名
+    const extByMime = { "video/mp4": ".mp4", "video/webm": ".webm", "video/quicktime": ".mov", "video/x-msvideo": ".avi" };
+    let ext = extByMime[videoMime] || path.extname(videoFileName).toLowerCase() || ".mp4";
+    // 统一输出 mp4 格式（如果 ffmpeg 可用则转码压缩，否则仅重命名）
+    const baseName = String(videoFileName || `video-${Date.now()}`)
+      .replace(/\.[^.]+$/, "")
+      .replace(/[^\w.-]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 80) || `video-${Date.now()}`;
+    const outputName = `${baseName}-${randomUUID().slice(0, 8)}.mp4`;
+
+    // 确定保存目录：workspace 的 source/video 子文件夹
+    let targetRoot = SOURCE_ROOT;
+    let relativePath = `video/${outputName}`;
+    let baseUrlPath = `/source/${relativePath}`;
+    const requestedWorkspaceId = workspaceIdField || "";
+    if (requestedWorkspaceId && WORKSPACE_SOURCE_PREFIX.test(requestedWorkspaceId)) {
+      const { workspaces } = await loadWorkspaces();
+      const workspace = workspaces.find((item) => item.id === requestedWorkspaceId);
+      if (workspace) {
+        targetRoot = path.join(workspace.root, "source");
+        relativePath = `${requestedWorkspaceId}/video/${outputName}`;
+        baseUrlPath = `/source/${relativePath}`;
+      }
+    }
+    const videoDir = path.resolve(targetRoot, "video");
+    const absolute = path.resolve(videoDir, outputName);
+    if (!isInside(targetRoot, absolute)) return json(res, 400, { error: "无效的视频保存路径" });
+    await mkdir(videoDir, { recursive: true });
+
+    // 先写入临时文件
+    const tempPath = absolute + ".tmp";
+    await writeFile(tempPath, videoBuffer);
+
+    let compressed = false;
+    let compressionNote = "";
+    // 尝试使用 ffmpeg 压缩（转码为 H.264 mp4，降低码率）
+    if (ext !== ".mp4" || isFfmpegAvailable()) {
+      if (isFfmpegAvailable()) {
+        try {
+          const compressedPath = absolute + ".compressed.mp4";
+          execFileSync("ffmpeg", [
+            "-y", "-i", tempPath,
+            "-c:v", "libx264", "-preset", "fast", "-crf", "28",
+            "-c:a", "aac", "-b:a", "128k",
+            "-movflags", "+faststart",
+            "-vf", "scale='min(1280,iw)':-2",
+            compressedPath,
+          ], { stdio: "ignore", timeout: 300000 });
+          // 压缩后检查体积是否减小
+          const compressedStat = await stat(compressedPath);
+          if (compressedStat.size < videoBuffer.length) {
+            await rename(compressedPath, absolute);
+            await rm(tempPath, { force: true }).catch(() => {});
+            compressed = true;
+            compressionNote = `已压缩 ${Math.round((1 - compressedStat.size / videoBuffer.length) * 100)}%`;
+          } else {
+            // 压缩后反而变大，放弃压缩
+            await rm(compressedPath, { force: true }).catch(() => {});
+            await rename(tempPath, absolute);
+          }
+        } catch (e) {
+          log("warn", `Video compression failed: ${e.message}`);
+          // 压缩失败，直接重命名临时文件
+          await rename(tempPath, absolute);
+        }
+      } else {
+        // 没有 ffmpeg，直接保存（如果原始格式不是 mp4，仍以 .mp4 扩展名保存但内容不变）
+        await rename(tempPath, absolute);
+        compressionNote = "ffmpeg 不可用，未压缩";
+      }
+    } else {
+      await rename(tempPath, absolute);
+    }
+
+    log("info", `Video saved: ${absolute} (${formatFileSize((await stat(absolute)).size)})${compressed ? `, ${compressionNote}` : ""}`);
+    // 返回 Markdown：使用 ![]() 语法，app.js 会根据 .mp4 扩展名渲染为 <video> 标签
+    const markdown = `![${baseName}](${baseUrlPath})`;
+    return json(res, 200, {
+      path: baseUrlPath,
+      markdown,
+      compressed,
+      note: compressionNote,
+      size: (await stat(absolute)).size,
+    });
   }
 
   if (url.pathname === "/api/workspaces") {
@@ -2215,16 +2202,16 @@ async function handleApi(req, res, url) {
     if (!target) {
       try {
         const normalized = await normalizeDocPath(docPath, true);
-        const content = await readFile(normalized.absolute, "utf8");
-        const title = extractTitle(content, path.basename(normalized.absolute));
+        const parsed = await readMarkdownFile(normalized.absolute);
+        const title = extractTitle(parsed.text, path.basename(normalized.absolute));
         docViews.record(normalized.ref);
-        return json(res, 200, { path: normalized.ref, title, content, tags: [], terms: [], contentSha256: createHash("sha256").update(Buffer.from(content, "utf8")).digest("hex") });
+        return json(res, 200, { path: normalized.ref, title, content: parsed.text, tags: [], terms: [], encoding: parsed.encoding, contentSha256: parsed.hash });
       } catch (e) {
         return json(res, 404, { error: "Document not found" });
       }
     }
     docViews.record(target.path);
-    return json(res, 200, { path: target.path, title: target.title, content: target.content, tags: target.tags, terms: target.terms, contentSha256: target.contentSha256 || "", created: target.created || 0, modified: target.modified || 0 });
+    return json(res, 200, { path: target.path, title: target.title, content: target.content, tags: target.tags, terms: target.terms, encoding: target.encoding || "utf-8", contentSha256: target.contentSha256 || "", created: target.created || 0, modified: target.modified || 0 });
   }
   if (url.pathname === "/api/knowledge/health") {
     const days = Math.max(1, Math.min(365, Number(url.searchParams.get("days")) || 30));
@@ -2487,6 +2474,40 @@ async function handleApi(req, res, url) {
     }
   }
 
+  // 打开外部链接到系统默认浏览器：避免在 WebView/内嵌窗口或当前页签内部
+  // 导航离开当前应用，提升稳定性。允许 http/https/mailto/tel 协议。
+  if (url.pathname === "/api/open-url" && req.method === "POST") {
+    const payload = await readJson(req);
+    const raw = String(payload.url || "").trim();
+    if (!raw) return json(res, 400, { error: "URL is required" });
+    let u;
+    try {
+      u = new URL(raw);
+    } catch (_) {
+      return json(res, 400, { error: "Invalid URL" });
+    }
+    const allowList = ["http:", "https:", "mailto:", "tel:"];
+    if (!allowList.includes(u.protocol)) {
+      return json(res, 400, { error: "Unsupported URL protocol" });
+    }
+    try {
+      const { execFile } = await import("node:child_process");
+      if (process.platform === "win32") {
+        // Windows: `start "" <url>` 经 cmd 启动可正确识别 https/ mailto 等；
+        // 直接 explorer <url> 在某些系统对非 http(s) 处理不统一。
+        const { exec } = await import("node:child_process");
+        exec(`start "" "${u.href.replace(/"/g, '""')}"`, { windowsHide: true });
+      } else if (process.platform === "darwin") {
+        execFile("open", [u.href]);
+      } else {
+        execFile("xdg-open", [u.href]);
+      }
+      return json(res, 200, { ok: true });
+    } catch (e) {
+      return json(res, 500, { error: e.message || "Failed to open URL" });
+    }
+  }
+
   if (url.pathname === "/api/create-folder" && req.method === "POST") {
     const payload = await readJson(req);
     const parent = String(payload.parent || "").trim();
@@ -2691,9 +2712,15 @@ async function serveStatic(res, pathname) {
     // 确保版本号变更后 WebView2 立即加载新文件，避免 immutable 缓存锁死旧代码。
     // 媒体资源（webp/mp4）体积大且不常变更，保留 immutable 长缓存。
     const revalidate = [".html", ".js", ".css"].includes(extension);
-    const immutableAsset = [".webp", ".mp4"].includes(extension);
+    const immutableAsset = [".webp", ".mp4", ".webm"].includes(extension);
     const headers = revalidate
-      ? { "Cache-Control": "no-cache" }
+      ? {
+          "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
+          "Expires": "0",
+          "Pragma": "no-cache",
+          "Surrogate-Control": "no-store",
+          "Vary": "*",
+        }
       : immutableAsset
         ? { "Cache-Control": "public, max-age=31536000, immutable" }
         : undefined;
@@ -2728,6 +2755,7 @@ createServer(async (req, res) => {
   }
 }).listen(PORT, HOST, () => {
   console.log(`Markdown knowledge app running at http://${HOST}:${PORT}`);
+  startMemoryMonitor();
   // 启动时打印机器码，方便用户获取
   try {
     const machineCode = getMachineCode();

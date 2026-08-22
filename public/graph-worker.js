@@ -164,7 +164,7 @@ function layoutGraph(graph) {
     neighborSets[spring.a].add(spring.b);
     neighborSets[spring.b].add(spring.a);
   }
-  const iterations = nodes.length < 120 ? 72 : nodes.length < 420 ? 44 : 24;
+  const iterations = nodes.length < 120 ? 72 : nodes.length < 420 ? 44 : nodes.length < 800 ? 24 : 12;
   const fx = new Float64Array(nodes.length);
   const fy = new Float64Array(nodes.length);
   const cellSize = 96;

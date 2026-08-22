@@ -22,6 +22,8 @@ function headingId(text, index) {
     .replace(/^-+|-+$/g, "");
   return `h-${base || "section"}-${index}`;
 }
+// Markdown 渲染缓存版本戳：解析器或 CSS 规则升级时递增，确保旧缓存不被复用。
+const MARKDOWN_RENDER_VERSION = "callout-v9-final-v12-20260822-force-1.8.63";
 
 function safeMarkdownUrl(value) {
   const url = String(value || "").trim();
@@ -140,7 +142,17 @@ function extractOutline(source) {
 
 function inlineMarkdown(value, searchTerm = "") {
   let html = escapeHtml(value)
-    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" class="auto-size-image" loading="lazy" />')
+    // 块级数学公式 $$...$$
+    .replace(/\$\$([\s\S]+?)\$\$/g, (_, math) => `<span class="math-block" data-math="${escapeHtml(math.trim())}"></span>`)
+    // 行内数学公式 $...$（不匹配 $$ 和行首独立 $）
+    .replace(/(?<!\$)\$(?!\$)([^\n$]+?)(?<!\$)\$/g, (_, math) => `<span class="math-inline" data-math="${escapeHtml(math.trim())}"></span>`)
+    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (match, alt, src) => {
+      const lowerSrc = String(src || "").toLowerCase();
+      if (/\.(mp4|webm|mov|avi)(\?|#|$)/.test(lowerSrc)) {
+        return `<video src="${src}" alt="${alt}" class="auto-size-video" controls preload="metadata"></video>`;
+      }
+      return `<img src="${src}" alt="${alt}" class="auto-size-image" loading="lazy" />`;
+    })
     .replace(/==([^=]+)==/g, "<mark>$1</mark>")
     .replace(/\+\+([^+]+)\+\+/g, "<u>$1</u>")
     .replace(/~~([^~]+)~~/g, "<del>$1</del>")
@@ -183,6 +195,9 @@ function renderMarkdown(source, options = {}) {
   let codeLanguage = "text";
   let list = null;
   let table = [];
+  let blockquote = [];
+  let blockquoteStartLine = -1;
+  let detailsBlock = null; // { startLine, lines: [] }
 
   const flushList = () => {
     if (!list) return;
@@ -206,11 +221,126 @@ function renderMarkdown(source, options = {}) {
     table = [];
   };
 
+  const CALLOUT_DEFAULT_TITLES = {
+    note: "备注", info: "信息", tip: "提示", success: "成功", warning: "警告",
+    todo: "待办", important: "重要", caution: "注意", danger: "危险",
+    failure: "失败", bug: "缺陷", question: "疑问", quote: "引用",
+    abstract: "摘要", example: "示例",
+  };
+  // callout 类型集合（indexOf 快速校验，不依赖长正则锚定）
+  const CALLOUT_TYPES = new Set(["note","info","tip","warning","danger","quote","success","question","bug","example","failure","abstract","todo","important","caution"]);
+
+  const flushBlockquote = () => {
+    if (!blockquote.length) return;
+    const rawFirst = blockquote[0];
+    // 1. 递归剥除所有层级 > 前缀（支持 > > [!type] 嵌套）
+    let firstClean = rawFirst;
+    while (/^>\s?/.test(firstClean)) firstClean = firstClean.replace(/^>\s?/, "");
+    firstClean = firstClean.trim();
+    // 2. indexOf 定位 [! 锚点，兼容前导污染字符
+    const anchorIdx = firstClean.indexOf("[!");
+    let calloutHeader = anchorIdx >= 0 ? firstClean.slice(anchorIdx) : firstClean;
+    calloutHeader = calloutHeader.replace(/^\s+/, "");
+    // 3. indexOf + Set 提取类型，去除正则对 "^" 锚定的依赖
+    let type = null;
+    let explicitTitle = "";
+    if (calloutHeader.startsWith("[!")) {
+      const closeBracket = calloutHeader.indexOf("]");
+      if (closeBracket > 2) {
+        const rawType = calloutHeader.slice(2, closeBracket).trim().toLowerCase();
+        if (CALLOUT_TYPES.has(rawType)) {
+          type = rawType;
+          explicitTitle = calloutHeader.slice(closeBracket + 1).trim();
+        }
+      }
+    }
+    if (type) {
+      const defaultTitle = CALLOUT_DEFAULT_TITLES[type] || type.charAt(0).toUpperCase() + type.slice(1);
+      const title = explicitTitle || defaultTitle;
+      const body = blockquote.slice(1).map((l) => {
+        let clean = l;
+        while (/^>\s?/.test(clean)) clean = clean.replace(/^>\s?/, "");
+        return clean;
+      });
+      const titleHtml = `<strong class="callout-title">${inlineMarkdown(title, searchTerm)}</strong>`;
+      const bodyHtml = body.map((l) => inlineMarkdown(l, searchTerm)).filter(Boolean).join("<br />");
+      html.push(`<div class="callout callout-${type}" data-callout-type="${type}">${titleHtml}${bodyHtml ? `<div class="callout-body">${bodyHtml}</div>` : ""}</div>`);
+    } else {
+      const content = blockquote.map((l) => inlineMarkdown(l, searchTerm)).join("<br />");
+      html.push(`<blockquote>${content}</blockquote>`);
+    }
+    blockquote = [];
+    blockquoteStartLine = -1;
+  };
+
+  const flushDetails = () => {
+    if (!detailsBlock) return;
+    const { lines, startLine } = detailsBlock;
+    let processed = lines.slice();
+    // 1) 跨行 summary 内容渲染：<summary>文本</summary> → 文本 inlineMarkdown 后包回标签
+    try {
+      const joined = processed.join("\u0001");
+      const rendered = joined.replace(/<summary>([\s\S]*?)<\/summary>/g, (_, content) => {
+        const text = String(content || "").replace(/\u0001/g, "\n").trim();
+        return `<summary>${inlineMarkdown(text, searchTerm)}</summary>`;
+      });
+      processed = rendered.split("\u0001");
+    } catch (_) { /* fallback */ }
+    // 2) 逐行分类：含 HTML 标签行 → 直接保留（不送 inlineMarkdown 避免二次 escape）；
+    //             纯文本行 → inlineMarkdown + <p> 包装
+    const renderedParts = [];
+    for (let i = 0; i < processed.length; i++) {
+      const p = processed[i];
+      const trimmed = p.trim();
+      const hasHtmlTag = /<[a-zA-Z\/!?]/.test(p);
+      if (hasHtmlTag) {
+        renderedParts.push(p);
+      } else if (trimmed) {
+        renderedParts.push(`<p>${inlineMarkdown(trimmed, searchTerm)}</p>`);
+      } else {
+        renderedParts.push(p);
+      }
+    }
+    html.push(`<div data-source-line="${startLine}">${renderedParts.join("\n")}</div>`);
+    detailsBlock = null;
+  };
+
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index];
+    // ===== details 细节块（HTML5 折叠块）累积状态机 =====
+    // 小写化 + indexOf 检测，绕过正则对空白/属性的敏感性
+    const lowerLine = line.toLowerCase().replace(/\r/g, "");
+    const hasOpenTag = lowerLine.indexOf("<details") >= 0;
+    const hasCloseTag = lowerLine.indexOf("</details>") >= 0;
+    let detailsStart = false;
+    if (hasOpenTag) {
+      const openPos = lowerLine.indexOf("<details");
+      const afterTag = lowerLine.charAt(openPos + 8);
+      if (!afterTag || afterTag === ">" || /\s/.test(afterTag)) {
+        const beforeOpen = lowerLine.slice(0, openPos);
+        if (!beforeOpen || /^\s*$/.test(beforeOpen)) detailsStart = true;
+      }
+    }
+    const detailsEnd = hasCloseTag;
+    if (detailsBlock) {
+      detailsBlock.lines.push(line);
+      if (detailsEnd) flushDetails();
+      continue;
+    }
+    if (detailsStart) {
+      flushList();
+      flushTable();
+      flushBlockquote();
+      detailsBlock = { startLine: index, lines: [line] };
+      if (detailsEnd && lowerLine.indexOf("</details>") > lowerLine.indexOf("<details")) {
+        flushDetails();
+      }
+      continue;
+    }
     if (line.startsWith("```")) {
       flushList();
       flushTable();
+      flushBlockquote();
       if (inCode) {
         html.push(`<div class="code-block" data-language="${codeLanguage}"><span class="code-language">${escapeHtml(codeLanguage)}</span><button class="code-copy" type="button">复制</button><pre><code class="language-${codeLanguage}">${escapeHtml(code.join("\n"))}</code></pre></div>`);
         code = [];
@@ -228,6 +358,7 @@ function renderMarkdown(source, options = {}) {
     if (/^\s*---+\s*$/.test(line)) {
       flushList();
       flushTable();
+      flushBlockquote();
       html.push("<hr />");
       continue;
     }
@@ -237,6 +368,7 @@ function renderMarkdown(source, options = {}) {
       && nextRow.every((cell) => markdownTableAlignment(cell));
     if (startsTable) {
       flushList();
+      flushBlockquote();
       table.push(line, lines[index + 1]);
       index += 1;
       continue;
@@ -294,12 +426,15 @@ function renderMarkdown(source, options = {}) {
       html.push(`<h4 id="${escapeHtml(id)}" style="margin-left: ${numHeading[1].length * 16}px;">${inlineMarkdown(numHeading[2] + numHeading[5], searchTerm)}</h4>`);
       continue;
     }
-    const quote = line.match(/^>\s?(.+)$/);
+    const quote = line.match(/^>\s?(.*)$/);
     if (quote) {
       flushList();
-      html.push(`<blockquote>${inlineMarkdown(quote[1], searchTerm)}</blockquote>`);
+      flushTable();
+      blockquote.push(quote[1]);
+      if (blockquoteStartLine < 0) blockquoteStartLine = index;
       continue;
     }
+    flushBlockquote();
     const bullet = line.match(/^(\s*)[-*]\s+(.+)$/);
     const ordered = line.match(/^(\s*)(\d+)[.)]\s+(.+)$/);
     if (bullet || ordered) {
@@ -333,6 +468,7 @@ function renderMarkdown(source, options = {}) {
     }
     if (!line.trim()) {
       flushList();
+      flushBlockquote();
       html.push("");
       continue;
     }
@@ -341,6 +477,8 @@ function renderMarkdown(source, options = {}) {
   }
   flushList();
   flushTable();
+  flushBlockquote();
+  flushDetails();
   if (inCode) {
     html.push(`<div class="code-block" data-language="${codeLanguage}"><span class="code-language">${escapeHtml(codeLanguage)}</span><button class="code-copy" type="button">复制</button><pre><code class="language-${codeLanguage}">${escapeHtml(code.join("\n"))}</code></pre></div>`);
   }
@@ -352,7 +490,7 @@ self._markdownCacheBytes = self._markdownCacheBytes || 0;
 
 function workerCacheKey(source, searchTerm, includeHtml, includeOutline) {
   const text = String(source || "");
-  return `${includeHtml ? 1 : 0}${includeOutline ? 1 : 0}\n${searchTerm || ""}\n${text.length}\n${text}`;
+  return `${MARKDOWN_RENDER_VERSION}\n${includeHtml ? 1 : 0}${includeOutline ? 1 : 0}\n${searchTerm || ""}\n${text.length}\n${text}`;
 }
 
 function renderWithCache({ source = "", searchTerm = "", includeHtml = true, includeOutline = true } = {}) {

@@ -13,15 +13,33 @@ namespace MyTempleInstaller
 {
     static class Program
     {
+        private const string InstallerMutexName = "MyTempleKnowledge.Installer.SingleInstance";
+
         [STAThread]
         static void Main(string[] args)
         {
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
-            if (args.Length > 0 && (args[0] == "/uninstall" || args[0] == "-u"))
-                Application.Run(new UninstallForm());
-            else
-                Application.Run(new InstallForm(args.Length > 0 && (args[0] == "/update" || args[0] == "-update")));
+            // 防止重复启动安装器：多个安装器并发执行 DeleteDirectory/CopyInstallationFiles
+            // 会损坏安装目录。使用命名互斥量保证全局只有一个安装器实例在运行。
+            bool createdNew;
+            using (var mutex = new Mutex(true, InstallerMutexName, out createdNew))
+            {
+                if (!createdNew)
+                {
+                    MessageBox.Show(
+                        AppConst.APP_TITLE + " 安装程序已在运行，请勿重复启动。",
+                        AppConst.APP_TITLE + " 安装程序",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Information);
+                    return;
+                }
+
+                Application.EnableVisualStyles();
+                Application.SetCompatibleTextRenderingDefault(false);
+                if (args.Length > 0 && (args[0] == "/uninstall" || args[0] == "-u"))
+                    Application.Run(new UninstallForm());
+                else
+                    Application.Run(new InstallForm(args.Length > 0 && (args[0] == "/update" || args[0] == "-update")));
+            }
         }
     }
 
@@ -30,7 +48,7 @@ namespace MyTempleInstaller
     {
         public const string APP_NAME = "MyTempleKnowledge";
         public const string APP_TITLE = "MyTemple Knowledge";
-        public const string APP_VERSION = "1.8.35";
+        public const string APP_VERSION = "1.8.63";
         public static readonly string InstallDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), APP_NAME);
         public static readonly string UserDataDir = Path.Combine(

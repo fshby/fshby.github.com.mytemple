@@ -49,20 +49,29 @@ function getHardwareIdentifiers() {
   } catch (_) { /* ignore */ }
 
   // Windows 硬件信息（单次 PowerShell 调用获取全部信息）
+  // 稳定性修复：PowerShell 冷启动慢或系统繁忙时可能超时，失败会让指纹回退到
+  // host+cpumodel，与成功时的指纹不一致 → 已激活的授权被误判失效（弹授权弹窗）。
+  // 重试 3 次、超时 15 秒，确保硬件查询稳定，指纹在多次启动间保持一致。
   if (process.platform === "win32") {
-    try {
-      const script = '$cpu=(Get-CimInstance Win32_Processor).ProcessorId; $disk=(Get-CimInstance Win32_DiskDrive | Select-Object -First 1).SerialNumber; $board=(Get-CimInstance Win32_BaseBoard).SerialNumber; $uuid=(Get-CimInstance Win32_ComputerSystemProduct).UUID; [Console]::OutputEncoding=[Text.Encoding]::UTF8; Write-Output "$cpu|$disk|$board|$uuid"';
-      const output = execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], {
-        timeout: 8000,
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "ignore"],
-      }).trim();
-      const [cpuId, diskSerial, boardSerial, uuid] = output.split("|");
-      if (cpuId) parts.push(`cpu:${cpuId}`);
-      if (diskSerial) parts.push(`disk:${diskSerial}`);
-      if (boardSerial) parts.push(`board:${boardSerial}`);
-      if (uuid) parts.push(`uuid:${uuid}`);
-    } catch (_) { /* ignore */ }
+    const script = '$cpu=(Get-CimInstance Win32_Processor).ProcessorId; $disk=(Get-CimInstance Win32_DiskDrive | Select-Object -First 1).SerialNumber; $board=(Get-CimInstance Win32_BaseBoard).SerialNumber; $uuid=(Get-CimInstance Win32_ComputerSystemProduct).UUID; [Console]::OutputEncoding=[Text.Encoding]::UTF8; Write-Output "$cpu|$disk|$board|$uuid"';
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const output = execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], {
+          timeout: 15000,
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "ignore"],
+        }).trim();
+        const [cpuId, diskSerial, boardSerial, uuid] = output.split("|");
+        // 四项齐全才算成功，避免部分失败导致指纹仍走回退路径
+        if (cpuId && diskSerial && boardSerial && uuid) {
+          parts.push(`cpu:${cpuId}`);
+          parts.push(`disk:${diskSerial}`);
+          parts.push(`board:${boardSerial}`);
+          parts.push(`uuid:${uuid}`);
+          break;
+        }
+      } catch (_) { /* 重试 */ }
+    }
   }
 
   // 退路：hostname + CPU 型号
@@ -104,6 +113,30 @@ export function getMachineFingerprint() {
   const raw = getHardwareIdentifiers();
   _machineFingerprintCache = crypto.createHash("sha256").update(raw).digest("hex");
   return _machineFingerprintCache;
+}
+
+/**
+ * 计算「PowerShell 硬件查询失败时的回退指纹」（仅 MAC + 主机名 + CPU 型号）。
+ * 兼容旧授权：若授权码在硬件查询失败时签发（指纹为回退值），后续查询成功
+ * 会让主指纹变化，导致已激活的旧授权被误判失效。verifyLicense 在主指纹不
+ * 匹配时补查此回退指纹，保证已激活的旧授权依然有效。
+ */
+function getFallbackFingerprint() {
+  const parts = [];
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    const addrs = interfaces[name] || [];
+    for (const addr of addrs) {
+      if (!addr.internal && !addr.mac.includes("00:00:00:00") && addr.mac.length > 0) {
+        parts.push(`mac:${addr.mac}`);
+        break;
+      }
+    }
+    if (parts.some((p) => p.startsWith("mac:"))) break;
+  }
+  parts.push(`host:${os.hostname()}`);
+  parts.push(`cpumodel:${os.cpus()[0]?.model || "unknown"}`);
+  return crypto.createHash("sha256").update(parts.join("|")).digest("hex");
 }
 
 /**
@@ -199,7 +232,13 @@ export async function verifyLicense(licenseKey) {
     // 2. 验证机器码绑定（机器码仅携带前16字节指纹，所以只比较前32个hex字符）
     const expectedFingerprint = getMachineFingerprint().slice(0, 32);
     if (payload.fp !== expectedFingerprint) {
-      return { valid: false, expired: false, error: "授权码与当前设备不匹配", machineCode };
+      // 兼容旧授权：若授权在 PowerShell 硬件查询失败时签发，其指纹为回退值
+      // （mac+host+cpumodel）。查询成功后主指纹变化会让旧授权被误判失效。
+      // 补查回退指纹，匹配则视为同一设备，避免已激活授权反复弹窗。
+      const fallbackFingerprint = getFallbackFingerprint().slice(0, 32);
+      if (payload.fp !== fallbackFingerprint) {
+        return { valid: false, expired: false, error: "授权码与当前设备不匹配", machineCode };
+      }
     }
 
     // 3. 防时间作弊检查
