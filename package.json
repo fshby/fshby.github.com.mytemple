@@ -1,11 +1,11 @@
 {
   "name": "mytemple-knowledge",
-  "version": "1.8.35",
+  "version": "1.8.55",
   "private": true,
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test tests/p0.test.js",
+    "test": "node --test tests/p0.test.js tests/p1.test.js",
     "check": "node --check server.js && node --check public/app.js",
     "build:editor": "esbuild frontend/editor-core.js --bundle --format=esm --target=es2020 --minify --outfile=public/editor-core.js"
   },

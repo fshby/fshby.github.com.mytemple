@@ -24,7 +24,7 @@
         <a href="#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.35.exe" download>下载 v1.8.35</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.63.exe" download>下载 v1.8.63</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -32,11 +32,11 @@
     <main id="top">
       <section class="hero section-wrap" aria-labelledby="hero-title">
         <div class="hero-copy reveal">
-          <p class="eyebrow"><span class="status-dot"></span> 本地 Markdown 工作区 <em>v1.8.35 桌面版</em></p>
+          <p class="eyebrow"><span class="status-dot"></span> 本地 Markdown 工作区 <em>v1.8.63 桌面版</em></p>
           <h1 id="hero-title">本地 Markdown 知识库与编辑器</h1>
           <p class="hero-lede">围绕本地 Markdown 文件提供阅读、编辑、目录、图谱、检索、主题与多工作区管理。</p>
           <div class="hero-actions">
-            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.35.exe" download>下载 Windows 安装包</a>
+            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.63.exe" download>下载 Windows 安装包</a>
             <a class="button button-soft" href="#docs">查看使用文档</a>
           </div>
           <p class="hero-note">Windows 桌面端 · 本地文件优先 · 内容助手为可选接入</p>
@@ -183,17 +183,18 @@
         </div>
         <div class="download-block reveal">
           <div class="download-primary">
-            <span class="download-badge">当前稳定版 v1.8.35</span>
+            <span class="download-badge">当前稳定版 v1.8.63</span>
             <p>本地工作区、阅读/修改双模式、图谱、主题、增量索引与可选辅助功能。</p>
-            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.35.exe" download>下载安装包</a>
+            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.63.exe" download>下载安装包</a>
           </div>
           <div class="download-secondary">
             <h3>最近更新</h3>
             <ul>
-              <li>v1.8.35：修复导入文档工作区选择错误，优先保存到当前激活工作区。</li>
-              <li>v1.8.30：导入功能升级，支持 DOCX/PDF/XLSX/HTML/PPTX/EPUB 转 Markdown；新增导出 HTML/DOCX/TXT/MD。</li>
-              <li>v1.8.29：服务端 DOCX 解析，标题/正文/列表/引用转 Markdown。</li>
-              <li>v1.8.27：新增导入功能，支持多种格式文件转 Markdown 保存到工作路径。</li>
+              <li>v1.8.63：修复高亮提示块（callout）颜色和样式区分，支持 15 种类型主题色；修复 details 折叠块渲染；全链路缓存清除。</li>
+              <li>v1.8.53：优化内存管理：服务端堆限制 512MB、LRU 缓存、定时 GC；前端 AI 历史限制 50 条、Worker 空闲销毁。</li>
+              <li>v1.8.51：新增视频插入工具，支持上传压缩保存到工作区 source/video 并以 Markdown 格式显示。</li>
+              <li>v1.8.48：新增数学公式下拉（块级/行内/分数/求和/积分/极限/矩阵/分段函数）与图表插入下拉（Mermaid 11 种图表 + Excalidraw）。</li>
+              <li>v1.8.46：新增高亮提示块下拉、目录大纲、折叠块；链接改为外部浏览器打开；编辑/阅读模式切换保持滚动位置。</li>
               <li>版本号变化触发自动清理 WebView2 缓存。</li>
             </ul>
             <p class="download-links">
@@ -277,10 +278,13 @@
             </ul>
           </article>
           <article class="doc-section">
-            <h3>v1.8.35 更新日志</h3>
+            <h3>v1.8.63 更新日志</h3>
             <ul>
-              <li>修复导入文档工作区选择错误：导入文档现在优先保存到当前激活的工作区目录，其次回退到默认工作区，最后才回退到第一个可见工作区，多工作区场景下不再误存到错误目录。</li>
-              <li>版本号 +1 触发自动清理 WebView2 缓存，升级后立即生效。</li>
+              <li>修复高亮提示块（callout）颜色和样式区分：15 种类型（note/info/tip/warning/important/caution 等）各有标志性边框色、背景色和标题色，兼容明亮/护眼/柔光/图片全部主题。</li>
+              <li>修复 details 折叠块在 Markdown 预览中被转义为纯文本的问题，正确渲染为原生 HTML 可点击展开控件。</li>
+              <li>修复 PDF 导出中 important/caution 与 todo 共用同色的问题，导出样式与预览一致。</li>
+              <li>全链路缓存版本戳升级（styles.css/app.js/worker/渲染缓存），服务端 anti-cache 头强化（五重头），确保升级后立即生效。</li>
+              <li>修复 version.json 格式错误导致安装包构建失败的问题。</li>
             </ul>
           </article>
         </div>

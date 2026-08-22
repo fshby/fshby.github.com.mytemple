@@ -384,7 +384,7 @@ internal static class MyTempleLauncher
                 if (nodeProcess != null && !nodeProcess.HasExited) return;
                 appUrl = BuildAppUrl(port);
 
-                var psi = new ProcessStartInfo(nodePath, "\"" + serverScript + "\"");
+                var psi = new ProcessStartInfo(nodePath, "--max-old-space-size=512 --expose-gc \"" + serverScript + "\"");
                 psi.WorkingDirectory = installDir;
                 psi.UseShellExecute = false;
                 psi.CreateNoWindow = true;

@@ -1,0 +1,33 @@
+# 依赖
+node_modules/
+.pnp
+.pnp.js
+
+# 构建产物
+dist/
+packaging/.build/
+packaging/build_temp/
+packaging/payload.zip
+promo/downloads/*.exe
+
+# 运行时数据（由应用运行时生成，不应入库）
+workspaces.json
+source/ws_*/
+
+# 日志
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 编辑器/系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 临时文件
+*.tmp
+*.bak
+*~
