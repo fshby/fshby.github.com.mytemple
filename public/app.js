@@ -8528,27 +8528,26 @@ const gsDebounced = debounce(async (query) => {
       gsResults.innerHTML = `<div style="text-align:center;padding:32px 0;color:var(--muted,#999);font-size:13px;">未找到匹配内容</div>`;
       return;
     }
-    // 按文件分组
+    // 按文件分组（保留原始数组索引，避免分组后 idx 与 gsCurrentItems 不匹配）
     const groups = {};
     const order = [];
-    for (const item of gsCurrentItems) {
+    for (let i = 0; i < gsCurrentItems.length; i++) {
+      const item = gsCurrentItems[i];
       const file = state.flatFiles.find((f) => f.path === item.path) || item;
       const refPath = displayRelativePath(item.path); const folder = refPath.split(/[\\/]/).slice(0, -1).join("/") || "根目录";
       if (!groups[folder]) { groups[folder] = []; order.push(folder); }
-      groups[folder].push({ item, file });
+      groups[folder].push({ item, file, origIdx: i });
     }
     let html = "";
-    let idx = 0;
     for (const folder of order) {
       html += `<div class="global-search-group">${escapeHtmlGs(folder)}</div>`;
-      for (const { item, file } of groups[folder]) {
-        const selectedCls = idx === gsSelectedIndex ? " selected" : "";
-        html += `<button class="global-search-item${selectedCls}" data-idx="${idx}" data-path="${escapeHtmlGs(item.path)}" data-query="${escapeHtmlGs(query)}">
+      for (const { item, file, origIdx } of groups[folder]) {
+        const selectedCls = origIdx === gsSelectedIndex ? " selected" : "";
+        html += `<button class="global-search-item${selectedCls}" data-idx="${origIdx}" data-path="${escapeHtmlGs(item.path)}" data-query="${escapeHtmlGs(query)}">
           <span class="global-search-item-title">${escapeHtmlGs(displayName(file))}</span>
           <span class="global-search-item-path">${escapeHtmlGs(displayRelativePath(item.path))}</span>
           <span class="global-search-item-snippet">${highlightSnippet(item.snippet || item.content || "", query)}</span>
         </button>`;
-        idx++;
       }
     }
     gsResults.innerHTML = html;
