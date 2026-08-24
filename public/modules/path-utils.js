@@ -11,7 +11,19 @@ export function escapeHtml(value) {
 }
 
 export function displayName(file) {
-  return file.displayName || file.name || file.path.split("/").pop();
+  if (file == null) return "";
+  if (file.displayName) return file.displayName;
+  if (file.name) return file.name;
+  const path = String(file.path || file.relative || "");
+  if (!path) return "";
+  const ref = splitPathRef(path);
+  const name = ref.relative.split(/[\\/]/).pop();
+  return name || path;
+}
+
+export function displayRelativePath(path) {
+  const ref = splitPathRef(String(path || ""));
+  return ref.relative.replace(/^[\\/]+/, "");
 }
 
 export function splitPathRef(value = "") {
