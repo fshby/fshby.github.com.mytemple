@@ -1,6 +1,6 @@
-import { createMarkdownEditor } from "/editor-core.js?v=20260814-v1";
+﻿import { createMarkdownEditor } from "/editor-core.js?v=20260814-v1";
 import { createPeriodicPerlin, generateSeamlessPaperTextureDataUrl, generateLargePaperTextureDataUrl, getPaperBackgroundUrl } from "./modules/paper-texture.js";
-import { escapeHtml, displayName, splitPathRef, joinPathRef, parentPathRef, compactName, splitWorkspaceRef, plainText, headingId } from "./modules/path-utils.js";
+import { escapeHtml, displayName, displayRelativePath, splitPathRef, joinPathRef, parentPathRef, compactName, splitWorkspaceRef, plainText, headingId } from "./modules/path-utils.js";
 import { extractOutline, addCnEnSpaces } from "./modules/editor-utils.js";
 import { stripFrontmatter, escapeRegex, splitIntoLogicalBlocks, estimateBlockLines, splitMarkdownIntoSlides, normalizeAssetUrlsToRelative } from "./modules/export-utils.js";
 import { highlightCode } from "./modules/preview-utils.js";
@@ -17,10 +17,12 @@ const text = {
 
 const LARGE_PREVIEW_BYTES = 100 * 1024;
 const LARGE_PREVIEW_DELAY = 700;
+const CHUNKED_RENDER_BYTES = 500 * 1024;
+const CHUNK_RENDER_SLICE_BYTES = 150 * 1024;
 const GRAPH_WORKER_URL = "/graph-worker.js?v=20260810-graph-1";
-const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20260822-worker-11";
+const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20260824-worker-12";
 // Markdown 渲染缓存版本戳：解析器或 CSS 规则升级时递增，确保旧缓存不被复用。
-const MARKDOWN_RENDER_VERSION = "callout-v9-final-v12-20260822-force-1.8.63";
+const MARKDOWN_RENDER_VERSION = "callout-v9-final-v13-20260824-url-auto-1.8.63";
 const AI_HISTORY_KEY = "mytemple.ai.history.v1";
 const AI_TRANSFORM_LABELS = { summary: "摘要", keypoints: "要点", terms: "术语解释", polish: "润色", continue: "续写", rewrite: "代写", translate: "翻译", hint: "编辑提示", code: "代码补全", comment: "生成注释" };
 
@@ -42,6 +44,7 @@ const state = {
   graphWorkerFailed: false,
   graphWorkerSeq: 0,
   graphWorkerPending: new Map(),
+  graphWorkerIdleTimer: 0,
   graphReady: false,
   currentVersion: "",
   graphView: {
@@ -1295,7 +1298,7 @@ const BACKUP_PREVIEW_DOC = `# 欢迎使用 MyTemple Knowledge
 - 顶部「最近」栏：快速跳回最近打开的文档，点击 × 可移除条目。
 - 顶部「修改」按钮进入编辑模式，支持大纲、编辑器、实时预览三栏。
 - 编辑工具栏：隐藏/显示大纲、编辑器、预览，或进入沉浸模式专注写作。
-- 快捷键：Ctrl+U AI 智能检索，Ctrl+I AI 编辑，Ctrl+F 关键字检索，Ctrl+Shift+I 导入文档。
+- 快捷键：Ctrl+U AI 智能检索，Ctrl+I AI 编辑，Ctrl+F 关键字检索，Ctrl+Shift+I 导入文档，Ctrl+Q 显示/隐藏工作区目录，Alt+Q 显示/隐藏大纲目录，Ctrl+W 显示/隐藏预览。
 
 打开任意文档即可开始记录。`;
 
@@ -2012,6 +2015,8 @@ function requestMarkdownRender({ source = "", searchTerm = "", includeHtml = tru
 async function renderReaderContent(source, options = {}) {
   const content = String(source || "");
   const searchTerm = options.searchTerm || "";
+  const byteLen = contentByteLength(content);
+  const useChunked = byteLen > CHUNKED_RENDER_BYTES;
   try {
     const { html, outline } = await requestMarkdownRender({
       source: content,
@@ -2022,15 +2027,68 @@ async function renderReaderContent(source, options = {}) {
     if (state.currentContent !== content && !searchTerm) return;
     let finalHtml = html ?? cachedRenderMarkdown(content, { searchTerm });
     try { if (typeof applySpellCheckHighlight === "function") finalHtml = applySpellCheckHighlight(finalHtml, content); } catch (_) {}
-    els.markdownView.innerHTML = finalHtml;
-    renderOutlineItems(outline || extractOutline(content));
+    if (useChunked) {
+      await renderReaderContentChunked(finalHtml, outline || extractOutline(content));
+    } else {
+      els.markdownView.innerHTML = finalHtml;
+      renderOutlineItems(outline || extractOutline(content));
+    }
   } catch (error) {
     console.error(error);
     let finalHtml = cachedRenderMarkdown(content, { searchTerm });
     try { if (typeof applySpellCheckHighlight === "function") finalHtml = applySpellCheckHighlight(finalHtml, content); } catch (_) {}
-    els.markdownView.innerHTML = finalHtml;
-    renderOutline(content);
+    if (useChunked) {
+      await renderReaderContentChunked(finalHtml, extractOutline(content));
+    } else {
+      els.markdownView.innerHTML = finalHtml;
+      renderOutline(content);
+    }
   }
+}
+
+async function renderReaderContentChunked(html, outline) {
+  const slices = splitHtmlForChunkedRender(html, CHUNK_RENDER_SLICE_BYTES);
+  if (slices.length <= 1) {
+    els.markdownView.innerHTML = html;
+    renderOutlineItems(outline);
+    return;
+  }
+  els.markdownView.innerHTML = slices[0];
+  renderOutlineItems(outline);
+  for (let i = 1; i < slices.length; i++) {
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const temp = document.createElement("div");
+    temp.innerHTML = slices[i];
+    const frag = document.createDocumentFragment();
+    while (temp.firstChild) frag.appendChild(temp.firstChild);
+    els.markdownView.appendChild(frag);
+  }
+  renderMathInPreview(els.markdownView);
+  renderChartsInPreview(els.markdownView);
+}
+
+function splitHtmlForChunkedRender(html, sliceBytes) {
+  if (!html || html.length <= sliceBytes) return [html || ""];
+  const slices = [];
+  let remaining = html;
+  while (remaining.length > sliceBytes) {
+    let cutoff = sliceBytes;
+    const safeTags = ["</p>", "</div>", "</h1>", "</h2>", "</h3>", "</h4>", "</h5>", "</h6>", "</li>", "</ul>", "</ol>", "</blockquote>", "</pre>", "</table>", "</tr>", "</section>", "</article>", "</hr/>", "</br/>"];
+    let bestCutoff = -1;
+    for (const tag of safeTags) {
+      const idx = remaining.lastIndexOf(tag, cutoff);
+      if (idx > bestCutoff) bestCutoff = idx;
+    }
+    if (bestCutoff > 0) cutoff = bestCutoff;
+    else {
+      const nextLt = remaining.indexOf(">", cutoff);
+      if (nextLt > 0) cutoff = nextLt + 1;
+    }
+    slices.push(remaining.slice(0, cutoff));
+    remaining = remaining.slice(cutoff);
+  }
+  if (remaining) slices.push(remaining);
+  return slices;
 }
 
 function inlineMarkdown(value, searchTerm = "") {
@@ -2081,8 +2139,20 @@ function inlineMarkdown(value, searchTerm = "") {
 function safeMarkdownUrl(value) {
   const url = String(value || "").trim();
   if (!url) return "#";
+  if (url.startsWith("#")) return url;
   const protocol = url.match(/^([a-z][a-z0-9+.-]*):/i)?.[1]?.toLowerCase();
-  if (protocol && !["http", "https", "mailto"].includes(protocol)) return "#";
+  if (protocol) {
+    if (!["http", "https", "mailto"].includes(protocol)) return "#";
+    return url;
+  }
+  // 无协议前缀的 URL：自动补 http://（如 mytemple.fshby.cc、example.com/path）
+  if (/^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)+(:\d+)?(\/|$)/.test(url)) {
+    return "http://" + url;
+  }
+  // IP 地址格式（如 127.0.0.1:8080/path）
+  if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?(\/|$)/.test(url)) {
+    return "http://" + url;
+  }
   return url;
 }
 
@@ -3364,6 +3434,8 @@ function setMode(mode) {
     state.graphLayouts.clear();
     state.graphLayoutPromises.clear();
     state.graphWorkerPending.clear();
+    if (state.graphWorker) { state.graphWorker.terminate(); state.graphWorker = null; }
+    if (state.graphWorkerIdleTimer) { clearTimeout(state.graphWorkerIdleTimer); state.graphWorkerIdleTimer = 0; }
   }
   if (mode === "graph") requestAnimationFrame(() => initGraph());
   updateEditorPlaceholder();
@@ -5689,7 +5761,7 @@ async function runSearch() {
       const title = document.createElement("strong");
       title.textContent = displayName(file);
       const snippet = document.createElement("span");
-      snippet.textContent = item.snippet || item.path;
+      snippet.textContent = item.snippet || displayRelativePath(item.path);
       button.append(title, snippet);
       fragment.appendChild(button);
     }
@@ -5914,6 +5986,8 @@ async function renameTreeItem(path) {
     state.graphReady = false;
     await bootstrap(true);
     if (response?.newPath) {
+      // 移除旧路径的最近文档记录，避免顶部栏残留旧文档名
+      removeRecentDoc(path);
       openDoc(response.newPath);
     }
     showToast("重命名成功");
@@ -5923,7 +5997,8 @@ async function renameTreeItem(path) {
 }
 
 function displayNameFromPath(path) {
-  const parts = (path || "").split(/[\\/]/);
+  const ref = splitPathRef(path);
+  const parts = (ref.relative || "").split(/[\\/]/);
   return parts[parts.length - 1] || "";
 }
 
@@ -5976,6 +6051,17 @@ function graphModeName() {
   return "双链脉络";
 }
 
+function scheduleGraphWorkerIdle() {
+  if (state.graphWorkerIdleTimer) clearTimeout(state.graphWorkerIdleTimer);
+  state.graphWorkerIdleTimer = setTimeout(() => {
+    if (state.graphWorkerPending.size === 0 && state.graphWorker) {
+      state.graphWorker.terminate();
+      state.graphWorker = null;
+    }
+    state.graphWorkerIdleTimer = 0;
+  }, 60000);
+}
+
 function ensureGraphWorker() {
   if (state.graphWorker || state.graphWorkerFailed || typeof Worker === "undefined") return state.graphWorker;
   try {
@@ -5987,6 +6073,7 @@ function ensureGraphWorker() {
       state.graphWorkerPending.delete(id);
       if (error) pending.reject(new Error(error));
       else pending.resolve(layout);
+      scheduleGraphWorkerIdle();
     };
     worker.onerror = (event) => {
       state.graphWorkerFailed = true;
@@ -5994,6 +6081,7 @@ function ensureGraphWorker() {
       state.graphWorkerPending.clear();
       worker.terminate();
       state.graphWorker = null;
+      if (state.graphWorkerIdleTimer) { clearTimeout(state.graphWorkerIdleTimer); state.graphWorkerIdleTimer = 0; }
     };
     state.graphWorker = worker;
   } catch {
@@ -6012,8 +6100,8 @@ function layoutGraphInWorker(graph) {
       reject(new Error("Graph worker timeout"));
     }, 20000);
     state.graphWorkerPending.set(id, {
-      resolve: (layout) => { clearTimeout(timeout); resolve(layout); },
-      reject: (error) => { clearTimeout(timeout); reject(error); },
+      resolve: (layout) => { clearTimeout(timeout); resolve(layout); scheduleGraphWorkerIdle(); },
+      reject: (error) => { clearTimeout(timeout); reject(error); scheduleGraphWorkerIdle(); },
     });
     try {
       worker.postMessage({ id, graph });
@@ -8299,6 +8387,27 @@ document.addEventListener("keydown", (event) => {
     renameCurrentDoc();
     return;
   }
+  // Ctrl/Cmd + Q: 显示/隐藏工作区目录
+  if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "q") {
+    if (inFormField) return;
+    event.preventDefault();
+    setSidebarCollapsed(!state.sidebarCollapsed);
+    return;
+  }
+  // Alt + Q: 编辑模式下显示/隐藏大纲目录
+  if (event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && event.key.toLowerCase() === "q" && state.mode === "edit") {
+    if (inFormField) return;
+    event.preventDefault();
+    setEditorOutlineVisible(!state.editorOutlineVisible);
+    return;
+  }
+  // Ctrl/Cmd + W: 编辑模式下显示/隐藏预览栏
+  if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "w" && state.mode === "edit") {
+    if (inFormField) return;
+    event.preventDefault();
+    setPreviewVisible(!state.previewVisible);
+    return;
+  }
   if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "u") {
     event.preventDefault();
     toggleAiDrawer(!state.ai.open);
@@ -8424,7 +8533,7 @@ const gsDebounced = debounce(async (query) => {
     const order = [];
     for (const item of gsCurrentItems) {
       const file = state.flatFiles.find((f) => f.path === item.path) || item;
-      const folder = (item.path || "").split("/").slice(0, -1).join("/") || "根目录";
+      const refPath = displayRelativePath(item.path); const folder = refPath.split(/[\\/]/).slice(0, -1).join("/") || "根目录";
       if (!groups[folder]) { groups[folder] = []; order.push(folder); }
       groups[folder].push({ item, file });
     }
@@ -8436,7 +8545,7 @@ const gsDebounced = debounce(async (query) => {
         const selectedCls = idx === gsSelectedIndex ? " selected" : "";
         html += `<button class="global-search-item${selectedCls}" data-idx="${idx}" data-path="${escapeHtmlGs(item.path)}" data-query="${escapeHtmlGs(query)}">
           <span class="global-search-item-title">${escapeHtmlGs(displayName(file))}</span>
-          <span class="global-search-item-path">${escapeHtmlGs(item.path)}</span>
+          <span class="global-search-item-path">${escapeHtmlGs(displayRelativePath(item.path))}</span>
           <span class="global-search-item-snippet">${highlightSnippet(item.snippet || item.content || "", query)}</span>
         </button>`;
         idx++;
@@ -9112,6 +9221,12 @@ els.searchResults.addEventListener("click", (event) => {
   }
 });
 els.markdownView.addEventListener("click", (event) => {
+  const img = event.target.closest("img");
+  if (img && !img.closest(".code-block")) {
+    event.preventDefault();
+    openImagePreview(img.src, img.alt || "");
+    return;
+  }
   const taskInput = event.target.closest("input[data-task-line]");
   if (taskInput) {
     event.stopPropagation();
@@ -9127,9 +9242,11 @@ els.markdownView.addEventListener("click", (event) => {
   const link = event.target.closest("[data-doc-link]");
   if (!link) return;
   event.preventDefault();
+  event.stopPropagation();
   const label = link.dataset.docLink.toLowerCase();
   const file = state.flatFiles.find((item) => item.title.toLowerCase() === label || item.path.toLowerCase().endsWith(`${label}.md`));
   if (file) openDoc(file.path);
+  else showToast("未找到对应文档");
 });
 els.markdownView.addEventListener("copy", (event) => {
   const selection = window.getSelection();
@@ -9138,6 +9255,12 @@ els.markdownView.addEventListener("copy", (event) => {
   }
 });
 els.preview.addEventListener("click", async (event) => {
+  const img = event.target.closest("img");
+  if (img && !img.closest(".code-block")) {
+    event.preventDefault();
+    openImagePreview(img.src, img.alt || "");
+    return;
+  }
   // 需求8：编辑模式预览栏中，http/https/mailto/tel 链接不内部打开，
   // 跳转到系统默认浏览器，减少内嵌 WebView 或当前页签离开导致的稳定性损失。
   const link = event.target.closest("a[href]");
@@ -9154,6 +9277,16 @@ els.preview.addEventListener("click", async (event) => {
       }
       return;
     }
+  }
+  const wikiLink = event.target.closest("[data-doc-link]");
+  if (wikiLink) {
+    event.preventDefault();
+    event.stopPropagation();
+    const label = wikiLink.dataset.docLink.toLowerCase();
+    const file = state.flatFiles.find((item) => item.title.toLowerCase() === label || item.path.toLowerCase().endsWith(`${label}.md`));
+    if (file) openDoc(file.path);
+    else showToast("未找到对应文档");
+    return;
   }
   const taskInput = event.target.closest("input[data-task-line]");
   if (taskInput) {
@@ -9176,6 +9309,14 @@ els.preview.addEventListener("click", async (event) => {
 });
 // 需求8：阅读模式（阅读栏）markdownView 中链接同样处理：外部链接走系统默认浏览器
 els.markdownView.addEventListener("click", async (event) => {
+  const img = event.target.closest("img");
+  if (img && !img.closest(".code-block")) {
+    event.preventDefault();
+    openImagePreview(img.src, img.alt || "");
+    return;
+  }
+  const wikiLink = event.target.closest("[data-doc-link]");
+  if (wikiLink) return;
   const link = event.target.closest("a[href]");
   if (link && link.getAttribute("href")) {
     const href = link.getAttribute("href");
@@ -9188,8 +9329,6 @@ els.markdownView.addEventListener("click", async (event) => {
       }
       return;
     }
-    // 内部锚点 #xxx：阅读区本身支持滚动，走默认跳转（不拦截）。
-    // 相对路径链接：本应用为单页应用不做跨文档跳转，也不拦截留给浏览器默认处理。
   }
 });
 els.readerOutline.addEventListener("click", (event) => {
@@ -11278,6 +11417,131 @@ async function startupLicenseCheck() {
     await bootstrap();
   }
 }
+
+// —— 图片预览系统 ——
+const imagePreviewState = { scale: 1, rotation: 0, src: "", alt: "" };
+
+function openImagePreview(src, alt) {
+  const modal = document.getElementById("imagePreviewModal");
+  const img = document.getElementById("imagePreviewImg");
+  const download = document.getElementById("imagePreviewDownload");
+  if (!modal || !img) return;
+  imagePreviewState.scale = 1;
+  imagePreviewState.rotation = 0;
+  imagePreviewState.src = src;
+  imagePreviewState.alt = alt || "";
+  img.src = src;
+  img.alt = alt || "";
+  img.style.transform = "";
+  img.style.cursor = "zoom-in";
+  if (download) {
+    try {
+      const url = new URL(src, location.href);
+      const filename = src.split("/").pop() || "image";
+      download.href = src;
+      download.download = filename;
+      download.style.display = url.protocol === "blob:" || url.protocol === "data:" ? "none" : "inline-flex";
+    } catch {
+      download.style.display = "none";
+    }
+  }
+  modal.classList.remove("hidden");
+  document.body.style.overflow = "hidden";
+}
+
+function closeImagePreview() {
+  const modal = document.getElementById("imagePreviewModal");
+  if (!modal) return;
+  modal.classList.add("hidden");
+  document.body.style.overflow = "";
+  imagePreviewState.scale = 1;
+  imagePreviewState.rotation = 0;
+  const img = document.getElementById("imagePreviewImg");
+  if (img) { img.style.transform = ""; img.style.cursor = "zoom-in"; }
+}
+
+function applyImagePreviewTransform() {
+  const img = document.getElementById("imagePreviewImg");
+  if (!img) return;
+  const { scale, rotation } = imagePreviewState;
+  img.style.transform = `scale(${scale}) rotate(${rotation}deg)`;
+  img.style.cursor = scale > 1 ? "zoom-out" : "zoom-in";
+}
+
+document.addEventListener("keydown", (event) => {
+  const modal = document.getElementById("imagePreviewModal");
+  if (!modal || modal.classList.contains("hidden")) return;
+  if (event.key === "Escape") {
+    event.preventDefault();
+    closeImagePreview();
+  } else if (event.key === "+" || event.key === "=") {
+    event.preventDefault();
+    imagePreviewState.scale = Math.min(imagePreviewState.scale + 0.25, 5);
+    applyImagePreviewTransform();
+  } else if (event.key === "-" || event.key === "_") {
+    event.preventDefault();
+    imagePreviewState.scale = Math.max(imagePreviewState.scale - 0.25, 0.25);
+    applyImagePreviewTransform();
+  } else if (event.key === "0") {
+    event.preventDefault();
+    imagePreviewState.scale = 1;
+    imagePreviewState.rotation = 0;
+    applyImagePreviewTransform();
+  }
+});
+
+const ipModal = document.getElementById("imagePreviewModal");
+const ipImg = document.getElementById("imagePreviewImg");
+const ipClose = ipModal?.querySelector(".image-preview-close");
+const ipBackdrop = ipModal?.querySelector(".image-preview-backdrop");
+const ipToolbar = ipModal?.querySelector(".image-preview-toolbar");
+
+ipClose?.addEventListener("click", closeImagePreview);
+ipBackdrop?.addEventListener("click", closeImagePreview);
+
+ipImg?.addEventListener("click", () => {
+  if (imagePreviewState.scale > 1) {
+    imagePreviewState.scale = 1;
+    imagePreviewState.rotation = 0;
+  } else {
+    imagePreviewState.scale = 2;
+  }
+  applyImagePreviewTransform();
+});
+
+ipImg?.addEventListener("wheel", (event) => {
+  event.preventDefault();
+  const delta = event.deltaY > 0 ? -0.1 : 0.1;
+  imagePreviewState.scale = Math.max(0.25, Math.min(5, imagePreviewState.scale + delta));
+  applyImagePreviewTransform();
+}, { passive: false });
+
+ipToolbar?.addEventListener("click", (event) => {
+  const btn = event.target.closest(".image-preview-btn");
+  if (!btn) return;
+  const action = btn.dataset.action;
+  if (!action) return;
+  event.preventDefault();
+  switch (action) {
+    case "zoom-in":
+      imagePreviewState.scale = Math.min(imagePreviewState.scale + 0.25, 5);
+      break;
+    case "zoom-out":
+      imagePreviewState.scale = Math.max(imagePreviewState.scale - 0.25, 0.25);
+      break;
+    case "zoom-reset":
+      imagePreviewState.scale = 1;
+      imagePreviewState.rotation = 0;
+      break;
+    case "rotate-left":
+      imagePreviewState.rotation -= 90;
+      break;
+    case "rotate-right":
+      imagePreviewState.rotation += 90;
+      break;
+  }
+  applyImagePreviewTransform();
+});
 
 // 启动入口：开机图片已在 HTML 中直接渲染显示，立即并行加载后台服务。
 beginLoading();
