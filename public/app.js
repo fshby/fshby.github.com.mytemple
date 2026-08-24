@@ -1,4 +1,4 @@
-﻿import { createMarkdownEditor } from "/editor-core.js?v=20260814-v1";
+import { createMarkdownEditor } from "/editor-core.js?v=20260814-v1";
 import { createPeriodicPerlin, generateSeamlessPaperTextureDataUrl, generateLargePaperTextureDataUrl, getPaperBackgroundUrl } from "./modules/paper-texture.js";
 import { escapeHtml, displayName, displayRelativePath, splitPathRef, joinPathRef, parentPathRef, compactName, splitWorkspaceRef, plainText, headingId } from "./modules/path-utils.js";
 import { extractOutline, addCnEnSpaces } from "./modules/editor-utils.js";
@@ -8600,6 +8600,7 @@ gsResults?.addEventListener("click", (e) => {
 
 function openGsResult(item, query) {
   closeGlobalSearch();
+  setMode("view");
   openDoc(item.path, { searchTerm: query });
 }
 
