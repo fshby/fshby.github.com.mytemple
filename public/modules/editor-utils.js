@@ -19,6 +19,7 @@ export function extractOutline(source) {
     const heading = line.match(/^(\s*)(#{1,6})\s+(.+)$/);
     if (heading) {
       const level = heading[2].length;
+      if (level > 3) continue; // 4级及以下小标题不纳入大纲
       let index;
       if (level === 1) {
         index = h1Index++;
@@ -57,7 +58,9 @@ export function extractOutline(source) {
     const numHeading = line.match(/^(\s*)(\((?:\d{1,3})\)|(\d{1,3})([、.．)]))\s*([^-*].+)$/);
     if (numHeading && !/^\s*\d+[.)]\s+\[[ xX]\](?:\s|$)/.test(line)) {
       const level = 4;
-      outline.push({ id: headingId(numHeading[5], `num-h4-${h4Index++}`), title: plainText(numHeading[5]), level, line: lineNo });
+      continue; // 4级数字标题也不纳入大纲
+      // 以下代码已废弃，仅为保持逻辑参考
+      // outline.push({ id: headingId(numHeading[5], `num-h4-${h4Index++}`), title: plainText(numHeading[5]), level, line: lineNo });
     }
   }
   return outline;

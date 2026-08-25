@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "knowledgeVersion": "716bb416899a511a7e44ee7efb2ce247571d0368",
-  "generatedAt": "2026-08-21T05:51:47.780Z",
+  "knowledgeVersion": "82f3f3b83aaab935ae4967dc444e75021608539a",
+  "generatedAt": "2026-08-24T02:39:17.002Z",
   "purpose": "供 AI 大模型快速定位本地知识库文档、标签、语义概念和图谱关系；命中候选后再读取 absolutePath 对应原文。",
   "aiUsage": [
     "先检索 documents 的 title、tags、headings、keywords 和 excerpt。",
@@ -11,49 +11,28 @@
   "library": {
     "defaultWorkspaceId": "default",
     "workspaceCount": 2,
-    "documentCount": 244,
-    "nodeCount": 459,
-    "edgeCount": 505,
+    "documentCount": 247,
+    "nodeCount": 464,
+    "edgeCount": 511,
     "tagCount": 160,
-    "semanticConceptCount": 42,
-    "missingLinkCount": 13
+    "semanticConceptCount": 43,
+    "missingLinkCount": 14
   },
   "workspaces": [
     {
       "id": "ws_25a724bd6b",
       "name": "temple",
       "root": "O:\\temple",
-      "documentCount": 239
+      "documentCount": 243
     },
     {
       "id": "default",
       "name": "默认 docs",
       "root": "C:\\Users\\fshby\\AppData\\Local\\MyTempleKnowledgeData\\docs",
-      "documentCount": 5
+      "documentCount": 4
     }
   ],
   "documents": [
-    {
-      "id": "default:测试.md",
-      "workspaceId": "default",
-      "workspace": "默认 docs",
-      "relativePath": "测试.md",
-      "absolutePath": "C:\\Users\\fshby\\AppData\\Local\\MyTempleKnowledgeData\\docs\\测试.md",
-      "title": "测试",
-      "tags": [],
-      "headings": [],
-      "keywords": [],
-      "semanticConcepts": [],
-      "outgoingLinks": [],
-      "backlinks": [
-        "default:知识库缺陷.md"
-      ],
-      "missingLinks": [],
-      "excerpt": "",
-      "bytes": 2,
-      "modifiedAt": "2026-08-21T04:04:25.455Z",
-      "contentSha256": "75a11da44c802486bc6f65640aa48a730f0f684c5c07a42ba3cd1735eb3fb070"
-    },
     {
       "id": "default:功能简介.md",
       "workspaceId": "default",
@@ -390,13 +369,13 @@
         }
       ],
       "semanticConcepts": [
+        "ai",
         "is"
       ],
-      "outgoingLinks": [
-        "default:测试.md"
-      ],
+      "outgoingLinks": [],
       "backlinks": [],
       "missingLinks": [
+        "测试",
         "mytemple-v1.6.0-defects-and-features",
         "PACKAGING"
       ],
@@ -1081,7 +1060,9 @@
           "count": 1
         }
       ],
-      "semanticConcepts": [],
+      "semanticConcepts": [
+        "ai"
+      ],
       "outgoingLinks": [],
       "backlinks": [],
       "missingLinks": [],
@@ -2125,6 +2106,14 @@
           "title": "贵州电信MK"
         },
         {
+          "level": 1,
+          "title": "vpn环境"
+        },
+        {
+          "level": 2,
+          "title": "版本"
+        },
+        {
           "level": 2,
           "title": "注意事项"
         },
@@ -2135,16 +2124,28 @@
         {
           "level": 3,
           "title": "20240108更新区别描述："
+        },
+        {
+          "level": 3,
+          "title": "福富网管"
         }
       ],
       "keywords": [
         {
           "term": "apk",
-          "count": 16
+          "count": 17
         },
         {
           "term": "stb",
+          "count": 11
+        },
+        {
+          "term": "release",
           "count": 9
+        },
+        {
+          "term": "网管",
+          "count": 7
         },
         {
           "term": "升级",
@@ -2155,12 +2156,20 @@
           "count": 7
         },
         {
-          "term": "release",
-          "count": 7
+          "term": "开机",
+          "count": 6
         },
         {
           "term": "预警",
           "count": 6
+        },
+        {
+          "term": "贵州",
+          "count": 5
+        },
+        {
+          "term": "vpn",
+          "count": 5
         },
         {
           "term": "write",
@@ -2169,36 +2178,19 @@
         {
           "term": "hardware",
           "count": 5
-        },
-        {
-          "term": "info",
-          "count": 5
-        },
-        {
-          "term": "db",
-          "count": 5
-        },
-        {
-          "term": "set",
-          "count": 5
-        },
-        {
-          "term": "tr069",
-          "count": 5
         }
       ],
       "semanticConcepts": [
         "升级",
-        "apk",
-        "db"
+        "apk"
       ],
       "outgoingLinks": [],
       "backlinks": [],
       "missingLinks": [],
-      "excerpt": "不支持手动放装 chongqing 默认DHCP， 没有手动放装 地址池暂时没有要求ipv6 陕西公网专网均可进行零配置，其他省分公网不能进行零配置 Wed Sep 24 13:03:19 CST 2025 版本vpn认证失败（KD 01版本外网无法接入） 贵州电信MK 提供不了全路由环境 家里只有公网 私网分开的 移动： VPN：贵州：27E407E3725633F1 专网：ETH1 公网：ETH2 @郑堃逢(郑堃逢)前方按照这个接法接好后，专网口打上2090的VLAN就行 电信：看下设备是否在线贵州：AB7BF5510473B788 专网：ETH0 公网：ETH1 业务公网口ETH2 专网固定到 vlan 2090 上 19 2…",
-      "bytes": 7473,
-      "modifiedAt": "2026-08-21T04:10:17.554Z",
-      "contentSha256": "bb70f21853a0ba14d2ae982bfa5b6eb514afa38f74338ac937d887ec5266e7a8"
+      "excerpt": "不支持手动放装 chongqing 默认DHCP， 没有手动放装 地址池暂时没有要求ipv6 贵州公网专网均可进行零配置，其他省分公网不能进行零配置 Wed Sep 24 13:03:19 CST 2025 版本vpn认证失败（KD 01版本外网无法接入） 贵州电信MK vpn环境 福富网管：ff gz support@chinatelecom.cn邮件发一下，电脑不通外网 提供不了全路由环境 家里只有公网 私网分开的 移动： VPN：贵州：27E407E3725633F1 专网：ETH1 公网：ETH2 @郑堃逢(郑堃逢)前方按照这个接法接好后，专网口打上2090的VLAN就行 电信：看下设备是否在线贵州：AB7BF5510473…",
+      "bytes": 8051,
+      "modifiedAt": "2026-08-24T02:23:09.308Z",
+      "contentSha256": "8efab7e54742e2d86775f098b5fddb0c10f4e7813b69b73108ada5b3c84e4d08"
     },
     {
       "id": "ws_25a724bd6b:贵州移动KF.md",
@@ -2685,6 +2677,89 @@
       "contentSha256": "a83f275894b829650f874f6b07a9baa8297b42f71ef92b14cbf09dbee6e875d7"
     },
     {
+      "id": "ws_25a724bd6b:湖北移动MR622-DK.md",
+      "workspaceId": "ws_25a724bd6b",
+      "workspace": "temple",
+      "relativePath": "湖北移动MR622-DK.md",
+      "absolutePath": "O:\\temple\\湖北移动MR622-DK.md",
+      "title": "湖北移动MR622-DK",
+      "tags": [],
+      "headings": [
+        {
+          "level": 1,
+          "title": "vpn环境"
+        },
+        {
+          "level": 1,
+          "title": "湖南移动MR622-DK"
+        },
+        {
+          "level": 2,
+          "title": "版本"
+        }
+      ],
+      "keywords": [
+        {
+          "term": "mr622",
+          "count": 4
+        },
+        {
+          "term": "dk",
+          "count": 3
+        },
+        {
+          "term": "硬件",
+          "count": 3
+        },
+        {
+          "term": "vpn",
+          "count": 2
+        },
+        {
+          "term": "环境",
+          "count": 2
+        },
+        {
+          "term": "eth",
+          "count": 2
+        },
+        {
+          "term": "349213",
+          "count": 2
+        },
+        {
+          "term": "00",
+          "count": 2
+        },
+        {
+          "term": "iptv",
+          "count": 2
+        },
+        {
+          "term": "fvos",
+          "count": 2
+        },
+        {
+          "term": "product",
+          "count": 2
+        },
+        {
+          "term": "combo",
+          "count": 2
+        }
+      ],
+      "semanticConcepts": [
+        "iptv"
+      ],
+      "outgoingLinks": [],
+      "backlinks": [],
+      "missingLinks": [],
+      "excerpt": "vpn环境 267D79F4DD4C328A ETH 0 ETH 1 vlan2040 上 1 2 湖南移动MR622 DK https://pan.baidu.com/s/1eOSW9ugZaNHzmHu8UJ7fng?pwd=fb34 提取码: fb34 版本 [!note] MR622 DK/MR820 DK ddr 使用老硬件测试，发货未确定（新老硬件随机发） 硬件版本号：MR622 DNYABG L 软件版本号：9.349213.00 机顶盒仅OTT版本，不涉及iptv 版本未报备 业务账号需要3个，当前未开通 VPN环境严重限速，宽带还有一个月左右到期 /JenkinsTempNew/FVOS product/daily…",
+      "bytes": 1207,
+      "modifiedAt": "2026-08-24T02:11:20.119Z",
+      "contentSha256": "b452c7e79bfafa5b7834583c19353c708161c3d9e824e3fc59602e38a5006f48"
+    },
+    {
       "id": "ws_25a724bd6b:湖北KA.md",
       "workspaceId": "ws_25a724bd6b",
       "workspace": "temple",
@@ -3147,9 +3222,9 @@
       "backlinks": [],
       "missingLinks": [],
       "excerpt": "vpn： 267D79F4DD4C328A，ETH0公网 ETH1 口专网 @SD WAN Help小兰 看看这个 vlan2040 版本： 2+8G 双rank，单rank版本无法烧录双rank盒子 HG680 NDAXX 1N1 mac:[B4:9F:4D:85:CE:4A] stbid:[009913FF401913102411B49F4D85CE4A] deviceid:[111019319000083] devicetype:[] devicemodel:[HG680 KF] hardwareversion:[HG680 NYOXV 7N] cmei:[mh1110006652115] authkey:[XRABCDHSN…",
-      "bytes": 3361,
-      "modifiedAt": "2026-05-14T02:04:17.783Z",
-      "contentSha256": "304650bfbaf4d3030acd25c6200516f3c847b90774662f00b85abf22269c3b88"
+      "bytes": 3273,
+      "modifiedAt": "2026-08-24T01:57:01.143Z",
+      "contentSha256": "c35a674f91b046b8cba4e07de2f6e0300be09ae383d323c873e65b2970bd4936"
     },
     {
       "id": "ws_25a724bd6b:湖南电信lan-MR820-MK.md",
@@ -3508,9 +3583,9 @@
       "backlinks": [],
       "missingLinks": [],
       "excerpt": "现场测试部分：网管、烤机（直播（湖南卫视4K）、点播（）、时移、回看、）、V6、质差、探针、网关机顶盒同时重启、性能 中兴CDN下：烤机直播（湖南卫视4K）、点播（一起露营吧第二季）、时移（都市频道、安乡新闻综合频道）、回看（财经频道） 探针 致命性动26集 30：00 注意事项：下次入网提供测试报告所有用例都需要截图 硬件型号：单ranl、双rank、8bit（11，13） 光猫密码： 中间试验台 DC18m%FF0 光猫密码wifi：CMCC 4ZU6 wifi密码：3ds54x26@@@ 光猫密码：EGC8m%6D4 中兴光猫 http://20.236.185.243:58000/iEjNdIhCdWgC ZTEGCD8B1…",
-      "bytes": 42082,
-      "modifiedAt": "2026-02-26T02:56:25.634Z",
-      "contentSha256": "ff2bdd56d58430a1f8fed22d4b595cd1a33627add89ae1e63b306bd2137aed9d"
+      "bytes": 41028,
+      "modifiedAt": "2026-08-24T02:02:01.715Z",
+      "contentSha256": "2509550bf0984380381c7a24cdc0400de8efcb4f4c4e6eed125421cda9e287da"
     },
     {
       "id": "ws_25a724bd6b:湖南LC-MC.md",
@@ -3862,10 +3937,10 @@
       "outgoingLinks": [],
       "backlinks": [],
       "missingLinks": [],
-      "excerpt": "账号、网管平台 直真平台mo 项目流程 中式服务器 10.96.158.11:60 账号密码 ：public/Public@123 10.96.163.11:24的public账号，账号/密码：public/Public@123进行访问 第一阶段全量测试 然后第二阶段先测试验收用例+抽检；没有问题就可以提测了；提测后再和研发代表评审剩下的那些用例要测试，或者填写测试结果。 周超： ZCzhouc 2026yub zhouc100@fiberhome.com 侯彦超 ychou / GrxchhL,YhsyxZ 147 http://devhub.fiberhome.com/home 涉密桌面取文档（使用徐贝账号登录xub6285/G…",
-      "bytes": 23182,
-      "modifiedAt": "2026-08-10T01:54:28.165Z",
-      "contentSha256": "c4fec41b156eec25026c712f73a394b4f8a24f6d0a2097d1d06740de546d4963"
+      "excerpt": "账号、网管平台 直真平台mo 项目流程 中式服务器 10.96.158.11:60 账号密码 ：public/Public@123 10.96.163.11:24的public账号，账号/密码：public/Public@123进行访问 第一阶段全量测试 然后第二阶段先测试验收用例+抽检；没有问题就可以提测了；提测后再和研发代表评审剩下的那些用例要测试，或者填写测试结果。 周超： zhouc100@fiberhome.com/ZCzhouc 2026yub baisong2515/20190508 Byt 侯彦超 ychou / GrxchhL,YhsyxZ 147 http://devhub.fiberhome.com/home…",
+      "bytes": 23209,
+      "modifiedAt": "2026-08-21T06:34:33.877Z",
+      "contentSha256": "8a8500506e33549cf6b1a3b5270153f70cb59b770fd6cf664cb190db43659e95"
     },
     {
       "id": "ws_25a724bd6b:架构.md",
@@ -3963,11 +4038,11 @@
       "keywords": [
         {
           "term": "set",
-          "count": 87
+          "count": 89
         },
         {
           "term": "system",
-          "count": 79
+          "count": 81
         },
         {
           "term": "sys",
@@ -3987,7 +4062,7 @@
         },
         {
           "term": "db",
-          "count": 61
+          "count": 63
         },
         {
           "term": "设置",
@@ -4021,9 +4096,9 @@
       "backlinks": [],
       "missingLinks": [],
       "excerpt": "Define SRVROOT \"O:\\Apache\\Apache24\"http://192.168.1.12:8888/factorysetstb.config?type=setSTB&macadd=90:C2:E5:70:D2:13&stbid=0010049900E06800091690C2E570D213&devicetype=LAN&hardware=MR820 CNY0BG L&deviceid=111019140000097 ServerRoot \"${SRVROOT}\" VPN固化VLAN 湖南交换机（上）1口和2口（vlan2040） 每台桌子上配置两条GPON（偶数）和两条EPON（奇数） 两条GPON口可能是从两…",
-      "bytes": 100835,
-      "modifiedAt": "2026-08-21T01:56:38.033Z",
-      "contentSha256": "b522427810a600ab5fd38b4626f970fdc14b9c53046e1b5463049123bf4bb719"
+      "bytes": 101088,
+      "modifiedAt": "2026-08-22T07:19:53.311Z",
+      "contentSha256": "95492e0e8ee62456c7990bef144df93bdf6fb42b7024d081f32a4ef80c995038"
     },
     {
       "id": "ws_25a724bd6b:江苏电信KD省采.md",
@@ -5825,6 +5900,14 @@
           "title": "打包方法"
         },
         {
+          "level": 1,
+          "title": "缺陷"
+        },
+        {
+          "level": 1,
+          "title": "功能分类"
+        },
+        {
           "level": 2,
           "title": "web界面"
         },
@@ -5839,6 +5922,10 @@
         {
           "level": 2,
           "title": "滚动条"
+        },
+        {
+          "level": 2,
+          "title": "快捷键"
         },
         {
           "level": 2,
@@ -5935,28 +6022,16 @@
         {
           "level": 3,
           "title": "缺陷："
-        },
-        {
-          "level": 3,
-          "title": "新增："
-        },
-        {
-          "level": 2,
-          "title": "v1.8.2"
-        },
-        {
-          "level": 3,
-          "title": "缺陷"
         }
       ],
       "keywords": [
         {
           "term": "编辑",
-          "count": 116
+          "count": 102
         },
         {
           "term": "模式",
-          "count": 62
+          "count": 56
         },
         {
           "term": "更新",
@@ -5975,11 +6050,15 @@
           "count": 29
         },
         {
-          "term": "安装",
+          "term": "工作",
+          "count": 27
+        },
+        {
+          "term": "当前",
           "count": 26
         },
         {
-          "term": "工作",
+          "term": "安装",
           "count": 26
         },
         {
@@ -5987,28 +6066,26 @@
           "count": 26
         },
         {
-          "term": "当前",
-          "count": 25
+          "term": "markdown",
+          "count": 24
         },
         {
           "term": "自动",
-          "count": 25
-        },
-        {
-          "term": "大纲",
           "count": 24
         }
       ],
-      "semanticConcepts": [],
+      "semanticConcepts": [
+        "ai"
+      ],
       "outgoingLinks": [
         "default:README.md"
       ],
       "backlinks": [],
       "missingLinks": [],
-      "excerpt": "web界面 结合项目信息更新 web 推广界面，保留界面风格，并更新： 1、web界面web界面手机端，从首页一直向下滑动中间部分出现长区域空白无内容 注意： 禁止出现 github 的链接跳转，功能介绍等想过文档接受直接内置到 web 推荐页内， 保留当 UI 配色风格，去除 AI 味 链接文字 编辑模式 稳固当前编辑模式功能，并解决下面缺陷： 1、编辑模式编辑工具区将有序列表、无序列表、任务清单、引用、分割线显示在同一个下拉列表中，下拉列表中所有控件都要完整有效 2、编辑模式编辑工具区将粗体、斜体、下划线、删除线高亮显示在同一个下拉列表中，下拉列表中所有控件都要完整有效 3、编辑模式编辑工具区的字体颜色与颜色选择盘合并显示能够让…",
-      "bytes": 38015,
-      "modifiedAt": "2026-08-21T05:51:47.223Z",
-      "contentSha256": "7e896aa16845f65b63d4ed2c87ff1be40c01dc2e22f9c8c3e56845de85ed58d9"
+      "excerpt": "缺陷 功能分类 web界面 结合项目信息更新 web 推广界面，保留界面风格，并更新： 1、web界面web界面手机端，从首页一直向下滑动中间部分出现长区域空白无内容 注意： 禁止出现 github 的链接跳转，功能介绍等想过文档接受直接内置到 web 推荐页内， 保留当 UI 配色风格，去除 AI 味 链接文字 编辑模式 稳固当前编辑模式功能，并解决下面缺陷： 1、[链接文字]() 链接在阅读模式中点击时要直接跳转到软件外部浏览器打开， 2、[[]]链接点击时编辑模式要直接跳转到对用的文档中，不需要另外开启窗口 3、 块级公式在预览模式中没有转换成数学公式显示 4、 部分长图表在预览模式中显示不完整 5、 导出pdf时文档中图标和…",
+      "bytes": 37486,
+      "modifiedAt": "2026-08-24T02:19:21.259Z",
+      "contentSha256": "323e6a9152a645254153a8ec0bf624d0f777d5dba4e81c878dd677824d8410ae"
     },
     {
       "id": "ws_25a724bd6b:文字脚本.md",
@@ -6454,6 +6531,97 @@
       "bytes": 4959,
       "modifiedAt": "2026-08-18T10:44:34.263Z",
       "contentSha256": "b933055bc8c3a46655b9b1ac1c7843c10f3ea3dc88d5f904f43b4356cdcdba9c"
+    },
+    {
+      "id": "ws_25a724bd6b:新疆移动MR622-DK.md",
+      "workspaceId": "ws_25a724bd6b",
+      "workspace": "temple",
+      "relativePath": "新疆移动MR622-DK.md",
+      "absolutePath": "O:\\temple\\新疆移动MR622-DK.md",
+      "title": "新疆移动MR622-DK",
+      "tags": [],
+      "headings": [
+        {
+          "level": 1,
+          "title": "新疆移动MR622-DK"
+        },
+        {
+          "level": 2,
+          "title": "账号信息"
+        },
+        {
+          "level": 3,
+          "title": "产测链接"
+        },
+        {
+          "level": 3,
+          "title": "账号"
+        },
+        {
+          "level": 2,
+          "title": "防呆测试"
+        }
+      ],
+      "keywords": [
+        {
+          "term": "硬件",
+          "count": 17
+        },
+        {
+          "term": "ddr4",
+          "count": 11
+        },
+        {
+          "term": "tip",
+          "count": 6
+        },
+        {
+          "term": "color",
+          "count": 6
+        },
+        {
+          "term": "dc2626",
+          "count": 6
+        },
+        {
+          "term": "lpddr4",
+          "count": 6
+        },
+        {
+          "term": "rank2g",
+          "count": 6
+        },
+        {
+          "term": "8bit",
+          "count": 6
+        },
+        {
+          "term": "size",
+          "count": 6
+        },
+        {
+          "term": "bytes",
+          "count": 6
+        },
+        {
+          "term": "编译",
+          "count": 6
+        },
+        {
+          "term": "时间",
+          "count": 6
+        }
+      ],
+      "semanticConcepts": [
+        "color"
+      ],
+      "outgoingLinks": [],
+      "backlinks": [],
+      "missingLinks": [],
+      "excerpt": "新疆移动MR622 DK 账号信息 产测链接 http://192.168.1.12:8888/factorysetstb.config?type=setSTB&macadd=F0:40:7B:87:1B:AD&stbid=0099F4FF5019196025063086F1931728&devicetype=GPON&model=MR622 DK&hardware=MR622 DNYEBG L&deviceid=111019960001101 http://192.168.1.12:8888/factorysetstb.config?type=setSTB&macadd=18:5E:0B:8E:3E:F1&stbid=7D4832…",
+      "bytes": 2844,
+      "modifiedAt": "2026-08-24T01:21:06.906Z",
+      "contentSha256": "513b4c8d45ae75dcdec76daf8c9cd36c0682d8ecaabdcbaf477dd5d07c44e648"
     },
     {
       "id": "ws_25a724bd6b:性能.md",
@@ -7412,7 +7580,9 @@
           "count": 2
         }
       ],
-      "semanticConcepts": [],
+      "semanticConcepts": [
+        "color"
+      ],
       "outgoingLinks": [],
       "backlinks": [],
       "missingLinks": [],
@@ -8682,8 +8852,7 @@
         }
       ],
       "semanticConcepts": [
-        "bh",
-        "fh"
+        "bh"
       ],
       "outgoingLinks": [],
       "backlinks": [],
@@ -9314,9 +9483,9 @@
       "backlinks": [],
       "missingLinks": [],
       "excerpt": "comflyUI 要求电脑配置 项目 最低能跑 推荐体验（SDXL/角色设计） 显卡​ NVIDIA GTX 1060 6GB（仅 SD 1.5 小图） RTX 3060 12GB / RTX 4060 Ti 16GB 显存(VRAM)​ 4GB（需 lowvram，很慢） 8GB 起步，12GB 更舒适​ 内存(RAM)​ 8GB（紧张） 16GB↑，跑视频/复杂节点建议 32GB CPU​ i5 6500 / R5 1600 四核↑ i5 12400F / R5 5600 六核↑ 硬盘​ 50GB SSD 剩余空间 100GB+ NVMe SSD（模型很大） 系统​ Win10 64位 + NVIDIA 驱动 525↑ Win1…",
-      "bytes": 6229,
-      "modifiedAt": "2026-07-02T03:17:20.131Z",
-      "contentSha256": "f0909e14376af7e74cf71342cb8f2c1abbf4bf4fae3cbfced8459e51abff08c2"
+      "bytes": 6054,
+      "modifiedAt": "2026-08-22T07:47:30.577Z",
+      "contentSha256": "a48b789aae0ea7fb2812792251d83085a3ffa74da4e987bcdd644b0154e3b89f"
     },
     {
       "id": "ws_25a724bd6b:ollama.md",
@@ -10412,9 +10581,7 @@
           "count": 3
         }
       ],
-      "semanticConcepts": [
-        "fh"
-      ],
+      "semanticConcepts": [],
       "outgoingLinks": [],
       "backlinks": [],
       "missingLinks": [],
@@ -12990,8 +13157,7 @@
         }
       ],
       "semanticConcepts": [
-        "系统",
-        "iptv"
+        "系统"
       ],
       "outgoingLinks": [],
       "backlinks": [],
@@ -13766,6 +13932,7 @@
         }
       ],
       "semanticConcepts": [
+        "db",
         "iptv",
         "send",
         "set"
@@ -14111,6 +14278,7 @@
         }
       ],
       "semanticConcepts": [
+        "color",
         "ff",
         "v2"
       ],
@@ -14504,6 +14672,7 @@
         }
       ],
       "semanticConcepts": [
+        "color",
         "ff",
         "log",
         "v2"
@@ -14576,6 +14745,7 @@
         }
       ],
       "semanticConcepts": [
+        "color",
         "ff",
         "log",
         "v2"
@@ -17001,9 +17171,7 @@
           "count": 2
         }
       ],
-      "semanticConcepts": [
-        "fh"
-      ],
+      "semanticConcepts": [],
       "outgoingLinks": [],
       "backlinks": [],
       "missingLinks": [],
@@ -18404,25 +18572,45 @@
       "contentSha256": "e8968b725c7b669d8eef4efda4ed2f0009184afa67909bd571bc47ce39594de9"
     },
     {
-      "id": "ws_25a724bd6b:source/screenshot-1787224425374.webp",
+      "id": "ws_25a724bd6b:source/screenshot-1787533803704.webp",
       "workspaceId": "ws_25a724bd6b",
       "workspace": "temple",
-      "relativePath": "source/screenshot-1787224425374.webp",
-      "absolutePath": "O:\\temple\\source\\screenshot-1787224425374.webp",
-      "title": "screenshot-1787224425374.webp",
-      "tags": [],
+      "relativePath": "source/screenshot-1787533803704.webp",
+      "absolutePath": "O:\\temple\\source\\screenshot-1787533803704.webp",
+      "title": "screenshot-1787533803704.webp",
+      "tags": [
+        "dk筿w",
+        "役墤",
+        "/k"
+      ],
       "headings": [],
       "keywords": [
         {
-          "term": "mp",
+          "term": "cn",
+          "count": 3
+        },
+        {
+          "term": "ad",
           "count": 2
         },
         {
-          "term": "uy",
+          "term": "pq",
           "count": 2
         },
         {
-          "term": "ie",
+          "term": "6x",
+          "count": 2
+        },
+        {
+          "term": "at",
+          "count": 2
+        },
+        {
+          "term": "yp",
+          "count": 2
+        },
+        {
+          "term": "de",
           "count": 2
         },
         {
@@ -18430,31 +18618,15 @@
           "count": 2
         },
         {
-          "term": "n7",
+          "term": "z0",
           "count": 2
         },
         {
-          "term": "6h",
+          "term": "d0",
           "count": 2
         },
         {
-          "term": "33",
-          "count": 2
-        },
-        {
-          "term": "5t",
-          "count": 2
-        },
-        {
-          "term": "yw",
-          "count": 2
-        },
-        {
-          "term": "xsue",
-          "count": 2
-        },
-        {
-          "term": "7vy",
+          "term": "v8",
           "count": 2
         },
         {
@@ -18466,47 +18638,108 @@
       "outgoingLinks": [],
       "backlinks": [],
       "missingLinks": [],
-      "excerpt": "RIFF瀧\u0000\u0000WEBPVP8X \u0000\u0000\u0000 \u0000\u0000\u0000 \u0004\u0000?\u0006\u0000ICCP�\u0001\u0000\u0000\u0000\u0000\u0001�\u0000\u0000\u0000\u0000\u00040\u0000\u0000mntrRGB XYZ \u0007�\u0000\u0001\u0000\u0001\u0000\u0000\u0000\u0000\u0000\u0000acsp\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u0000\u0000鲋\u0000\u0001\u0000\u0000\u0000\u0000� \u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000 desc\u0000\u0000\u0000�\u0000\u0000\u0000$rXYZ\u0000\u0000\u0001\u0014\u0000\u0000\u0000\u0014gXYZ\u0000\u0000\u0001(\u0000\u0000\u0000\u0014bXYZ\u0000\u0000\u0001<\u0000\u0000\u0000\u0014wtpt\u0000\u0000\u0001P\u0000\u0000\u0000\u0014rTRC\u0000\u0000\u0001d\u0000\u0000\u0000(gTRC\u0000\u0000\u0001d\u0000\u0000\u0000(bTRC\u0000\u0000\u0001d\u0000\u0000\u0000(cprt\u0000\u0000\u0001�\u0000\u0000\u0000<mluc\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u0000\u0000\u0000 enUS\u0000\u0000\u0000\b\u0000\u0000\u0000\u001c\u0000s\u0000R\u0000G\u0000BXYZ \u0000\u0000\u0000\u0000…",
-      "bytes": 31654,
-      "modifiedAt": "2026-08-20T11:13:45.384Z",
-      "contentSha256": "80ee8a37cdc3cfbf698e5f327db996249801f21baf262a6e9a1d6efcfb911689"
+      "excerpt": "RIFF瑀\u0000\u0000WEBPVP8X \u0000\u0000\u0000 \u0000\u0000\u0000?\u0006\u0000�\u0000\u0000ICCP�\u0001\u0000\u0000\u0000\u0000\u0001�\u0000\u0000\u0000\u0000\u00040\u0000\u0000mntrRGB XYZ \u0007�\u0000\u0001\u0000\u0001\u0000\u0000\u0000\u0000\u0000\u0000acsp\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u0000\u0000鲋\u0000\u0001\u0000\u0000\u0000\u0000� \u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000 desc\u0000\u0000\u0000�\u0000\u0000\u0000$rXYZ\u0000\u0000\u0001\u0014\u0000\u0000\u0000\u0014gXYZ\u0000\u0000\u0001(\u0000\u0000\u0000\u0014bXYZ\u0000\u0000\u0001<\u0000\u0000\u0000\u0014wtpt\u0000\u0000\u0001P\u0000\u0000\u0000\u0014rTRC\u0000\u0000\u0001d\u0000\u0000\u0000(gTRC\u0000\u0000\u0001d\u0000\u0000\u0000(bTRC\u0000\u0000\u0001d\u0000\u0000\u0000(cprt\u0000\u0000\u0001�\u0000\u0000\u0000<mluc\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u0000\u0000\u0000 enUS\u0000\u0000\u0000\b\u0000\u0000\u0000\u001c\u0000s\u0000R\u0000G\u0000BXYZ \u0000\u0000\u0000\u0000…",
+      "bytes": 29364,
+      "modifiedAt": "2026-08-24T01:10:03.775Z",
+      "contentSha256": "2775a47bc062d11da8ad52d4c0a681c75801089edacafd3966fde8399990ca0f"
     },
     {
-      "id": "ws_25a724bd6b:source/screenshot-1787224546964.webp",
+      "id": "ws_25a724bd6b:source/screenshot-1787533833337.webp",
       "workspaceId": "ws_25a724bd6b",
       "workspace": "temple",
-      "relativePath": "source/screenshot-1787224546964.webp",
-      "absolutePath": "O:\\temple\\source\\screenshot-1787224546964.webp",
-      "title": "screenshot-1787224546964.webp",
+      "relativePath": "source/screenshot-1787533833337.webp",
+      "absolutePath": "O:\\temple\\source\\screenshot-1787533833337.webp",
+      "title": "screenshot-1787533833337.webp",
+      "tags": [
+        "监欚",
+        "奭曞肩衄mj僠a紕y謓",
+        "d瞐拀",
+        "c驉穽啲/"
+      ],
+      "headings": [],
+      "keywords": [
+        {
+          "term": "50",
+          "count": 4
+        },
+        {
+          "term": "vy",
+          "count": 4
+        },
+        {
+          "term": "ud",
+          "count": 4
+        },
+        {
+          "term": "5y",
+          "count": 3
+        },
+        {
+          "term": "ts",
+          "count": 3
+        },
+        {
+          "term": "xl",
+          "count": 3
+        },
+        {
+          "term": "he",
+          "count": 3
+        },
+        {
+          "term": "rc",
+          "count": 3
+        },
+        {
+          "term": "1c",
+          "count": 3
+        },
+        {
+          "term": "3d",
+          "count": 3
+        },
+        {
+          "term": "rd",
+          "count": 3
+        },
+        {
+          "term": "hl",
+          "count": 3
+        }
+      ],
+      "semanticConcepts": [],
+      "outgoingLinks": [],
+      "backlinks": [],
+      "missingLinks": [],
+      "excerpt": "RIFF豍\u0001\u0000WEBPVP8X \u0000\u0000\u0000 \u0000\u0000\u0000?\u0006\u0000�\u0002\u0000ICCP�\u0001\u0000\u0000\u0000\u0000\u0001�\u0000\u0000\u0000\u0000\u00040\u0000\u0000mntrRGB XYZ \u0007�\u0000\u0001\u0000\u0001\u0000\u0000\u0000\u0000\u0000\u0000acsp\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u0000\u0000鲋\u0000\u0001\u0000\u0000\u0000\u0000� \u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000 desc\u0000\u0000\u0000�\u0000\u0000\u0000$rXYZ\u0000\u0000\u0001\u0014\u0000\u0000\u0000\u0014gXYZ\u0000\u0000\u0001(\u0000\u0000\u0000\u0014bXYZ\u0000\u0000\u0001<\u0000\u0000\u0000\u0014wtpt\u0000\u0000\u0001P\u0000\u0000\u0000\u0014rTRC\u0000\u0000\u0001d\u0000\u0000\u0000(gTRC\u0000\u0000\u0001d\u0000\u0000\u0000(bTRC\u0000\u0000\u0001d\u0000\u0000\u0000(cprt\u0000\u0000\u0001�\u0000\u0000\u0000<mluc\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u0000\u0000\u0000 enUS\u0000\u0000\u0000\b\u0000\u0000\u0000\u001c\u0000s\u0000R\u0000G\u0000BXYZ \u0000\u0000\u0000\u0000…",
+      "bytes": 86240,
+      "modifiedAt": "2026-08-24T01:10:33.363Z",
+      "contentSha256": "8e2e0cd8ffdc5bcc66a6db8c14f63f4bd1c7007a738a26b910616cb6f5a03d18"
+    },
+    {
+      "id": "ws_25a724bd6b:source/screenshot-1787537730238.webp",
+      "workspaceId": "ws_25a724bd6b",
+      "workspace": "temple",
+      "relativePath": "source/screenshot-1787537730238.webp",
+      "absolutePath": "O:\\temple\\source\\screenshot-1787537730238.webp",
+      "title": "screenshot-1787537730238.webp",
       "tags": [],
       "headings": [],
       "keywords": [
         {
-          "term": "ng",
-          "count": 30
+          "term": "at",
+          "count": 9
         },
         {
-          "term": "6al",
+          "term": "us",
           "count": 7
         },
         {
-          "term": "cg",
-          "count": 2
+          "term": "8e",
+          "count": 4
         },
         {
-          "term": "e6",
-          "count": 2
-        },
-        {
-          "term": "dw",
-          "count": 2
-        },
-        {
-          "term": "7h",
-          "count": 2
-        },
-        {
-          "term": "nn",
+          "term": "bt",
           "count": 2
         },
         {
@@ -18528,16 +18761,734 @@
         {
           "term": "xyz",
           "count": 1
+        },
+        {
+          "term": "acsp",
+          "count": 1
+        },
+        {
+          "term": "desc",
+          "count": 1
+        },
+        {
+          "term": "rxyz",
+          "count": 1
         }
       ],
       "semanticConcepts": [],
       "outgoingLinks": [],
       "backlinks": [],
       "missingLinks": [],
-      "excerpt": "RIFF瞉\u0000\u0000WEBPVP8X \u0000\u0000\u0000 \u0000\u0000\u0000C\u0004\u0000?\u0006\u0000ICCP�\u0001\u0000\u0000\u0000\u0000\u0001�\u0000\u0000\u0000\u0000\u00040\u0000\u0000mntrRGB XYZ \u0007�\u0000\u0001\u0000\u0001\u0000\u0000\u0000\u0000\u0000\u0000acsp\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u0000\u0000鲋\u0000\u0001\u0000\u0000\u0000\u0000� \u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000 desc\u0000\u0000\u0000�\u0000\u0000\u0000$rXYZ\u0000\u0000\u0001\u0014\u0000\u0000\u0000\u0014gXYZ\u0000\u0000\u0001(\u0000\u0000\u0000\u0014bXYZ\u0000\u0000\u0001<\u0000\u0000\u0000\u0014wtpt\u0000\u0000\u0001P\u0000\u0000\u0000\u0014rTRC\u0000\u0000\u0001d\u0000\u0000\u0000(gTRC\u0000\u0000\u0001d\u0000\u0000\u0000(bTRC\u0000\u0000\u0001d\u0000\u0000\u0000(cprt\u0000\u0000\u0001�\u0000\u0000\u0000<mluc\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u0000\u0000\u0000 enUS\u0000\u0000\u0000\b\u0000\u0000\u0000\u001c\u0000s\u0000R\u0000G\u0000BXYZ \u0000\u0000\u0000\u0000…",
-      "bytes": 23994,
-      "modifiedAt": "2026-08-20T11:15:46.970Z",
-      "contentSha256": "7186bde9680ba5e40dd65e0442039570ef6c55701cf39cbb2bc551b4d2460b65"
+      "excerpt": "RIFF�.\u0000\u0000WEBPVP8X \u0000\u0000\u0000 \u0000\u0000\u0000?\u0006\u0000�\u0002\u0000ICCP�\u0001\u0000\u0000\u0000\u0000\u0001�\u0000\u0000\u0000\u0000\u00040\u0000\u0000mntrRGB XYZ \u0007�\u0000\u0001\u0000\u0001\u0000\u0000\u0000\u0000\u0000\u0000acsp\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u0000\u0000鲋\u0000\u0001\u0000\u0000\u0000\u0000� \u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000 desc\u0000\u0000\u0000�\u0000\u0000\u0000$rXYZ\u0000\u0000\u0001\u0014\u0000\u0000\u0000\u0014gXYZ\u0000\u0000\u0001(\u0000\u0000\u0000\u0014bXYZ\u0000\u0000\u0001<\u0000\u0000\u0000\u0014wtpt\u0000\u0000\u0001P\u0000\u0000\u0000\u0014rTRC\u0000\u0000\u0001d\u0000\u0000\u0000(gTRC\u0000\u0000\u0001d\u0000\u0000\u0000(bTRC\u0000\u0000\u0001d\u0000\u0000\u0000(cprt\u0000\u0000\u0001�\u0000\u0000\u0000<mluc\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u0000\u0000\u0000 enUS\u0000\u0000\u0000\b\u0000\u0000\u0000\u001c\u0000s\u0000R\u0000G\u0000BXYZ \u0000\u0000\u0000…",
+      "bytes": 11994,
+      "modifiedAt": "2026-08-24T02:15:30.258Z",
+      "contentSha256": "feb40125f2089087e00cf0ea72f0b0b8f9ed525f92aff84132e30b5fc3a1b60a"
+    },
+    {
+      "id": "ws_25a724bd6b:source/video/2026-07-23-16-12-31-1d5b20aa.mp4",
+      "workspaceId": "ws_25a724bd6b",
+      "workspace": "temple",
+      "relativePath": "source/video/2026-07-23-16-12-31-1d5b20aa.mp4",
+      "absolutePath": "O:\\temple\\source\\video\\2026-07-23-16-12-31-1d5b20aa.mp4",
+      "title": "2026-07-23-16-12-31-1d5b20aa.mp4",
+      "tags": [
+        "u婮謹",
+        "ud",
+        "6笠t裦饑jx",
+        "1s枸ez",
+        "x膵",
+        "畐苈l2",
+        "碍e8t",
+        "倴-赝畅",
+        "銪b祛簌a",
+        "un",
+        "f篔寓纝僝薙楴",
+        "嗱败倌",
+        "x煪",
+        "i傔",
+        "j銵",
+        "鰖a",
+        "烩藪",
+        "型yw瀞",
+        "鱖簷",
+        "g鶖",
+        "賁儜蠃",
+        "b孠",
+        "2埛诹",
+        "9溩撒皎nb",
+        "k3烄",
+        "跦阡语酻y4c",
+        "吂蕐舑埝",
+        "xe",
+        "佘櫐",
+        "z彎鸿",
+        "h/羪瞺覊",
+        "0i孪",
+        "y斥廩s嵖谎溳f豪e",
+        "葍vqt諠k",
+        "q惸觍y",
+        "紲pp藍頓鹘丏萬璍",
+        "ql冈俛h亏",
+        "豝龈矁c",
+        "瞞艔",
+        "n窈",
+        "諗鰄嶶",
+        "援d憀",
+        "z铪葺",
+        "ぃ蓜巳5颰o襍i靏蠢",
+        "字潶朠o鹬w",
+        "缇禪x",
+        "苎惹",
+        "蒠心儏",
+        "4tn",
+        "dh",
+        "hi",
+        "株s紭",
+        "pv浌r",
+        "hh",
+        "摓4n仜塦聣癗p畲悢",
+        "唊違4",
+        "怈ⅱtf",
+        "j靲壁j",
+        "揞v湓",
+        "迪鮀戹炨",
+        "rn秐",
+        "詬髆1䦅礻罪q",
+        "3歿",
+        "俓山",
+        "隡潌輘",
+        "蹁a",
+        "艀ん樴",
+        "柳f",
+        "兢j",
+        "倍/",
+        "涷7",
+        "陽袡",
+        "驣q",
+        "毯睆_哣p顎1雥聣窛",
+        "du䴖",
+        "g3礎",
+        "翛检c朷w掦酭c6o楶r",
+        "n蓴",
+        "f潙x",
+        "踓ae嶉p3犩剕",
+        "桤湈",
+        "滅簷",
+        "p锊",
+        "sc歐鄺镞埼",
+        "2ч檛桝n",
+        "孕t",
+        "谞溂v",
+        "緐萏胪",
+        "t鑡",
+        "猛揕",
+        "燃ωd",
+        "i輞",
+        "d乛胝",
+        "邵c戤a喍",
+        "把v趂詗",
+        "eo",
+        "d褈zm郔",
+        "ヨe挘",
+        "踼h",
+        "鏚纶",
+        "歀靴臖g豛",
+        "0r殕敓j",
+        "o霛",
+        "安襶踅/",
+        "鏝橜",
+        "蝴e蕘",
+        "山v",
+        "f名",
+        "驴醭7摈lu漜鈧瑝",
+        "g怛",
+        "璼鯖",
+        "昗喙",
+        "喒囿",
+        "数/",
+        "df娖2thc骃鯾",
+        "秏箣uk徬",
+        "5c",
+        "旨薽繜",
+        "xx",
+        "e3",
+        "no瀘彙杌",
+        "钫q",
+        "v磊/",
+        "l灁v",
+        "b圮",
+        "5榇",
+        "妚鶅蠌",
+        "櫏勠g",
+        "3朅",
+        "r塆",
+        "渰抁",
+        "b_彉r莆",
+        "纒ep",
+        "8蝳3rh姠",
+        "j灷x",
+        "wd翎9",
+        "vx",
+        "㈠頷夎",
+        "bもv",
+        "襹zj",
+        "誤颺",
+        "躷葊o硬",
+        "j枾霘",
+        "ie",
+        "痴d",
+        "b姄a",
+        "4u",
+        "豣袌4諒",
+        "ky跹",
+        "嚺su榥櫌砯",
+        "迬躩gd",
+        "夕5優",
+        "a腮z8鑭a迃",
+        "d罋撨0",
+        "y幔",
+        "崒氀-",
+        "孾床",
+        "詗灧",
+        "螻鬲褳1膝4玑",
+        "7留",
+        "竹頍鹚5o",
+        "青沤珆tａ",
+        "j雲ez",
+        "墾葯",
+        "繞艖b",
+        "束燘x",
+        "ggw籏",
+        "3酡蛑啓",
+        "檗5tw1a詽",
+        "譤稆",
+        "2篱",
+        "鋻炛",
+        "揻扰铥憞q",
+        "紎簫眜䦃",
+        "q3i",
+        "灺预",
+        "n釺蹄侪",
+        "銐梵唤",
+        "e儏hgdu絎",
+        "鹰m慉臵顩",
+        "/螱bl",
+        "wif-",
+        "ip",
+        "粝寓4",
+        "愾p",
+        "譈k忊m",
+        "qv库犄",
+        "f亰",
+        "k贄z",
+        "葈o",
+        "鴘莛l",
+        "z抙",
+        "v争",
+        "脷远",
+        "幟玷",
+        "芎uk",
+        "瑑y",
+        "39",
+        "莅誧",
+        "幺銽p",
+        "銯僽",
+        "朮譒",
+        "麙潠键d",
+        "歔觕q",
+        "d橈",
+        "塍惵",
+        "t鬀",
+        "蓙q",
+        "凂0a",
+        "u祜",
+        "hs褖",
+        "c沅誥峘q",
+        "灳7e胅僿碊銥郗l",
+        "辀魍g溼",
+        "鍂a",
+        "j跘",
+        "嬑沥豜",
+        "帡鼣缜鮧",
+        "鄒s",
+        "e姉",
+        "5呗",
+        "扃r",
+        "0粝m",
+        "溬贀",
+        "0諠",
+        "w柫溻沌暖",
+        "鐾w舑组a倍",
+        "劚痬",
+        "8讓o睱",
+        "勼枳漥fr頬斺h摡",
+        "嶀_",
+        "岝h",
+        "l3",
+        "y夳",
+        "覅亢-癐",
+        "jd洙",
+        "嘷5i慦",
+        "5盌w舿",
+        "劷pr",
+        "q罹穐d淴",
+        "飬瞎",
+        "蟜1s",
+        "yt",
+        "夢鬥",
+        "mj羯",
+        "硐擏",
+        "邯h",
+        "4璳ko",
+        "搖j",
+        "洶淁岭钎憼",
+        "x怢",
+        "n嶎9蟽m騴歈",
+        "桵欚鑏",
+        "kgyq嗸",
+        "鈾蹳",
+        "プ双p",
+        "n痬",
+        "f荲",
+        "d堨华",
+        "f袨",
+        "嵝睜",
+        "9ui燅9e",
+        "肬e",
+        "j踖",
+        "pd",
+        "猭q炢",
+        "桮献恊k",
+        "砣洡",
+        "-aq鏍葛",
+        "毵棭4铔",
+        "瀡撥",
+        "w鯕o煸猬q缋黏c靀g育",
+        "蔟樿p",
+        "x鋍",
+        "蟺9",
+        "o宄",
+        "sey鏙锤g",
+        "z对m厫馕堠",
+        "4煹cb恄⒋",
+        "侣缁蓱",
+        "/锵",
+        "j輞50",
+        "y谫鋷溯",
+        "谾o",
+        "蘀/喍",
+        "d餴6u",
+        "b猡",
+        "挄司",
+        "f飱",
+        "g襾",
+        "zc柗",
+        "啣l姣",
+        "ny涌",
+        "囩唥鴷",
+        "抇淢儮",
+        "j2",
+        "嫃曓yρ",
+        "羷1",
+        "社餎暉mnt陾",
+        "梆a",
+        "e莻",
+        "厨谈b坲悶r",
+        "夕漳",
+        "奄皳drr",
+        "銂榚6p",
+        "_炱瑡q",
+        "刾x",
+        "hc",
+        "b搂",
+        "g雎",
+        "销簤s",
+        "cw沨眷嬪r憎e",
+        "fcqq",
+        "d無仯a",
+        "鈃μ",
+        "8v帇e渽研p",
+        "g坢z狣",
+        "麛r",
+        "袲塷",
+        "咨l",
+        "懻衭幐勄溰",
+        "b裬",
+        "0顎",
+        "vq",
+        "蹞u",
+        "т腴uh鏫",
+        "紝遱8vf",
+        "πb",
+        "k稫y",
+        "7a",
+        "wn8",
+        "稍远",
+        "羜欕",
+        "g鱇q",
+        "貓煇",
+        "0n",
+        "q餂鍊覊薼",
+        "窾汽",
+        "崤-",
+        "楒y鞶f2",
+        "蹍駽頾摙nq畚",
+        "d朡",
+        "ob咘嫝",
+        "頜槣坑",
+        "s薖",
+        "gwri",
+        "l概旯咃",
+        "碐s漍乾",
+        "潤蟘τ6q",
+        "y兎",
+        "冬啴g熫呾9緵dl指",
+        "駩褏",
+        "犾倴lt膟t",
+        "b慉",
+        "rk詅",
+        "氞_",
+        "忷yc晓",
+        "瑜荒q牄y",
+        "霌痉",
+        "he",
+        "鐤8竝",
+        "x穐",
+        "色j莿衢z柰-",
+        "歠7",
+        "幩頴r男暢6",
+        "沰謭",
+        "嶏䦃貎3妓袮捯g蓿",
+        "赗k",
+        "钹璊",
+        "埽f盡",
+        "bw",
+        "ee",
+        "诼鞡",
+        "炈必e",
+        "乯z",
+        "6俙",
+        "娃z-",
+        "雠眀",
+        "莔x",
+        "卄檻",
+        "蜄f倆义",
+        "秒羫",
+        "晚x",
+        "g寫",
+        "9欆韅伯",
+        "a水h贪",
+        "琽彴橪/",
+        "瑗颽蹌jxa",
+        "p瓚",
+        "8鸶灌躖",
+        "ǖy",
+        "茶吿",
+        "eq",
+        "hm",
+        "遭攢脋wvy済兞",
+        "讹e筶",
+        "3磼嗩",
+        "庩鸚垯賴縠傾袅o枡",
+        "e还",
+        "鄨r陂",
+        "勏粰",
+        "咁毡燈",
+        "屛i懭h",
+        "踎x飣a",
+        "泼s毘",
+        "秥t",
+        "蔷6",
+        "鱟评q頲乼坼曘鳮3c祬",
+        "咬jqe殳",
+        "q墋吣谈rξ8",
+        "傿磹潸e",
+        "禤娀恪l",
+        "氄浧韲秐5ワ花a",
+        "-c陷嵋煚gyd鵛x",
+        "ol",
+        "曧湀",
+        "ツa",
+        "s鼉",
+        "鑋嫓oy",
+        "栔c",
+        "wp1b笩",
+        "d甴齞侑k鸞",
+        "齾v迹",
+        "m堽硤fm",
+        "跒努",
+        "nc髛濖梉",
+        "g瀔",
+        "頞a瞞氟",
+        "庐齎荔ｄr",
+        "孂b",
+        "7m艭酳d",
+        "i8户",
+        "p炷觧t远",
+        "垖赑沘",
+        "kszi瘐",
+        "h檆p",
+        "锅c塞扜",
+        "x鈔y",
+        "鳿飣",
+        "d缡",
+        "u侣",
+        "葋l",
+        "栝td",
+        "欩錱彜",
+        "吓誾",
+        "鉬n歵刋嘌",
+        "暲犳",
+        "畏r",
+        "c藈l",
+        "闖縓b7蛀腟嬳",
+        "/4慏",
+        "簾鳉",
+        "輞鴟纜鉅l",
+        "qb1m臽",
+        "bv讏",
+        "爟ws_斸部2錱/w潪",
+        "l4",
+        "j刓",
+        "佌禟",
+        "v蟔鲀呹浧r塕",
+        "t膕匰",
+        "m歉厱v鴸畣葘饓t遜埡p煰9昄蘉",
+        "dwl炕",
+        "46a",
+        "荄猏k",
+        "擩0攑s",
+        "xf",
+        "18用惥",
+        "--鵆慶",
+        "_w臉",
+        "n陠柠",
+        "f漫oゞ",
+        "vn9",
+        "鏽櫊嗊",
+        "燢冃s",
+        "呥駞",
+        "燉n颂怚",
+        "码nя",
+        "矱l萈",
+        "uo",
+        "tx朚奶鯙",
+        "j豁",
+        "忭帒",
+        "躊neo",
+        "暓e",
+        "身ワ",
+        "蚦蹎",
+        "鬶蝪",
+        "湻乛",
+        "gd",
+        "璓0x拚o",
+        "cq1",
+        "鷻yㄣ泪鵷籨khndr抋6k",
+        "p笂鎙稂电z蒖x唂v麵脓蚞",
+        "az0m未",
+        "橁y鮩",
+        "wu鲿劤邕楑娋弻矹a",
+        "y槣6",
+        "tmqh",
+        "秒緟q",
+        "匙9d坤涔o焘嵂蘈",
+        "挦乿p胏韉啖",
+        "1噃臡",
+        "x锈z",
+        "絫j哽別",
+        "9摲pf饋",
+        "齡l妛阼7",
+        "轴e",
+        "葅馱a鉬",
+        "欉r",
+        "2l",
+        "缹敶剅絍a軇抱逳h",
+        "3z",
+        "m軐wprm皩祊n鍗mpg宥僰",
+        "b戹",
+        "ln",
+        "u4",
+        "汝騃",
+        "鹿q",
+        "〣1/",
+        "9圥",
+        "徳萺隈",
+        "q嵚7o晤",
+        "jg",
+        "d借",
+        "鎡l峳",
+        "rs諅",
+        "岌孊饠澄c玙誊",
+        "鄌-x躼9覷蓛獧",
+        "韵6",
+        "鬨繹j",
+        "8適唝",
+        "zx禠",
+        "駡7",
+        "i韧",
+        "m窚諪",
+        "嚶裑i霯o累",
+        "p倞",
+        "w袐",
+        "酌6丫_",
+        "腚-圼",
+        "涱9ip轛3",
+        "p3星槱2",
+        "hh绦稖5",
+        "绣0爳仲v3嘟愡",
+        "f皠鹍霰x飾觘詽鼍榭珅k8埅",
+        "ds7恋銄nk嵧p鲲佾",
+        "磵閦挾",
+        "/祢肿挳0f鮄晔d",
+        "xk",
+        "盚纐猺",
+        "p岢p價e朂馳",
+        "穇祦",
+        "h門淈",
+        "g鑖鱹乂",
+        "扤蜯比f咿杓",
+        "59相",
+        "鵙y坯睘q鉏",
+        "歛呺",
+        "ugq",
+        "礍7",
+        "蜁t",
+        "虔耱",
+        "h噌",
+        "鷋fs酮灣",
+        "a訮j虭狍",
+        "kr",
+        "姮8",
+        "ib",
+        "羄e",
+        "焒41哮飷",
+        "譏擶黏s禩",
+        "衷蓏灨3",
+        "饮厬d嗉",
+        "鶵烄籱o鏬萔",
+        "霏鏤q",
+        "80",
+        "cc﨏w猧靓并h獖",
+        "羁_j",
+        "t舖",
+        "籑苫",
+        "c嵊蜮",
+        "椯秌翮瘼次",
+        "礏g",
+        "渤炊箾乢",
+        "娶2",
+        "耯腱",
+        "縬hv",
+        "鯎t檮",
+        "茠踋皩",
+        "c旚",
+        "pr",
+        "d蛌",
+        "躏b烊伶幃",
+        "8覛",
+        "r厗",
+        "銯o",
+        "燏p",
+        "gy",
+        "i漶",
+        "acr",
+        "l-栭q"
+      ],
+      "headings": [
+        {
+          "level": 1,
+          "title": "9E�,t噂�\u0011�\u0004?袌s�\u0011衟\u000b袑Z��\f�1蜕�\u0017怑[`�,D黷B>�\u0015en�#铥{\u0017�\u0003龇駬\u0007€�=�\u0003–援慮�\u000bO讞"
+        },
+        {
+          "level": 1,
+          "title": "'�\u0003焆躧Iffm{\t_=˙夝0醄:j�\u0017巂�0�>�9僟耗'\u001f�\u001f�\u001e�\u0012��-l,o\u0001\u0000駷]�\u0001�6\u0019U豙O~O战纚�\t6魚~p唸\u0015�.匏\u0006嫙r?'疫�4k怛K钚X-�\u0007\u0018]e7鮠襹嚘\u0012洶轋.�\u0002"
+        },
+        {
+          "level": 1,
+          "title": "\"沟0澑\u0014｜\u0013&韒>\u0014栈(糽gS\u0018烏[\u0000(d�\u0004\t拳�\u001b儇薖弣6槎\u0004�4JMy葓9 't5狿�\u0016�\u0014ac{奲囜&尷�\u001b4z�\u0002誝Wa�3\u0003�\u0002<€�&﨟d骆\u001bSK?H籯s馆鉉栜檿y�9蹟x#€D\u0012y聝鄧克�\u001b摘\"遇\u0018g\u001f沉>鵞融T)謘焇�#)\u0003薗a圕閳\u0001\u0010�(\u0004�>ヤoM;眤\u001e鸂ル菨\t�$�/斫唥鱳�+膕戇d~旬蟘供*检剅晻x槧EO�\u000f[賕\u0001\u001dow禅嗪_氂Sp(侇4噺)\u000e�\u0017襲壈U\u0007厪勅"
+        },
+        {
+          "level": 1,
+          "title": "哭屣钎�\f辌飞�躆s魲竗��\u0011淭3R_涴%4帋罇d牂朴馀囃v\u0018\u001f\u000e碙滵O唃JI)L$�\u001fT�0\u0013殳)O奺\u0000獏骗蘃�&^幈庎t\t鋹+��劷>5-\u0011~*ェ軰鲉鶂"
+        },
+        {
+          "level": 1,
+          "title": "籪囏c殧Q\u001c咱�;\u001f\u001fH�(d�\u001b3�\u0003�\u000b衱\u0007d\b|T\"杜{溑<\u0015鴤紸变vi_錞y嬠!�&澳8Da^戽茆弞攙"
+        },
+        {
+          "level": 1,
+          "title": "鰷<�瓜*€€屡E歚\u0015\u001cp胬\u0016�2公mZ�6\u001a_\u000f蛄タ譼航#-j�\u0000a!j\u0018\u0019臑堑]禄,a聗4湅\u0017埑\t蘈"
+        },
+        {
+          "level": 1,
+          "title": "Th_2&�\u0010旓X�\u0010UI痷5W.\u0002猚�-'dn珤窏阜P\u001a.圷�\u001a\u0010\u001ba\u001dlD>Z帚恭\u0004\u0002ha驡穉�=\u001b\u0012"
+        },
+        {
+          "level": 1,
+          "title": "苝漉*^帉.+�$胘vW8�\u0000興s�\u0001b�\u0011Bｑ嗒\f繸艄P掇)卦\u0017昌\u0006Orj�*繽到喞,�<3}\u0007wc桉驰f�6織窰H�\u0001V"
+        }
+      ],
+      "keywords": [
+        {
+          "term": "yn",
+          "count": 109
+        },
+        {
+          "term": "ee",
+          "count": 102
+        },
+        {
+          "term": "fa",
+          "count": 99
+        },
+        {
+          "term": "iw",
+          "count": 98
+        },
+        {
+          "term": "jx",
+          "count": 97
+        },
+        {
+          "term": "ai",
+          "count": 95
+        },
+        {
+          "term": "4la",
+          "count": 95
+        },
+        {
+          "term": "re",
+          "count": 94
+        },
+        {
+          "term": "xz",
+          "count": 94
+        },
+        {
+          "term": "ak",
+          "count": 93
+        },
+        {
+          "term": "kl",
+          "count": 93
+        },
+        {
+          "term": "nj",
+          "count": 93
+        }
+      ],
+      "semanticConcepts": [
+        "ai"
+      ],
+      "outgoingLinks": [],
+      "backlinks": [],
+      "missingLinks": [],
+      "excerpt": "\u0000\u0000\u0000 ftypisom\u0000\u0000\u0002\u0000isomiso2avc1mp41\u0000\u0000\u0000\bfree\u0001 € mdat\u0000\u0000\u0002�\u0006\u0005��蜍E榻尜H窎,� � 铒x264 core 164 r3095 baee400 H.264/MPEG 4 AVC codec Copyleft 2003 2022 http://www.videolan.org/x264.html options: cabac=1 ref=1 deblock=1:0:0 analyse=0x3:0x113 me=hex subme=2 psy=1 psy rd=1.00:0.00 mixed ref=0 me range=16 chroma me=1 trellis=0 8x8dct=1…",
+      "bytes": 19829944,
+      "modifiedAt": "2026-08-22T03:19:06.589Z",
+      "contentSha256": "e4f4db0116fd3894045bff50859b580204ff9a69a50a6c930c8d0d4bbf55acd8"
     },
     {
       "id": "ws_25a724bd6b:um_cs_key.md",
@@ -18711,9 +19662,9 @@
         "label": "边界",
         "kind": "doc",
         "group": "temple",
-        "weight": 1,
-        "degree": 0,
-        "orphan": true,
+        "weight": 2,
+        "degree": 1,
+        "orphan": false,
         "modified": 1739517630687.0227
       },
       {
@@ -18851,10 +19802,10 @@
         "label": "贵州电信MK",
         "kind": "doc",
         "group": "temple",
-        "weight": 7,
-        "degree": 6,
+        "weight": 6,
+        "degree": 5,
         "orphan": false,
-        "modified": 1787285417554.3506
+        "modified": 1787538189308.778
       },
       {
         "id": "ws_25a724bd6b:贵州移动KF.md",
@@ -18927,6 +19878,16 @@
         "modified": 1786677904135.5693
       },
       {
+        "id": "ws_25a724bd6b:湖北移动MR622-DK.md",
+        "label": "湖北移动MR622-DK",
+        "kind": "doc",
+        "group": "temple",
+        "weight": 2,
+        "degree": 1,
+        "orphan": false,
+        "modified": 1787537480119.9905
+      },
+      {
         "id": "ws_25a724bd6b:湖北KA.md",
         "label": "湖北KA",
         "kind": "doc",
@@ -18974,7 +19935,7 @@
         "weight": 4,
         "degree": 3,
         "orphan": false,
-        "modified": 1778724257783.7942
+        "modified": 1787536621143.469
       },
       {
         "id": "ws_25a724bd6b:湖南电信lan-MR820-MK.md",
@@ -19014,7 +19975,7 @@
         "weight": 7,
         "degree": 6,
         "orphan": false,
-        "modified": 1772074585634.385
+        "modified": 1787536921715.6436
       },
       {
         "id": "ws_25a724bd6b:湖南LC-MC.md",
@@ -19054,7 +20015,7 @@
         "weight": 4,
         "degree": 3,
         "orphan": false,
-        "modified": 1786326868165.3665
+        "modified": 1787294073877.5476
       },
       {
         "id": "ws_25a724bd6b:架构.md",
@@ -19064,7 +20025,7 @@
         "weight": 12,
         "degree": 11,
         "orphan": false,
-        "modified": 1787277398033.1738
+        "modified": 1787383193311.58
       },
       {
         "id": "ws_25a724bd6b:江苏电信KD省采.md",
@@ -19291,10 +20252,10 @@
         "label": "文档知识库开发记录",
         "kind": "doc",
         "group": "temple",
-        "weight": 2,
-        "degree": 1,
+        "weight": 3,
+        "degree": 2,
         "orphan": false,
-        "modified": 1787291507223.851
+        "modified": 1787537961259.8176
       },
       {
         "id": "ws_25a724bd6b:文字脚本.md",
@@ -19355,6 +20316,16 @@
         "degree": 5,
         "orphan": false,
         "modified": 1787049874263.5415
+      },
+      {
+        "id": "ws_25a724bd6b:新疆移动MR622-DK.md",
+        "label": "新疆移动MR622-DK",
+        "kind": "doc",
+        "group": "temple",
+        "weight": 2,
+        "degree": 1,
+        "orphan": false,
+        "modified": 1787534466906.7117
       },
       {
         "id": "ws_25a724bd6b:性能.md",
@@ -19451,9 +20422,9 @@
         "label": "codex常见异常处理",
         "kind": "doc",
         "group": "temple",
-        "weight": 1,
-        "degree": 0,
-        "orphan": true,
+        "weight": 2,
+        "degree": 1,
+        "orphan": false,
         "modified": 1784517767883.3926
       },
       {
@@ -19611,8 +20582,8 @@
         "label": "dns.png",
         "kind": "doc",
         "group": "temple",
-        "weight": 11,
-        "degree": 10,
+        "weight": 10,
+        "degree": 9,
         "orphan": false,
         "modified": 1744965217093.6062
       },
@@ -19684,7 +20655,7 @@
         "weight": 1,
         "degree": 0,
         "orphan": true,
-        "modified": 1782962240131.7664
+        "modified": 1787384850577.4775
       },
       {
         "id": "ws_25a724bd6b:ollama.md",
@@ -19821,8 +20792,8 @@
         "label": "开机流程.png",
         "kind": "doc",
         "group": "temple",
-        "weight": 4,
-        "degree": 3,
+        "weight": 3,
+        "degree": 2,
         "orphan": false,
         "modified": 1690384007246.6455
       },
@@ -20171,8 +21142,8 @@
         "label": "__FolderData__.ini",
         "kind": "doc",
         "group": "temple",
-        "weight": 3,
-        "degree": 2,
+        "weight": 2,
+        "degree": 1,
         "orphan": false,
         "modified": 1716964069773.3455
       },
@@ -20301,8 +21272,8 @@
         "label": "__Commands__.ini",
         "kind": "doc",
         "group": "temple",
-        "weight": 4,
-        "degree": 3,
+        "weight": 5,
+        "degree": 4,
         "orphan": false,
         "modified": 1669094790000
       },
@@ -20371,8 +21342,8 @@
         "label": "Global.ini",
         "kind": "doc",
         "group": "temple",
-        "weight": 3,
-        "degree": 2,
+        "weight": 4,
+        "degree": 3,
         "orphan": false,
         "modified": 1721263353861.1316
       },
@@ -20431,8 +21402,8 @@
         "label": "serial-com13.ini",
         "kind": "doc",
         "group": "temple",
-        "weight": 4,
-        "degree": 3,
+        "weight": 5,
+        "degree": 4,
         "orphan": false,
         "modified": 1719971777923.3823
       },
@@ -20441,8 +21412,8 @@
         "label": "serial-com3.ini",
         "kind": "doc",
         "group": "temple",
-        "weight": 4,
-        "degree": 3,
+        "weight": 5,
+        "degree": 4,
         "orphan": false,
         "modified": 1721357124027.9167
       },
@@ -20791,9 +21762,9 @@
         "label": "screenshot-1786610321279.webp",
         "kind": "doc",
         "group": "temple",
-        "weight": 2,
-        "degree": 1,
-        "orphan": false,
+        "weight": 1,
+        "degree": 0,
+        "orphan": true,
         "modified": 1786610321285.8027
       },
       {
@@ -20987,24 +21958,44 @@
         "modified": 1787223928440.8865
       },
       {
-        "id": "ws_25a724bd6b:source/screenshot-1787224425374.webp",
-        "label": "screenshot-1787224425374.webp",
+        "id": "ws_25a724bd6b:source/screenshot-1787533803704.webp",
+        "label": "screenshot-1787533803704.webp",
         "kind": "doc",
         "group": "temple",
         "weight": 1,
         "degree": 0,
         "orphan": true,
-        "modified": 1787224425384.688
+        "modified": 1787533803775.2473
       },
       {
-        "id": "ws_25a724bd6b:source/screenshot-1787224546964.webp",
-        "label": "screenshot-1787224546964.webp",
+        "id": "ws_25a724bd6b:source/screenshot-1787533833337.webp",
+        "label": "screenshot-1787533833337.webp",
         "kind": "doc",
         "group": "temple",
         "weight": 1,
         "degree": 0,
         "orphan": true,
-        "modified": 1787224546970.429
+        "modified": 1787533833363.4521
+      },
+      {
+        "id": "ws_25a724bd6b:source/screenshot-1787537730238.webp",
+        "label": "screenshot-1787537730238.webp",
+        "kind": "doc",
+        "group": "temple",
+        "weight": 1,
+        "degree": 0,
+        "orphan": true,
+        "modified": 1787537730258.1887
+      },
+      {
+        "id": "ws_25a724bd6b:source/video/2026-07-23-16-12-31-1d5b20aa.mp4",
+        "label": "2026-07-23-16-12-31-1d5b20aa.mp4",
+        "kind": "doc",
+        "group": "temple",
+        "weight": 2,
+        "degree": 1,
+        "orphan": false,
+        "modified": 1787368746589.8176
       },
       {
         "id": "ws_25a724bd6b:um_cs_key.md",
@@ -21027,16 +22018,6 @@
         "modified": 1785152925297.152
       },
       {
-        "id": "default:测试.md",
-        "label": "测试",
-        "kind": "doc",
-        "group": "默认 docs",
-        "weight": 2,
-        "degree": 1,
-        "orphan": false,
-        "modified": 1787285065455.7976
-      },
-      {
         "id": "default:功能简介.md",
         "label": "功能简介",
         "kind": "doc",
@@ -21051,8 +22032,8 @@
         "label": "知识库缺陷",
         "kind": "doc",
         "group": "默认 docs",
-        "weight": 6,
-        "degree": 5,
+        "weight": 7,
+        "degree": 6,
         "orphan": false,
         "modified": 1787226904428.085
       },
@@ -21149,6 +22130,16 @@
       {
         "id": "missing:default:file:///d:/game/mytemple/.trae/documents/mytemple-v1.6.0-defects-and-features.md",
         "label": "mytemple-v1.6.0-defects-and-features",
+        "kind": "missing",
+        "group": "未创建",
+        "weight": 2,
+        "degree": 1,
+        "orphan": false,
+        "modified": 0
+      },
+      {
+        "id": "missing:default:file:///d:/game/mytemple/docs/测试.md",
+        "label": "测试",
         "kind": "missing",
         "group": "未创建",
         "weight": 2,
@@ -22811,7 +23802,7 @@
         "label": "system",
         "kind": "keyword",
         "group": "语义",
-        "weight": 401,
+        "weight": 403,
         "degree": 10,
         "orphan": false,
         "modified": 0
@@ -22861,7 +23852,7 @@
         "label": "db",
         "kind": "keyword",
         "group": "语义",
-        "weight": 308,
+        "weight": 309,
         "degree": 10,
         "orphan": false,
         "modified": 0
@@ -22921,7 +23912,7 @@
         "label": "set",
         "kind": "keyword",
         "group": "语义",
-        "weight": 272,
+        "weight": 274,
         "degree": 10,
         "orphan": false,
         "modified": 0
@@ -22937,22 +23928,22 @@
         "modified": 0
       },
       {
+        "id": "keyword:iptv",
+        "label": "iptv",
+        "kind": "keyword",
+        "group": "语义",
+        "weight": 96,
+        "degree": 10,
+        "orphan": false,
+        "modified": 0
+      },
+      {
         "id": "keyword:class",
         "label": "class",
         "kind": "keyword",
         "group": "语义",
         "weight": 197,
         "degree": 8,
-        "orphan": false,
-        "modified": 0
-      },
-      {
-        "id": "keyword:iptv",
-        "label": "iptv",
-        "kind": "keyword",
-        "group": "语义",
-        "weight": 95,
-        "degree": 10,
         "orphan": false,
         "modified": 0
       },
@@ -23031,7 +24022,7 @@
         "label": "apk",
         "kind": "keyword",
         "group": "语义",
-        "weight": 166,
+        "weight": 167,
         "degree": 6,
         "orphan": false,
         "modified": 0
@@ -23197,6 +24188,16 @@
         "modified": 0
       },
       {
+        "id": "keyword:color",
+        "label": "color",
+        "kind": "keyword",
+        "group": "语义",
+        "weight": 55,
+        "degree": 5,
+        "orphan": false,
+        "modified": 0
+      },
+      {
         "id": "keyword:移动",
         "label": "移动",
         "kind": "keyword",
@@ -23217,12 +24218,12 @@
         "modified": 0
       },
       {
-        "id": "keyword:fh",
-        "label": "fh",
+        "id": "keyword:ai",
+        "label": "ai",
         "kind": "keyword",
         "group": "语义",
-        "weight": 19,
-        "degree": 3,
+        "weight": 140,
+        "degree": 4,
         "orphan": false,
         "modified": 0
       }
@@ -23237,16 +24238,16 @@
       },
       {
         "source": "default:知识库缺陷.md",
-        "target": "default:测试.md",
-        "type": "link",
+        "target": "missing:default:file:///d:/game/mytemple/packaging.md",
+        "type": "missing",
         "weight": 6,
         "directed": true
       },
       {
         "source": "default:知识库缺陷.md",
-        "target": "missing:default:file:///d:/game/mytemple/packaging.md",
+        "target": "missing:default:file:///d:/game/mytemple/docs/测试.md",
         "type": "missing",
-        "weight": 6,
+        "weight": 4,
         "directed": true
       },
       {
@@ -25525,6 +26526,48 @@
         "directed": false
       },
       {
+        "source": "ws_25a724bd6b:宁夏iptv.md",
+        "target": "keyword:iptv",
+        "type": "keyword",
+        "weight": 6,
+        "directed": false
+      },
+      {
+        "source": "ws_25a724bd6b:上海MC.md",
+        "target": "keyword:iptv",
+        "type": "keyword",
+        "weight": 6,
+        "directed": false
+      },
+      {
+        "source": "ws_25a724bd6b:mysql.md",
+        "target": "keyword:iptv",
+        "type": "keyword",
+        "weight": 6,
+        "directed": false
+      },
+      {
+        "source": "ws_25a724bd6b:湖北KA.md",
+        "target": "keyword:iptv",
+        "type": "keyword",
+        "weight": 6,
+        "directed": false
+      },
+      {
+        "source": "ws_25a724bd6b:山西电信KD.md",
+        "target": "keyword:iptv",
+        "type": "keyword",
+        "weight": 6,
+        "directed": false
+      },
+      {
+        "source": "ws_25a724bd6b:云南移动MR622-CK.md",
+        "target": "keyword:iptv",
+        "type": "keyword",
+        "weight": 6,
+        "directed": false
+      },
+      {
         "source": "ws_25a724bd6b:湖北LV.md",
         "target": "keyword:class",
         "type": "keyword",
@@ -25576,48 +26619,6 @@
       {
         "source": "ws_25a724bd6b:计划.md",
         "target": "keyword:class",
-        "type": "keyword",
-        "weight": 6,
-        "directed": false
-      },
-      {
-        "source": "ws_25a724bd6b:宁夏iptv.md",
-        "target": "keyword:iptv",
-        "type": "keyword",
-        "weight": 6,
-        "directed": false
-      },
-      {
-        "source": "ws_25a724bd6b:上海MC.md",
-        "target": "keyword:iptv",
-        "type": "keyword",
-        "weight": 6,
-        "directed": false
-      },
-      {
-        "source": "ws_25a724bd6b:mysql.md",
-        "target": "keyword:iptv",
-        "type": "keyword",
-        "weight": 6,
-        "directed": false
-      },
-      {
-        "source": "ws_25a724bd6b:湖北KA.md",
-        "target": "keyword:iptv",
-        "type": "keyword",
-        "weight": 6,
-        "directed": false
-      },
-      {
-        "source": "ws_25a724bd6b:山西电信KD.md",
-        "target": "keyword:iptv",
-        "type": "keyword",
-        "weight": 6,
-        "directed": false
-      },
-      {
-        "source": "ws_25a724bd6b:云南移动MR622-CK.md",
-        "target": "keyword:iptv",
         "type": "keyword",
         "weight": 6,
         "directed": false
@@ -26316,6 +27317,34 @@
         "directed": false
       },
       {
+        "source": "ws_25a724bd6b:settings/config/Global.ini",
+        "target": "keyword:color",
+        "type": "keyword",
+        "weight": 6,
+        "directed": false
+      },
+      {
+        "source": "ws_25a724bd6b:settings/config/Sessions/serial-com13.ini",
+        "target": "keyword:color",
+        "type": "keyword",
+        "weight": 6,
+        "directed": false
+      },
+      {
+        "source": "ws_25a724bd6b:settings/config/Sessions/serial-com3.ini",
+        "target": "keyword:color",
+        "type": "keyword",
+        "weight": 6,
+        "directed": false
+      },
+      {
+        "source": "ws_25a724bd6b:新疆移动MR622-DK.md",
+        "target": "keyword:color",
+        "type": "keyword",
+        "weight": 6,
+        "directed": false
+      },
+      {
         "source": "ws_25a724bd6b:记录.md",
         "target": "keyword:移动",
         "type": "keyword",
@@ -26365,17 +27394,24 @@
         "directed": false
       },
       {
-        "source": "ws_25a724bd6b:hexo/dns.png",
-        "target": "keyword:fh",
+        "source": "ws_25a724bd6b:source/video/2026-07-23-16-12-31-1d5b20aa.mp4",
+        "target": "keyword:ai",
         "type": "keyword",
         "weight": 6,
         "directed": false
       },
       {
-        "source": "ws_25a724bd6b:贵州电信MK.md",
-        "target": "keyword:db",
+        "source": "ws_25a724bd6b:文档知识库开发记录.md",
+        "target": "keyword:ai",
         "type": "keyword",
-        "weight": 5,
+        "weight": 6,
+        "directed": false
+      },
+      {
+        "source": "default:知识库缺陷.md",
+        "target": "keyword:ai",
+        "type": "keyword",
+        "weight": 6,
         "directed": false
       },
       {
@@ -26435,10 +27471,10 @@
         "directed": false
       },
       {
-        "source": "ws_25a724bd6b:resources/开机流程.png",
-        "target": "keyword:fh",
+        "source": "ws_25a724bd6b:settings/config/Commands/IPTV测试/__Commands__.ini",
+        "target": "keyword:db",
         "type": "keyword",
-        "weight": 5,
+        "weight": 4,
         "directed": false
       },
       {
@@ -26568,6 +27604,13 @@
         "directed": false
       },
       {
+        "source": "ws_25a724bd6b:codex常见异常处理.md",
+        "target": "keyword:color",
+        "type": "keyword",
+        "weight": 3,
+        "directed": false
+      },
+      {
         "source": "ws_25a724bd6b:辽宁KF.md",
         "target": "keyword:移动",
         "type": "keyword",
@@ -26577,6 +27620,13 @@
       {
         "source": "ws_25a724bd6b:上海移动MR622-DK.md",
         "target": "keyword:set",
+        "type": "keyword",
+        "weight": 2,
+        "directed": false
+      },
+      {
+        "source": "ws_25a724bd6b:湖北移动MR622-DK.md",
+        "target": "keyword:iptv",
         "type": "keyword",
         "weight": 2,
         "directed": false
@@ -26656,20 +27706,6 @@
         "target": "keyword:ac",
         "type": "keyword",
         "weight": 2,
-        "directed": false
-      },
-      {
-        "source": "ws_25a724bd6b:source/screenshot-1786610321279.webp",
-        "target": "keyword:fh",
-        "type": "keyword",
-        "weight": 2,
-        "directed": false
-      },
-      {
-        "source": "ws_25a724bd6b:settings/config/Commands/__FolderData__.ini",
-        "target": "keyword:iptv",
-        "type": "keyword",
-        "weight": 1,
         "directed": false
       },
       {
@@ -26759,6 +27795,13 @@
       {
         "source": "ws_25a724bd6b:settings/config/Commands/__FolderData__.ini",
         "target": "keyword:系统",
+        "type": "keyword",
+        "weight": 1,
+        "directed": false
+      },
+      {
+        "source": "ws_25a724bd6b:边界.md",
+        "target": "keyword:ai",
         "type": "keyword",
         "weight": 1,
         "directed": false
