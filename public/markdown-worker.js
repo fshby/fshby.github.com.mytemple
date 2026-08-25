@@ -23,13 +23,25 @@ function headingId(text, index) {
   return `h-${base || "section"}-${index}`;
 }
 // Markdown 渲染缓存版本戳：解析器或 CSS 规则升级时递增，确保旧缓存不被复用。
-const MARKDOWN_RENDER_VERSION = "callout-v9-final-v12-20260822-force-1.8.63";
+const MARKDOWN_RENDER_VERSION = "callout-v9-final-v13-20260824-url-auto-1.8.63";
 
 function safeMarkdownUrl(value) {
   const url = String(value || "").trim();
   if (!url) return "#";
+  if (url.startsWith("#")) return url;
   const protocol = url.match(/^([a-z][a-z0-9+.-]*):/i)?.[1]?.toLowerCase();
-  if (protocol && !["http", "https", "mailto"].includes(protocol)) return "#";
+  if (protocol) {
+    if (!["http", "https", "mailto"].includes(protocol)) return "#";
+    return url;
+  }
+  // 无协议前缀的 URL：自动补 http://（如 mytemple.fshby.cc、example.com/path）
+  if (/^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)+(:\d+)?(\/|$)/.test(url)) {
+    return "http://" + url;
+  }
+  // IP 地址格式（如 127.0.0.1:8080/path）
+  if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?(\/|$)/.test(url)) {
+    return "http://" + url;
+  }
   return url;
 }
 

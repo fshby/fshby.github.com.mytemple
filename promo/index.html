@@ -24,7 +24,7 @@
         <a href="#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.63.exe" download>下载 v1.8.63</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.72.exe" download>下载 v1.8.72</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -32,11 +32,11 @@
     <main id="top">
       <section class="hero section-wrap" aria-labelledby="hero-title">
         <div class="hero-copy reveal">
-          <p class="eyebrow"><span class="status-dot"></span> 本地 Markdown 工作区 <em>v1.8.63 桌面版</em></p>
+          <p class="eyebrow"><span class="status-dot"></span> 本地 Markdown 工作区 <em>v1.8.72 桌面版</em></p>
           <h1 id="hero-title">本地 Markdown 知识库与编辑器</h1>
           <p class="hero-lede">围绕本地 Markdown 文件提供阅读、编辑、目录、图谱、检索、主题与多工作区管理。</p>
           <div class="hero-actions">
-            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.63.exe" download>下载 Windows 安装包</a>
+            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.72.exe" download>下载 Windows 安装包</a>
             <a class="button button-soft" href="#docs">查看使用文档</a>
           </div>
           <p class="hero-note">Windows 桌面端 · 本地文件优先 · 内容助手为可选接入</p>
@@ -183,18 +183,18 @@
         </div>
         <div class="download-block reveal">
           <div class="download-primary">
-            <span class="download-badge">当前稳定版 v1.8.63</span>
+            <span class="download-badge">当前稳定版 v1.8.72</span>
             <p>本地工作区、阅读/修改双模式、图谱、主题、增量索引与可选辅助功能。</p>
-            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.63.exe" download>下载安装包</a>
+            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.72.exe" download>下载安装包</a>
           </div>
           <div class="download-secondary">
             <h3>最近更新</h3>
             <ul>
-              <li>v1.8.63：修复高亮提示块（callout）颜色和样式区分，支持 15 种类型主题色；修复 details 折叠块渲染；全链路缓存清除。</li>
-              <li>v1.8.53：优化内存管理：服务端堆限制 512MB、LRU 缓存、定时 GC；前端 AI 历史限制 50 条、Worker 空闲销毁。</li>
-              <li>v1.8.51：新增视频插入工具，支持上传压缩保存到工作区 source/video 并以 Markdown 格式显示。</li>
-              <li>v1.8.48：新增数学公式下拉（块级/行内/分数/求和/积分/极限/矩阵/分段函数）与图表插入下拉（Mermaid 11 种图表 + Excalidraw）。</li>
-              <li>v1.8.46：新增高亮提示块下拉、目录大纲、折叠块；链接改为外部浏览器打开；编辑/阅读模式切换保持滚动位置。</li>
+              <li>v1.8.72：功能无损性能优化：状态栏 DOM 引用缓存、页面隐藏暂停定时器、编辑器 scroll 监听器合并、resize 去抖。</li>
+              <li>v1.8.71：沉浸+轻量模式整合：一个按钮同时实现沉浸写作与轻量编辑（禁用语法高亮/终止 Worker/释放内存）。</li>
+              <li>v1.8.69-70：内存/GPU 优化：contentStore LRU、图谱模拟间隔拉长、shadowBlur 降级、backdrop-blur 缩小。</li>
+              <li>v1.8.68：文档安全加固：竞态防护序号、Worker 重建冷却、openDoc 失败回滚、草稿自动保存、数据完整性校验。</li>
+              <li>v1.8.63：修复高亮提示块（callout）颜色和样式区分，支持 15 种类型主题色。</li>
               <li>版本号变化触发自动清理 WebView2 缓存。</li>
             </ul>
             <p class="download-links">
@@ -278,13 +278,13 @@
             </ul>
           </article>
           <article class="doc-section">
-            <h3>v1.8.63 更新日志</h3>
+            <h3>v1.8.72 更新日志</h3>
             <ul>
-              <li>修复高亮提示块（callout）颜色和样式区分：15 种类型（note/info/tip/warning/important/caution 等）各有标志性边框色、背景色和标题色，兼容明亮/护眼/柔光/图片全部主题。</li>
-              <li>修复 details 折叠块在 Markdown 预览中被转义为纯文本的问题，正确渲染为原生 HTML 可点击展开控件。</li>
-              <li>修复 PDF 导出中 important/caution 与 todo 共用同色的问题，导出样式与预览一致。</li>
-              <li>全链路缓存版本戳升级（styles.css/app.js/worker/渲染缓存），服务端 anti-cache 头强化（五重头），确保升级后立即生效。</li>
-              <li>修复 version.json 格式错误导致安装包构建失败的问题。</li>
+              <li>功能无损性能优化：状态栏 DOM 引用缓存（_statusFieldCache），每秒避免 4+ 次 querySelectorAll；页面隐藏时暂停系统时间 setInterval；合并编辑器 3 个 scroll 监听器为 1 个 passive；5 个 resize 监听器统一 100ms 去抖。</li>
+              <li>沉浸+轻量模式整合：一个按钮（⚡ 沉浸）同时实现沉浸写作与轻量编辑——进入时终止 Markdown Worker、禁用语法高亮 CSS、隐藏预览/大纲面板，退出时自动重建 Worker 并刷新预览。</li>
+              <li>文档安全加固：渲染序号竞态防护（readerRenderSeq）、Worker 失败后 5 秒冷却可重建、openDoc 被覆盖时回滚清理、切换文档前同步保存草稿、保存接口返回 contentSha256 支持乐观锁。</li>
+              <li>内存/GPU 优化：contentStore LRU 缓存（最多 50 热文档）、知识文档上限 300、轻度 trim 250MB/激进 320MB；图谱模拟间隔拉长 30%、shadowBlur 降级、backdrop-filter blur 缩小。</li>
+              <li>服务端保存接口返回 contentSha256，前端兼容旧服务端自动降级，不再误报校验失败。</li>
             </ul>
           </article>
         </div>

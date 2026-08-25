@@ -59,6 +59,8 @@ let cache = {
   knowledgeDocuments: new Map(),
   workspaces: [],
 };
+const contentStore = new Map(); // path → { content, plain, accessTime }
+const MAX_CONTENT_STORE = 50; // max documents with full content cached
 let cacheRefreshPromise = null;
 let structureDirty = true;
 let structureGeneration = 1;
@@ -83,7 +85,9 @@ let workspacesCache = null;
 let workspacesCacheStamp = 0;
 const DEFAULT_WORKSPACE_ID = "default";
 const LOG_LEVEL = process.env.MYTEMPLE_LOG_LEVEL || "warn";
-const MAX_DOCUMENT_CACHE_ENTRIES = 200;
+const MAX_DOCUMENT_CACHE_ENTRIES = 100;
+const MAX_KNOWLEDGE_DOCUMENTS = 300;
+const TRIM_KNOWLEDGE_DOCUMENTS_TO = 200;
 const MEMORY_CHECK_INTERVAL_MS = 5 * 60 * 1000;
 
 function log(level, message) {
@@ -92,6 +96,49 @@ function log(level, message) {
   const messageLevel = levels[level.toLowerCase()] || 2;
   if (messageLevel >= currentLevel) {
     console[level](message);
+  }
+}
+
+function getPlain(file) {
+  if (file.plain) return file.plain;
+  if (file.content) {
+    file.plain = file.content.replace(/[#>*_`[\]()!-]/g, " ");
+    return file.plain;
+  }
+  return "";
+}
+
+async function getFileContent(path) {
+  const entry = contentStore.get(path);
+  if (entry) {
+    entry.accessTime = Date.now();
+    return entry.content;
+  }
+  const cached = cache.files.find((f) => f.path === path);
+  if (cached && cached.content) {
+    contentStore.set(path, { content: cached.content, plain: cached.plain, accessTime: Date.now() });
+    evictContentStoreIfNeeded();
+    return cached.content;
+  }
+  const ref = path.includes(":") ? path.split(":").pop() : path;
+  const abs = path.isAbsolute ? path : path.join(DATA_ROOT || process.env.MYTEMPLE_DATA_ROOT || "./data", ref);
+  try {
+    const text = await readFile(abs, "utf8");
+    contentStore.set(path, { content: text, plain: text.replace(/[#>*_`[\]()!-]/g, " "), accessTime: Date.now() });
+    evictContentStoreIfNeeded();
+    return text;
+  } catch {
+    return null;
+  }
+}
+
+function evictContentStoreIfNeeded() {
+  if (contentStore.size <= MAX_CONTENT_STORE) return;
+  const entries = [...contentStore.entries()];
+  entries.sort((a, b) => (a[1].accessTime || 0) - (b[1].accessTime || 0));
+  const toRemove = entries.slice(0, entries.length - MAX_CONTENT_STORE + 10);
+  for (const [key] of toRemove) {
+    contentStore.delete(key);
   }
 }
 
@@ -124,7 +171,10 @@ function isFfmpegAvailable() {
 }
 
 function splitWorkspaceRef(input, alreadyDecoded = false) {
-  const decoded = alreadyDecoded ? (input || "").replace(/\\/g, "/") : decodeURIComponent(input || "").replace(/\\/g, "/");
+  let decoded = (input || "").replace(/\\/g, "/");
+  if (!alreadyDecoded) {
+    try { decoded = decodeURIComponent(decoded); } catch (_) { /* 含 % 等非法转义时按原字符串处理，文档名本身未编码 */ }
+  }
   const colon = decoded.indexOf(":");
   if (colon > 0) {
     const prefix = decoded.slice(0, colon);
@@ -300,21 +350,45 @@ function trimDocumentCache() {
   log("debug", `Trimmed document cache: removed ${excess} entries, remaining ${docCache.size}`);
 }
 
+function trimKnowledgeDocuments(force = false) {
+  const map = cache.knowledgeDocuments;
+  if (!map || !(map instanceof Map)) return;
+  const max = force ? Math.floor(MAX_KNOWLEDGE_DOCUMENTS / 2) : MAX_KNOWLEDGE_DOCUMENTS;
+  if (map.size <= max) return;
+  const target = force ? TRIM_KNOWLEDGE_DOCUMENTS_TO : max - Math.floor((max - TRIM_KNOWLEDGE_DOCUMENTS_TO) / 2);
+  const excess = map.size - target;
+  const keys = map.keys();
+  for (let i = 0; i < excess; i++) {
+    const key = keys.next().value;
+    if (key === undefined) break;
+    map.delete(key);
+  }
+  log("debug", `Trimmed knowledge documents (LRU): removed ${excess} entries, remaining ${map.size}`);
+}
+
 function startMemoryMonitor() {
   setInterval(() => {
     const mem = process.memoryUsage();
     const heapMB = Math.round(mem.heapUsed / 1024 / 1024);
     const rssMB = Math.round(mem.rss / 1024 / 1024);
-    if (rssMB > 400) {
+    if (rssMB > 320) {
       log("warn", `Memory usage high: RSS=${rssMB}MB, Heap=${heapMB}MB, trimming caches`);
       trimDocumentCache();
-      if (cache.knowledgeDocuments instanceof Map && cache.knowledgeDocuments.size > 100) {
-        cache.knowledgeDocuments.clear();
-      }
+      trimKnowledgeDocuments(false);
+      evictContentStoreIfNeeded();
+      if (dirtyPaths.size > 500) { dirtyPaths.clear(); log("info", "Cleared dirtyPaths"); }
+      if (dirtyVersions.size > 500) { dirtyVersions.clear(); log("info", "Cleared dirtyVersions"); }
+      if (pendingSavedDocuments.size > 100) { pendingSavedDocuments.clear(); log("info", "Cleared pendingSavedDocuments"); }
       if (global.gc) {
         global.gc();
         log("info", "Manual GC triggered after cache trim");
       }
+    } else if (rssMB > 250) {
+      trimKnowledgeDocuments(false);
+      evictContentStoreIfNeeded();
+      if (dirtyPaths.size > 300) { dirtyPaths.clear(); }
+      if (dirtyVersions.size > 300) { dirtyVersions.clear(); }
+      if (pendingSavedDocuments.size > 50) { pendingSavedDocuments.clear(); }
     }
   }, MEMORY_CHECK_INTERVAL_MS).unref();
 }
@@ -822,6 +896,10 @@ function buildKnowledgeIndex(data) {
     .map((file) => {
       const signature = `${file.contentSha256 || ""}|${data.graphVersion || 0}`;
       const previous = previousDocuments.get(file.path);
+      if (previous) {
+        previousDocuments.delete(file.path);
+        previousDocuments.set(file.path, previous);
+      }
       if (previous?.signature === signature) {
         nextDocuments.set(file.path, previous);
         return previous.document;
@@ -849,6 +927,16 @@ function buildKnowledgeIndex(data) {
       return document;
     });
   data.knowledgeDocuments = nextDocuments;
+  if (data.knowledgeDocuments.size > MAX_KNOWLEDGE_DOCUMENTS) {
+    const excess = data.knowledgeDocuments.size - TRIM_KNOWLEDGE_DOCUMENTS_TO;
+    const keys = data.knowledgeDocuments.keys();
+    for (let i = 0; i < excess; i++) {
+      const key = keys.next().value;
+      if (key === undefined) break;
+      data.knowledgeDocuments.delete(key);
+    }
+    log("info", `Trimmed knowledge documents after rebuild: removed ${excess} LRU entries, remaining ${data.knowledgeDocuments.size}`);
+  }
   const workspaceCounts = new Map();
   for (const document of documents) workspaceCounts.set(document.workspaceId, (workspaceCounts.get(document.workspaceId) || 0) + 1);
   const workspaces = data.workspaces
@@ -1029,6 +1117,15 @@ async function legacyRefreshCache(force = false) {
     }
   }
   cache = { stamp: Date.now(), files, tree, graph: buildGraph(files), graphDirty: false, workspaces, defaultWorkspaceId };
+  if (cache.files.length > 0) {
+    const recent = cache.files.slice(-MAX_CONTENT_STORE);
+    for (const file of recent) {
+      if (file.content) {
+        contentStore.set(file.path, { content: file.content, plain: file.plain, accessTime: Date.now() });
+      }
+    }
+    evictContentStoreIfNeeded();
+  }
   try {
     scheduleKnowledgeIndexSync();
   } catch (error) {
@@ -1328,7 +1425,7 @@ function search(files, query) {
   const parts = q.split(/\s+/).filter(Boolean);
   return files
     .map((file) => {
-      const hay = `${file.title}\n${file.workspaceName || ""}\n${file.path}\n${file.plain}`.toLowerCase();
+      const hay = `${file.title}\n${file.workspaceName || ""}\n${file.path}\n${getPlain(file)}`.toLowerCase();
       let score = 0;
       for (const part of parts) {
         if (file.title.toLowerCase().includes(part)) score += 12;
@@ -1336,7 +1433,7 @@ function search(files, query) {
         score += (hay.match(new RegExp(escapeRegExp(part), "g")) || []).length;
       }
       const first = parts.map((part) => hay.indexOf(part)).filter((idx) => idx >= 0).sort((a, b) => a - b)[0] || 0;
-      const snippet = file.plain.slice(Math.max(0, first - 60), first + 180).replace(/\s+/g, " ").trim();
+      const snippet = getPlain(file).slice(Math.max(0, first - 60), first + 180).replace(/\s+/g, " ").trim();
       return { path: file.path, title: file.title, workspaceName: file.workspaceName, score, snippet, tags: file.tags };
     })
     .filter((result) => result.score > 0)
@@ -2370,9 +2467,10 @@ async function handleApi(req, res, url) {
       log("warn", `Save request for non-md file: ${relative}`);
       return json(res, 400, { error: "只能保存 .md 文件" });
     }
+    const savedContent = String(payload.content ?? "");
     try {
       await mkdir(path.dirname(absolute), { recursive: true });
-      await writeFile(absolute, String(payload.content ?? ""), "utf8");
+      await writeFile(absolute, savedContent, "utf8");
       log("info", `Saved document: ${absolute}`);
     } catch (e) {
       if (e.code === "EPERM" || e.code === "EACCES") {
@@ -2382,8 +2480,9 @@ async function handleApi(req, res, url) {
       log("error", `Failed to save document: ${absolute}, error: ${e.message}`);
       return json(res, 500, { error: `保存文件失败: ${e.message}` });
     }
-    queueSavedDocumentRefresh(normalized, String(payload.content ?? ""));
-    return json(res, 200, { ok: true, path: ref });
+    queueSavedDocumentRefresh(normalized, savedContent);
+    const contentSha256 = createHash("sha256").update(Buffer.from(savedContent, "utf8")).digest("hex");
+    return json(res, 200, { ok: true, path: ref, contentSha256 });
   }
   if (url.pathname === "/api/browse-folder" && req.method === "POST") {
     let selected = "";
@@ -2671,7 +2770,7 @@ async function handleApi(req, res, url) {
     if (!isDir) {
       if (!safeName.toLowerCase().endsWith(".md")) safeName = safeName + ".md";
     }
-    safeName = safeName.replace(/[\\/]/g, "").trim();
+    safeName = safeName.replace(/[\\/:*?"<>|]/g, "").trim();
     if (!safeName || safeName === "." || safeName === "..") {
       return json(res, 400, { error: "Invalid name" });
     }

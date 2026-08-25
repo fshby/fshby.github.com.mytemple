@@ -18,9 +18,9 @@
       body.license-locked #licenseModal,
       body.license-locked #settingsModal { pointer-events: auto; }
     </style>
-    <link rel="stylesheet" href="/styles.css?v=20260822-v12" />
+    <link rel="stylesheet" href="/styles.css?v=20260822-v14" />
 <link rel="modulepreload" href="/editor-core.js?v=20260822-v4" />
-<link rel="modulepreload" href="/app.js?v=20260822-v12" />
+<link rel="modulepreload" href="/app.js?v=20260822-v14" />
   </head>
   <body>
     <div id="appSplash" class="app-splash">
@@ -919,6 +919,9 @@
                   <div><code>F3 / Ctrl/Cmd + G</code><span>查找下一个匹配</span></div>
                   <div><code>Ctrl/Cmd + Alt + ↑/↓</code><span>在相邻行添加多处光标</span></div>
                   <div><code>Ctrl/Cmd + Shift + L</code><span>选中当前词的全部匹配项</span></div>
+                  <div><code>Ctrl/Cmd + Q</code><span>显示/隐藏工作区目录</span></div>
+                  <div><code>Alt + Q</code><span>编辑模式下显示/隐藏大纲目录</span></div>
+                  <div><code>Ctrl/Cmd + W</code><span>编辑模式下显示/隐藏预览栏</span></div>
                 </div>
               </details>
               <details class="settings-section shortcut-settings-section">
@@ -1414,7 +1417,7 @@
         }, 15000);
       })();
     </script>
-    <script src="/app.js?v=20260822-v12" type="module"></script>
+    <script src="/app.js?v=20260822-v13" type="module"></script>
 
     <div class="menu-dropdowns" id="menuDropdowns">
       <div class="menu-dropdown hidden" data-dropdown="file" role="menu">
@@ -1460,6 +1463,21 @@
         <button class="menu-option" data-action="import-html"><span class="menu-option-icon">🌐</span>HTML 网页 (.html)</button>
         <button class="menu-option" data-action="import-csv"><span class="menu-option-icon">📊</span>CSV 表格 (.csv)</button>
         <button class="menu-option" data-action="import-json"><span class="menu-option-icon">📋</span>JSON 数据 (.json)</button>
+      </div>
+    </div>
+    <div id="imagePreviewModal" class="image-preview-modal hidden" role="dialog" aria-modal="true" aria-label="图片预览">
+      <div class="image-preview-backdrop"></div>
+      <div class="image-preview-container">
+        <button type="button" class="image-preview-close" aria-label="关闭">&times;</button>
+        <img id="imagePreviewImg" class="image-preview-img" alt="" />
+        <div class="image-preview-toolbar">
+          <button type="button" class="image-preview-btn" data-action="zoom-in" aria-label="放大">＋</button>
+          <button type="button" class="image-preview-btn" data-action="zoom-out" aria-label="缩小">−</button>
+          <button type="button" class="image-preview-btn" data-action="zoom-reset" aria-label="重置">1:1</button>
+          <button type="button" class="image-preview-btn" data-action="rotate-left" aria-label="左旋转">↺</button>
+          <button type="button" class="image-preview-btn" data-action="rotate-right" aria-label="右旋转">↻</button>
+          <a id="imagePreviewDownload" class="image-preview-btn image-preview-download" download>⬇</a>
+        </div>
       </div>
     </div>
   </body>

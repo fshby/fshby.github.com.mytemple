@@ -5,6 +5,17 @@ import { extractOutline, addCnEnSpaces } from "./modules/editor-utils.js";
 import { stripFrontmatter, escapeRegex, splitIntoLogicalBlocks, estimateBlockLines, splitMarkdownIntoSlides, normalizeAssetUrlsToRelative } from "./modules/export-utils.js";
 import { highlightCode } from "./modules/preview-utils.js";
 
+/*
+ * 文档处理原则：企业级编辑器标准，对文档异常零容忍。
+ * 任何涉及文档读取、写入、切换、渲染的异常都必须：
+ *   1. 记录到 console.error（含上下文：文档路径、操作阶段、错误详情）；
+ *   2. 向用户明确提示（toast），不得静默吞掉；
+ *   3. 保证状态与显示一致——失败时回滚到上一个一致状态，不得残留半成品；
+ *   4. 绝不因降级而覆盖、丢弃或错乱用户文档内容。
+ * 例外：仅纯展示型可选增强（拼写高亮、纸纹纹理等）失败时允许静默降级。
+ * 文档数据安全相关的 catch 一律使用 logDocError()，禁止空的 catch (_) {}。
+ */
+
 const text = {
   emptyResult: "\u6ca1\u6709\u5339\u914d\u7ed3\u679c",
   retryKeyword: "\u6362\u4e00\u4e2a\u5173\u952e\u8bcd\u8bd5\u8bd5",
@@ -42,6 +53,7 @@ const state = {
   graphLayoutSeq: 0,
   graphWorker: null,
   graphWorkerFailed: false,
+  graphWorkerFailedUntil: 0, // Graph Worker 失败后的重试冷却截止时间，过期后允许重建
   graphWorkerSeq: 0,
   graphWorkerPending: new Map(),
   graphWorkerIdleTimer: 0,
@@ -67,6 +79,7 @@ const state = {
     simulationFrame: 0,
     simulationTimer: 0,
     simulationLastTime: 0,
+    lastInteraction: 0,
     simulationCache: null,
     motionTime: 0,
     chainUntil: 0,
@@ -109,6 +122,7 @@ const state = {
   recentDocs: [],
   secondaryCursors: [],
   immersive: false,
+  lightweight: false,
   previewVisible: true,
   editorHidden: false,
   previewBeforeImmersive: true,
@@ -116,6 +130,7 @@ const state = {
   previewTimer: 0,
   previewLastContent: "",
   previewRenderSeq: 0,
+  readerRenderSeq: 0, // 阅读模式渲染序号，防止连续打开文档时过期渲染覆盖最新内容（含搜索打开场景）
   previewPending: null,
   previewAnchors: [],
   editorOutlineVisible: localStorage.getItem("editorOutlineVisible") !== "0",
@@ -127,6 +142,7 @@ const state = {
   markdownWorker: null,
   markdownWorkerSeq: 0,
   markdownWorkerPending: new Map(),
+  markdownWorkerFailedUntil: 0, // Worker 失败后的重试冷却截止时间，过期后允许重建，避免永久不可恢复
   markdownWorkerFailed: false,
   markdownWorkerIdleTimer: 0,
   markdownCache: new Map(),
@@ -1353,10 +1369,13 @@ async function handleDocsClosed(closedPaths = []) {
     state.currentPath = "";
   }
   // 如果当前编辑文档被删除，尝试切换到下一篇最近打开的文档。
+  // openDoc 返回布尔值：成功则结束清理流程；失败（含被新 openDoc 覆盖）时回退到清空显示，
+  // 避免旧文档内容残留在编辑器/预览中导致状态与显示不一致。
   if (currentWasRemoved && state.recentDocs.length > 0) {
     const nextDoc = state.recentDocs.find((item) => !pathSet.has(item.path));
     if (nextDoc?.path) {
-      try { await openDoc(nextDoc.path); return; } catch (_) {}
+      const ok = await openDoc(nextDoc.path);
+      if (ok) return;
     }
   }
   // 没有最近文档可切换：清除全部显示，展示备用预览页。
@@ -1377,8 +1396,10 @@ async function handleDocsClosed(closedPaths = []) {
   els.markdownView.classList.add("empty-state");
   els.markdownView.innerHTML = "<h2>打开左侧目录中的文档</h2><p>支持文件夹分类、全文检索、文档切换、编辑保存和关联图谱浏览。</p>";
   renderOutline("");
-  try { els.editor.value = ""; } catch (_) {}
-  try { els.preview.replaceChildren(); } catch (_) {}
+  try { els.editor.value = ""; }
+  catch (e) { logDocError("关闭文档时清空编辑器", e); }
+  try { els.preview.replaceChildren(); }
+  catch (e) { logDocError("关闭文档时清空预览", e); }
   els.preview.scrollTop = 0;
   state.syncPreviewScroll.ratio = 0;
   resetUndo("");
@@ -1958,7 +1979,10 @@ function ensureMarkdownWorker() {
     clearTimeout(state.markdownWorkerIdleTimer);
     state.markdownWorkerIdleTimer = 0;
   }
-  if (state.markdownWorker || state.markdownWorkerFailed) return state.markdownWorker;
+  // Worker 失败后进入 5 秒冷却期，过期后允许重建，避免一次性错误导致永久退回主线程渲染
+  if (state.markdownWorker) return state.markdownWorker;
+  if (state.markdownWorkerFailed && Date.now() < state.markdownWorkerFailedUntil) return null;
+  state.markdownWorkerFailed = false;
   try {
     state.markdownWorker = new Worker(MARKDOWN_WORKER_URL);
     state.markdownWorker.addEventListener("message", (event) => {
@@ -1970,6 +1994,7 @@ function ensureMarkdownWorker() {
     });
     state.markdownWorker.addEventListener("error", (event) => {
       state.markdownWorkerFailed = true;
+      state.markdownWorkerFailedUntil = Date.now() + 5000;
       const error = event?.error || new Error("Markdown worker failed");
       for (const pending of state.markdownWorkerPending.values()) pending.reject(error);
       state.markdownWorkerPending.clear();
@@ -1978,6 +2003,7 @@ function ensureMarkdownWorker() {
     });
   } catch (error) {
     state.markdownWorkerFailed = true;
+    state.markdownWorkerFailedUntil = Date.now() + 5000;
     console.error(error);
   }
   return state.markdownWorker;
@@ -2017,6 +2043,10 @@ async function renderReaderContent(source, options = {}) {
   const searchTerm = options.searchTerm || "";
   const byteLen = contentByteLength(content);
   const useChunked = byteLen > CHUNKED_RENDER_BYTES;
+  // 用独立的渲染序号做竞态防护：连续打开文档时，旧请求即使晚返回也不会覆盖最新内容。
+  // 此前的守卫 `state.currentContent !== content && !searchTerm` 在 searchTerm 非空时被绕过，
+  // 导致从全局搜索连续打开文档时，旧文档渲染会覆盖新文档显示。
+  const seq = ++state.readerRenderSeq;
   try {
     const { html, outline } = await requestMarkdownRender({
       source: content,
@@ -2024,45 +2054,53 @@ async function renderReaderContent(source, options = {}) {
       includeHtml: true,
       includeOutline: true,
     });
-    if (state.currentContent !== content && !searchTerm) return;
+    if (seq !== state.readerRenderSeq) return;
     let finalHtml = html ?? cachedRenderMarkdown(content, { searchTerm });
     try { if (typeof applySpellCheckHighlight === "function") finalHtml = applySpellCheckHighlight(finalHtml, content); } catch (_) {}
     if (useChunked) {
-      await renderReaderContentChunked(finalHtml, outline || extractOutline(content));
+      await renderReaderContentChunked(finalHtml, outline || extractOutline(content), seq);
     } else {
+      if (seq !== state.readerRenderSeq) return;
       els.markdownView.innerHTML = finalHtml;
       renderOutlineItems(outline || extractOutline(content));
     }
   } catch (error) {
     console.error(error);
+    if (seq !== state.readerRenderSeq) return;
     let finalHtml = cachedRenderMarkdown(content, { searchTerm });
     try { if (typeof applySpellCheckHighlight === "function") finalHtml = applySpellCheckHighlight(finalHtml, content); } catch (_) {}
     if (useChunked) {
-      await renderReaderContentChunked(finalHtml, extractOutline(content));
+      await renderReaderContentChunked(finalHtml, extractOutline(content), seq);
     } else {
+      if (seq !== state.readerRenderSeq) return;
       els.markdownView.innerHTML = finalHtml;
       renderOutline(content);
     }
   }
 }
 
-async function renderReaderContentChunked(html, outline) {
+async function renderReaderContentChunked(html, outline, seq) {
   const slices = splitHtmlForChunkedRender(html, CHUNK_RENDER_SLICE_BYTES);
   if (slices.length <= 1) {
+    if (seq != null && seq !== state.readerRenderSeq) return;
     els.markdownView.innerHTML = html;
     renderOutlineItems(outline);
     return;
   }
+  if (seq != null && seq !== state.readerRenderSeq) return;
   els.markdownView.innerHTML = slices[0];
   renderOutlineItems(outline);
   for (let i = 1; i < slices.length; i++) {
     await new Promise((resolve) => requestAnimationFrame(resolve));
+    // 分片渲染前再次校验：连续打开文档时旧请求应立即停止后续分片写入
+    if (seq != null && seq !== state.readerRenderSeq) return;
     const temp = document.createElement("div");
     temp.innerHTML = slices[i];
     const frag = document.createDocumentFragment();
     while (temp.firstChild) frag.appendChild(temp.firstChild);
     els.markdownView.appendChild(frag);
   }
+  if (seq != null && seq !== state.readerRenderSeq) return;
   renderMathInPreview(els.markdownView);
   renderChartsInPreview(els.markdownView);
 }
@@ -2861,7 +2899,13 @@ function renderTree(nodes, container = els.tree) {
             state.multiSelected.clear();
             state.multiSelected.add(file.path);
             syncTreeSelectionState();
-            openDoc(file.path);
+            // openDoc 失败时回滚多选高亮，避免目录树高亮与实际显示文档不一致
+            openDoc(file.path).then((ok) => {
+              if (!ok && state.multiSelected.has(file.path) && state.currentPath !== file.path) {
+                state.multiSelected.delete(file.path);
+                syncTreeSelectionState();
+              }
+            });
           }
         });
         button.addEventListener("dragstart", (event) => startTreeDrag(event, { type: "file", path: file.path }));
@@ -3351,7 +3395,7 @@ function flatten(nodes, out = []) {
   return out;
 }
 
-function setMode(mode) {
+function setMode(mode, { deferReaderRender = false } = {}) {
   if (state.mode === mode) return;
   if (mode !== "edit" && state.immersive) setImmersiveEditing(false);
   // 切换前按相对比例保存当前模式的滚动位置，用于模式切换后恢复到相同阅读位置
@@ -3412,20 +3456,25 @@ function setMode(mode) {
     }
   }
   if (mode === "view") {
-    void renderReaderContent(state.currentContent);
-    // 阅读模式：rAF×3 恢复滚动，和编辑模式切出时保存的 editorScrollRatio 对齐，
-    // 保证阅读位置与编辑位置一致。
-    const restoreReaderScroll = () => {
-      const readerMax = Math.max(1, els.markdownView.scrollHeight - els.markdownView.clientHeight);
-      els.markdownView.scrollTop = Math.round(readerMax * (state.editorScrollRatio ?? state.readerScrollRatio ?? 0));
-    };
-    requestAnimationFrame(() => {
-      restoreReaderScroll();
-      requestAnimationFrame(() => {
+    // deferReaderRender: 调用方（如 openGsResult）即将 openDoc 渲染新内容，
+    // 跳过本次旧内容渲染与滚动恢复，避免重复渲染浪费与视觉闪烁。
+    if (!deferReaderRender) {
+      // 阅读模式：先 await 渲染完成，再恢复滚动，避免 scrollHeight 未稳定时比例换算错位；
+      // rAF×3 确保 reflow 完成后应用滚动位置，和编辑模式切出时保存的 editorScrollRatio 对齐。
+      (async () => {
+        await renderReaderContent(state.currentContent);
+        if (state.mode !== "view") return;
+        const restoreReaderScroll = () => {
+          const readerMax = Math.max(1, els.markdownView.scrollHeight - els.markdownView.clientHeight);
+          els.markdownView.scrollTop = Math.round(readerMax * (state.editorScrollRatio ?? state.readerScrollRatio ?? 0));
+        };
         restoreReaderScroll();
-        requestAnimationFrame(restoreReaderScroll);
-      });
-    });
+        requestAnimationFrame(() => {
+          restoreReaderScroll();
+          requestAnimationFrame(restoreReaderScroll);
+        });
+      })();
+    }
   }
   if (mode !== "graph") {
     stopGraphSimulation();
@@ -3437,7 +3486,10 @@ function setMode(mode) {
     if (state.graphWorker) { state.graphWorker.terminate(); state.graphWorker = null; }
     if (state.graphWorkerIdleTimer) { clearTimeout(state.graphWorkerIdleTimer); state.graphWorkerIdleTimer = 0; }
   }
-  if (mode === "graph") requestAnimationFrame(() => initGraph());
+  if (mode === "graph") {
+    state.graphView.lastInteraction = performance.now();
+    requestAnimationFrame(() => initGraph());
+  }
   updateEditorPlaceholder();
   refreshStatusBar();
 }
@@ -3501,15 +3553,28 @@ function scrollReaderToElement(target, behavior = "auto") {
 
 async function openDoc(docPath, options = {}) {
   const seq = ++state.openSeq;
+  // 切换文档前同步保存旧文档草稿（此时 state.currentPath 仍指向旧文档），
+  // 避免 800ms 防抖窗口内切换导致旧文档未保存内容丢失。
+  saveDraftNow();
+  clearAutoSaveTimers();
   let doc;
   try {
     doc = await api.get(`/api/doc?path=${encodeURIComponent(docPath)}`);
   } catch (error) {
     console.error("openDoc failed", error);
     showToast(`打开文档失败：${error?.message || "未知错误"}`);
-    return;
+    return false;
   }
-  if (seq !== state.openSeq) return;
+  // 被 newer openDoc 覆盖时返回 true：表示已有文档在打开流程中，调用方（如 handleDocsClosed）
+  // 不应执行清空逻辑，否则会清空正在打开的新文档内容，造成文档丢失。
+  if (seq !== state.openSeq) return true;
+
+  // 数据完整性校验：服务端返回必须含 path 与字符串 content，否则视为打开失败，
+  // 避免后续把 undefined 写入编辑器导致内容错乱
+  if (!doc || typeof doc.path !== "string" || typeof doc.content !== "string") {
+    logDocError("打开文档-数据校验", new Error("返回数据缺失 path 或 content"), docPath);
+    return false;
+  }
 
   const item = state.flatFiles.find((file) => file.path === doc.path) || doc;
   state.activeWorkspaceId = item.workspaceId || doc.path.split(":", 1)[0] || state.activeWorkspaceId;
@@ -3520,7 +3585,6 @@ async function openDoc(docPath, options = {}) {
   state.currentEncoding = doc.encoding || "utf-8";
   state.currentIsMarkdown = /\.md$/i.test(doc.path || "");
   updateLargeDocumentState(doc.content, true);
-  state.lastSavedContent = doc.content;
   state.selectedNode = doc.path;
   state.selectedFolder = doc.path.includes("/") ? doc.path.split("/").slice(0, -1).join("/") : "";
   state.folderExplicit = false;
@@ -3529,6 +3593,17 @@ async function openDoc(docPath, options = {}) {
   els.docTitle.textContent = displayName(item);
   els.docTitle.title = doc.title || displayName(item);
   els.markdownView.classList.remove("empty-state");
+  // 检查草稿并设置编辑器内容——必须在 await renderReaderContent 之前完成，
+  // 避免 await 期间 auto-save 把旧文档内容保存到新路径
+  const draftContent = restoreDraft(doc.path);
+  const effectiveContent = (draftContent != null && draftContent !== doc.content) ? draftContent : doc.content;
+  els.editor.value = effectiveContent;
+  state.lastSavedContent = doc.content;
+  if (draftContent != null && draftContent !== doc.content) {
+    state.currentContent = draftContent;
+    setSaveStatus("\u672a\u4fdd\u5b58", true);
+    scheduleAutoSave();
+  }
   if (state.currentIsMarkdown) {
     try {
       await renderReaderContent(doc.content, { searchTerm: options.searchTerm || "" });
@@ -3545,15 +3620,6 @@ async function openDoc(docPath, options = {}) {
     preview.style.padding = "16px";
     els.markdownView.appendChild(preview);
     renderOutlineItems([]);
-  }
-  // 检查是否有未保存的草稿，如果有则恢复
-  const draftContent = restoreDraft(doc.path);
-  const effectiveContent = (draftContent != null && draftContent !== doc.content) ? draftContent : doc.content;
-  els.editor.value = effectiveContent;
-  if (draftContent != null && draftContent !== doc.content) {
-    state.currentContent = draftContent;
-    setSaveStatus("\u672a\u4fdd\u5b58", true);
-    scheduleAutoSave();
   }
   els.preview.classList.remove("preview-pending");
   if (state.largeDocument) {
@@ -3585,6 +3651,33 @@ async function openDoc(docPath, options = {}) {
   lastInputValue = effectiveContent;
   setSaveStatus("\u4fdd\u5b58", false);
   syncTreeSelectionState();
+  // 二次校验：确保编辑器内容与当前文档一致（CodeMirror setter 可能异步或被覆盖）
+  const _resyncEditor = (label) => {
+    if (!state.currentPath || state.currentPath !== doc.path) return;
+    if (els.editor.value !== effectiveContent) {
+      console.warn(`[openDoc] editor content mismatch (${label}), resyncing. path=${doc.path} editor_len=${els.editor.value?.length || 0} target_len=${effectiveContent.length}`);
+      try {
+        if (els.editor.view && typeof els.editor.view.dispatch === "function") {
+          els.editor.view.dispatch({
+            changes: { from: 0, to: els.editor.value.length, insert: effectiveContent },
+            selection: { anchor: 0, head: 0 },
+            scrollIntoView: true,
+          });
+        } else {
+          els.editor.value = effectiveContent;
+        }
+      } catch (e) {
+        console.error("resyncEditor dispatch failed, using fallback setter:", e);
+        try { els.editor.value = effectiveContent; }
+        catch (e2) { logDocError("编辑器内容同步", e2); }
+      }
+      state.lastSavedContent = doc.content;
+      if (draftContent != null && draftContent !== doc.content) state.currentContent = draftContent;
+    }
+  };
+  _resyncEditor("immediate");
+  requestAnimationFrame(() => { if (seq === state.openSeq) _resyncEditor("rAF-1"); });
+  requestAnimationFrame(() => requestAnimationFrame(() => { if (seq === state.openSeq) _resyncEditor("rAF-2"); }));
   if (state.mode === "edit" && state.editorOutlineVisible) {
     renderEditorOutline(effectiveContent);
   }
@@ -3594,12 +3687,14 @@ async function openDoc(docPath, options = {}) {
     if (state.mode === "edit" && els.editor.searchInEditor) {
       const term = String(options.searchTerm).trim();
       if (term) {
-        requestAnimationFrame(() => {
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          if (seq !== state.openSeq) return;
+          _resyncEditor("pre-search");
           const result = els.editor.searchInEditor(term);
           if (result.total > 0 && result.matches && result.matches[0]) {
             els.editor.jumpToMatch(result.matches[0].from, result.matches[0].to);
           }
-        });
+        }));
       }
     }
   }
@@ -3610,6 +3705,7 @@ async function openDoc(docPath, options = {}) {
   updateStatusCreated(state.currentDocCreated);
   updateStatusEncoding(state.currentEncoding);
   refreshStatusBar();
+  return true;
 }
 
 function debounce(fn, wait = 180) {
@@ -3664,16 +3760,29 @@ function _formatClock(d) {
   return `${hh}:${mi}:${ss}`;
 }
 
+const _statusFieldCache = new Map();
+function _getStatusFieldEls(field) {
+  let els = _statusFieldCache.get(field);
+  if (!els) {
+    els = [...document.querySelectorAll(`[data-status-field="${field}"]`)];
+    _statusFieldCache.set(field, els);
+  }
+  return els;
+}
+function _invalidateStatusCache(field) {
+  if (field) _statusFieldCache.delete(field);
+  else _statusFieldCache.clear();
+}
 function _setStatusField(field, text) {
-  document.querySelectorAll(`[data-status-field="${field}"]`).forEach((el) => {
+  for (const el of _getStatusFieldEls(field)) {
     el.textContent = text;
-  });
+  }
 }
 
 function _setStatusItemState(field, className, on) {
-  document.querySelectorAll(`[data-status-field="${field}"]`).forEach((el) => {
+  for (const el of _getStatusFieldEls(field)) {
     el.classList.toggle(className, !!on);
-  });
+  }
 }
 
 function _countVisibleChars(text) {
@@ -3749,9 +3858,9 @@ function _renderPomodoro() {
   _setStatusItemState("pomodoro", "running", _pomodoroState.mode === "focus");
   _setStatusItemState("pomodoro", "break", _pomodoroState.mode === "break");
   const focusLabel = _pomodoroState.mode === "focus" ? "专注中" : (_pomodoroState.mode === "break" ? "休息中" : "空闲");
-  document.querySelectorAll('[data-status-field="pomodoro"]').forEach((el) => {
+  for (const el of _getStatusFieldEls("pomodoro")) {
     el.title = `番茄钟 · ${focusLabel}（点击切换启动/停止）`;
-  });
+  }
 }
 
 function _tickPomodoro() {
@@ -3800,8 +3909,19 @@ function refreshStatusBar() {
   _renderPomodoro();
 }
 
-// 系统时间每秒刷新
-setInterval(updateStatusSystemTime, 1000);
+// 系统时间刷新（页面隐藏时暂停以节省 CPU）
+let _systemTimeInterval = null;
+function _startSystemTimeInterval() {
+  if (_systemTimeInterval) return;
+  _systemTimeInterval = setInterval(updateStatusSystemTime, 1000);
+}
+function _stopSystemTimeInterval() {
+  if (_systemTimeInterval) {
+    clearInterval(_systemTimeInterval);
+    _systemTimeInterval = null;
+  }
+}
+_startSystemTimeInterval();
 // 番茄钟按钮：绑定到所有状态栏中的番茄钟项
 document.querySelectorAll('[data-action="toggle-pomodoro"]').forEach((el) => {
   el.addEventListener("click", _togglePomodoro);
@@ -4172,64 +4292,6 @@ els.editorAiDialogInput?.addEventListener("keydown", (event) => {
 
 els.editorAiDialogSubmit?.addEventListener("click", () => {
   submitAiInlineDialog();
-});
-
-els.editor?.addEventListener("scroll", () => {
-  if (state.aiInline.visible) {
-    const view = els.editor.view;
-    if (view) {
-      try {
-        const cursorPos = els.editor.selectionStart ?? 0;
-        const coords = view.coordsAtPos(cursorPos);
-        const editorEl = document.getElementById("editor");
-        if (coords && editorEl) {
-          const editorRect = editorEl.getBoundingClientRect();
-          if (coords.top < editorRect.top || coords.top > editorRect.bottom) {
-            closeAiInlineDialog();
-          } else {
-            positionAiInlineDialog();
-          }
-        }
-      } catch (e) { positionAiInlineDialog(); }
-    }
-  }
-  const ph = document.getElementById("editorPlaceholder");
-  if (ph && state.mode === "edit" && state.currentPath) {
-    const cursorLineBlank = _isCursorLineBlank();
-    const view = els.editor.view;
-    const cursorPos = els.editor.selectionStart ?? 0;
-    if (!cursorLineBlank) {
-      ph.classList.remove("visible");
-      ph.style.display = "none";
-      return;
-    }
-    if (!view) return;
-    try {
-      const coords = view.coordsAtPos(cursorPos);
-      const editorEl = document.getElementById("editor");
-      if (coords && editorEl) {
-        const editorRect = editorEl.getBoundingClientRect();
-        if (coords.top < editorRect.top || coords.top > editorRect.bottom - 20) {
-          ph.classList.remove("visible");
-          ph.style.display = "none";
-          return;
-        }
-        ph.style.top = `${coords.top - editorRect.top + 2}px`;
-        ph.style.left = `${coords.left - editorRect.left + 8}px`;
-        ph.style.right = "8px";
-        ph.style.display = "block";
-        ph.classList.add("visible");
-      }
-    } catch (e) {}
-  }
-}, { passive: true });
-
-window.addEventListener("resize", () => {
-  if (state.aiInline.visible) positionAiInlineDialog();
-  const ph = document.getElementById("editorPlaceholder");
-  if (ph && ph.classList.contains("visible") && state.mode === "edit" && state.currentPath) {
-    _showPlaceholder();
-  }
 });
 
 // ===== 编辑器关键字检索弹窗 =====
@@ -5490,13 +5552,13 @@ function setImmersiveEditing(enabled) {
   if (enabled && !state.currentPath) return showToast("请先打开一篇文档");
   const wasImmersive = state.immersive;
   state.immersive = Boolean(enabled);
+  state.lightweight = state.immersive;
   els.appShell.classList.toggle("immersive", state.immersive);
   document.body.classList.toggle("immersive-editing", state.immersive);
-  els.focusModeBtn.textContent = state.immersive ? "退出沉浸" : "沉浸";
+  document.body.classList.toggle("lightweight-editor", state.lightweight);
+  els.focusModeBtn.textContent = state.immersive ? "退出沉浸 (轻量)" : "⚡ 沉浸";
   els.focusModeBtn.setAttribute("aria-pressed", String(state.immersive));
   if (state.immersive) {
-    // 进入沉浸：记录当前大纲/预览状态，然后直接隐藏大纲与预览，仅保留编辑器。
-    // 大纲隐藏不写入 localStorage，避免异常退出后重载丢失用户偏好。
     if (!wasImmersive) {
       state.previewBeforeImmersive = state.previewVisible;
       state.outlineBeforeImmersive = state.editorOutlineVisible;
@@ -5504,11 +5566,29 @@ function setImmersiveEditing(enabled) {
     if (state.mode !== "edit") setMode("edit");
     setEditorOutlineVisible(false, { persist: false });
     setPreviewVisible(false);
+    // 轻量模式：终止 Markdown Worker，清除待渲染队列，释放内存
+    if (state.markdownWorker) {
+      state.markdownWorkerPending.forEach((p) => p.reject(new Error("轻量模式终止")));
+      state.markdownWorkerPending.clear();
+      state.markdownWorker.terminate();
+      state.markdownWorker = null;
+      state.markdownWorkerFailed = false;
+      state.markdownWorkerFailedUntil = 0;
+    }
+    if (state.previewTimer) {
+      clearTimeout(state.previewTimer);
+      state.previewTimer = 0;
+    }
     requestAnimationFrame(() => els.editor.focus());
   } else if (wasImmersive) {
-    // 退出沉浸：显示大纲、编辑器、预览栏（恢复三栏布局）。
+    // 退出沉浸：恢复完整功能
     setEditorOutlineVisible(true);
     setPreviewVisible(true);
+    // 重建 Markdown Worker 并刷新预览
+    if (state.currentPath && state.currentIsMarkdown) {
+      ensureMarkdownWorker();
+      requestAnimationFrame(() => schedulePreviewUpdate({ immediate: true }));
+    }
     requestAnimationFrame(() => els.editor.focus());
   }
 }
@@ -5531,21 +5611,31 @@ async function saveCurrentDoc({ refreshTree = false, keepEditorState = true, ren
   setSaveStatus("\u4fdd\u5b58\u4e2d", true);
   try {
     const result = await api.post("/api/save", { path: state.currentPath, content, baseHash: state.currentVersion || "" });
-    state.currentVersion = result.contentSha256 || state.currentVersion;
+    // currentVersion 更新必须在 seq 检查之后：连续保存时旧请求晚返回会用旧 hash 覆盖新 hash，
+    // 导致后续保存的 baseHash 不对，可能引发冲突或覆盖他人修改。
+    if (seq !== state.saveSeq) return true;
+    // 服务端应返回 contentSha256 用于乐观锁；缺失时视为保存成功但跳过版本号更新，
+    // 兼容旧服务端（仅返回 {ok, path}），同时记录警告便于排查
+    if (!result || typeof result.contentSha256 !== "string" || !result.contentSha256) {
+      console.warn("[文档异常] stage=保存-返回校验 服务端未返回 contentSha256，跳过版本号更新");
+      // 保存成功但无 hash：不更新 currentVersion，下次保存 baseHash 为空字符串，
+      // 仅乐观锁检查可能失效，不影响基本保存功能
+    } else {
+      state.currentVersion = result.contentSha256;
+    }
   } catch (e) {
     const errorMessage = e?.response?.data?.error || e?.message || "保存失败";
     setSaveStatus("保存失败", false);
     showToast(errorMessage);
     return false;
   }
-  if (seq !== state.saveSeq) return true;
   const editorUnchanged = els.editor.value === content;
   const latestContent = els.editor.value;
   state.currentContent = editorUnchanged ? content : latestContent;
   updateLargeDocumentState(state.currentContent);
   state.lastSavedContent = content;
   clearDraft(state.currentPath);
-  if (renderAfterSave && editorUnchanged && state.mode === "read") {
+  if (renderAfterSave && editorUnchanged && state.mode === "view") {
     await renderReaderContent(content);
   } else if (renderAfterSave && editorUnchanged && state.previewVisible) {
     schedulePreviewUpdate({ immediate: true, forceContent: content });
@@ -5613,6 +5703,20 @@ async function runAutoSave() {
     return;
   }
   if (els.editor.value === state.lastSavedContent) return;
+  // 安全检查：如果编辑器内容包含的 frontmatter title/头部文本 与当前文档路径明显不匹配
+  // （例如当前路径=湖南移动MC.md，但编辑器frontmatter title=青海移动MR622-CK），跳过保存。
+  // 仅当编辑器内容与state.currentContent/草稿的SHA一致或用户确认手动编辑过才保存。
+  const _safeEditorVal = String(els.editor.value || "");
+  const _safeCurrent = String(state.currentContent || state.lastSavedContent || "");
+  if (_safeCurrent && _safeCurrent.length > 16 && _safeEditorVal.length > 16) {
+    const _shortCurr = _safeCurrent.slice(0, 64);
+    const _shortEdit = _safeEditorVal.slice(0, 64);
+    if (_shortCurr !== _shortEdit && els.editor.value.length === state.lastSavedContent.length) {
+      // 长度相同但前64字节不同 — 很可能是编辑器错位未同步，拒绝保存
+      console.warn("[runAutoSave] skipped: editor head mismatch vs currentContent (likely unsynced editor). state.currentPath=", state.currentPath);
+      return;
+    }
+  }
   state.autoSave.inFlight = true;
   try {
     await saveCurrentDoc({ keepEditorState: false, renderAfterSave: false });
@@ -5639,6 +5743,14 @@ function scheduleAutoSave() {
   if (!state.autoSave.maxTimer) state.autoSave.maxTimer = setTimeout(() => requestAutoSaveRun(1200), max);
 }
 
+// 文档数据安全异常统一处理：记录上下文 + 提示用户，禁止静默吞掉
+function logDocError(stage, error, docPath) {
+  const path = docPath || state.currentPath || "(unknown)";
+  const msg = error?.message || String(error);
+  console.error(`[文档异常] stage=${stage} path=${path}`, error);
+  showToast(`文档处理异常（${stage}）：${msg}`);
+}
+
 // 草稿保存：将未保存的编辑内容暂存到 localStorage，防止意外关闭丢失
 let draftSaveTimer = 0;
 function saveDraft() {
@@ -5652,20 +5764,44 @@ function saveDraft() {
       } else {
         localStorage.removeItem("draft:" + state.currentPath);
       }
-    } catch (_) {}
+    } catch (e) {
+      // 草稿保存失败（如 localStorage 满）：必须提示用户，否则编辑内容可能在崩溃时丢失
+      logDocError("草稿保存", e);
+    }
   }, 800);
+}
+
+// 同步保存草稿（无防抖）：用于切换文档前立即持久化旧文档编辑，
+// 避免 800ms 防抖窗口内切换导致旧文档未保存内容丢失。
+function saveDraftNow() {
+  clearTimeout(draftSaveTimer);
+  if (!state.currentPath || state.mode !== "edit") return;
+  try {
+    const content = els.editor.value;
+    if (content !== state.lastSavedContent) {
+      localStorage.setItem("draft:" + state.currentPath, content);
+    } else {
+      localStorage.removeItem("draft:" + state.currentPath);
+    }
+  } catch (e) {
+    logDocError("切换前草稿保存", e);
+  }
 }
 
 function restoreDraft(docPath) {
   try {
     const draft = localStorage.getItem("draft:" + docPath);
     if (draft != null) return draft;
-  } catch (_) {}
+  } catch (e) {
+    // 草稿读取失败：不阻断打开流程，但必须提示用户草稿可能存在但无法恢复
+    logDocError("草稿恢复", e, docPath);
+  }
   return null;
 }
 
 function clearDraft(docPath) {
-  try { localStorage.removeItem("draft:" + docPath); } catch (_) {}
+  try { localStorage.removeItem("draft:" + docPath); }
+  catch (e) { logDocError("草稿清理", e, docPath); }
 }
 
 async function normalizeAllToMarkdown() {
@@ -6063,7 +6199,10 @@ function scheduleGraphWorkerIdle() {
 }
 
 function ensureGraphWorker() {
-  if (state.graphWorker || state.graphWorkerFailed || typeof Worker === "undefined") return state.graphWorker;
+  // Graph Worker 失败后进入 5 秒冷却期，过期后允许重建，避免图谱布局永久退回主线程
+  if (state.graphWorker || typeof Worker === "undefined") return state.graphWorker;
+  if (state.graphWorkerFailed && Date.now() < state.graphWorkerFailedUntil) return null;
+  state.graphWorkerFailed = false;
   try {
     const worker = new Worker(GRAPH_WORKER_URL);
     worker.onmessage = (event) => {
@@ -6077,6 +6216,7 @@ function ensureGraphWorker() {
     };
     worker.onerror = (event) => {
       state.graphWorkerFailed = true;
+      state.graphWorkerFailedUntil = Date.now() + 5000;
       for (const pending of state.graphWorkerPending.values()) pending.reject(event.error || new Error("Graph worker unavailable"));
       state.graphWorkerPending.clear();
       worker.terminate();
@@ -6086,6 +6226,7 @@ function ensureGraphWorker() {
     state.graphWorker = worker;
   } catch {
     state.graphWorkerFailed = true;
+    state.graphWorkerFailedUntil = Date.now() + 5000;
   }
   return state.graphWorker;
 }
@@ -6817,9 +6958,9 @@ function stopGraphSimulation() {
 function graphSimulationInterval(now, cache) {
   const count = cache.nodes.length;
   const urgent = Boolean(state.graphDrag) || now < state.graphView.chainUntil || now < state.graphView.reboundUntil;
-  if (urgent) return count > 900 ? 42 : count > 500 ? 36 : 30;
-  if (state.graphView.hoveredId || cache.maxEnergy > 0.08) return count > 900 ? 56 : count > 500 ? 45 : 40;
-  return count > 900 ? 100 : count > 500 ? 80 : count > 250 ? 66 : 50;
+  if (urgent) return count > 900 ? 48 : count > 500 ? 42 : 36;
+  if (state.graphView.hoveredId || cache.maxEnergy > 0.08) return count > 900 ? 64 : count > 500 ? 54 : 48;
+  return count > 900 ? 120 : count > 500 ? 100 : count > 250 ? 84 : 70;
 }
 
 function queueGraphSimulation(delay = 0) {
@@ -6838,6 +6979,10 @@ function startGraphSimulation() {
   const now = performance.now();
   if ((!state.graphView.dynamic && now > state.graphView.chainUntil && now > state.graphView.reboundUntil) || graphMotionReduced()) return;
   if (state.mode !== "graph" || document.hidden || !state.graphView.pageActive) return;
+  if (state.graphView.lastInteraction && now - state.graphView.lastInteraction > 10000 && !state.graphDrag && !state.graphView.hoveredId) {
+    stopGraphSimulation();
+    return;
+  }
   const urgent = Boolean(state.graphDrag) || now < state.graphView.chainUntil || now < state.graphView.reboundUntil;
   if (urgent && state.graphView.simulationTimer) {
     clearTimeout(state.graphView.simulationTimer);
@@ -7044,7 +7189,7 @@ function drawGraph() {
     ctx.globalAlpha = focused && queryRelated ? Math.min(0.78, (baseAlpha + energy * 0.24) * edgeOpacityScale) : 0.022 * edgeOpacityScale;
     ctx.lineWidth = (edge.backbone ? 0.86 : 0.34) + Math.min(1.35, edge.weight * (edge.backbone ? 0.14 : 0.055)) + energy * 0.8;
     ctx.shadowColor = edge.backbone && focused ? ctx.strokeStyle : "transparent";
-    ctx.shadowBlur = edge.backbone && focused ? (3 + energy * 6) * glowScale : 0;
+    ctx.shadowBlur = edge.backbone && focused ? (2 + energy * 4) * glowScale : 0;
     const dx = pb.x - pa.x;
     const dy = pb.y - pa.y;
     const distance = Math.max(1, Math.hypot(dx, dy));
@@ -7087,7 +7232,7 @@ function drawGraph() {
     const related = !focusId || connected.has(node.id);
     const queryMatch = !query || matches.has(node.id);
     const energy = clamp(node.energy || 0, 0, 1);
-    const idlePulse = view.dynamic ? Math.sin(motionTime * 0.0015 + graphHash(node.id) * Math.PI * 2) * 0.014 : 0;
+    const idlePulse = view.dynamic ? Math.sin(motionTime * 0.0015 + graphHash(node.id) * Math.PI * 2) * 0.008 : 0;
     const radius = graphNodeRadius(node) * clamp(view.scale, 0.72, 1.18) * (1 + idlePulse + energy * 0.12);
     const kindColor = node.kind === "tag" ? palette.tag : node.kind === "keyword" ? palette.keyword : node.kind === "missing" ? palette.missing : palette.doc;
     ctx.globalAlpha = related && queryMatch ? 1 : query && matches.has(node.id) ? 1 : 0.18;
@@ -7095,7 +7240,7 @@ function drawGraph() {
     ctx.strokeStyle = active || hovered ? palette.active : node.kind === "doc" ? palette.docBorder : kindColor;
     ctx.lineWidth = active || hovered ? 2.6 : 1.2;
     ctx.shadowColor = active || hovered ? palette.active : energy > 0.08 ? kindColor : "transparent";
-    ctx.shadowBlur = active || hovered ? 14 * glowScale : energy > 0.08 ? (5 + energy * 9) * glowScale : 0;
+    ctx.shadowBlur = active || hovered ? 10 * glowScale : energy > 0.08 ? (3 + energy * 6) * glowScale : 0;
     ctx.beginPath();
     if (node.kind === "tag") {
       ctx.moveTo(p.x, p.y - radius);
@@ -7200,6 +7345,7 @@ function scheduleGraphHover(clientX, clientY) {
     const nextId = node?.id || "";
     if (nextId !== state.graphView.hoveredId) {
       state.graphView.hoveredId = nextId;
+      state.graphView.lastInteraction = performance.now();
       scheduleGraphDraw();
     }
     updateGraphTooltip(node, eventLike);
@@ -8466,6 +8612,7 @@ const gsCount = document.getElementById("globalSearchCount");
 let gsSeq = 0;
 let gsSelectedIndex = -1;
 let gsCurrentItems = [];
+let gsDisplayOrder = [];
 
 function openGlobalSearch() {
   if (!gsOverlay) return;
@@ -8516,19 +8663,22 @@ const gsDebounced = debounce(async (query) => {
     gsResults.innerHTML = "";
     gsCount.textContent = "";
     gsCurrentItems = [];
+    gsDisplayOrder = [];
+    gsSelectedIndex = -1;
     return;
   }
   try {
     const { results } = await api.get(`/api/search?q=${encodeURIComponent(query)}`);
     if (seq !== gsSeq) return;
     gsCurrentItems = results.slice(0, 50);
-    gsSelectedIndex = gsCurrentItems.length ? 0 : -1;
     gsCount.textContent = `${results.length} 个结果`;
     if (!gsCurrentItems.length) {
       gsResults.innerHTML = `<div style="text-align:center;padding:32px 0;color:var(--muted,#999);font-size:13px;">未找到匹配内容</div>`;
+      gsDisplayOrder = [];
+      gsSelectedIndex = -1;
       return;
     }
-    // 按文件分组（保留原始数组索引，避免分组后 idx 与 gsCurrentItems 不匹配）
+    // 按文件分组，记录渲染顺序与原始数组索引的映射（gsDisplayOrder 按显示顺序存 origIdx）
     const groups = {};
     const order = [];
     for (let i = 0; i < gsCurrentItems.length; i++) {
@@ -8538,19 +8688,22 @@ const gsDebounced = debounce(async (query) => {
       if (!groups[folder]) { groups[folder] = []; order.push(folder); }
       groups[folder].push({ item, file, origIdx: i });
     }
+    gsDisplayOrder = [];
     let html = "";
     for (const folder of order) {
       html += `<div class="global-search-group">${escapeHtmlGs(folder)}</div>`;
       for (const { item, file, origIdx } of groups[folder]) {
-        const selectedCls = origIdx === gsSelectedIndex ? " selected" : "";
-        html += `<button class="global-search-item${selectedCls}" data-idx="${origIdx}" data-path="${escapeHtmlGs(item.path)}" data-query="${escapeHtmlGs(query)}">
+        gsDisplayOrder.push(origIdx);
+        html += `<button class="global-search-item" data-idx="${origIdx}" data-path="${escapeHtmlGs(item.path)}" data-query="${escapeHtmlGs(query)}">
           <span class="global-search-item-title">${escapeHtmlGs(displayName(file))}</span>
           <span class="global-search-item-path">${escapeHtmlGs(displayRelativePath(item.path))}</span>
           <span class="global-search-item-snippet">${highlightSnippet(item.snippet || item.content || "", query)}</span>
         </button>`;
       }
     }
+    gsSelectedIndex = gsDisplayOrder.length ? 0 : -1;
     gsResults.innerHTML = html;
+    updateGsSelection();
   } catch (err) {
     gsResults.innerHTML = `<div style="text-align:center;padding:24px;color:var(--warn,#d97706);font-size:13px;">搜索出错，请重试</div>`;
   }
@@ -8564,25 +8717,28 @@ gsInput?.addEventListener("keydown", (e) => {
   if (e.key === "Escape") { closeGlobalSearch(); return; }
   if (e.key === "ArrowDown") {
     e.preventDefault();
-    if (gsCurrentItems.length === 0) return;
-    gsSelectedIndex = Math.min(gsSelectedIndex + 1, gsCurrentItems.length - 1);
+    if (gsDisplayOrder.length === 0) return;
+    gsSelectedIndex = Math.min(gsSelectedIndex + 1, gsDisplayOrder.length - 1);
     updateGsSelection();
   } else if (e.key === "ArrowUp") {
     e.preventDefault();
-    if (gsCurrentItems.length === 0) return;
+    if (gsDisplayOrder.length === 0) return;
     gsSelectedIndex = Math.max(gsSelectedIndex - 1, 0);
     updateGsSelection();
   } else if (e.key === "Enter") {
     e.preventDefault();
-    if (gsSelectedIndex >= 0 && gsSelectedIndex < gsCurrentItems.length) {
-      openGsResult(gsCurrentItems[gsSelectedIndex], gsInput.value.trim());
+    if (gsSelectedIndex >= 0 && gsSelectedIndex < gsDisplayOrder.length) {
+      const origIdx = gsDisplayOrder[gsSelectedIndex];
+      openGsResult(gsCurrentItems[origIdx], gsInput.value.trim());
     }
   }
 });
 
 function updateGsSelection() {
+  const currentOrigIdx = (gsSelectedIndex >= 0 && gsSelectedIndex < gsDisplayOrder.length)
+    ? gsDisplayOrder[gsSelectedIndex] : -1;
   gsResults.querySelectorAll(".global-search-item").forEach((el) => {
-    el.classList.toggle("selected", Number(el.dataset.idx) === gsSelectedIndex);
+    el.classList.toggle("selected", Number(el.dataset.idx) === currentOrigIdx);
   });
   const sel = gsResults.querySelector(".global-search-item.selected");
   if (sel) sel.scrollIntoView({ block: "nearest" });
@@ -8591,15 +8747,17 @@ function updateGsSelection() {
 gsResults?.addEventListener("click", (e) => {
   const btn = e.target.closest(".global-search-item");
   if (!btn) return;
-  const idx = Number(btn.dataset.idx);
-  if (idx >= 0 && idx < gsCurrentItems.length) {
-    openGsResult(gsCurrentItems[idx], gsInput.value.trim());
+  const origIdx = Number(btn.dataset.idx);
+  if (origIdx >= 0 && origIdx < gsCurrentItems.length) {
+    gsSelectedIndex = gsDisplayOrder.indexOf(origIdx);
+    openGsResult(gsCurrentItems[origIdx], gsInput.value.trim());
   }
 });
 
 function openGsResult(item, query) {
   closeGlobalSearch();
-  setMode("view");
+  // 跳过 setMode 的旧内容渲染：openDoc 马上会渲染新文档，避免重复渲染与闪烁
+  setMode("view", { deferReaderRender: true });
   openDoc(item.path, { searchTerm: query });
 }
 
@@ -8682,7 +8840,6 @@ if (els.workspaceBtn) {
   });
 
   // 窗口尺寸变化后菜单项位置会偏移，直接关闭已展开的下拉，避免错位
-  window.addEventListener("resize", closeAllMenus, { passive: true });
 
   const actions = {
     "new-doc": () => openCreateModal("doc"),
@@ -9371,7 +9528,6 @@ els.editor.addEventListener("compositionend", () => {
   scheduleAutoSave();
   scheduleAiEditHint();
 });
-els.editor.addEventListener("scroll", () => { hideAiEditHintPopover(); syncPreviewToEditor(false); }, { passive: true });
 els.editor.addEventListener("select", () => { syncPreviewToEditor(); scheduleAiEditHint(); }, { passive: true });
 
 function addLineCursor(direction) {
@@ -9759,8 +9915,12 @@ function updateMultiCursorDisplay() {
   overlay.style.display = state.secondaryCursors.length > 0 ? "block" : "none";
 }
 
-els.editor.addEventListener("scroll", updateMultiCursorDisplay);
-window.addEventListener("resize", updateMultiCursorDisplay);
+els.editor.addEventListener("scroll", () => {
+  syncPreviewToEditor(false);
+  hideAiEditHintPopover();
+  updateMultiCursorDisplay();
+}, { passive: true });
+
 // Capture before CodeMirror's native paste handler so auto-wrapping replaces
 // the paste instead of inserting a second, unwrapped copy afterwards.
 els.editor.addEventListener("paste", handleEditorPaste, { capture: true });
@@ -10518,7 +10678,6 @@ function initEditorSplitters() {
   }
 
   applyLayout();
-  window.addEventListener("resize", () => requestAnimationFrame(applyLayout));
 
   function startOutlineDrag(event) {
     event.preventDefault();
@@ -11103,15 +11262,26 @@ els.resetGraphPhysicsBtn?.addEventListener("click", () => {
 syncGraphPhysicsControls();
 document.addEventListener("visibilitychange", () => {
   state.graphView.pageActive = !document.hidden;
-  if (document.hidden) stopGraphSimulation();
-  else startGraphSimulation();
+  if (document.hidden) {
+    stopGraphSimulation();
+    _stopSystemTimeInterval();
+  } else {
+    startGraphSimulation();
+    _startSystemTimeInterval();
+  }
   // 页面隐藏时立即保存草稿
   if (document.hidden) saveDraft();
+  // 状态缓存失效
+  _invalidateStatusCache();
 });
 window.addEventListener("pagehide", () => {
   // 页面关闭前同步保存草稿
   if (state.currentPath && state.mode === "edit" && els.editor.value !== state.lastSavedContent) {
-    try { localStorage.setItem("draft:" + state.currentPath, els.editor.value); } catch (_) {}
+    try { localStorage.setItem("draft:" + state.currentPath, els.editor.value); }
+    catch (e) {
+      // 页面即将关闭，toast 可能来不及显示，至少记录到 console
+      console.error("[文档异常] stage=页面关闭草稿保存 path=" + state.currentPath, e);
+    }
   }
 });
 window.addEventListener("blur", () => {
@@ -11157,6 +11327,7 @@ els.canvas.addEventListener("pointerdown", (event) => {
   }
   els.canvas.classList.add("dragging");
   els.canvas.setPointerCapture?.(event.pointerId);
+  state.graphView.lastInteraction = performance.now();
 });
 els.canvas.addEventListener("pointermove", (event) => {
   if (!state.graphDrag) {
@@ -11228,13 +11399,29 @@ els.canvas.addEventListener("keydown", (event) => {
   event.preventDefault();
   scheduleGraphDraw();
 });
-window.addEventListener("resize", debounce(() => {
-  restoreSidebarWidth();
-  if (state.mode === "graph") {
-    resizeCanvas();
-    fitGraphView();
-  }
-}, 200));
+
+// 统一的 resize 去抖处理
+let _resizeTimer = null;
+window.addEventListener("resize", () => {
+  if (_resizeTimer) return;
+  _resizeTimer = setTimeout(() => {
+    _resizeTimer = null;
+    // 触发所有 resize 相关操作
+    if (state.aiInline.visible) positionAiInlineDialog();
+    const ph = document.getElementById("editorPlaceholder");
+    if (ph && ph.classList.contains("visible") && state.mode === "edit" && state.currentPath) {
+      _showPlaceholder();
+    }
+    closeAllMenus();
+    updateMultiCursorDisplay();
+    requestAnimationFrame(applyLayout);
+    restoreSidebarWidth();
+    if (state.mode === "graph") {
+      resizeCanvas();
+      fitGraphView();
+    }
+  }, 100);
+});
 
 if (els.recentDocs) {
   els.recentDocs.addEventListener("wheel", (event) => {
