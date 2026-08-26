@@ -539,12 +539,21 @@ function renderWithCache({ source = "", searchTerm = "", includeHtml = true, inc
   return value;
 }
 
-self.onmessage = (event) => {
-  const { seq, source = "", searchTerm = "", includeHtml = true, includeOutline = true } = event.data || {};
+self.onmessage = async (event) => {
+  const data = event.data || {};
+  const { seq, searchTerm = "", includeHtml = true, includeOutline = true, useBlob = false } = data;
+  // Blob 传输：从 Blob 重建源文本
+  let source = data.source || "";
+  if (useBlob && data.blob) {
+    try { source = await data.blob.text(); } catch (_) { source = ""; }
+  }
   const result = renderWithCache({ source, searchTerm, includeHtml, includeOutline });
-  self.postMessage({
-    seq,
-    html: result.html,
-    outline: result.outline,
-  });
+  // 大响应也用 Blob 传输（避免结构化克隆在主线程产生峰值）
+  const HTML_BLOB_THRESHOLD = 100 * 1024; // 100KB
+  if (useBlob && result.html && result.html.length > HTML_BLOB_THRESHOLD) {
+    const htmlBlob = new Blob([result.html]);
+    self.postMessage({ seq, useBlob: true, htmlBlob, outline: result.outline }, [htmlBlob]);
+  } else {
+    self.postMessage({ seq, useBlob: false, html: result.html, outline: result.outline });
+  }
 };

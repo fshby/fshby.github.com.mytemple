@@ -2,7 +2,18 @@ import { createServer } from "node:http";
 import { createHash, randomUUID } from "node:crypto";
 import { cp, readFile, writeFile, readdir, stat, mkdir, rm, rename, unlink, access } from "node:fs/promises";
 import { existsSync, readFileSync, writeFileSync, watch } from "node:fs";
-import { execFileSync } from "node:child_process";
+import { execFileSync, execFile } from "node:child_process";
+import { promisify } from "node:util";
+const execFileAsync = promisify(execFile);
+
+async function execFileCapture(cmd, args, opts) {
+  try {
+    const { stdout, stderr } = await execFileAsync(cmd, args, opts);
+    return { stdout: stdout || "", stderr: stderr || "", error: null, killed: false };
+  } catch (err) {
+    return { stdout: err.stdout || "", stderr: err.stderr || "", error: err, killed: !!err.killed };
+  }
+}
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createDocumentTemplate, frontmatterSummary, normalizeFrontmatter } from "./server/frontmatter.js";
@@ -88,7 +99,7 @@ const LOG_LEVEL = process.env.MYTEMPLE_LOG_LEVEL || "warn";
 const MAX_DOCUMENT_CACHE_ENTRIES = 100;
 const MAX_KNOWLEDGE_DOCUMENTS = 300;
 const TRIM_KNOWLEDGE_DOCUMENTS_TO = 200;
-const MEMORY_CHECK_INTERVAL_MS = 5 * 60 * 1000;
+const MEMORY_CHECK_INTERVAL_MS = 3 * 60 * 1000;
 
 function log(level, message) {
   const levels = { debug: 0, info: 1, warn: 2, error: 3 };
@@ -1608,13 +1619,21 @@ async function handleApi(req, res, url) {
     if (!existsSync(licenseFile)) {
       return json(res, 403, { code: "LICENSE_REQUIRED", error: "软件未授权，请先完成授权" });
     }
+    let licenseKey;
     try {
-      const licenseKey = await readFile(licenseFile, "utf8");
+      licenseKey = await readFile(licenseFile, "utf8");
+    } catch (readErr) {
+      // 文件系统瞬态错误（如 EACCES、EPIPE），不应作为授权失效处理
+      console.error("License file read error:", readErr.code, readErr.message);
+      return json(res, 503, { code: "LICENSE_TEMPORARY", error: "授权文件读取失败，请稍后重试" });
+    }
+    try {
       const result = await verifyLicense(licenseKey);
       if (!result.valid) {
         return json(res, 403, { code: "LICENSE_REQUIRED", error: result.error || "授权已失效，请重新授权" });
       }
     } catch (err) {
+      console.error("License verification error:", err.message);
       return json(res, 403, { code: "LICENSE_REQUIRED", error: "授权校验失败：" + err.message });
     }
   }
@@ -2486,57 +2505,45 @@ async function handleApi(req, res, url) {
   }
   if (url.pathname === "/api/browse-folder" && req.method === "POST") {
     let selected = "";
+    const timeout = process.platform === "win32" ? 130_000 : 120_000;
+    const runOpts = { timeout, windowsHide: false };
     if (process.platform === "win32") {
       try {
         const { writeFileSync, unlinkSync } = await import("node:fs");
-        const { execFileSync } = await import("node:child_process");
         const os = await import("node:os");
         const tmpVbs = path.join(os.tmpdir(), `browse_${Date.now()}.vbs`);
         const vbs = `Set shell = CreateObject("Shell.Application")\r\nSet folder = shell.BrowseForFolder(0, "选择工作路径", &H10 or &H40, &H11)\r\nIf Not folder Is Nothing Then\r\n  WScript.Echo folder.Self.Path\r\nEnd If\r\n`;
         writeFileSync(tmpVbs, vbs, { encoding: "utf-8" });
         try {
-          const buffer = execFileSync("wscript", [tmpVbs], { timeout: 130_000, windowsHide: false });
-          if (buffer && buffer.length > 0) {
-            selected = buffer.toString().trim();
-          } else {
-            const buffer2 = execFileSync("cscript", ["//Nologo", tmpVbs], { timeout: 130_000, windowsHide: false });
-            selected = (buffer2 || "").toString().trim();
-          }
-        } catch (e) {
-          if (e.stdout) selected = e.stdout.toString().trim();
-          else if (e.stderr) {
-            const stderr = e.stderr.toString();
+          const r1 = await execFileCapture("wscript", [tmpVbs], runOpts);
+          selected = (r1.stdout || "").toString().trim();
+          if (!selected) {
+            const stderr = (r1.stderr || "").toString();
             const match = stderr.match(/[A-Za-z]:\\[^\r\n]+/);
             if (match) selected = match[0].trim();
           }
-          if (!selected) {
-            try {
-              const buffer2 = execFileSync("cscript", ["//Nologo", tmpVbs], { timeout: 130_000, windowsHide: false });
-              selected = (buffer2 || "").toString().trim();
-            } catch {}
+          if (!selected && !r1.killed) {
+            const r2 = await execFileCapture("cscript", ["//Nologo", tmpVbs], runOpts);
+            selected = (r2.stdout || "").toString().trim();
           }
-        }
+          if (!selected) {
+            const r3 = await execFileCapture("cscript", ["//Nologo", tmpVbs], runOpts);
+            selected = (r3.stdout || "").toString().trim();
+          }
+        } catch (_) { selected = ""; }
         try { unlinkSync(tmpVbs); } catch {}
-      } catch (e) {
-        selected = "";
-      }
+      } catch (_) { selected = ""; }
     } else if (process.platform === "darwin") {
       try {
-        const { execFileSync } = await import("node:child_process");
         const script = `choose folder with prompt "选择工作路径" default location (path to desktop folder)`;
-        const buffer = execFileSync("osascript", ["-e", script], { timeout: 120_000 });
-        selected = (buffer || "").toString().trim().replace(/^alias\s*"?"?/i, "").replace(/"$/,"").trim();
-      } catch {
-        selected = "";
-      }
+        const r = await execFileCapture("osascript", ["-e", script], runOpts);
+        selected = (r.stdout || "").toString().trim().replace(/^alias\s*"?"?/i, "").replace(/"$/,"").trim();
+      } catch (_) { selected = ""; }
     } else {
       try {
-        const { execFileSync } = await import("node:child_process");
-        const buffer = execFileSync("zenity", ["--file-selection", "--directory", "--title=选择工作路径"], { timeout: 120_000 });
-        selected = (buffer || "").toString().trim();
-      } catch {
-        selected = "";
-      }
+        const r = await execFileCapture("zenity", ["--file-selection", "--directory", "--title=选择工作路径"], runOpts);
+        selected = (r.stdout || "").toString().trim();
+      } catch (_) { selected = ""; }
     }
     if (selected) return json(res, 200, { ok: true, path: selected });
     return json(res, 200, { ok: false, path: "" });

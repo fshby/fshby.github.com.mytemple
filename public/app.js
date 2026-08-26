@@ -31,7 +31,7 @@ const LARGE_PREVIEW_DELAY = 700;
 const CHUNKED_RENDER_BYTES = 500 * 1024;
 const CHUNK_RENDER_SLICE_BYTES = 150 * 1024;
 const GRAPH_WORKER_URL = "/graph-worker.js?v=20260810-graph-1";
-const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20260824-worker-12";
+const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20260825-worker-blob-1";
 // Markdown 渲染缓存版本戳：解析器或 CSS 规则升级时递增，确保旧缓存不被复用。
 const MARKDOWN_RENDER_VERSION = "callout-v9-final-v13-20260824-url-auto-1.8.63";
 const AI_HISTORY_KEY = "mytemple.ai.history.v1";
@@ -123,6 +123,8 @@ const state = {
   secondaryCursors: [],
   immersive: false,
   lightweight: false,
+  lowGpuMode: false,
+  licenseValidatedAt: 0,
   previewVisible: true,
   editorHidden: false,
   previewBeforeImmersive: true,
@@ -134,6 +136,7 @@ const state = {
   previewPending: null,
   previewAnchors: [],
   editorOutlineVisible: localStorage.getItem("editorOutlineVisible") !== "0",
+  lowGpuMode: localStorage.getItem("lowGpuMode") !== "false", // 默认开启低显存
   editorOutlineTimer: 0,
   editorOutlineSeq: 0,
   currentContentBytes: 0,
@@ -203,6 +206,7 @@ const els = {
   deleteBtn: document.querySelector("#deleteBtn"),
   saveBtn: document.querySelector("#saveBtn"),
   focusModeBtn: document.querySelector("#focusModeBtn"),
+  lowGpuToggle: document.querySelector("#lowGpuToggle"),
   previewToggleBtn: document.querySelector("#previewToggleBtn"),
   fitGraphBtn: document.querySelector("#fitGraphBtn"),
   graphStats: document.querySelector("#graphStats"),
@@ -546,6 +550,8 @@ const api = {
       try { detail = JSON.parse(body); } catch (_) {}
       if (response.status === 403 && detail.code === "LICENSE_REQUIRED") {
         window.dispatchEvent(new CustomEvent("license-required", { detail }));
+      } else if (response.status === 503 && detail.code === "LICENSE_TEMPORARY") {
+        console.warn("License temporarily unavailable:", detail.error);
       }
       throw new Error(detail.error || body);
     }
@@ -563,6 +569,8 @@ const api = {
       try { detail = JSON.parse(body); } catch (_) {}
       if (response.status === 403 && detail.code === "LICENSE_REQUIRED") {
         window.dispatchEvent(new CustomEvent("license-required", { detail }));
+      } else if (response.status === 503 && detail.code === "LICENSE_TEMPORARY") {
+        console.warn("License temporarily unavailable:", detail.error);
       }
       throw new Error(detail.error || body);
     }
@@ -1986,11 +1994,13 @@ function ensureMarkdownWorker() {
   try {
     state.markdownWorker = new Worker(MARKDOWN_WORKER_URL);
     state.markdownWorker.addEventListener("message", (event) => {
-      const { seq, html, outline } = event.data || {};
+      const data = event.data || {};
+      const seq = data.seq;
       const pending = state.markdownWorkerPending.get(seq);
       if (!pending) return;
       state.markdownWorkerPending.delete(seq);
-      pending.resolve({ html, outline });
+      // 传递完整 data，由 pending.resolve 处理 Blob/非 Blob 两种响应
+      pending.resolve(data);
     });
     state.markdownWorker.addEventListener("error", (event) => {
       state.markdownWorkerFailed = true;
@@ -2029,12 +2039,36 @@ function requestMarkdownRender({ source = "", searchTerm = "", includeHtml = tru
     });
   }
   const seq = ++state.markdownWorkerSeq;
+  // 大文档用 Blob 传输（零拷贝转移），避免结构化克隆在主线程产生内存峰值
+  const BLOB_THRESHOLD = 100 * 1024; // 100KB
+  const useBlob = source.length > BLOB_THRESHOLD;
+  const payload = { seq, searchTerm, includeHtml, includeOutline, useBlob };
+  const transferList = [];
+  if (useBlob) {
+    payload.blob = new Blob([source]);
+    transferList.push(payload.blob);
+  } else {
+    payload.source = source;
+  }
   return new Promise((resolve, reject) => {
     state.markdownWorkerPending.set(seq, {
-      resolve: (value) => { resolve(value); scheduleMarkdownWorkerIdle(); },
+      resolve: async (value) => {
+        // 响应也可能是 Blob（大 html），需要解包
+        try {
+          if (value && value.useBlob && value.htmlBlob) {
+            const html = await value.htmlBlob.text();
+            resolve({ html, outline: value.outline });
+          } else {
+            resolve(value);
+          }
+        } catch (err) {
+          resolve(value); // 降级：直接返回原值
+        }
+        scheduleMarkdownWorkerIdle();
+      },
       reject: (err) => { reject(err); scheduleMarkdownWorkerIdle(); },
     });
-    worker.postMessage({ seq, source, searchTerm, includeHtml, includeOutline });
+    worker.postMessage(payload, transferList);
   });
 }
 
@@ -5544,6 +5578,24 @@ function setEditorVisible(visible) {
           }
         } catch (_) {}
       });
+    });
+  });
+}
+
+// 低 GPU 模式：移除所有 backdrop-filter 和大范围 box-shadow，节省 GPU 合成层
+function setLowGpuMode(enabled) {
+  state.lowGpuMode = Boolean(enabled);
+  document.body.classList.toggle("low-gpu-mode", state.lowGpuMode);
+  if (els.lowGpuToggle) els.lowGpuToggle.checked = state.lowGpuMode;
+  try {
+    localStorage.setItem("lowGpuMode", String(state.lowGpuMode));
+  } catch (_) {}
+  // 强制重排以应用新样式
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      if (state.mode === "view" && state.currentContent) {
+        void renderReaderContent(state.currentContent);
+      }
     });
   });
 }
@@ -9998,8 +10050,9 @@ async function checkLicenseStatus() {
   try {
     const result = await api.get("/api/license/check");
     if (result.activated) {
-      els.licenseUnactivated.classList.add("hidden");
-      els.licenseActivated.classList.remove("hidden");
+      state.licenseValidatedAt = Date.now();
+      els.licenseUnactivated?.classList.add("hidden");
+      els.licenseActivated?.classList.remove("hidden");
       if (els.activatedMachineCode) els.activatedMachineCode.textContent = result.machineCode || "";
       if (els.licenseExpiry) {
         if (result.expiry > 0) {
@@ -10017,8 +10070,9 @@ async function checkLicenseStatus() {
         els.licenseWarning.classList.add("hidden");
       }
     } else {
-      els.licenseUnactivated.classList.remove("hidden");
-      els.licenseActivated.classList.add("hidden");
+      state.licenseValidatedAt = 0;
+      els.licenseUnactivated?.classList.remove("hidden");
+      els.licenseActivated?.classList.add("hidden");
       if (els.machineCodeDisplay) els.machineCodeDisplay.textContent = result.machineCode || "获取失败";
       if (els.licenseWarning && result.error && result.error.includes("时间回拨")) {
         els.licenseWarning.textContent = `⚠️ ${result.error}`;
@@ -10087,9 +10141,8 @@ if (els.activateLicenseBtn) {
         els.licenseStatus.textContent = "激活成功！";
         els.licenseStatus.className = "license-status success";
         await checkLicenseStatus();
-        if (startupLicensePending) {
-          clearLicenseGate();
-        }
+        clearLicenseGate();
+        window.dispatchEvent(new CustomEvent("license-activated", { detail: result }));
       } else {
         els.licenseStatus.textContent = result.error || "激活失败";
         els.licenseStatus.className = "license-status error";
@@ -11050,6 +11103,7 @@ els.modeToggleBtn.addEventListener("click", async () => {
 });
 els.graphBtn.addEventListener("click", () => setMode("graph"));
 els.focusModeBtn.addEventListener("click", () => setImmersiveEditing(!state.immersive));
+els.lowGpuToggle?.addEventListener("change", () => setLowGpuMode(els.lowGpuToggle.checked));
 els.previewToggleBtn.addEventListener("click", () => setPreviewVisible(!state.previewVisible));
 els.outlineToggleBtn?.addEventListener("click", () => setEditorOutlineVisible(!state.editorOutlineVisible));
 els.editorOutline?.addEventListener("click", (event) => {
@@ -11476,6 +11530,8 @@ const splashProgressPct = document.querySelector("#splashProgressPct");
 const splashProgressText = document.querySelector("#splashProgressText");
 
 let _splashProgress = 0;
+let _licenseGateCheckPromise = null;
+
 function showLicenseGate(message = "软件未授权，请完成授权后继续使用") {
   startupLicensePending = true;
   document.body.classList.add("license-locked");
@@ -11495,8 +11551,38 @@ function clearLicenseGate() {
   els.licenseModal?.classList.add("hidden");
 }
 
-window.addEventListener("license-required", (event) => {
-  showLicenseGate(event.detail?.error || "授权已失效，请重新授权");
+window.addEventListener("license-required", async (event) => {
+  // 快速路径：30秒内已验证授权有效，直接清除弹窗（瞬态错误）
+  const recentlyValid = state.licenseValidatedAt > 0 && (Date.now() - state.licenseValidatedAt) < 30000;
+  if (recentlyValid) {
+    console.warn("License validated recently (<30s), treating 403 as transient error");
+    clearLicenseGate();
+    return;
+  }
+
+  // 去重：如果已有正在进行的验证请求，直接复用结果
+  if (_licenseGateCheckPromise) return _licenseGateCheckPromise;
+
+  _licenseGateCheckPromise = (async () => {
+    try {
+      // 重新验证授权状态，排除瞬态错误（如文件读取失败、机器码计算异常等）
+      const result = await checkLicenseStatus();
+      if (result && result.activated) {
+        // 授权仍然有效，只是之前的API请求出现了瞬态错误
+        console.warn("License is still valid but API returned 403 LICENSE_REQUIRED — cleared gate");
+        clearLicenseGate();
+        return;
+      }
+      // 授权确实无效，显示授权弹窗
+      showLicenseGate(event.detail?.error || "授权已失效，请重新授权");
+    } catch (verifyErr) {
+      console.error("License verification after 403 failed:", verifyErr);
+      showLicenseGate(event.detail?.error || "授权状态验证失败，请重新授权");
+    } finally {
+      _licenseGateCheckPromise = null;
+    }
+  })();
+  return _licenseGateCheckPromise;
 });
 
 function setSplashProgress(pct, text) {
@@ -11507,6 +11593,7 @@ function setSplashProgress(pct, text) {
 }
 
 try { applySettings(); } catch (e) { console.error("applySettings failed:", e); }
+try { if (state.lowGpuMode) { document.body.classList.add("low-gpu-mode"); if (els.lowGpuToggle) els.lowGpuToggle.checked = true; } } catch (e) { console.error("lowGpuMode restore failed:", e); }
 try { restoreWindowZoom(); } catch (e) { console.error("restoreWindowZoom failed:", e); }
 try { restoreSidebarWidth(); } catch (e) { console.error("restoreSidebarWidth failed:", e); }
 try { restoreSidebarCollapsed(); } catch (e) { console.error("restoreSidebarCollapsed failed:", e); }
@@ -11585,6 +11672,8 @@ async function startupLicenseCheck() {
     setSplashProgress(100, "加载完成");
     // 加载完成后直接隐藏开机图片，进入应用。
     hideSplash();
+    // 启动后台定时授权检查（每5分钟一次，检测授权是否在使用期间失效）
+    startPeriodicLicenseCheck();
   } else {
     state.tree = [];
     state.flatFiles = [];
@@ -11603,6 +11692,22 @@ async function startupLicenseCheck() {
     });
     await bootstrap();
   }
+}
+
+function startPeriodicLicenseCheck() {
+  const INTERVAL_MS = 5 * 60 * 1000; // 每5分钟
+  setInterval(async () => {
+    try {
+      const result = await checkLicenseStatus();
+      if (!result.activated && state.licenseValidatedAt > 0) {
+        // 授权在使用期间失效（如过期、被解绑等），触发授权弹窗
+        state.licenseValidatedAt = 0;
+        showLicenseGate(result.error || "授权已失效，请重新授权");
+      }
+    } catch (_) {
+      // 静默忽略检查错误，不打扰用户
+    }
+  }, INTERVAL_MS);
 }
 
 // —— 图片预览系统 ——
