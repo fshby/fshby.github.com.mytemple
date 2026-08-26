@@ -583,7 +583,16 @@ internal static class MyTempleLauncher
             {
                 string profile = Path.Combine(dataDir, WindowProfileFolder, "webview2", Process.GetCurrentProcess().Id.ToString());
                 Directory.CreateDirectory(profile);
-                CoreWebView2Environment environment = await CoreWebView2Environment.CreateAsync(null, profile);
+                // 传递 Chromium 启动参数以降低 GPU/内存开销：
+                // --js-flags: 限制 WebView2 V8 堆为 256MB（独立于 Node.js 的 384MB 限制）
+                // --disable-extensions: 禁用扩展系统（本应用不使用）
+                // --disable-plugins: 禁用插件系统（本应用不使用）
+                // --disable-features=WebRTC: 禁用 WebRTC（本应用仅播放本地视频，不需实时通信）
+                var envOptions = new CoreWebView2EnvironmentOptions
+                {
+                    AdditionalBrowserArguments = "--js-flags=\"--max-old-space-size=256\" --disable-extensions --disable-plugins --disable-features=WebRTC"
+                };
+                CoreWebView2Environment environment = await CoreWebView2Environment.CreateAsync(null, profile, envOptions);
                 await webView.EnsureCoreWebView2Async(environment);
                 webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = true;
                 webView.CoreWebView2.Settings.IsStatusBarEnabled = false;
