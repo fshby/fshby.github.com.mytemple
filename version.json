@@ -1,7 +1,7 @@
-{
-  "version": "1.8.77",
-  "downloadUrl": "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.77.exe",
-  "latestReleaseNotes": "修复已授权软件仍显示需要授权的缺陷：前端增加授权状态实时验证、瞬态错误快速容错、事件去重机制",
-  "releaseNotes": "v1.8.77 授权状态同步修复\n1.【前端】修复已授权软件使用过程中仍显示授权弹窗的缺陷：license-required 事件处理增加二次授权验证，先通过 checkLicenseStatus() 确认授权真实状态再决定是否显示弹窗，避免瞬态错误（如文件读取失败）导致已授权用户被误锁\n2.【前端】增加授权状态快速验证路径：30秒内已验证授权有效时，403 请求将被视为瞬态错误直接清除弹窗，不再触发完整验证流程\n3.【前端】增加事件去重机制：多个并发 API 请求同时返回 403 时，合并为单次验证请求，避免重复弹窗\n4.【前端】新增 state.licenseValidatedAt 时间戳追踪授权验证时间，配合后台定时检查（每5分钟）检测授权是否在运行期间失效\n5.【前端】授权激活成功后立即清除所有授权弹窗，不再依赖 startupLicensePending 状态\n6.【服务端】区分授权文件读取错误与授权验证错误：文件系统瞬态错误（如 I/O 异常）返回 503 而非 403，避免前端误判为授权失效\n7.【前端】新增 license-activated 全局事件，授权激活后通知所有相关组件",
-  "releaseDate": "2026-08-26"
+﻿{
+  "version": "1.8.93",
+  "downloadUrl": "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.93.exe",
+  "latestReleaseNotes": "【v1.8.93】UI修复：工作区添加界面浏览按钮不再溢出输入框；搜索升级：全局搜索支持多关键词AND、精确短语\"...\"、智能评分排序；快捷键调整：Ctrl+W迁移为Alt+W，新增Alt+E切换编辑/阅读、Alt+O切换沉浸模式；自升级功能重写：真实fetch远程版本+语义化版本比较",
+  "releaseNotes": "v1.8.93 界面与体验升级\n1.【UI修复】工作区目录添加对话框：输入框强制100%宽度导致\"浏览\"按钮溢出，覆盖CSS使按钮保持在网格单元内\n2.【搜索升级】后端search()完全重写：从单关键词substring升级为多关键词AND逻辑、支持精确引号短语\"...\"、按title/content/短语位置智能评分降序排序\n3.【快捷键调整】Ctrl+W（预览切换）迁移为Alt+W；新增Alt+E在编辑/阅读模式间切换；新增Alt+O切换沉浸模式；全局handler添加stopPropagation防止编辑器textarea拦截\n4.【自升级重写】check_update从stub改为真实fetch远程version.json并做语义化版本比较；get_version支持?refresh=1强制刷新，默认读本地快速加载；远程不可达时优雅降级并给出warning\n5.【窗口体验】启动默认最大化，适配不同屏幕分辨率",
+  "releaseDate": "2026-08-28"
 }

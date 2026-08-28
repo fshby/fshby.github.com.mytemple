@@ -28,8 +28,14 @@ export function displayRelativePath(path) {
 
 export function splitPathRef(value = "") {
   const text = String(value || "");
-  const index = text.indexOf(":");
-  if (index > 0) return { workspaceId: text.slice(0, index), relative: text.slice(index + 1) };
+  // Try ":" separator first (canonical form "ws_id:relative/path")
+  const colon = text.indexOf(":");
+  if (colon > 0) return { workspaceId: text.slice(0, colon), relative: text.slice(colon + 1) };
+  // Fallback: "/" separator (e.g. "ws_id/pon/xxx.md" → ws_id + pon/xxx.md)
+  const slash = text.indexOf("/");
+  if (slash > 0 && text.startsWith("ws_")) {
+    return { workspaceId: text.slice(0, slash), relative: text.slice(slash + 1) };
+  }
   return { workspaceId: "default", relative: text };
 }
 
@@ -51,9 +57,18 @@ export function compactName(value, limit = 20) {
 
 export function splitWorkspaceRef(path) {
   const value = String(path || "");
+  // Try ":" separator first (canonical form "ws_id:relative")
   const colon = value.indexOf(":");
   if (colon > 0) {
     return { id: value.slice(0, colon), relative: value.slice(colon + 1) };
+  }
+  // Fallback: "/" separator (also used in practice, e.g. "ws_id/pon/xxx.md")
+  const slash = value.indexOf("/");
+  if (slash > 0 && value.startsWith("ws_")) {
+    return { id: value.slice(0, slash), relative: value.slice(slash + 1) };
+  }
+  if (slash > 0) {
+    return { id: "default", relative: value.slice(slash + 1) };
   }
   return { id: value, relative: "" };
 }
