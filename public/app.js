@@ -2902,17 +2902,24 @@ function renderTree(nodes, container = els.tree) {
       collectExpandedFolderFiles(node.children);
       const maxFiles = 10;
       const isExpanded = state.expandedWorkspaceRoots.has(node.workspaceId);
-      // 展开状态：子文件夹已通过 renderTree(folders, children) 递归渲染其中文件，
-      // 根目录只展示 workspace 直接下属文件，避免子文件夹内文件被重复挂载到根层级。
-      // 收起状态：扁平化展示前 maxFiles 项，但排除已在展开子文件夹中可见的文件，
-      // 避免同一文件在根目录扁平列表与展开子文件夹内重复出现。
-      const candidateFiles = isExpanded
-        ? rootFiles
-        : allFiles.filter((f) => !expandedFolderFilePaths.has(f.path));
-      const displayFiles = candidateFiles.slice(0, maxFiles);
-      const displayTotal = candidateFiles.length;
+      // 智能化收起状态：默认仅显示当前打开的文档，不渲染文件夹结构，减少视觉噪音。
+      // 展开状态：显示子文件夹 + 根目录文件（子文件夹已递归渲染自身文件）。
+      let candidateFiles;
+      if (isExpanded) {
+        candidateFiles = rootFiles;
+      } else {
+        // 仅显示 state.currentPath 若属于本工作区
+        const currentlyOpen = state.currentPath && allFiles.find((f) => f.path === state.currentPath);
+        candidateFiles = currentlyOpen ? [currentlyOpen] : [];
+      }
+      const displayFiles = isExpanded
+        ? candidateFiles.slice(0, maxFiles)
+        : candidateFiles;
+      const displayTotal = allFiles.filter((f) => !expandedFolderFilePaths.has(f.path)).length;
 
-      renderTree(folders, children);
+      if (isExpanded) {
+        renderTree(folders, children);
+      }
 
       for (const file of displayFiles) {
         const button = document.createElement("button");
@@ -2947,22 +2954,36 @@ function renderTree(nodes, container = els.tree) {
         children.append(button);
       }
 
-      if (displayTotal > maxFiles) {
-        const moreBtn = document.createElement("button");
-        moreBtn.type = "button";
-        moreBtn.className = "more-files-btn";
-        moreBtn.textContent = isExpanded ? `收起 ${displayTotal - maxFiles} 项` : `... 还有 ${displayTotal - maxFiles} 项`;
-        const workspaceId = node.workspaceId;
-        moreBtn.addEventListener("click", (e) => {
-          e.stopPropagation();
-          if (state.expandedWorkspaceRoots.has(workspaceId)) {
+      if (isExpanded) {
+        if (displayTotal > maxFiles) {
+          const moreBtn = document.createElement("button");
+          moreBtn.type = "button";
+          moreBtn.className = "more-files-btn";
+          moreBtn.textContent = `收起 ${displayTotal - maxFiles} 项`;
+          const workspaceId = node.workspaceId;
+          moreBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
             state.expandedWorkspaceRoots.delete(workspaceId);
-          } else {
+            rerenderWorkspacePanel(node, panel);
+          });
+          children.append(moreBtn);
+        }
+      } else {
+        // 收起状态：显示"展开全部"按钮展示隐藏的文件
+        const hiddenCount = displayTotal - displayFiles.length;
+        if (hiddenCount > 0 || displayTotal > 0) {
+          const moreBtn = document.createElement("button");
+          moreBtn.type = "button";
+          moreBtn.className = "more-files-btn";
+          moreBtn.textContent = hiddenCount > 0 ? `展开全部 ${hiddenCount + displayFiles.length} 项` : "展开全部";
+          const workspaceId = node.workspaceId;
+          moreBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
             state.expandedWorkspaceRoots.add(workspaceId);
-          }
-          rerenderWorkspacePanel(node, panel);
-        });
-        children.append(moreBtn);
+            rerenderWorkspacePanel(node, panel);
+          });
+          children.append(moreBtn);
+        }
       }
 
       panel.append(head, children);
@@ -3734,6 +3755,8 @@ async function openDoc(docPath, options = {}) {
   }
   addRecentDoc(doc.path);
   try { localStorage.setItem("lastOpenedDoc", doc.path); } catch (_) {}
+  // 智能化工作区：当前打开文档变化时，重新渲染目录树以更新收起状态下显示的文件
+  if (state.tree) renderTree(state.tree);
   updateEditorPlaceholder();
   updateStatusDocName(els.docTitle?.textContent || "");
   updateStatusCreated(state.currentDocCreated);
@@ -5161,7 +5184,7 @@ function attachImageDeleteButtons(root = els.preview) {
   images.forEach((img) => {
     if (img.dataset.deleteAttached) return;
     const src = img.getAttribute("src") || "";
-    if (!src || src.startsWith("data:") || !src.includes("/source/")) return;
+    if (!src || src.startsWith("data:") || (!src.includes("source/") && !src.includes("ws-asset/"))) return;
     img.dataset.deleteAttached = "1";
     const parent = img.parentElement;
     if (!parent) return;
@@ -5185,7 +5208,7 @@ function attachImageDeleteButtons(root = els.preview) {
   videos.forEach((video) => {
     if (video.dataset.deleteAttached) return;
     const src = video.getAttribute("src") || "";
-    if (!src || !src.includes("/source/")) return;
+    if (!src || (!src.includes("source/") && !src.includes("ws-asset/"))) return;
     video.dataset.deleteAttached = "1";
     const parent = video.parentElement;
     if (!parent) return;
@@ -8304,17 +8327,24 @@ async function handleEditorPaste(event) {
     ?.getAsFile();
   if (image) {
     event.preventDefault();
-    const compressed = await compressImage(image);
-    const dataUrl = await blobToDataUrl(compressed);
-    const targetWorkspaceId = resolveScreenshotWorkspaceId();
-    const uploaded = await api.post("/api/asset", {
-      dataUrl,
-      name: `screenshot-${Date.now()}.webp`,
-      workspaceId: targetWorkspaceId || undefined,
-    });
-    insertAtCursor(`\n${uploaded.markdown}\n`);
-    if (!state.previewVisible) setPreviewVisible(true, { automatic: true });
-    schedulePreviewUpdate({ immediate: true });
+    try {
+      const compressed = await compressImage(image);
+      const dataUrl = await blobToDataUrl(compressed);
+      const targetWorkspaceId = resolveScreenshotWorkspaceId();
+      const uploaded = await api.post("/api/asset", {
+        dataUrl,
+        name: `screenshot-${Date.now()}.webp`,
+        workspaceId: targetWorkspaceId || undefined,
+      });
+      if (!uploaded || !uploaded.markdown) {
+        throw new Error("服务器返回格式异常（缺少 markdown 字段）");
+      }
+      insertAtCursor(`\n${uploaded.markdown}\n`);
+      if (!state.previewVisible) setPreviewVisible(true, { automatic: true });
+      schedulePreviewUpdate({ immediate: true });
+    } catch (e) {
+      showToast(`粘贴截图失败：${e.message || e}`);
+    }
     return;
   }
   const textValue = event.clipboardData?.getData("text/plain") || "";
@@ -8328,16 +8358,40 @@ async function handleEditorPaste(event) {
 
 function resolveScreenshotWorkspaceId() {
   const mode = localStorage.getItem("screenshotSaveLocation") || "workspace";
-  if (mode === "default") {
-    return state.defaultWorkspaceId && state.defaultWorkspaceId !== "default"
-      ? state.defaultWorkspaceId
-      : "";
+  // Extract workspace id from path — can be separated by ":" OR "/"
+  // e.g. "ws_6c24c9ac:/xxx/xxx.md"  →  "ws_6c24c9ac"
+  // e.g. "ws_6c24c9ac/pon/xxx.md"   →  "ws_6c24c9ac"
+  function extractWsId(path) {
+    if (!path) return "";
+    // splitWorkspaceRef returns { id: everything-before-:, relative } or { id: whole, relative: "" }
+    const ref = splitWorkspaceRef(path);
+    if (ref.id && !ref.relative) {
+      // No colon separator → path itself might be "ws_id/relative" → extract first segment
+      const slashIdx = ref.id.indexOf("/");
+      if (slashIdx > 0) return ref.id.slice(0, slashIdx);
+    }
+    return ref.id || "";
   }
-  const fromPath = state.currentPath ? splitWorkspaceRef(state.currentPath).id : "";
-  if (fromPath && /^ws_[a-f0-9]{10}$/i.test(fromPath)) return fromPath;
-  if (state.activeWorkspaceId && /^ws_[a-f0-9]{10}$/i.test(state.activeWorkspaceId)) return state.activeWorkspaceId;
-  if (state.defaultWorkspaceId && /^ws_[a-f0-9]{10}$/i.test(state.defaultWorkspaceId)) return state.defaultWorkspaceId;
-  return "";
+
+  let result = "";
+  if (mode === "default") {
+    const d = state.defaultWorkspaceId;
+    if (d && d !== "default") result = d;
+    else if (d === "default") result = "default";
+  } else {
+    const fromPath = extractWsId(state.currentPath);
+    if (fromPath) result = fromPath;
+    else if (state.activeWorkspaceId) {
+      const a = extractWsId(state.activeWorkspaceId);
+      if (a) result = a;
+    }
+    if (!result && state.defaultWorkspaceId) result = state.defaultWorkspaceId;
+  }
+  console.log("[截图] resolveScreenshotWorkspaceId →", {
+    mode, currentPath: state.currentPath, activeWs: state.activeWorkspaceId,
+    defaultWs: state.defaultWorkspaceId, result
+  });
+  return result;
 }
 
 async function handleVideoUpload(file) {
@@ -8585,25 +8639,40 @@ document.addEventListener("keydown", (event) => {
     renameCurrentDoc();
     return;
   }
-  // Ctrl/Cmd + Q: 显示/隐藏工作区目录
+  // Ctrl/Cmd + Q: 显示/隐藏工作区目录（编辑模式下也生效）
   if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "q") {
-    if (inFormField) return;
     event.preventDefault();
+    event.stopPropagation();
     setSidebarCollapsed(!state.sidebarCollapsed);
     return;
   }
   // Alt + Q: 编辑模式下显示/隐藏大纲目录
   if (event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && event.key.toLowerCase() === "q" && state.mode === "edit") {
-    if (inFormField) return;
     event.preventDefault();
+    event.stopPropagation();
     setEditorOutlineVisible(!state.editorOutlineVisible);
     return;
   }
-  // Ctrl/Cmd + W: 编辑模式下显示/隐藏预览栏
-  if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "w" && state.mode === "edit") {
-    if (inFormField) return;
+  // Alt + W: 编辑模式下显示/隐藏预览栏
+  if (event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && event.key.toLowerCase() === "w" && state.mode === "edit") {
     event.preventDefault();
+    event.stopPropagation();
     setPreviewVisible(!state.previewVisible);
+    return;
+  }
+  // Alt + E: 切换编辑/阅读模式
+  if (event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && event.key.toLowerCase() === "e") {
+    event.preventDefault();
+    event.stopPropagation();
+    const next = state.mode === "edit" ? "view" : "edit";
+    setMode(next);
+    return;
+  }
+  // Alt + O: 切换沉浸模式
+  if (event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && event.key.toLowerCase() === "o") {
+    event.preventDefault();
+    event.stopPropagation();
+    setImmersiveEditing(!state.immersive);
     return;
   }
   if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "u") {
@@ -9200,17 +9269,18 @@ function htmlToMarkdown(html) {
 
 async function imageToMarkdown(file, dataUrl, baseName) {
   const ext = (file.name.split(".").pop() || "").toLowerCase();
-  const assetDir = `source`;
   const fileName = `${Date.now()}_${baseName}.${ext}`;
+  const targetWorkspaceId = resolveScreenshotWorkspaceId();
   try {
     const resp = await fetch("/api/asset", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ dataUrl }),
+      body: JSON.stringify({ dataUrl, name: fileName, workspaceId: targetWorkspaceId || undefined }),
     });
     if (resp.ok) {
       const data = await resp.json();
-      const assetPath = data.path || `${assetDir}/${fileName}`;
+      if (data.markdown) return data.markdown;
+      const assetPath = data.path || `source/${fileName}`;
       return `![${baseName}](${assetPath})`;
     }
   } catch {}
