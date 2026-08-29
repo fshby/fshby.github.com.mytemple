@@ -24,7 +24,7 @@
         <a href="#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.94.exe" download>下载 v1.8.94</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.95.exe" download>下载 v1.8.95</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -32,11 +32,11 @@
     <main id="top">
       <section class="hero section-wrap" aria-labelledby="hero-title">
         <div class="hero-copy reveal">
-          <p class="eyebrow"><span class="status-dot"></span> 本地 Markdown 工作区 <em>v1.8.94 桌面版</em></p>
+          <p class="eyebrow"><span class="status-dot"></span> 本地 Markdown 工作区 <em>v1.8.95 桌面版</em></p>
           <h1 id="hero-title">本地 Markdown 知识库与编辑器</h1>
           <p class="hero-lede">围绕本地 Markdown 文件提供阅读、编辑、目录、图谱、检索、主题与多工作区管理。</p>
           <div class="hero-actions">
-            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.94.exe" download>下载 Windows 安装包</a>
+            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.95.exe" download>下载 Windows 安装包</a>
             <a class="button button-soft" href="#docs">查看使用文档</a>
           </div>
           <p class="hero-note">Windows 桌面端 · 本地文件优先 · 内容助手为可选接入</p>
@@ -183,13 +183,14 @@
         </div>
         <div class="download-block reveal">
           <div class="download-primary">
-            <span class="download-badge">当前稳定版 v1.8.94</span>
+            <span class="download-badge">当前稳定版 v1.8.95</span>
             <p>本地工作区、阅读/修改双模式、图谱、主题、增量索引与可选辅助功能。</p>
-            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.94.exe" download>下载安装包</a>
+            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.95.exe" download>下载安装包</a>
           </div>
           <div class="download-secondary">
             <h3>最近更新</h3>
             <ul>
+              <li>v1.8.95：缺陷修复与工作区视图重写：修复代码后缀(bat/vbs/js/py等)无法保存问题(默认进入编辑态)；折叠态显示最近10个按修改时间排序的文档；展开态完整目录树(文件夹可独立展开/收起)。</li>
               <li>v1.8.94：工作区与编辑器增强：支持显示非MD文件(bat/vbs/代码等)、展开全部文档不再限制数量、文件按修改时间排序、Ctrl+/-调整字体、代码文件可打开保存。</li>
               <li>v1.8.93：界面与体验升级：工作区添加对话框UI修复、搜索支持多关键词AND+精确短语+评分排序、快捷键调整(Ctrl+W→Alt+W/新增Alt+E/Alt+O)、自升级真实fetch远程版本比较、窗口启动默认最大化。</li>
               <li>v1.8.72：功能无损性能优化：状态栏 DOM 引用缓存、页面隐藏暂停定时器、编辑器 scroll 监听器合并、resize 去抖。</li>
@@ -280,16 +281,33 @@
             </ul>
           </article>
           <article class="doc-section">
+            <h3>v1.8.95 更新日志</h3>
+            <ul>
+              <li>修复代码后缀文档无法保存：bat/vbs/js/py/ini/css/html/java/c/cpp/go/rb/sh/sql/json/xml/yaml/cs/php 等代码与文本文件，打开后默认进入编辑态，自动保存与 Ctrl+S 均能正确写入磁盘，不再被 view 模式 gate 短路。</li>
+              <li>工作区折叠态：收起时显示整个工作区全部文件按 modified 倒序（最新在前）取前 10 个展示，并保证当前打开文档始终可见；尾部显示「共 X 项，展开查看全部」。</li>
+              <li>工作区展开态：展开时渲染真正目录树结构：所有文件夹可独立展开/收起，每层文件按 modified 倒序排列，根级文件独立显示；尾部「收起」按钮返回折叠视图。</li>
+            </ul>
+          </article>
+          <article class="doc-section">
             <h3>v1.8.94 更新日志</h3>
             <ul>
+              <li>非MD文件显示：工作区目录 mdOnly=false 时显示 bat/vbs/js/py/ini/txt/sh/code 等文本/代码文件（二进制黑名单+10MB 上限）。</li>
+              <li>展开全部修复：工作区目录「展开全部」时无数量限制显示全部文件，收起时保持简洁。</li>
+              <li>代码文件支持：代码后缀可正常打开编辑保存；非MD预览使用等宽字体+换行样式。</li>
+              <li>文件排序：工作区目录文件按修改时间倒序排列（最新在前）。</li>
+              <li>字体快捷键：Ctrl+= 增大编辑器字体，Ctrl+- 减小，Ctrl+0 重置（10~32px，localStorage 持久化）。</li>
+            </ul>
+          </article>
+          <article class="doc-section">
+            <h3>v1.8.93（历史）更新日志</h3>
+            <ul>
+              <li>界面与体验升级：工作区添加对话框UI修复（z-index+遮罩层级）；搜索支持多关键词 AND + 精确短语 + 评分排序；快捷键调整（Ctrl+W → Alt+W / 新增 Alt+E / Alt+O）；自升级真实 fetch 远程版本语义化比较；窗口启动默认最大化。</li>
               <li>功能无损性能优化：状态栏 DOM 引用缓存（_statusFieldCache），每秒避免 4+ 次 querySelectorAll；页面隐藏时暂停系统时间 setInterval；合并编辑器 3 个 scroll 监听器为 1 个 passive；5 个 resize 监听器统一 100ms 去抖。</li>
               <li>沉浸+轻量模式整合：一个按钮（⚡ 沉浸）同时实现沉浸写作与轻量编辑——进入时终止 Markdown Worker、禁用语法高亮 CSS、隐藏预览/大纲面板，退出时自动重建 Worker 并刷新预览。</li>
               <li>文档安全加固：渲染序号竞态防护（readerRenderSeq）、Worker 失败后 5 秒冷却可重建、openDoc 被覆盖时回滚清理、切换文档前同步保存草稿、保存接口返回 contentSha256 支持乐观锁。</li>
               <li>内存/GPU 优化：contentStore LRU 缓存（最多 50 热文档）、知识文档上限 300、轻度 trim 250MB/激进 320MB；图谱模拟间隔拉长 30%、shadowBlur 降级、backdrop-filter blur 缩小。</li>
-              <li>服务端保存接口返回 contentSha256，前端兼容旧服务端自动降级，不再误报校验失败。</li>
             </ul>
           </article>
-        </div>
       </section>
     </main>
 

@@ -1,7 +1,7 @@
 {
-  "version": "1.8.94",
-  "downloadUrl": "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.94.exe",
-  "latestReleaseNotes": "【v1.8.94】工作区目录支持显示非MD文件(bat/vbs/代码等)、展开全部文档不再限制数量、文件按修改时间排序、编辑器支持Ctrl+/-调整字体、代码文件可正常打开和保存",
-  "releaseNotes": "v1.8.94 工作区与编辑器增强\n1.【非MD文件显示】取消仅显示MD后，工作区目录显示bat/vbs/js/py/ini/txt/sh等文本文件\n2.【展开全部修复】点击展开全部时显示所有文件，不再限制10个\n3.【代码文件支持】bat/vbs/代码文件可正常打开、编辑、保存；非MD文件以等宽字体预览\n4.【文件排序】工作区目录文件按修改时间倒序排列（最新在前）\n5.【字体快捷键】Ctrl+=增大编辑器字体，Ctrl-减小，Ctrl+0重置",
-  "releaseDate": "2026-08-28"
+  "version": "1.8.95",
+  "downloadUrl": "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.95.exe",
+  "latestReleaseNotes": "【v1.8.95】修复代码后缀文档无法保存的问题、工作区目录折叠/展开逻辑全新优化：折叠态显示最近修改10个文档，展开态显示完整目录树",
+  "releaseNotes": "v1.8.95 缺陷修复与工作区视图重写\n1.【代码文件保存修复】代码后缀(bat/vbs/js/py/ini/css/html/java/c/cpp/go/rb等)打开后默认进入编辑态，自动保存与Ctrl+S均能正确写入磁盘，不再因view模式被gate短路\n2.【折叠态】工作区收起时显示整个工作区全部文件按保存时间modified倒序取前10个（并保证当前打开文档可见），尾部显示「共X项，展开查看全部」\n3.【展开态】工作区展开时渲染真正目录树结构：所有文件夹可独立展开/收起，每层文件按modified倒序排列，根级文件独立显示；尾部「收起」按钮返回折叠视图",
+  "releaseDate": "2026-08-29"
 }

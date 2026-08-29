@@ -2918,22 +2918,25 @@ function renderTree(nodes, container = els.tree) {
       }
       collectExpandedFolderFiles(node.children);
       const isExpanded = state.expandedWorkspaceRoots.has(node.workspaceId);
-      // 智能化收起状态：默认仅显示当前打开的文档，不渲染文件夹结构，减少视觉噪音。
-      // 展开状态：显示所有文件（排除已在展开子文件夹内显示的），无数量限制。
-      let candidateFiles;
+      let displayFiles;
       if (isExpanded) {
-        candidateFiles = allFiles.filter((f) => !expandedFolderFilePaths.has(f.path));
-      } else {
-        // 仅显示 state.currentPath 若属于本工作区
-        const currentlyOpen = state.currentPath && allFiles.find((f) => f.path === state.currentPath);
-        candidateFiles = currentlyOpen ? [currentlyOpen] : [];
-      }
-      const displayFiles = candidateFiles;
-      const displayTotal = displayFiles.length;
-
-      if (isExpanded) {
+        // 展开态：渲染真正的目录树（所有文件夹+文件，层级结构，独立可展开/收起）
+        // 文件夹先渲染（子文件/子文件夹递归由 renderTree 处理），然后渲染根级文件。
         renderTree(folders, children);
+        displayFiles = rootFiles || [];
+      } else {
+        // 折叠态：扁平整个工作区所有文件，按 modified 倒序（保存时间新→旧）取前10个展示。
+        // 确保当前打开文档可见：若不在top10中则显式追加到末尾（避免用户"找不到当前文件"的困惑）
+        const sortedAll = [...allFiles].sort((a, b) => (Number(b.modified) || 0) - (Number(a.modified) || 0));
+        const topN = sortedAll.slice(0, 10);
+        if (state.currentPath && !topN.some((f) => f.path === state.currentPath)) {
+          const openFile = allFiles.find((f) => f.path === state.currentPath);
+          if (openFile) topN.push(openFile);
+        }
+        displayFiles = topN;
       }
+      const displayTotal = displayFiles.length;
+      const workspaceTotal = allFiles.length;
 
       for (const file of displayFiles) {
         const button = document.createElement("button");
@@ -2973,7 +2976,7 @@ function renderTree(nodes, container = els.tree) {
         const moreBtn = document.createElement("button");
         moreBtn.type = "button";
         moreBtn.className = "more-files-btn";
-        moreBtn.textContent = `收起 ${displayTotal} 项`;
+        moreBtn.textContent = `收起（目录树共 ${workspaceTotal} 项）`;
         const workspaceId = node.workspaceId;
         moreBtn.addEventListener("click", (e) => {
           e.stopPropagation();
@@ -2981,22 +2984,19 @@ function renderTree(nodes, container = els.tree) {
           rerenderWorkspacePanel(node, panel);
         });
         children.append(moreBtn);
-      } else {
-        // 收起状态：显示"展开全部"按钮展示隐藏的文件
-        const hiddenCount = displayTotal - displayFiles.length;
-        if (hiddenCount > 0 || displayTotal > 0) {
-          const moreBtn = document.createElement("button");
-          moreBtn.type = "button";
-          moreBtn.className = "more-files-btn";
-          moreBtn.textContent = hiddenCount > 0 ? `展开全部 ${hiddenCount + displayFiles.length} 项` : "展开全部";
-          const workspaceId = node.workspaceId;
-          moreBtn.addEventListener("click", (e) => {
-            e.stopPropagation();
-            state.expandedWorkspaceRoots.add(workspaceId);
-            rerenderWorkspacePanel(node, panel);
-          });
-          children.append(moreBtn);
-        }
+      } else if (workspaceTotal > displayTotal || workspaceTotal > 0) {
+        // 收起状态：显示"展开全部"按钮（展示整个工作区的目录树结构）
+        const moreBtn = document.createElement("button");
+        moreBtn.type = "button";
+        moreBtn.className = "more-files-btn";
+        moreBtn.textContent = `共 ${workspaceTotal} 项，展开查看全部`;
+        const workspaceId = node.workspaceId;
+        moreBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          state.expandedWorkspaceRoots.add(workspaceId);
+          rerenderWorkspacePanel(node, panel);
+        });
+        children.append(moreBtn);
       }
 
       panel.append(head, children);
@@ -3680,7 +3680,9 @@ async function openDoc(docPath, options = {}) {
       els.markdownView.innerHTML = `<p style="color: var(--danger);">文档渲染失败：${escapeHtml(error?.message || "未知错误")}</p>`;
     }
   } else {
-    // 非Markdown文件：代码/文本预览，带等宽字体和行号风格
+    // 非Markdown文件（代码/文本）：默认进入编辑态以便直接修改+自动保存；
+    // readerPanel 里仍然渲染一份代码预览作为参考（但编辑态下readerPanel隐藏，
+    // 不影响正常使用；用户切回view态时可见）。
     els.markdownView.innerHTML = "";
     const preview = document.createElement("pre");
     preview.className = "code-preview";
@@ -3694,6 +3696,9 @@ async function openDoc(docPath, options = {}) {
     preview.style.tabSize = "4";
     els.markdownView.appendChild(preview);
     renderOutlineItems([]);
+    // 非Markdown文档：默认进入编辑态，允许输入、自动保存与手动保存。
+    // 先同步滚动比例避免setMode恢复view scroll时归零导致跳到非预期位置。
+    if (state.mode !== "edit") setMode("edit");
   }
   els.preview.classList.remove("preview-pending");
   if (state.largeDocument) {
