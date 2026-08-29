@@ -1,13 +1,13 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "MyTemple Knowledge",
-  "version": "1.8.103",
+  "version": "1.8.104",
   "identifier": "com.mytemple.knowledge",
   "build": {
     "frontendDist": "../public",
     "devUrl": "http://127.0.0.1:7321",
     "beforeDevCommand": "",
-    "beforeBuildCommand": ""
+    "beforeBuildCommand": "powershell.exe -NoProfile -Command \"$ErrorActionPreference='Stop'; robocopy ..\\public resources\\public /MIR /NFL /NDL /NJH /NJS; if ($LASTEXITCODE -gt 7) { exit 1 } else { exit 0 }\""
   },
   "app": {
     "withGlobalTauri": false,
@@ -24,10 +24,10 @@
       "../packaging/logo.png",
       "../packaging/logo.ico"
     ],
-    "resources": [
-      "WebView2Loader.dll",
-      "../public"
-    ],
+    "resources": {
+      "WebView2Loader.dll": "",
+      "../public": "resources/public"
+    },
     "externalBin": [],
     "copyright": "",
     "category": "Productivity",

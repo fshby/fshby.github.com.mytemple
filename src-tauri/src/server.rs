@@ -31,21 +31,24 @@ pub struct ServerState {
 
 // ── 静态资源解析 ──
 
-/// 解析前端静态资源根目录。
+/// 解析前端静态资源根目录。返回 `(选定目录, 全部尝试过的候选列表)`，后者用于
+/// 内置 404 友好错误页完整展示（绝不向用户只展示 1 条误导性的路径）。
 ///
-/// 优先级（越高越先尝试，存在才返回）：
-///   1. `MYTEMPLE_PUBLIC_ROOT` 环境变量（开发/调试强制指定）
-///   2. `<可执行文件目录>/resources/public` — 安装后最常用。Tauri NSIS 安装
-///      器把 `bundle.resources = ["../public"]` 解压到 `exe/resources/public/`
-///   3. `<可执行文件目录>/public` — 绿色免安装（把 public 文件夹丢在 exe 旁）
-///   4. `<CARGO_MANIFEST_DIR>/../public` — cargo build / cargo tauri dev
-///      编译期目录下的项目 public
-///   5. `./public`（进程 CWD 下）— 兜底
+/// 优先级（越高越先尝试，目录存在且含 index.html 才返回）：
+///   1. `MYTEMPLE_PUBLIC_ROOT` 环境变量（强制指定）
+///   2. `<exe_dir>/resources/public`              — Tauri 2 NSIS 对象映射 target=resources/public（安装位置）
+///   3. `<exe_dir>/resources/resources/public`    — 打包时 resources 再套 resources 的极端兜底
+///   4. `<exe_dir>/public`                        — 绿色免安装 / Tauri 默认字符串资源解包到 $INSTDIR/public
+///   5. `<exe_dir>/_up_/public`                   — Tauri 构建中间态（target/release/_up_）
+///   6. `<CARGO_MANIFEST_DIR>/../public`          — cargo build / cargo tauri dev
+///   7. `<CARGO_MANIFEST_DIR>/public`             — src-tauri/public 直接放
+///   8. `%APPDATA%/MyTemple Knowledge/public`     — 用户数据区手动放
+///   9. `./public`                                — 进程 CWD
+///  10. `./resources/public`                      — CWD/resources/public
 ///
-/// 若以上候选都不存在，返回最后一个兜底路径（后续 404 HTML 写友好错误
-/// 画面，而不是 panic 让用户只能看到 WebView 空白）。
-fn resolve_public_root() -> PathBuf {
-    // 2/3 所需 exe_dir 先求一次
+/// 所有候选都失败时回退到 candidates[0]（env 优先，否则就是 exe_dir/resources/public），
+/// 但日志和内置 404 HTML 都会列出 **全部 10 条候选**，避免误导。
+fn resolve_public_root() -> (PathBuf, Vec<PathBuf>) {
     let exe_dir = std::env::current_exe()
         .ok()
         .and_then(|p| p.parent().map(|d| d.to_path_buf()));
@@ -56,43 +59,66 @@ fn resolve_public_root() -> PathBuf {
     if let Ok(root) = std::env::var("MYTEMPLE_PUBLIC_ROOT") {
         candidates.push(PathBuf::from(root));
     }
-    // 2) exe_dir/resources/public (bundle.resources=["../public"] 解包位置)
+    // 2) exe_dir/resources/public
     if let Some(ref d) = exe_dir {
         candidates.push(d.join("resources").join("public"));
     }
-    // 3) exe_dir/public 绿色便携
+    // 3) exe_dir/resources/resources/public（套娃兜底）
+    if let Some(ref d) = exe_dir {
+        candidates.push(d.join("resources").join("resources").join("public"));
+    }
+    // 4) exe_dir/public
     if let Some(ref d) = exe_dir {
         candidates.push(d.join("public"));
     }
-    // 4) CARGO_MANIFEST_DIR/../public 开发
+    // 5) exe_dir/_up_/public
+    if let Some(ref d) = exe_dir {
+        candidates.push(d.join("_up_").join("public"));
+    }
+    // 6) CARGO_MANIFEST_DIR/../public
     {
         let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         if let Some(parent) = manifest.parent() {
             candidates.push(parent.join("public"));
         }
     }
-    // 5) ./public
+    // 7) CARGO_MANIFEST_DIR/public
+    {
+        candidates.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("public"));
+    }
+    // 8) APPDATA/MyTemple Knowledge/public
+    if let Ok(appdata) = std::env::var("APPDATA") {
+        candidates.push(PathBuf::from(appdata).join("MyTemple Knowledge").join("public"));
+    }
+    // 9) ./public
     candidates.push(PathBuf::from("public"));
+    // 10) ./resources/public
+    candidates.push(PathBuf::from("resources").join("public"));
 
     for p in &candidates {
+        if p.is_dir() && p.join("index.html").is_file() {
+            log::info!("前端静态目录选定: {} (含 index.html)", p.display());
+            return (p.clone(), candidates);
+        }
         if p.is_dir() {
-            // 进一步校验含 index.html（不是空 public 目录）
-            if p.join("index.html").is_file() {
-                log::info!("前端静态目录选定: {} (含 index.html)", p.display());
-                return p.clone();
-            } else {
-                log::warn!("候选 public 目录存在但缺少 index.html: {}", p.display());
-            }
+            log::warn!("候选 public 目录存在但缺少 index.html: {}", p.display());
         }
     }
-    // 没找到 — 返回候选首位（若 env 设置了返回 env 否则 ./public），
-    // 并在日志里把整个候选列表都吐出来便于排障
-    let fallback = candidates.into_iter().next().unwrap_or_else(|| PathBuf::from("public"));
+    let fallback = candidates
+        .clone()
+        .into_iter()
+        .next()
+        .unwrap_or_else(|| PathBuf::from("public"));
     log::error!(
-        "[FATAL] 未找到可用的前端 public 目录（含 index.html）。回退到 {:?}",
-        fallback
+        "[FATAL] 未找到可用的前端 public 目录（含 index.html）。回退到 {:?}\n全部候选:\n  {}",
+        fallback,
+        candidates
+            .iter()
+            .map(|p| format!("{}", p.display()))
+            .collect::<Vec<_>>()
+            .join("\n  ")
     );
-    fallback
+    (fallback, candidates)
 }
 
 /// 选择并绑定可用端口：按 `start_port..=start_port+99` 递增扫描，
@@ -127,7 +153,7 @@ pub async fn run(
     app_state: Arc<crate::app::AppState>,
     rag_service: Arc<crate::rag::RagService>,
 ) -> anyhow::Result<ServerBound> {
-    let public_root = resolve_public_root();
+    let (public_root, candidates) = resolve_public_root();
 
     let state = Arc::new(ServerState {
         app: app_state,
@@ -150,34 +176,43 @@ pub async fn run(
             .merge(crate::handlers::build_native_router(state))
             .fallback_service(serve)
     } else {
-        // 异常：前端资源缺失。返回一个最小错误页 + 静态资源 404。
+        // 异常：前端资源缺失。返回最小错误页（枚举全部 10 条候选，杜绝仅展示 1 条误导）。
         use axum::{
             body::Body,
             http::{Response, StatusCode},
             response::IntoResponse,
             routing::get,
         };
+        let candidates_display = candidates
+            .iter()
+            .enumerate()
+            .map(|(i, p)| format!("{:>2}. {}", i + 1, p.display()))
+            .collect::<Vec<_>>()
+            .join("\n");
         let missing_html = format!(
             r#"<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>前端资源缺失</title></head>
 <body style="margin:0;padding:48px 24px;font-family:'PingFang SC','Microsoft YaHei',sans-serif;background:#1e293b;color:#f8fafc;">
-<div style="max-width:760px;margin:0 auto;">
-  <h2 style="color:#fbbf24;margin:0 0 12px 0;">启动失败：前端资源缺失</h2>
-  <p>安装目录中找不到 <code style="background:#0f172a;padding:2px 6px;border-radius:4px;">public/index.html</code>。</p>
-  <p>这通常是因为 <b>安装包没有把前端文件打入 resources/public</b>，或杀毒软件删除了安装目录下的前端文件。</p>
+<div style="max-width:860px;margin:0 auto;">
+  <h2 style="color:#fbbf24;margin:0 0 12px 0;">启动失败：前端资源缺失（v1.8.104 完整候选）</h2>
+  <p>安装后 10 条候选目录下都没找到 <code style="background:#0f172a;padding:2px 6px;border-radius:4px;">index.html</code>。</p>
+  <p>通常是：①<b>杀毒软件/实时防护把安装目录下的 public 文件删了</b>；②<b>NSIS 打包时 bundle.resources 映射路径错了</b>；③ 极少数情况下 C 盘权限不足。下方会列出 <b>全部尝试过的路径</b>，用户自己就能对比真实目录结构。</p>
   <div style="margin-top:20px;padding:16px;background:#0f172a;border:1px solid #334155;border-radius:8px;">
-    <div><b>当前静态资源目录尝试路径（都不存在 index.html）：</b></div>
-    <pre style="white-space:pre-wrap;color:#cbd5e1;">{}</pre>
+    <div><b>已尝试的静态资源目录（共 {} 条，都没有 index.html）：</b></div>
+    <pre style="white-space:pre-wrap;color:#cbd5e1;line-height:1.75;">{}
+</pre>
   </div>
   <div style="margin-top:18px;">
-    <b>解决方式：</b>
+    <b>解决方式（按推荐顺序）：</b>
     <ol>
-      <li>先 <b>卸载当前版本</b> → 关闭杀毒软件/防火墙实时防护 → 重新安装最新版安装包。</li>
-      <li>仍失败时：把官网最新版安装包发给管理员，在安装目录下手动检查是否存在 <code style="background:#0f172a;padding:2px 6px;border-radius:4px;">resources/public/index.html</code>。</li>
-      <li>或设置环境变量 <code style="background:#0f172a;padding:2px 6px;border-radius:4px;">MYTEMPLE_PUBLIC_ROOT</code> 指向含 index.html 的前端目录后重启。</li>
+      <li>先 <b>卸载当前版本</b> → 关闭杀毒软件/企业杀软/Defender 实时防护 → 下载 <b>v1.8.104 或更新版</b> 再安装（v1.8.104 开始用对象映射强制写到 resources/public，不再歧义）。</li>
+      <li>临时救急：在其它电脑的相同安装目录 <code style="background:#0f172a;padding:2px 6px;border-radius:4px;">C:\Program Files\MyTemple Knowledge\</code> 下，手动把 <code>resources/public/</code>（含 index.html、app.js、styles.css）完整拷贝过去。</li>
+      <li>临时救急：设置<b>用户环境变量</b> <code style="background:#0f172a;padding:2px 6px;border-radius:4px;">MYTEMPLE_PUBLIC_ROOT</code> = <code style="background:#0f172a;padding:2px 6px;border-radius:4px;">C:\Program Files\MyTemple Knowledge\resources\public</code>（或真实存在 index.html 的绝对路径），重启 MyTemple Knowledge。</li>
+      <li>仍失败请把这张错误页 + 安装目录截图（Explorer 打开安装目录展开 resources/public）发给管理员/在群里反馈，我们会根据第 N 条缺失定位问题。</li>
     </ol>
   </div>
 </div></body></html>"#,
-            public_root.display()
+            candidates.len(),
+            candidates_display
         );
         Router::new()
             .merge(crate::handlers::build_native_router(state))
