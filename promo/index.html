@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
@@ -24,7 +24,7 @@
         <a href="#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.96.exe" download>下载 v1.8.96</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.97.exe" download>下载 v1.8.97</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -32,11 +32,11 @@
     <main id="top">
       <section class="hero section-wrap" aria-labelledby="hero-title">
         <div class="hero-copy reveal">
-          <p class="eyebrow"><span class="status-dot"></span> 本地 Markdown 工作区 <em>v1.8.96 桌面版</em></p>
+          <p class="eyebrow"><span class="status-dot"></span> 本地 Markdown 工作区 <em>v1.8.97 桌面版</em></p>
           <h1 id="hero-title">本地 Markdown 知识库与编辑器</h1>
           <p class="hero-lede">围绕本地 Markdown 文件提供阅读、编辑、目录、图谱、检索、主题与多工作区管理。</p>
           <div class="hero-actions">
-            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.96.exe" download>下载 Windows 安装包</a>
+            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.97.exe" download>下载 Windows 安装包</a>
             <a class="button button-soft" href="#docs">查看使用文档</a>
           </div>
           <p class="hero-note">Windows 桌面端 · 本地文件优先 · 内容助手为可选接入</p>
@@ -183,13 +183,14 @@
         </div>
         <div class="download-block reveal">
           <div class="download-primary">
-            <span class="download-badge">当前稳定版 v1.8.96</span>
+            <span class="download-badge">当前稳定版 v1.8.97</span>
             <p>本地工作区、阅读/修改双模式、图谱、主题、增量索引与可选辅助功能。</p>
-            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.96.exe" download>下载安装包</a>
+            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.97.exe" download>下载安装包</a>
           </div>
           <div class="download-secondary">
             <h3>最近更新</h3>
             <ul>
+              <li>v1.8.97：编辑器字体与快捷键大升级：Ctrl+/-/0字号快捷键(编辑区焦点也生效)、重启保留用户习惯字号、编辑模式字体全面优化(等宽字体栈+连字+抗锯齿+字重行距字距)更清晰更美观。</li>
               <li>v1.8.96：代码文件保存最终修复：打开代码文档即进入编辑态、保存按钮清除「非Markdown不支持保存」提示、状态栏改为「保存/已保存 HH:MM」；同时保留折叠态Top10 + 展开态目录树。</li>
               <li>v1.8.95：工作区视图重写 + 基础保存修复：折叠态Top10按modified倒序、展开态完整目录树(文件夹独立展开/收起)；代码后缀打开默认进入编辑态。</li>
               <li>v1.8.94：工作区与编辑器增强：支持显示非MD文件(bat/vbs/代码等)、展开全部文档不再限制数量、文件按修改时间排序、Ctrl+/-调整字体、代码文件可打开保存。</li>
@@ -279,6 +280,22 @@
               <li><kbd>Ctrl+Shift+P</kbd> 润色 · <kbd>Ctrl+Shift+X</kbd> 续写</li>
               <li><kbd>Ctrl+U</kbd> 顶部智能检索 · <kbd>Ctrl+I</kbd> 行内对话</li>
               <li>辅助快捷键需在设置中开启对应功能后生效</li>
+            </ul>
+          </article>
+          <article class="doc-section">
+            <h3>v1.8.97 更新日志</h3>
+            <ul>
+              <li>Ctrl+/- 编辑器字号快捷键最终修复：事件监听同时注册在编辑器宿主（els.editor keydown，最高优先级，避免 CodeMirror 吞键）和 document 全局两重，编辑区焦点、工具栏焦点、目录焦点三种上下文都能稳定放大/缩小字号；Ctrl+0 立即重置。</li>
+              <li>重启保留用户习惯字号：loadSettings → applySettings 末尾主动 applyEditorFontSizeToDom，把 localStorage 的 docContentFontSize 同步到 #editor 及 CodeMirror 多节点；setMode('edit')、切换文档、取消预览再打开时都会重放，不会被默认 CSS 冲掉。</li>
+              <li>编辑模式字体全面优化更清晰更美观：
+                <ul>
+                  <li>等宽字体栈：Cascadia Mono / Cascadia Code / JetBrains Mono / Fira Code（Windows 11 原生可连字）→ 中文 Sarasa Mono SC / Source Han Mono SC / PingFang SC / Microsoft YaHei UI → Consolas 兜底，中英文比例更均衡不发虚。</li>
+                  <li>渲染优化：font-feature-settings liga/calt/cv11/ss01 开启等宽连字与数字替代；-webkit-font-smoothing antialiased；text-rendering optimizeLegibility；Windows 下字重 450 避免浅色主题纤细发虚；字距 0.002em 轻微拉开降低密集代码的阅读负担。</li>
+                  <li>行距与留白：主编辑行距 1.76、预览隐藏时行距放宽到 1.82；.cm-content 增加 padding-block 18px→160px（底部保留充足编辑区避免光标贴底）、左右 padding 22px；行号 gutters 透明度降到 78% + tabular-nums 保持数字整齐。</li>
+                  <li>代码文件预览（非MD阅读器）同步升级为与编辑器相同字体栈与行距、并使用 var(--doc-font-size) 随 Ctrl+/- 同步变化。</li>
+                </ul>
+              </li>
+              <li>兼容保障：字号调整会对 .cm-editor/.cm-scroller/.cm-content/.cm-line/.cm-gutters/selection/cursor/activeLine 层以及 #cursor-overlay 全部显式 setProperty(important)，并调用 requestMeasure 强制 CodeMirror 重绘避免滚动条错位。</li>
             </ul>
           </article>
           <article class="doc-section">

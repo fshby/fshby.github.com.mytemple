@@ -3101,8 +3101,28 @@ html body[data-theme="image"] .markdown-body .callout .callout-title::before {
   min-height: 0;
   background: var(--panel-glass);
   color: var(--text);
-  line-height: 1.6;
-  font-family: "Cascadia Code", Consolas, monospace;
+  /* 更紧凑且利于编辑的行高与字重：正文1.75，中文字正，英文等宽不挤压 */
+  line-height: 1.76;
+  /* 等宽字体栈：优先使用 Windows 11 / 新 IDE 自带的 Cascadia Mono/Cascadia Code 连字，
+     FiraCode 连字次之；中文退回到更清晰的微软雅黑/PingFang/Sarasa/思源等宽。
+     保证中文与英文的字形比例更均衡，避免中文比英文大一截或渲染发虚。*/
+  font-family: "Cascadia Mono", "Cascadia Code", "JetBrains Mono", "Fira Code",
+               "Sarasa Mono SC", "Sarasa Mono T SC", "Source Han Mono SC",
+               "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei",
+               Consolas, "Courier New", monospace;
+  font-variant-ligatures: normal;
+  font-feature-settings: "liga" 1, "calt" 1, "cv11", "ss01";
+  /* 渲染优化：禁用亚像素在高分屏可能不明显，以下两条在 Windows LCD 上显著提升清晰度 */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  /* 字距极微拉开：避免代码密集区难以辨认 */
+  letter-spacing: 0.002em;
+  /* 字号优先使用被 JS 写过的 --editor-font-size-local，
+     否则回退到 --doc-font-size，最后兜底 16px。
+     保证 Ctrl+/- 设置与重启恢复都能从根变量正确读取。 */
+  font-size: var(--editor-font-size-local, var(--editor-font-size, var(--doc-font-size, 16px)));
+  tab-size: 4;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   position: relative;
@@ -3111,15 +3131,63 @@ html body[data-theme="image"] .markdown-body .callout .callout-title::before {
 #editor .cm-editor {
   height: 100%;
   min-height: 0;
+  /* 所有子节点继承父字号与字体栈（含连字与字距） */
+  font: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  font-feature-settings: inherit;
+  font-variant-ligatures: inherit;
+  -webkit-font-smoothing: inherit;
+  text-rendering: inherit;
 }
 
 #editor .cm-scroller {
   height: 100%;
   min-height: 0;
+  font: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  font-feature-settings: inherit;
+  font-variant-ligatures: inherit;
+  overflow-x: auto;
 }
 
 #editor .cm-content {
   min-height: 100%;
+  padding-block: 18px 160px;
+  padding-inline: 22px;
+  font: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  font-feature-settings: inherit;
+  font-variant-ligatures: inherit;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+#editor .cm-line {
+  font: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  padding-block: 1px;
+  /* 避免长行在未开启换行时产生抖动，开启换行则优雅换行 */
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+
+#editor .cm-gutters {
+  font: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  /* 行号字体稍降一级与主文本对齐，视觉层级更清晰 */
+  font-variant-numeric: tabular-nums;
+  opacity: 0.78;
+  user-select: none;
 }
 
 #cursor-overlay {
@@ -3207,8 +3275,10 @@ html body[data-theme="image"] .markdown-body .callout .callout-title::before {
 }
 
 .editor-panel.preview-hidden #editor {
-  font-size: calc(var(--doc-font-size) * 1.05);
-  line-height: 1.8;
+  /* 仅隐藏预览时，编辑器本身"字号"不做自动放大，尊重用户 Ctrl+/- 手动设置；
+     但保留更宽松的行距 + 更大外边距以获得清爽的单栏写作感受。*/
+  font-size: var(--editor-font-size-local, var(--editor-font-size, var(--doc-font-size, 16px)));
+  line-height: 1.82;
 }
 
 .editor-panel.preview-hidden #preview {
@@ -5876,7 +5946,11 @@ button.primary {
 }
 
 #editor {
-  line-height: 1.74;
+  /* 与前一个 #editor 规则的 line-height 保持一致，避免被覆盖回 1.74 打断比例 */
+  line-height: 1.76;
+  font-weight: 450;
+  /* Windows下字体略细会虚，适度抬升字重到 450 但仍保持普通字重观感 */
+  color: color-mix(in srgb, var(--text) 96%, #000);
 }
 
 #editor:focus-within {

@@ -714,12 +714,56 @@ function adjustEditorFontSize(delta) {
   }
   localStorage.setItem("docContentFontSize", String(settings.contentFontSize));
   const scale = (Number(localStorage.getItem("windowZoom")) || computeOptimalZoom()) / 100;
-  document.documentElement.style.setProperty("--doc-font-size", `${Math.round(settings.contentFontSize * scale)}px`);
-  const editorEl = document.querySelector(".editor-pane textarea, .editor-pane .cm-content");
-  if (editorEl) {
-    editorEl.style.fontSize = `${settings.contentFontSize}px`;
+  const scopedPx = Math.round(settings.contentFontSize * scale);
+  document.documentElement.style.setProperty("--doc-font-size", `${scopedPx}px`);
+  // 编辑模式字号必须显式同步到 #editor 及 CodeMirror 子元素，
+  // 仅靠 CSS 变量或单元素内联样式无法覆盖 .cm-line / gutters / cursor-overlay 等多节点。
+  applyEditorFontSizeToDom(settings.contentFontSize, scopedPx);
+  showToast(`编辑器字体 ${settings.contentFontSize}px`);
+}
+
+/**
+ * 将编辑器字号同步到所有影响显示的 DOM 节点。
+ * 同步设置变量与显式样式，保证：
+ * 1) CodeMirror 重绘（cm-content/cm-line/cm-gutters/cm-activeLine）
+ * 2) 普通 textarea 兼容（如果未来 #editor 退化）
+ * 3) 光标覆盖层 #cursor-overlay 与编辑器行高/字号保持一致
+ * 4) 行高、字间距、字体渲染选项随字号同步，避免编辑模式文字模糊/拥挤
+ */
+function applyEditorFontSizeToDom(basePx, scaledPx = basePx) {
+  const root = document.documentElement;
+  root.style.setProperty("--editor-font-size", `${basePx}px`);
+  root.style.setProperty("--editor-font-size-scaled", `${scaledPx}px`);
+  const editorHost = els.editor?.host || document.querySelector("#editor");
+  if (editorHost) {
+    // 字号按未缩放值（编辑器局部跟随 --doc-font-size 可能被全局zoom重复叠加）；
+    // 这里统一使用 basePx，与用户"Ctrl+/-调整到多少就显示多少"的直觉一致。
+    editorHost.style.setProperty("font-size", `${basePx}px`, "important");
+    editorHost.style.setProperty("--editor-font-size-local", `${basePx}px`);
+    editorHost.style.fontSize = `${basePx}px`;
+    const scroller = editorHost.querySelector(".cm-scroller");
+    const content = editorHost.querySelector(".cm-content");
+    const gutters = editorHost.querySelector(".cm-gutters");
+    const lines = editorHost.querySelectorAll(".cm-line");
+    const layer = editorHost.querySelector(".cm-selectionLayer, .cm-cursorLayer, .cm-activeLineLayer");
+    const targets = [content, scroller, gutters, layer].filter(Boolean);
+    targets.forEach((el) => {
+      el.style.setProperty("font-size", `${basePx}px`, "important");
+    });
+    lines.forEach((ln) => {
+      ln.style.setProperty("font-size", `${basePx}px`, "important");
+    });
+    const overlay = document.querySelector("#cursor-overlay");
+    if (overlay) overlay.style.fontSize = `${basePx}px`;
+    // 强制 CodeMirror 重新测量视图尺寸，避免行高/滚动条错位
+    if (typeof els.editor?.requestMeasure === "function") {
+      try { els.editor.requestMeasure(); } catch (_) { /* ignore */ }
+    }
+    if (typeof editorHost.focus === "function") {
+      // 触发一次滚动测量以刷新滚动条范围
+      try { editorHost.dispatchEvent(new UIEvent("resize", { bubbles: false })); } catch (_) {}
+    }
   }
-  showToast(`字体 ${settings.contentFontSize}px`);
 }
 
 function restoreWindowZoom() {
@@ -770,7 +814,10 @@ function applySettings(settings = loadSettings()) {
   }
   const currentScale = parseFloat(document.documentElement.style.getPropertyValue("--app-scale")) || 1;
   document.documentElement.style.setProperty("--app-font-size", `${Math.round(settings.fontSize * currentScale)}px`);
-  document.documentElement.style.setProperty("--doc-font-size", `${Math.round(settings.contentFontSize * currentScale)}px`);
+  const scaledContentPx = Math.round(settings.contentFontSize * currentScale);
+  document.documentElement.style.setProperty("--doc-font-size", `${scaledContentPx}px`);
+  // 重启 / 重设设置后，编辑器实际字号要与持久化 contentFontSize 一致
+  applyEditorFontSizeToDom(settings.contentFontSize, scaledContentPx);
   document.documentElement.style.setProperty("--app-font-family", settings.fontFamily);
   const markdownColorVars = {
     heading: "--md-heading",
@@ -3502,6 +3549,12 @@ function setMode(mode, { deferReaderRender = false } = {}) {
     setEditorOutlineVisible(state.editorOutlineVisible);
     setPreviewVisible(state.previewVisible);
     setEditorVisible(!state.editorHidden);
+    // 进入编辑态立即重放一次用户字号设置（CodeMirror重建视图后会重置尺寸，
+    // 不加此行会导致：打开非md默认edit / 切回edit 时，字号被CSS默认值覆盖，
+    // Ctrl+/- 调整过的大小在编辑态中"看起来没生效"。）
+    const s = loadSettings();
+    const sc = parseFloat(document.documentElement.style.getPropertyValue("--app-scale")) || 1;
+    applyEditorFontSizeToDom(s.contentFontSize, Math.round(s.contentFontSize * sc));
     if (state.editorOutlineVisible) {
       renderEditorOutline(els.editor.value);
     }
@@ -9770,6 +9823,28 @@ function selectAllMatchingWords() {
 
 els.editor.addEventListener("keydown", (event) => {
   const mod = event.ctrlKey || event.metaKey;
+  // 编辑器内 Ctrl/Cmd + +/-/0：调整编辑器字体大小。
+  // 必须在这里（捕获到 #editor 本身的 keydown）高优先前置处理：
+  // CodeMirror 会吞掉编辑区内的大量快捷键，document级监听常常拿不到事件，导致用户反馈"没生效"。
+  // 对 +/-/= 三处位置均识别（= 键按 Shift 会生成 +，不按 Shift 就是 =，两者都是Ctrl+放大）。
+  if (mod && !event.altKey && !event.shiftKey && (event.key === "=" || event.key === "+")) {
+    event.preventDefault();
+    event.stopPropagation();
+    adjustEditorFontSize(1);
+    return;
+  }
+  if (mod && !event.altKey && !event.shiftKey && event.key === "-") {
+    event.preventDefault();
+    event.stopPropagation();
+    adjustEditorFontSize(-1);
+    return;
+  }
+  if (mod && !event.altKey && !event.shiftKey && event.key === "0") {
+    event.preventDefault();
+    event.stopPropagation();
+    adjustEditorFontSize(0);
+    return;
+  }
   const handled = (() => {
     if (mod && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "f") {
       event.preventDefault();
