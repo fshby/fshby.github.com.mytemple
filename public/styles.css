@@ -4325,15 +4325,89 @@ html body[data-theme="image"] .markdown-body .callout .callout-title::before {
   right: 22px;
   bottom: 22px;
   z-index: 70;
-  max-width: 320px;
-  padding: 10px 14px;
+  max-width: 440px;
+  min-width: 260px;
+  padding: 12px 14px 10px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--panel);
-  box-shadow: 0 14px 34px rgba(16, 24, 40, 0.18);
+  box-shadow: 0 14px 34px rgba(16, 24, 40, 0.22);
   color: var(--text);
   font-size: 13px;
+  line-height: 1.55;
 }
+.toast-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.toast-title {
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 4px;
+  word-break: break-word;
+}
+.toast-message {
+  color: var(--muted);
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+.toast-path {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(127, 127, 127, 0.10);
+  font-family: ui-monospace, Consolas, Menlo, monospace;
+  font-size: 12px;
+  color: var(--text);
+  word-break: break-all;
+  user-select: all;
+}
+.toast-close {
+  flex: 0 0 auto;
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 2px;
+  cursor: pointer;
+}
+.toast-close:hover { color: var(--text); }
+.toast-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+}
+.toast-action {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background .15s ease, border-color .15s ease;
+}
+.toast-action:hover {
+  background: rgba(127, 127, 127, 0.10);
+  border-color: rgba(127, 127, 127, 0.35);
+}
+.toast-action.primary {
+  background: var(--accent, #2f7bf0);
+  border-color: var(--accent, #2f7bf0);
+  color: #fff;
+}
+.toast-action.primary:hover { filter: brightness(1.08); }
+.toast.kind-warn  { border-color: rgba(217, 119,  6, 0.55); }
+.toast.kind-error { border-color: rgba(220,  38, 38, 0.55); }
+.toast.kind-ok    { border-color: rgba( 16, 185,129, 0.55); }
 
 .modal-dialog h2 {
   margin: 0;

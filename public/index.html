@@ -1240,7 +1240,7 @@
           <div>
             <span class="settings-kicker">IMPORT</span>
             <h2>导入文档</h2>
-            <p class="muted">支持 DOCX、PDF、XLSX、HTML、PPTX、EPUB、CSV、TXT、JSON、Markdown — 自动转换为 Markdown 文档</p>
+            <p class="muted">支持 DOCX · RTF · ODT · MD · TXT · HTML · JSON · CSV · PDF · PPTX · XLSX · EPUB — DOCX/RTF/ODT 自动提取正文，不再生成占位</p>
           </div>
           <button type="button" id="closeImportBtn" class="settings-close" aria-label="关闭">×</button>
         </header>
@@ -1254,15 +1254,16 @@
               </svg>
             </div>
             <p class="import-drop-title">选择要导入的文件</p>
-            <p class="import-drop-hint">拖拽文件到此处，或点击下方按钮选择</p>
-            <p class="import-formats">DOCX · PDF · XLSX · HTML · PPTX · EPUB · CSV · TXT · JSON · MD</p>
-            <input type="file" id="importFileInput" accept=".docx,.pdf,.xlsx,.xls,.html,.htm,.pptx,.epub,.csv,.txt,.json,.md" multiple hidden />
+            <p class="import-drop-hint">拖拽文件到此处；或使用下方「选择文件」/ 「系统文件对话框」</p>
+            <p class="import-formats">DOCX/RTF/ODT 自动提取正文 · MD/TXT/HTML/JSON/CSV 原生支持 · PDF/PPTX/XLSX/EPUB 占位导入</p>
+            <input type="file" id="importFileInput" accept=".docx,.doc,.rtf,.odt,.md,.markdown,.txt,.html,.htm,.json,.csv,.pdf,.xlsx,.xls,.pptx,.ppt,.epub" multiple hidden />
           </div>
           <div class="import-file-list" id="importFileList"></div>
         </div>
         <div class="modal-actions import-actions">
           <button type="button" id="cancelImportBtn">取消</button>
           <button type="button" id="browseImportBtn" class="secondary">选择文件</button>
+          <button type="button" id="sysPickImportBtn" class="secondary hidden">系统文件对话框</button>
           <button type="button" id="confirmImportBtn" class="primary" disabled>导入</button>
         </div>
       </div>

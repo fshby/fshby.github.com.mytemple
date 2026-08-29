@@ -437,6 +437,7 @@ const els = {
   closeImportBtn: document.querySelector("#closeImportBtn"),
   cancelImportBtn: document.querySelector("#cancelImportBtn"),
   browseImportBtn: document.querySelector("#browseImportBtn"),
+  sysPickImportBtn: document.querySelector("#sysPickImportBtn"),
   confirmImportBtn: document.querySelector("#confirmImportBtn"),
   insertVideoBtn: document.querySelector("#insertVideoBtn"),
   videoFileInput: document.querySelector("#videoFileInput"),
@@ -649,11 +650,189 @@ function applyPaperTexture() {
   styleEl.dataset.ready = "1";
 }
 
-function showToast(message) {
+/**
+ * Toast 通知（支持字符串 / 对象两种签名，向前兼容）。
+ *   showToast("hello")                                 —— 旧调用：1.8s 文本 toast（保持不破坏）
+ *   showToast({ message, title, duration, actions, canClose, kind, path })
+ *     - message:   string，主消息
+ *     - title:     string，可选粗体标题（默认"提示"，path 存在时默认"已保存"）
+ *     - path:      string，可选完整绝对路径（以可复制的等宽小字块显示）
+ *     - duration:  number, ms。默认：有 actions = 10000；否则 = 2400。
+ *     - kind:      "ok" | "warn" | "error"，边框色（可选）
+ *     - canClose:  bool，默认 true（显示右上角 ×）
+ *     - actions:   [{label, onClick, primary, dismissAfter?:true|ms, disabled?}]，最多建议 2~3 个
+ *                  onClick 返回 true 则不自动关闭；dismissAfter=true 点击后即关闭。
+ */
+function showToast(arg) {
   clearTimeout(state.toastTimer);
-  els.toast.textContent = message;
-  els.toast.classList.remove("hidden");
-  state.toastTimer = setTimeout(() => els.toast.classList.add("hidden"), 1800);
+  state.toastTimer = null;
+
+  // 兼容旧签名：单字符串
+  let opts = arg;
+  if (typeof arg === "string") {
+    opts = { message: arg, duration: 1800, canClose: false };
+  }
+  opts = opts || {};
+  const {
+    message = "",
+    title = (opts.path ? "已保存" : "提示"),
+    path = "",
+    duration = (Array.isArray(opts.actions) && opts.actions.length ? 10000 : 2400),
+    kind = (opts.path ? "ok" : ""),
+    canClose = true,
+    actions = [],
+  } = opts;
+
+  const toast = els.toast;
+  toast.className = "toast";
+  if (kind && ["ok", "warn", "error"].includes(kind)) {
+    toast.classList.add(`kind-${kind}`);
+  }
+
+  const safeText = (s) => (s == null ? "" : String(s));
+  const esc = (s) => safeText(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
+  let html = "";
+  html += '<div class="toast-head">';
+  html += '<div style="flex:1;min-width:0;">';
+  if (title) html += `<div class="toast-title">${esc(title)}</div>`;
+  if (message) html += `<div class="toast-message">${esc(message)}</div>`;
+  if (path) html += `<div class="toast-path" title="点击复制" data-copy="${esc(path)}">${esc(path)}</div>`;
+  html += '</div>';
+  if (canClose) html += `<button type="button" class="toast-close" aria-label="关闭" data-toast-close="1">×</button>`;
+  html += '</div>';
+
+  if (Array.isArray(actions) && actions.length) {
+    html += '<div class="toast-actions">';
+    actions.forEach((act, idx) => {
+      if (!act || typeof act.label !== "string") return;
+      const cls = ["toast-action", act.primary ? "primary" : ""].filter(Boolean).join(" ");
+      const dis = act.disabled ? " disabled" : "";
+      html += `<button type="button" class="${cls}"${dis} data-toast-action="${idx}">${esc(act.label)}</button>`;
+    });
+    html += '</div>';
+  }
+
+  toast.innerHTML = html;
+  toast.classList.remove("hidden");
+
+  // 事件绑定（闭包捕获 actions）
+  const close = () => {
+    clearTimeout(state.toastTimer);
+    state.toastTimer = null;
+    toast.classList.add("hidden");
+    toast.innerHTML = "";
+    toast.className = "toast hidden";
+  };
+  state._toastClose = close;
+
+  const handleClick = (e) => {
+    const tgt = e.target;
+    if (!(tgt instanceof Element)) return;
+    // 路径块：点击复制
+    if (tgt.matches("[data-copy]")) {
+      const v = tgt.getAttribute("data-copy") || "";
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          navigator.clipboard.writeText(v).catch(() => {});
+        } else {
+          const ta = document.createElement("textarea");
+          ta.value = v; ta.style.position = "fixed"; ta.style.left = "-9999px";
+          document.body.appendChild(ta); ta.select();
+          try { document.execCommand("copy"); } catch (_) {}
+          document.body.removeChild(ta);
+        }
+        const old = tgt.textContent;
+        tgt.textContent = "✓ 已复制路径";
+        setTimeout(() => { try { tgt.textContent = old; } catch (_) {} }, 1200);
+      } catch (_) {}
+      return;
+    }
+    // 关闭按钮
+    if (tgt.matches("[data-toast-close]")) { close(); return; }
+    // action 按钮
+    const actAttr = tgt.getAttribute("data-toast-action");
+    if (actAttr != null) {
+      const idx = Number(actAttr);
+      const act = (Array.isArray(actions) ? actions[idx] : null);
+      if (!act || act.disabled) return;
+      let keepOpen = false;
+      try {
+        if (typeof act.onClick === "function") {
+          const r = act.onClick();
+          if (r === true) keepOpen = true;
+        }
+      } catch (err) { console.error("[toast action]", err); }
+      const dismiss = act.dismissAfter;
+      if (!keepOpen) {
+        if (typeof dismiss === "number") {
+          state.toastTimer = setTimeout(close, Math.max(0, dismiss));
+        } else {
+          close();
+        }
+      }
+      return;
+    }
+  };
+  toast.removeEventListener("click", state._toastHandler || (() => {}));
+  state._toastHandler = handleClick;
+  toast.addEventListener("click", handleClick);
+
+  if (duration > 0) {
+    state.toastTimer = setTimeout(close, duration);
+  }
+}
+
+/** 方便统一调用：另存为成功后 1 个 path toast（打开文件 / 在文件夹中查看） */
+function showSavedAsToast({ path, formatName = "文档", extraActions = [] }) {
+  if (!path) return;
+  const actions = [
+    {
+      label: "打开文件", primary: true, dismissAfter: true,
+      async onClick() {
+        try {
+          if (window.__TAURI__?.core?.invoke) {
+            await window.__TAURI__.core.invoke("cmd_open_exported_file", { path });
+          } else if (window.__TAURI__?.invoke) {
+            await window.__TAURI__.invoke("cmd_open_exported_file", { path });
+          } else {
+            // 非 Tauri（纯浏览器）无法 open path，降级提示
+            showToast({ title: "已复制路径", message: "当前环境不支持直接打开，已复制路径到剪贴板。", path, duration: 3000, kind: "warn" });
+          }
+        } catch (err) {
+          showToast({ title: "打开失败", message: String(err?.message || err), kind: "error", duration: 4000 });
+        }
+      },
+    },
+    {
+      label: "在文件夹中查看", dismissAfter: true,
+      async onClick() {
+        try {
+          if (window.__TAURI__?.core?.invoke) {
+            await window.__TAURI__.core.invoke("cmd_reveal_exported_file_in_folder", { path });
+          } else if (window.__TAURI__?.invoke) {
+            await window.__TAURI__.invoke("cmd_reveal_exported_file_in_folder", { path });
+          } else {
+            showToast({ title: "已复制路径", message: "当前环境不支持定位文件，已复制路径到剪贴板。", path, duration: 3000, kind: "warn" });
+          }
+        } catch (err) {
+          showToast({ title: "定位失败", message: String(err?.message || err), kind: "error", duration: 4000 });
+        }
+      },
+    },
+    ...(extraActions || []),
+  ];
+  showToast({
+    title: `${formatName} 已保存`,
+    message: "您随时可以从下方路径再次访问该文件。",
+    path,
+    duration: 15000,
+    kind: "ok",
+    actions,
+  });
 }
 
 function loadSettings() {
@@ -2170,6 +2349,104 @@ async function triggerBlobDownload({ blob, filename }) {
   }
 }
 
+/**
+ * Tauri 2.x 安全：前端调 invoke 的入口在此集中。
+ *   - 非 Tauri 环境（纯浏览器 / 打包但 __TAURI__ 没注入）返回 null；
+ *   - 调用失败走 throw。
+ */
+function tauriInvoke(name, args) {
+  if (!window.__TAURI__) return null;
+  const fn = window.__TAURI__?.core?.invoke || window.__TAURI__?.invoke;
+  if (typeof fn !== "function") return null;
+  return fn(name, args || {});
+}
+
+/**
+ * 把一段 Blob → 先尝试通过 Tauri 系统原生「另存为」对话框让用户明确路径并真写入磁盘，
+ * 返回用户确认的绝对路径字符串；以下情况返回 null（= 调用方应降级走浏览器 Blob 下载）：
+ *   - 非 Tauri / invoke 不可用
+ *   - 用户取消对话框（Rust 返回 Ok(null) 时，返回 null 但 state.cancelled = true）
+ *   - Rust 侧返回明确"取消"语义（canceled:true）
+ *   - Rust 侧抛错（会 throw，除非 allowFallback=true，此时返回 null 同时打印警告）
+ *
+ * @param {Object} opts
+ * @param {Blob} opts.blob
+ * @param {string} opts.defaultName 不带扩展名或带扩展名皆可；另存为会把扩展名再拼到对话框过滤
+ * @param {string|string[]} opts.extensions 扩展名过滤（不含点）。String 单扩展，String[] 多扩展（常用：["docx","doc"]）。
+ * @param {string} [opts.formatName] 仅用于 toast
+ * @param {boolean} [opts.allowFallback=true] Rust 侧失败（如 dialog 插件死）是否允许不 throw 只返 null
+ * @returns {Promise<string|null>} 路径 or null
+ */
+async function tauriSaveAs({ blob, defaultName, extensions, allowFallback = true }) {
+  // 1) 检测 Tauri invoke 可用性
+  if (!window.__TAURI__) return null;
+  const invoke = window.__TAURI__?.core?.invoke || window.__TAURI__?.invoke;
+  if (typeof invoke !== "function") return null;
+
+  // 2) Blob → ArrayBuffer → base64 (不包含 data:xxx;base64, header)
+  let buf;
+  try {
+    buf = await (blob.arrayBuffer ? blob.arrayBuffer() : Promise.resolve(blob));
+  } catch (_) { buf = null; }
+  if (buf == null) return null;
+  const u8 = new Uint8Array(buf);
+  // 浏览器 base64 encode：用 FileReader data URL 方案兼容所有 WebView2
+  let b64;
+  try {
+    const dataUrl = await new Promise((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onload = () => resolve(fr.result);
+      fr.onerror = () => reject(fr.error || new Error("FileReader failed"));
+      fr.readAsDataURL(new Blob([u8], { type: "application/octet-stream" }));
+    });
+    b64 = String(dataUrl).replace(/^data:[^;]*;base64,/, "");
+  } catch (err) {
+    console.warn("[tauriSaveAs] base64 encode failed, will fallback to blob download", err);
+    return null;
+  }
+
+  // 3) 默认文件名：如果 defaultName 已经带扩展名，过滤 extensions 用的后缀要以「defaultName 扩展名」优先
+  let name = String(defaultName || "未命名");
+  let extsList = [];
+  if (Array.isArray(extensions)) extsList = extensions.map((s) => String(s));
+  else if (extensions) extsList = [String(extensions)];
+  extsList = extsList
+    .map((s) => s.trim().replace(/^\.+/, "").toLowerCase())
+    .filter(Boolean);
+
+  // 4) 构造传给 Rust 的扩展名列表
+  let extForRust = extsList.slice();
+  if (!extForRust.length) {
+    // 没指定扩展名：从 defaultName 拆
+    const m = name.match(/\.([^./\\]+)$/);
+    if (m) extForRust = [m[1].toLowerCase()];
+    name = name.replace(/\.[^./\\]+$/, ""); // 给 Rust 用 set_file_name 不带扩展名（Rust 的 filter 会自动拼）
+  } else {
+    // 即使指定了扩展名，如果 defaultName 末尾带同名扩展名，也剥掉，避免变成 xx.doc.docx
+    const last = `.${extForRust[0].toLowerCase()}`;
+    if (name.toLowerCase().endsWith(last)) {
+      name = name.slice(0, name.length - last.length);
+    }
+  }
+  if (!name) name = "未命名";
+
+  // 5) 真正 invoke
+  try {
+    const res = await invoke("cmd_export_save_as", {
+      defaultName: name,
+      extensions: extForRust,
+      dataBase64: b64,
+    });
+    // res: string | null | undefined
+    if (!res) return null; // 用户取消
+    return String(res);
+  } catch (err) {
+    console.warn("[tauriSaveAs] invoke failed, will fallback:", err?.message || err);
+    if (allowFallback) return null;
+    throw err;
+  }
+}
+
 async function exportCurrentDoc(format) {
   if (!state.currentPath && !state.currentContent) {
     showToast("请先打开一个文档");
@@ -2178,46 +2455,91 @@ async function exportCurrentDoc(format) {
   const safeTitle = (title) => String(title || "导出文档").replace(/[\\/:*?"<>|]/g, "_").slice(0, 60) || "导出文档";
   const fmt = String(format || "md").toLowerCase();
 
-  // 1) HTML / DOCX：直接前端本地生成最高质量（样式+图+公式+图表全内联）
+  /** 通用导出：先问路径，成功 showSavedAsToast；取消不报错；失败降级 Blob 下载并 toast 说明浏览器路径。 */
+  async function runExport({ label, blob, filenameForBlob, extensions, formatName }) {
+    const path = await tauriSaveAs({
+      blob,
+      defaultName: filenameForBlob,
+      extensions,
+      allowFallback: true,
+    });
+    if (typeof path === "string" && path) {
+      showSavedAsToast({ path, formatName });
+      return true;
+    }
+    // 非 Tauri 或 dialog 失败 / 用户取消：path = null。
+    // 为区分"用户取消"（不应再触发 Blob 下载）与"降级下载"，用一个经验判断：
+    //   若 dialog 插件可用但返回 null（用户真取消了）→ 静默；
+    //   否则（根本没 Tauri / invoke 抛错）→ 走老的 Blob 下载并 toast 明确告知保存到浏览器下载目录。
+    const hasTauri = !!(window.__TAURI__ && (window.__TAURI__.core?.invoke || window.__TAURI__.invoke));
+    if (hasTauri) {
+      // 在 Tauri 里返回 null = 用户明确取消（因为 invoke 异常时 catch 里仍会返 allowFallback=true 的 null）。
+      // 这里不做任何 toast，满足需求 D「用户取消不报错」。
+      return false;
+    }
+    // 纯浏览器：降级 Blob + 提示"浏览器默认下载目录"
+    await triggerBlobDownload({ blob, filename: filenameForBlob });
+    showToast({
+      title: `${label} 已导出`,
+      kind: "warn",
+      duration: 6000,
+      message: `当前环境不支持原生另存为，已保存至浏览器默认下载目录。\n建议打开下载面板查看保存位置。`,
+      actions: [{ label: "知道了", dismissAfter: true }],
+    });
+    return false;
+  }
+
+  // 1) HTML：直接前端本地生成最高质量（样式+图+公式+图表全内联）
   if (fmt === "html") {
     showToast("正在导出 HTML（含内联图片/公式/图表）…");
     try {
       const { html, title } = await buildExportableHtml({ withBrandFooter: true });
       const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-      await triggerBlobDownload({ blob, filename: `${safeTitle(title)}.html` });
-      showToast("已导出 HTML");
+      const name = `${safeTitle(title)}.html`;
+      await runExport({
+        label: "HTML", formatName: "HTML 文件",
+        blob, filenameForBlob: name, extensions: ["html", "htm"],
+      });
       return;
     } catch (e) {
       console.error("HTML export failed:", e);
-      showToast(`HTML 导出失败: ${e.message}`);
-      return;
-    }
-  }
-  if (fmt === "docx" || fmt === "doc") {
-    showToast("正在导出 Word（DOCX/DOC 兼容格式）…");
-    try {
-      const { blob, title, ext } = await buildExportableDocxBlob();
-      await triggerBlobDownload({ blob, filename: `${safeTitle(title)}.${ext}` });
-      showToast("已导出 Word 文档（用 Word/WPS 打开即可，支持图片/公式/中文）");
-      return;
-    } catch (e) {
-      console.error("DOCX export failed:", e);
-      showToast(`Word 导出失败: ${e.message}`);
+      showToast({ title: "HTML 导出失败", message: String(e?.message || e), kind: "error", duration: 4000 });
       return;
     }
   }
 
-  // 2) MD / TXT：调用后端 /api/export — 后端已经统一 strip_frontmatter，
-  //    TXT 后端同时剥离 Markdown 语法糖（frontmatter / ``` / 标题 / 粗体 等）。
-  //    如后端 HTTP 400 或网络失败：前端兜底用 stripFrontmatter + 轻量 txt 剥离，
-  //    保证"绝不无法保存"。
-  showToast(`正在导出 ${fmt.toUpperCase()}...`);
+  // 2) DOCX/DOC：Word 兼容格式（Word/WPS 直接打开）
+  if (fmt === "docx" || fmt === "doc") {
+    showToast("正在导出 Word（DOCX/DOC 兼容格式）…");
+    try {
+      const { blob, title, ext } = await buildExportableDocxBlob();
+      const name = `${safeTitle(title)}.${ext}`;
+      await runExport({
+        label: "Word 文档", formatName: "Word 文档",
+        blob, filenameForBlob: name,
+        extensions: ext === "docx" ? ["docx", "doc"] : ["doc", "docx"],
+      });
+      return;
+    } catch (e) {
+      console.error("DOCX export failed:", e);
+      showToast({ title: "Word 导出失败", message: String(e?.message || e), kind: "error", duration: 4000 });
+      return;
+    }
+  }
+
+  // 3) MD / TXT：优先后端 /api/export（统一 strip_frontmatter + 中文 BOM + TXT 去语法），
+  //    失败再前端兜底；无论哪条通道，都先把 Blob 交给 tauriSaveAs 问路径。
+  const desc = fmt === "txt" || fmt === "text" ? "TXT" : (fmt === "md" || fmt === "markdown" ? "Markdown" : fmt.toUpperCase());
+  showToast(`正在导出 ${desc}...`);
   const content = state.currentContent || "";
   const title = state.currentTitle || state.currentPath?.split("/").pop()?.replace(/\.md$/i, "") || "导出文档";
   const pdfSettings = readPdfExportSettings();
   const author = pdfSettings.showAuthor ? (pdfSettings.authorText || "") : "";
   const watermark = pdfSettings.watermarkText || "";
 
+  let blob = null;
+  let ext = (fmt === "markdown" ? "md" : (fmt === "text" ? "txt" : fmt));
+  let fetchOk = false;
   try {
     const resp = await fetch("/api/export", {
       method: "POST",
@@ -2228,41 +2550,45 @@ async function exportCurrentDoc(format) {
       const err = await resp.json().catch(() => ({}));
       throw new Error(err.error || `导出失败 (HTTP ${resp.status})`);
     }
-    const blob = await resp.blob();
-    const ext = fmt === "markdown" ? "md" : (fmt === "text" ? "txt" : fmt);
-    await triggerBlobDownload({ blob, filename: `${safeTitle(title)}.${ext}` });
-    showToast(`已导出 ${fmt.toUpperCase()}`);
-    return;
+    blob = await resp.blob();
+    fetchOk = true;
   } catch (e) {
     console.warn("Export via backend failed, fallback to local:", e);
   }
 
-  // —— 前端本地兜底 ——
-  try {
-    const noFm = stripFrontmatter(content);
-    if (fmt === "md" || fmt === "markdown") {
-      const blob = new Blob([noFm], { type: "text/markdown;charset=utf-8" });
-      await triggerBlobDownload({ blob, filename: `${safeTitle(title)}.md` });
-      showToast("已导出 MD（本地降级）");
+  // 前端本地兜底（仅当 HTTP 失败时）
+  if (!blob) {
+    try {
+      const noFm = stripFrontmatter(content);
+      if (fmt === "md" || fmt === "markdown") {
+        ext = "md";
+        blob = new Blob([noFm], { type: "text/markdown;charset=utf-8" });
+      } else if (fmt === "txt" || fmt === "text") {
+        ext = "txt";
+        const plain = await (async () => {
+          const wrap = document.createElement("div");
+          wrap.innerHTML = cachedRenderMarkdown(noFm);
+          return plainText(wrap.innerHTML || wrap.textContent || noFm) || noFm;
+        })();
+        const BOM = "\uFEFF";
+        blob = new Blob([BOM + plain], { type: "text/plain;charset=utf-8" });
+      } else {
+        showToast({ title: "导出失败", message: `不支持的格式 ${fmt}`, kind: "error", duration: 3000 });
+        return;
+      }
+    } catch (e2) {
+      console.error("Export fallback failed:", e2);
+      showToast({ title: "导出失败", message: String(e2?.message || e2), kind: "error", duration: 4000 });
       return;
     }
-    if (fmt === "txt" || fmt === "text") {
-      const plain = await (async () => {
-        const wrap = document.createElement("div");
-        wrap.innerHTML = cachedRenderMarkdown(noFm);
-        return plainText(wrap.innerHTML || wrap.textContent || noFm) || noFm;
-      })();
-      const BOM = "\uFEFF";
-      const blob = new Blob([BOM + plain], { type: "text/plain;charset=utf-8" });
-      await triggerBlobDownload({ blob, filename: `${safeTitle(title)}.txt` });
-      showToast("已导出 TXT（本地降级）");
-      return;
-    }
-    showToast(`导出失败: 不支持的格式 ${fmt}`);
-  } catch (e2) {
-    console.error("Export fallback failed:", e2);
-    showToast(`导出失败: ${e2.message}`);
   }
+
+  const name = `${safeTitle(title)}.${ext}`;
+  const suffix = fetchOk ? "" : "（本地降级）";
+  await runExport({
+    label: `${desc}${suffix}`, formatName: `${desc} 文件${suffix}`,
+    blob, filenameForBlob: name, extensions: [ext],
+  });
 }
 
 async function exportCurrentDocToPdf() {
@@ -2283,6 +2609,28 @@ async function exportCurrentDocToPdf() {
     try { html = await inlinePrintImages(html); } catch (_) {}
   }
   const title = els.docTitle?.textContent || state.currentDoc?.title || "MyTemple 文档";
+  const safeTitle = (t) => String(t || "导出文档").replace(/[\\/:*?"<>|]/g, "_").slice(0, 60) || "导出文档";
+  const baseName = safeTitle(title);
+
+  // 先另存一份 HTML（与 PDF 完全同内容，样式+图片全内联）到用户明确路径，
+  // 方便用户"清楚知道保存位置"；同时 iframe print 对话框仍保留（可再另存为 PDF）。
+  // 这样：用户既能拿到路径，也没丢原有的"直接打印 / 另存为 PDF"通道。
+  const fullHtml = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>${PRINT_STYLES}</style></head><body>${html}</body></html>`;
+  const htmlBlob = new Blob([fullHtml], { type: "text/html;charset=utf-8" });
+  let htmlPath = null;
+  try {
+    htmlPath = await tauriSaveAs({
+      blob: htmlBlob,
+      defaultName: `${baseName}.html`,
+      extensions: ["html", "htm"],
+      allowFallback: true,
+    });
+  } catch (e) {
+    console.warn("PDF 后台另存 HTML 失败（不影响打印）", e);
+    htmlPath = null;
+  }
+  const hasTauri = !!(window.__TAURI__ && (window.__TAURI__.core?.invoke || window.__TAURI__.invoke));
+
   // 通过隐藏 iframe 打印：iframe 来源为 about:blank，浏览器打印页眉页脚不会显示本机地址与端口。
   const iframe = document.createElement("iframe");
   iframe.setAttribute("aria-hidden", "true");
@@ -2297,7 +2645,7 @@ async function exportCurrentDocToPdf() {
   try {
     const doc = iframe.contentWindow.document;
     doc.open();
-    doc.write(`<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>${PRINT_STYLES}</style></head><body>${html}</body></html>`);
+    doc.write(fullHtml);
     doc.close();
     const images = [...doc.querySelectorAll("img")];
     if (images.length) {
@@ -2312,12 +2660,63 @@ async function exportCurrentDocToPdf() {
     await new Promise((r) => requestAnimationFrame(r));
     await new Promise((r) => setTimeout(r, 320));
     iframe.contentWindow.focus();
-    showToast("提示：若不需要页眉页脚，请在打印对话框中取消勾选「页眉与页脚」，选择「另存为 PDF」即可完成导出");
+
+    // —— 路径 / 另存提示 toast：合并"HTML 已保存位置"与"PDF 对话框提示"两条信息 ——
+    if (htmlPath) {
+      const actions = [
+        { label: "打开 HTML 源文件", dismissAfter: true,
+          async onClick() {
+            try {
+              const invoke = window.__TAURI__?.core?.invoke || window.__TAURI__?.invoke;
+              if (typeof invoke === "function") await invoke("cmd_open_exported_file", { path: htmlPath });
+            } catch (_) {}
+          } },
+        { label: "在文件夹中查看", dismissAfter: true,
+          async onClick() {
+            try {
+              const invoke = window.__TAURI__?.core?.invoke || window.__TAURI__?.invoke;
+              if (typeof invoke === "function") await invoke("cmd_reveal_exported_file_in_folder", { path: htmlPath });
+            } catch (_) {}
+          } },
+      ];
+      showToast({
+        title: "PDF 导出准备完成",
+        message:
+          "① 打印对话框已打开，选择「另存为 PDF」即可得到最终 PDF 文件（建议取消「页眉与页脚」）。\n" +
+          "② 同时同内容 HTML 已保存在下方路径，双击打开浏览或再次打印都可以。",
+        path: htmlPath,
+        kind: "ok",
+        duration: 18000,
+        actions,
+      });
+    } else if (hasTauri) {
+      // Tauri 但 htmlPath=null：用户在另存为 HTML 那一步已取消 / 插件失败；仍继续调 print。
+      showToast({
+        title: "打印对话框已弹出",
+        kind: "ok",
+        duration: 7000,
+        message: "请选择「另存为 PDF」或目标打印机；建议取消「页眉与页脚」得到更干净的 PDF。",
+        actions: [{ label: "知道了", dismissAfter: true }],
+      });
+    } else {
+      // 纯浏览器：无原生另存为，只能依赖 print 另存 PDF + 浏览器 HTML 下载
+      await triggerBlobDownload({ blob: htmlBlob, filename: `${baseName}.html` });
+      showToast({
+        title: "打印对话框已弹出",
+        kind: "warn",
+        duration: 10000,
+        message:
+          "请在打印对话框中选择「另存为 PDF」完成导出。\n" +
+          "同时 HTML 源文件已保存至浏览器默认下载目录，供您随时查看。",
+        actions: [{ label: "知道了", dismissAfter: true }],
+      });
+    }
+
     iframe.contentWindow.addEventListener("afterprint", cleanup);
     iframe.contentWindow.print();
   } catch (error) {
     console.error(error);
-    showToast("无法调起打印对话框，请检查浏览器设置");
+    showToast({ title: "无法调起打印对话框", message: String(error?.message || error), kind: "error", duration: 4000 });
     cleanup();
   }
   setTimeout(cleanup, 120000);
@@ -2575,12 +2974,32 @@ html,body{width:100%;height:100%;overflow:hidden;background:#1a1a2e;font-family:
 </html>`;
   const blob = new Blob([presentationHtml], { type: "text/html;charset=utf-8" });
   const safeName = String(title).replace(/[\\/:*?"<>|]/g, "_").slice(0, 60) || "幻灯片";
+  const filename = `${safeName}_幻灯片.html`;
+
+  const path = await tauriSaveAs({
+    blob, defaultName: filename, extensions: ["html", "htm"], allowFallback: true,
+  });
+  if (typeof path === "string" && path) {
+    showSavedAsToast({ path, formatName: "幻灯片 HTML" });
+    return;
+  }
+  const hasTauri = !!(window.__TAURI__ && (window.__TAURI__.core?.invoke || window.__TAURI__.invoke));
+  if (hasTauri) return; // 用户在另存为对话框里取消了 —— 静默，需求 D
+
+  // 纯浏览器：退回 Blob 下载 + 提示路径不透明
   try {
-    await triggerBlobDownload({ blob, filename: `${safeName}_幻灯片.html` });
-    showToast(`已导出 ${slides.length} 页幻灯片，双击 HTML 即可演示，按 P 可打印为 PPT`);
+    await triggerBlobDownload({ blob, filename });
+    showToast({
+      title: `已导出 ${slides.length} 页幻灯片`,
+      kind: "warn",
+      duration: 7000,
+      message:
+        "当前环境不支持原生另存为，已保存至浏览器默认下载目录。\n双击 HTML 即可演示，按 P 可打印为 PPT。",
+      actions: [{ label: "知道了", dismissAfter: true }],
+    });
   } catch (e) {
     console.error("PPT 导出失败:", e);
-    showToast(`幻灯片导出失败: ${e.message}`);
+    showToast({ title: "幻灯片导出失败", message: String(e?.message || e), kind: "error", duration: 4000 });
   }
 }
 
@@ -9742,6 +10161,11 @@ let importFiles = [];
 function openImportModal(format) {
   importFiles = [];
   renderImportFileList();
+  // 仅在 Tauri 2.x 环境显示「系统文件对话框」按钮，纯浏览器下 hidden
+  if (els.sysPickImportBtn) {
+    const hasTauri = !!(window.__TAURI__ && (window.__TAURI__.core?.invoke || window.__TAURI__.invoke));
+    els.sysPickImportBtn.classList.toggle("hidden", !hasTauri);
+  }
   els.importModal?.classList.remove("hidden");
 }
 
@@ -9786,15 +10210,98 @@ function renderImportFileList() {
   els.confirmImportBtn.disabled = importFiles.length === 0;
 }
 
+/**
+ * 支持 3 种来源统一入 importFiles：
+ *   1) HTML FileList / drop File[]        → 原生 File 对象（与 v1.8.102 兼容）
+ *   2) string[] 绝对路径（Tauri 系统对话框返回）→ 调 Rust cmd_import_read_file 预提取，最后入队一项
+ *
+ * 每一项入队元素统一形状：
+ *   { name, size, ext?,
+ *     rawFile?            // File，给 readFileAsBase64 + /api/import 老通道用
+ *     path?,              // string，系统对话框绝对路径
+ *     preconverted?       // { title: string, content: string, ext: string }
+ *                         //   给 confirmImport 里直接 create-doc + save 走；不再走 /api/import 占位
+ *   }
+ *
+ * > 50MB 的项（无论哪种来源）都 toast 跳过。
+ */
 function addImportFiles(fileList) {
-  for (const file of fileList) {
-    if (file.size > 50 * 1024 * 1024) {
-      showToast(`文件 ${file.name} 超过 50MB，已跳过`);
-      continue;
-    }
-    importFiles.push(file);
+  const list = Array.isArray(fileList) ? fileList : Array.from(fileList || []);
+  // 开一个微任务链，保证串行 await readFromRustPath 完成后再 render
+  let chain = Promise.resolve();
+  for (const entry of list) {
+    chain = chain.then(async () => {
+      try {
+        // case A：来自 Tauri 系统对话框的绝对路径
+        if (typeof entry === "string") {
+          let result = null;
+          try {
+            const invoke = window.__TAURI__?.core?.invoke || window.__TAURI__?.invoke;
+            if (typeof invoke === "function") {
+              result = await invoke("cmd_import_read_file", { path: entry });
+            }
+          } catch (err) {
+            console.warn("[addImportFiles] Rust read failed:", entry, err?.message || err);
+            showToast({ title: "读取失败", message: `${entry}: ${err?.message || err}`, kind: "error", duration: 3500 });
+            return;
+          }
+          if (!result) return;
+          if (Number(result.size || 0) > 50 * 1024 * 1024) {
+            showToast(`文件 ${result.name || entry} 超过 50MB，已跳过`);
+            return;
+          }
+          // 从 Rust 组装一个"预转换项"
+          let preconverted = null;
+          // text 格式 → 直接用 text 做 content（如果是 md/txt 原格式即内容；html/json/csv 仍然走 /api/import 老通道更佳，因为老后端会做 html->md / csv->md / json pretty；这里兜底优先走原通道，text 只有在是 raw md/txt/html/json/csv 之一时保留走老通道更好。所以 preconverted 只针对 Rust 做了特殊转换的 docx/rtf/odt。）
+          const needsPreconverted = ["docx", "doc", "rtf", "odt"].includes(String(result.ext || "").toLowerCase());
+          if (needsPreconverted) {
+            const md = result.converted_markdown || result.text || "";
+            if (md && md.trim()) {
+              const title = (result.name || "").replace(/\.[^.]+$/, "") || "导入文档";
+              preconverted = { title, content: md, ext: result.ext || "md" };
+            }
+          }
+          const synthetic = {
+            name: result.name || entry.split(/[\\/]/).pop() || "未命名",
+            size: Number(result.size || 0),
+            ext: result.ext || "",
+            path: result.path || entry,
+            text: result.text || null,
+          };
+          if (preconverted) synthetic.preconverted = preconverted;
+          importFiles.push(synthetic);
+          return;
+        }
+
+        // case B：原生 File 对象
+        if (entry && (entry instanceof File || (typeof entry.name === "string" && typeof entry.size === "number" && typeof entry.slice === "function"))) {
+          if (entry.size > 50 * 1024 * 1024) {
+            showToast(`文件 ${entry.name} 超过 50MB，已跳过`);
+            return;
+          }
+          importFiles.push({
+            name: entry.name,
+            size: entry.size,
+            ext: (entry.name.split(".").pop() || "").toLowerCase(),
+            rawFile: entry,
+          });
+          return;
+        }
+
+        // case C：已经是合成对象（兼容重复调用 / 外部入队）
+        if (entry && typeof entry === "object" && entry.name) {
+          if (Number(entry.size || 0) > 50 * 1024 * 1024) {
+            showToast(`文件 ${entry.name} 超过 50MB，已跳过`);
+            return;
+          }
+          importFiles.push(entry);
+        }
+      } catch (e) {
+        console.warn("[addImportFiles] 单文件跳过:", e);
+      }
+    });
   }
-  renderImportFileList();
+  chain.then(() => renderImportFileList()).catch(() => renderImportFileList());
 }
 
 function removeImportFile(idx) {
@@ -9807,10 +10314,15 @@ function convertFileToMarkdown(file) {
   const baseName = file.name.replace(/\.[^.]+$/, "");
 
   const binaryExts = ["pdf", "docx", "doc", "pptx", "ppt", "xlsx", "xls", "odt", "rtf", "epub", "tex"];
+  const extractedExts = ["docx", "doc", "rtf", "odt"];
   const imageExts = ["png", "jpg", "jpeg", "webp", "gif"];
 
   if (binaryExts.includes(ext)) {
-    const content = `# ${baseName}\n\n> 此文件为 .${ext.toUpperCase()} 格式，已创建占位文档。如需转换为 Markdown，请使用专业工具（如 pandoc）转换后再导入。\n\n\`\`\`\n[原始文件: ${file.name}]\n大小: ${formatFileSize(file.size)}\n\`\`\``;
+    const isExtracted = extractedExts.includes(ext);
+    const hint = isExtracted
+      ? `提示：该 .${ext.toUpperCase()} 文件可通过「系统文件对话框」选择，自动提取正文为 Markdown（无需再使用 pandoc 等专业工具）。`
+      : `此文件为 .${ext.toUpperCase()} 格式，如需转换为 Markdown，请使用专业工具（如 pandoc）转换后再导入。`;
+    const content = `# ${baseName}\n\n> ${hint}\n\n\`\`\`\n[原始文件: ${file.name}]\n大小: ${formatFileSize(file.size)}\n\`\`\``;
     return Promise.resolve({ title: baseName, content, ext });
   }
 
@@ -10036,27 +10548,86 @@ async function confirmImport() {
     els.confirmImportBtn.textContent = "导入";
     return;
   }
+  // 用于「create-doc + save」通道：找到工作区根目录，parent 就给根目录
+  const ws = [...state.workspaces].find((w) => w && w.id === workspaceId);
+  const importParent = (ws && ws.root) ? "" : ""; // create-doc 允许 parent="" 表示在工作区根下
 
   let importedCount = 0;
   let failedCount = 0;
 
-  for (const file of importFiles) {
+  for (const item of importFiles) {
     try {
+      // —— 1) 预提取的 Markdown：直接创建同名文档 + save content（docx/rtf/odt 不再占位 ✅） ——
+      if (item.preconverted && typeof item.preconverted.content === "string") {
+        const title = String(item.preconverted.title || item.name.replace(/\.[^.]+$/, "") || "导入文档").slice(0, 120);
+        const safeName = `${title}.md`;
+        const created = await api.post("/api/create-doc", { parent: importParent, name: safeName });
+        if (!created || !created.path) throw new Error("创建文档失败：create-doc 返回空");
+        const body = String(item.preconverted.content || "");
+        await api.post("/api/save", { path: created.path, content: body });
+        importedCount++;
+        continue;
+      }
+
+      // —— 2) 系统对话框的纯文本格式（md/txt/html/json/csv）：走 Rust 已经读好的 text，
+      //       直接"模拟一份 File 对象"走 /api/import，或者创建同名文档写内容。
+      if (!item.rawFile && item.path && typeof item.text === "string") {
+        const ext = String(item.ext || (item.name.split(".").pop() || "")).toLowerCase();
+        if (["md", "markdown", "txt", "html", "htm", "json", "csv"].includes(ext)) {
+          // 直接上传到 /api/import 仍要求 base64 编码字节；不如在前端把 text 字符串 encode 成 base64，
+          // 构造与 readFileAsBase64 一样的结果
+          const rawUtf8 = new TextEncoder().encode(item.text);
+          let b64 = "";
+          try {
+            const dataUrl = await new Promise((resolve, reject) => {
+              const fr = new FileReader();
+              fr.onload = () => resolve(fr.result);
+              fr.onerror = () => reject(fr.error || new Error("FileReader failed"));
+              fr.readAsDataURL(new Blob([rawUtf8], { type: "application/octet-stream" }));
+            });
+            b64 = String(dataUrl).replace(/^data:[^;]*;base64,/, "");
+          } catch (e) {
+            // 退化成 create-doc + save
+            const name = item.name.replace(/\.[^.]+$/, "") || "导入文档";
+            const safeName = `${name}.md`;
+            const created = await api.post("/api/create-doc", { parent: importParent, name: safeName });
+            await api.post("/api/save", { path: created.path, content: item.text });
+            importedCount++;
+            continue;
+          }
+          const resp = await fetch("/api/import", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ fileName: item.name, fileData: b64, workspaceId }),
+          });
+          if (resp.ok) importedCount++;
+          else failedCount++;
+          continue;
+        }
+      }
+
+      // —— 3) 其他：必须有 rawFile；沿用老的 /api/import（Rust 对 PDF/PPTX/XLSX/EPUB 仍写占位） ——
+      const file = item.rawFile;
+      if (!file) {
+        console.warn("Import skipped (no rawFile & not supported):", item.name);
+        failedCount++;
+        continue;
+      }
       const fileData = await readFileAsBase64(file);
       const resp = await fetch("/api/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileName: file.name, fileData, workspaceId }),
+        body: JSON.stringify({ fileName: item.name, fileData, workspaceId }),
       });
       if (resp.ok) {
         importedCount++;
       } else {
         const err = await resp.json().catch(() => ({}));
-        console.error("Import failed for", file.name, err.error);
+        console.error("Import failed for", item.name, err.error);
         failedCount++;
       }
     } catch (e) {
-      console.error("Import failed for", file.name, e);
+      console.error("Import failed for", item.name, e);
       failedCount++;
     }
   }
@@ -10139,6 +10710,23 @@ if (els.cancelImportBtn) {
 if (els.browseImportBtn) {
   els.browseImportBtn.addEventListener("click", () => {
     els.importFileInput?.click();
+  });
+}
+if (els.sysPickImportBtn) {
+  els.sysPickImportBtn.addEventListener("click", async () => {
+    const invoke = window.__TAURI__?.core?.invoke || window.__TAURI__?.invoke;
+    if (typeof invoke !== "function") {
+      showToast({ title: "当前环境不支持", kind: "warn", duration: 3000, message: "系统文件对话框仅在安装版（Tauri）中可用。请使用「选择文件」。" });
+      return;
+    }
+    try {
+      const paths = await invoke("cmd_import_pick_files");
+      if (!Array.isArray(paths) || paths.length === 0) return; // 用户取消 → 静默（需求 D）
+      addImportFiles(paths);
+    } catch (err) {
+      console.warn("[sysPickImport]", err?.message || err);
+      showToast({ title: "系统文件对话框失败", kind: "error", duration: 3500, message: String(err?.message || err) });
+    }
   });
 }
 if (els.confirmImportBtn) {
