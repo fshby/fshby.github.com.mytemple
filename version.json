@@ -1,7 +1,7 @@
 {
-  "version": "1.8.97",
-  "downloadUrl": "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.97.exe",
-  "latestReleaseNotes": "【v1.8.97】Ctrl+/-/0编辑器字号快捷键最终修复（编辑器内按键优先捕获+CodeMirror多节点同步字号）；重启保留用户习惯字号；编辑模式字体全面优化：更全的等宽字体栈+连字/抗锯齿/字重/行距/字距让编辑更清晰更美观。",
-  "releaseNotes": "v1.8.97 编辑器快捷键与字体品质全面升级\n1.【Ctrl+/-字号快捷键最终修复】全局listener+编辑器listener双保险处理Ctrl+/-/0；事件在els.editor捕获阶段高优先级前置处理，避免CodeMirror吞掉快捷键导致「没生效」；applyEditorFontSizeToDom同步#editor/.cm-editor/.cm-scroller/.cm-content/.cm-line/.cm-gutters/#cursor-overlay字号并requestMeasure强制CM重绘\n2.【重启保留用户字号】loadSettings→applySettings末尾调用applyEditorFontSizeToDom；setMode('edit')也重放设置，避免切换编辑态/打开文档被默认字号冲掉\n3.【编辑模式字体更清晰更美观】字体栈：Cascadia Mono/Cascadia Code/JetBrains Mono/Fira Code/Sarasa Mono/YaHei/PingFang兜底；连字liga/calt/cv11/ss01；抗锯齿antialiased；text-rendering: optimizeLegibility；行距1.76→1.82(预览隐藏)；字重450适度提升防Windows发虚；字距微开0.002em；.cm-gutters行号tabular-nums+透明度78%；.cm-content上下padding与宽度加大，编辑更从容",
+  "version": "1.8.98",
+  "downloadUrl": "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.98.exe",
+  "latestReleaseNotes": "【v1.8.98】PDF导出大升级：支持显示数学公式(KaTeX渲染)与Mermaid图表；默认在文末附带官网下载链接+推荐语品牌卡片，不使用fixed不遮挡正文；所有本地图片与SVG图表转DataURL内联，离线打开PDF仍完整显示。",
+  "releaseNotes": "v1.8.98 PDF导出功能全面修复与升级\n1.【图表导出】Mermaid代码块在打印前异步调用mermaid.render→生成SVG→逐节点inline stroke/fill/style→转img src=data:image/svg+xml，脱离外部CSS后PDF仍能完整显示，不会出现"黑线空心大色块";Excalidraw图表若无运行时则降级显示源码\n2.【公式导出】math-block/math-inline使用katex.render生成DOM并内联到iframe，同时PRINT_STYLES注入KATEX_PRINT_CSS最小集合(约90条class规则)覆盖.katex-display.katex.mfrac.vlist等关键布局，无需访问CDN CSS；连字/分数/根号/上下标/表格/矩阵均正确\n3.【品牌推荐语】文末默认追加虚线品牌卡片（非fixed非水印，绝不遮挡正文）：包含MyTemple Knowledge品牌名+推荐语「个人知识沉淀 · 本地 Markdown 知识库 · 让写作阅读与管理都更安心」+官网下载链接https://mytemple.fshby.cc/；多页PDF仅末页显示\n4.【鲁棒性】离屏div(-99999px)渲染，不干扰用户当前视图；若Mermaid/KaTeX加载失败自动降级为源码显示，绝不阻断导出；主流程失败回退老流程；iframe print前rAF×3+320ms确保dataURI图像栅格化完成\n5.【图片内联】所有相对路径img再fetch→blob→readAsDataURL转内联，PDF离线也显示",
   "releaseDate": "2026-08-29"
 }

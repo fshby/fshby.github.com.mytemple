@@ -24,7 +24,7 @@
         <a href="#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.97.exe" download>下载 v1.8.97</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.98.exe" download>下载 v1.8.98</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -32,11 +32,11 @@
     <main id="top">
       <section class="hero section-wrap" aria-labelledby="hero-title">
         <div class="hero-copy reveal">
-          <p class="eyebrow"><span class="status-dot"></span> 本地 Markdown 工作区 <em>v1.8.97 桌面版</em></p>
+          <p class="eyebrow"><span class="status-dot"></span> 本地 Markdown 工作区 <em>v1.8.98 桌面版</em></p>
           <h1 id="hero-title">本地 Markdown 知识库与编辑器</h1>
           <p class="hero-lede">围绕本地 Markdown 文件提供阅读、编辑、目录、图谱、检索、主题与多工作区管理。</p>
           <div class="hero-actions">
-            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.97.exe" download>下载 Windows 安装包</a>
+            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.98.exe" download>下载 Windows 安装包</a>
             <a class="button button-soft" href="#docs">查看使用文档</a>
           </div>
           <p class="hero-note">Windows 桌面端 · 本地文件优先 · 内容助手为可选接入</p>
@@ -183,13 +183,14 @@
         </div>
         <div class="download-block reveal">
           <div class="download-primary">
-            <span class="download-badge">当前稳定版 v1.8.97</span>
+            <span class="download-badge">当前稳定版 v1.8.98</span>
             <p>本地工作区、阅读/修改双模式、图谱、主题、增量索引与可选辅助功能。</p>
-            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.97.exe" download>下载安装包</a>
+            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.98.exe" download>下载安装包</a>
           </div>
           <div class="download-secondary">
             <h3>最近更新</h3>
             <ul>
+              <li>v1.8.98：PDF导出功能大升级：数学公式(KaTeX真实渲染)与Mermaid图表导出PDF后正确显示、文末默认附官网下载链接+推荐语品牌卡片(非fixed不遮挡正文)、本地图片与SVG图表转DataURL内联离线也完整显示、渲染失败自动降级源码仍可导出。</li>
               <li>v1.8.97：编辑器字体与快捷键大升级：Ctrl+/-/0字号快捷键(编辑区焦点也生效)、重启保留用户习惯字号、编辑模式字体全面优化(等宽字体栈+连字+抗锯齿+字重行距字距)更清晰更美观。</li>
               <li>v1.8.96：代码文件保存最终修复：打开代码文档即进入编辑态、保存按钮清除「非Markdown不支持保存」提示、状态栏改为「保存/已保存 HH:MM」；同时保留折叠态Top10 + 展开态目录树。</li>
               <li>v1.8.95：工作区视图重写 + 基础保存修复：折叠态Top10按modified倒序、展开态完整目录树(文件夹独立展开/收起)；代码后缀打开默认进入编辑态。</li>
@@ -280,6 +281,16 @@
               <li><kbd>Ctrl+Shift+P</kbd> 润色 · <kbd>Ctrl+Shift+X</kbd> 续写</li>
               <li><kbd>Ctrl+U</kbd> 顶部智能检索 · <kbd>Ctrl+I</kbd> 行内对话</li>
               <li>辅助快捷键需在设置中开启对应功能后生效</li>
+            </ul>
+          </article>
+          <article class="doc-section">
+            <h3>v1.8.98 更新日志 · PDF 导出大升级</h3>
+            <ul>
+              <li>【图表导出】Mermaid 代码块在打印前异步调用 <code>mermaid.render</code> 生成 SVG → 逐节点 <code>getComputedStyle</code> 把 fill / stroke / stroke-width / opacity 写入 inline style → <code>XMLSerializer</code> 转 <code>data:image/svg+xml</code> → 独立 <code>&lt;img&gt;</code> 替代；脱离外部 CSS 后 PDF 内仍能完整显示，不再出现"黑线空心大色块"；Excalidraw 块无运行时则降级为等宽源码显示。</li>
+              <li>【公式导出】<code>.math-block</code> 与 <code>.math-inline</code> 在打印前使用 <code>katex.render()</code> 真实渲染 DOM；同时 <code>PRINT_STYLES</code> 内联注入约 90 条 KaTeX 关键布局类（KATEX_PRINT_CSS：.katex-display / .mfrac / .vlist / .op-symbol / .delimsizing / .mtable / .accent-body / mathbf/mathbb/mathcal 等），about:blank iframe 无需再请求 CDN CSS；\frac、\sqrt、上下标、矩阵、\sum 均正确输出。</li>
+              <li>【品牌推荐语】文末默认追加独立品牌推荐卡片（<code>section.print-brand-recommend</code>，流式文档流、<code>page-break-inside:avoid</code>，非 fixed/watermark，绝不会遮挡正文）：紫蓝渐变圆形徽章 M + 标题「本文档由『MyTemple Knowledge』导出 · 欢迎体验官网最新版」+ slogan「个人知识沉淀 · 本地 Markdown 知识库 · 让写作、阅读与管理都更安心」+ 官网下载超链接 <code>https://mytemple.fshby.cc/</code>；多页 PDF 仅末页显示。</li>
+              <li>【鲁棒性】离屏 div（<code>position:fixed;left/top:-99999px;width:900px</code>）挂载渲染，不干扰用户当前视图；Mermaid/KaTeX 加载或渲染失败自动降级为带颜色或等宽源码，绝不阻断导出；主流程 <code>buildDocumentPrintHtmlRendered()</code> 抛异常时 <code>catch</code> 回退老链路 <code>buildDocumentPrintHtml + inlinePrintImages</code>；<code>iframe.print()</code> 前 <code>requestAnimationFrame × 3 + setTimeout 320ms</code> + img 最长等待 5s，保证 data URI SVG 与图片被 Chromium 栅格化完再打印。</li>
+              <li>【图片内联】容器内相对路径 <code>&lt;img&gt;</code> 再次 <code>fetch → blob → readAsDataURL</code> 内联，PDF 离线打开图片仍完整显示；打印样式 @page <code>size:A4;margin:18mm 14mm</code>；图表块与品牌卡片用 <code>page-break-inside:avoid</code> 防跨页切裂；页眉页脚弹窗提示用户"另存为 PDF 时取消勾选页眉与页脚"。</li>
             </ul>
           </article>
           <article class="doc-section">
