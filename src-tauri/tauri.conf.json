@@ -1,0 +1,45 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "MyTemple Knowledge",
+  "version": "1.8.93",
+  "identifier": "com.mytemple.knowledge",
+  "build": {
+    "frontendDist": "../public",
+    "devUrl": "http://127.0.0.1:7321",
+    "beforeDevCommand": "",
+    "beforeBuildCommand": ""
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [],
+    "security": {
+      "csp": null,
+      "dangerousDisableAssetCspModification": true
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "icon": [
+      "../packaging/logo.png",
+      "../packaging/logo.ico"
+    ],
+    "resources": [
+      "WebView2Loader.dll"
+    ],
+    "externalBin": [],
+    "copyright": "",
+    "category": "Productivity",
+    "shortDescription": "MyTemple Knowledge - 个人知识管理",
+    "longDescription": "MyTemple Knowledge - Phase 5 纯原生架构：Rust 后端 + WebView2 前端，无 Node.js 依赖",
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      },
+      "nsis": {
+        "installerIcon": "../packaging/logo.ico",
+        "installMode": "perMachine"
+      }
+    }
+  }
+}
