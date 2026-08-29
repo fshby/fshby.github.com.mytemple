@@ -31,10 +31,10 @@ const LARGE_PREVIEW_DELAY = 700;
 const CHUNKED_RENDER_BYTES = 500 * 1024;
 const CHUNK_RENDER_SLICE_BYTES = 150 * 1024;
 const GRAPH_WORKER_URL = "/graph-worker.js?v=20260810-graph-1";
-const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20260829-v18100-octal-fix-katexprint-2";
+const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20260829-v18101-export-quality-frontmatter-3";
 // Markdown 渲染缓存版本戳：解析器或 CSS 规则升级时递增，确保旧缓存不被复用。
-// 2026-08-29 升级 v1.8.100：跨越多行 $$...$$ 块级公式占位符保护 & Worker 侧 mermaid/excalidraw chart-block 生成 + 修复 KATEX_PRINT_CSS 八进制 \10 模板字符串语法错误。
-const MARKDOWN_RENDER_VERSION = "20260829-v18100-multiline-math-excalidraw-octal-fix";
+// 2026-08-29 v1.8.101：导出质量升级（HTML/DOCX/MD/TXT/PPT 统一 strip frontmatter + 质量提升）。
+const MARKDOWN_RENDER_VERSION = "20260829-v18101-export-quality-frontmatter-md-txt-html-docx";
 const AI_HISTORY_KEY = "mytemple.ai.history.v1";
 const AI_TRANSFORM_LABELS = { summary: "摘要", keypoints: "要点", terms: "术语解释", polish: "润色", continue: "续写", rewrite: "代写", translate: "翻译", hint: "编辑提示", code: "代码补全", comment: "生成注释" };
 
@@ -2038,42 +2038,230 @@ const PRINT_STYLES = `html,body{margin:0;padding:0;background:#fff;}
 ${KATEX_PRINT_CSS}
 @page{margin:18mm 14mm;size:A4;}`;
 
+async function buildExportableHtml({ withBrandFooter = true } = {}) {
+  // 高品质离线 HTML 导出：
+  //  - strip frontmatter（读者视角不需要写作者元数据）
+  //  - 用 renderMarkdown 产出渲染后 body（含 KaTeX math-block / Mermaid chart-block / Excalidraw chart-block / MATH inline 占位）
+  //  - 立即调用 renderMathInPreview + renderChartsInPreview 得到真实 KaTeX DOM 与 Mermaid SVG（等同于阅读栏最终视觉）
+  //  - inlinePrintImages：本地相对路径 img → data URI（离线）
+  //  - 把主站 styles.css 中 .markdown-body / 图表 / .katex-display 等关键类完整内联（避免 CDN）
+  //  - 文末附品牌推荐卡（同 PDF，非 fixed 不挡正文）
+  const rawContent = String(state.currentContent || els.editor.value || "");
+  const noFm = stripFrontmatter(rawContent);
+  const title = els.docTitle?.textContent || state.currentDoc?.title || state.currentPath?.split("/").pop()?.replace(/\.md$/i, "") || "MyTemple 文档";
+  const pdfSettings = readPdfExportSettings();
+  const showDate = pdfSettings.showDate;
+  const showAuthor = pdfSettings.showAuthor;
+  const showFooter = pdfSettings.showFooter;
+  const updated = state.currentDoc?.updated || state.currentDoc?.modified;
+  const dateLabel = showDate && updated ? new Date(updated).toLocaleString() : "";
+  const authorLabel = escapeHtml(pdfSettings.authorText || "");
+  const exportNote = showAuthor ? `<p class="print-author">由 ${PRINT_BRAND_NAME} 导出 · ${authorLabel}</p>` : "";
+  const footerLabel = escapeHtml(pdfSettings.footerText || `${PRINT_BRAND_NAME} · 本地 Markdown 知识库`);
+  const footer = showFooter ? `<footer class="print-footer"><span>${footerLabel}</span></footer>` : "";
+  const watermark = buildExportWatermark(pdfSettings.watermarkText);
+  const brandRecommend = withBrandFooter ? `
+    <section class="print-brand-recommend" aria-label="${PRINT_BRAND_NAME} 推荐">
+      <div class="print-brand-logo" aria-hidden="true">M</div>
+      <div class="print-brand-body">
+        <strong>本文档由「${PRINT_BRAND_NAME}」导出 · 欢迎体验官网最新版</strong>
+        <div>${escapeHtml(PRINT_BRAND_SLOGAN)}</div>
+        <div>官网下载地址：<a href="${PRINT_DOWNLOAD_URL}" target="_blank" rel="noreferrer noopener">${PRINT_DOWNLOAD_URL}</a></div>
+      </div>
+    </section>` : "";
+  // 用离屏容器做 renderMarkdown → 渲染公式/图表 → 取 innerHTML
+  const stage = document.createElement("div");
+  stage.setAttribute("aria-hidden", "true");
+  stage.style.position = "fixed";
+  stage.style.left = "-99999px";
+  stage.style.top = "-99999px";
+  stage.style.width = "900px";
+  stage.className = "markdown-body preview-container";
+  stage.innerHTML = cachedRenderMarkdown(noFm);
+  document.body.appendChild(stage);
+  try {
+    try { await renderMathInPreview(stage); } catch (_) {}
+    try { await renderChartsInPreview(stage); } catch (_) {}
+  } finally {
+    // 即使 render 抛错也要移除 stage
+  }
+  let bodyHtml = normalizeAssetUrlsToRelative(stage.innerHTML);
+  try { bodyHtml = await inlinePrintImages(bodyHtml); } catch (_) {}
+  stage.remove();
+  // 使用打印样式 + markdown-body + KATEX_PRINT_CSS 三合一内联 CSS
+  const html = `<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${escapeHtml(title)}</title>
+<style>
+/* 导出页面统一背景与最大宽度，浏览器打开可读 + 打印按 A4 */
+html,body{margin:0;padding:0;background:#fff;color:#1f2937;font-family:"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;}
+body{padding:32px 16px 64px 16px;}
+.print-article{max-width:900px;margin:0 auto;background:#fff;}
+${PRINT_STYLES}
+${KATEX_PRINT_CSS}
+/* 图片内联打印边距（inlinePrintImages 会把 img src 改为 data URL，但显示样式要用当前 markdown-body 视觉） */
+.print-body img{max-width:100%;height:auto;display:block;margin:16px auto;border-radius:6px;}
+.print-body .chart-block{margin:16px 0;padding:12px;border:1px solid #e5e7eb;border-radius:8px;background:#fcfcfd;}
+.print-body .mermaid-container svg{max-width:100%;height:auto;display:block;margin:0 auto;}
+.print-body .excalidraw-block .excalidraw-preview{background:#f5f5f4;border:1px dashed #d6d3d1;border-radius:8px;padding:12px;}
+.print-body .excalidraw-block .excalidraw-json{background:#fff;color:#44403c;font-family:"Cascadia Code",Consolas,monospace;font-size:12px;max-height:240px;overflow:auto;padding:10px;border-radius:6px;}
+.print-body .excalidraw-block .excalidraw-hint{color:#78716c;font-size:12px;margin-top:6px;}
+@media print {
+  @page { size: A4; margin: 18mm 14mm; }
+  body{padding:0;}
+  .print-article{box-shadow:none;border:0;}
+}
+</style>
+</head>
+<body>
+<article class="print-article">
+  ${watermark}
+  <header class="print-header">
+    <h1 class="print-title">${escapeHtml(title)}</h1>
+    ${dateLabel ? `<p class="print-meta">${escapeHtml(dateLabel)}</p>` : ""}
+    ${exportNote}
+  </header>
+  <div class="print-body markdown-body">${bodyHtml}</div>
+  ${footer}
+  ${brandRecommend}
+</article>
+</body>
+</html>`;
+  return { html, title };
+}
+
+async function buildExportableDocxBlob() {
+  // Word DOCX 降级方案：生成 Word 能原生打开的 MHTML(.doc)/HTML，
+  // 浏览器端无 docx 生成库（避免引入庞大依赖仍失败），但该格式 Word/
+  // WPS 直接双击打开，图表/图片/公式/中文都保留。
+  const { html, title } = await buildExportableHtml({ withBrandFooter: true });
+  // Word 喜欢带 BOM 的 UTF-8，避免中文变问号
+  const BOM = "\uFEFF";
+  const payload = BOM + html;
+  return {
+    blob: new Blob([payload], { type: "application/msword;charset=utf-8" }),
+    title,
+    ext: "doc",
+  };
+}
+
+async function triggerBlobDownload({ blob, filename }) {
+  const url = URL.createObjectURL(blob);
+  try {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    // setAttribute('download') 并加一个延迟，确保 Tauri/Chromium 主线程能把它
+    // 推进到"允许下载"列表；经验上 0 偶发丢事件，50ms 稳
+    await new Promise((r) => setTimeout(r, 50));
+    a.click();
+    setTimeout(() => {
+      try { a.remove(); } catch (_) {}
+      try { URL.revokeObjectURL(url); } catch (_) {}
+    }, 3000);
+  } catch (err) {
+    try { URL.revokeObjectURL(url); } catch (_) {}
+    throw err;
+  }
+}
+
 async function exportCurrentDoc(format) {
   if (!state.currentPath && !state.currentContent) {
     showToast("请先打开一个文档");
     return;
   }
+  const safeTitle = (title) => String(title || "导出文档").replace(/[\\/:*?"<>|]/g, "_").slice(0, 60) || "导出文档";
+  const fmt = String(format || "md").toLowerCase();
+
+  // 1) HTML / DOCX：直接前端本地生成最高质量（样式+图+公式+图表全内联）
+  if (fmt === "html") {
+    showToast("正在导出 HTML（含内联图片/公式/图表）…");
+    try {
+      const { html, title } = await buildExportableHtml({ withBrandFooter: true });
+      const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+      await triggerBlobDownload({ blob, filename: `${safeTitle(title)}.html` });
+      showToast("已导出 HTML");
+      return;
+    } catch (e) {
+      console.error("HTML export failed:", e);
+      showToast(`HTML 导出失败: ${e.message}`);
+      return;
+    }
+  }
+  if (fmt === "docx" || fmt === "doc") {
+    showToast("正在导出 Word（DOCX/DOC 兼容格式）…");
+    try {
+      const { blob, title, ext } = await buildExportableDocxBlob();
+      await triggerBlobDownload({ blob, filename: `${safeTitle(title)}.${ext}` });
+      showToast("已导出 Word 文档（用 Word/WPS 打开即可，支持图片/公式/中文）");
+      return;
+    } catch (e) {
+      console.error("DOCX export failed:", e);
+      showToast(`Word 导出失败: ${e.message}`);
+      return;
+    }
+  }
+
+  // 2) MD / TXT：调用后端 /api/export — 后端已经统一 strip_frontmatter，
+  //    TXT 后端同时剥离 Markdown 语法糖（frontmatter / ``` / 标题 / 粗体 等）。
+  //    如后端 HTTP 400 或网络失败：前端兜底用 stripFrontmatter + 轻量 txt 剥离，
+  //    保证"绝不无法保存"。
+  showToast(`正在导出 ${fmt.toUpperCase()}...`);
   const content = state.currentContent || "";
   const title = state.currentTitle || state.currentPath?.split("/").pop()?.replace(/\.md$/i, "") || "导出文档";
   const pdfSettings = readPdfExportSettings();
   const author = pdfSettings.showAuthor ? (pdfSettings.authorText || "") : "";
   const watermark = pdfSettings.watermarkText || "";
 
-  showToast(`正在导出 ${format.toUpperCase()}...`);
   try {
     const resp = await fetch("/api/export", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content, format, title, author, watermark }),
+      body: JSON.stringify({ content, format: fmt, title, author, watermark }),
     });
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
-      showToast(err.error || `导出失败`);
-      return;
+      throw new Error(err.error || `导出失败 (HTTP ${resp.status})`);
     }
     const blob = await resp.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${title.replace(/[\\/:*?"<>|]/g, "_")}.${format === "md" ? "md" : format}`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-    showToast(`已导出 ${format.toUpperCase()}`);
+    const ext = fmt === "markdown" ? "md" : (fmt === "text" ? "txt" : fmt);
+    await triggerBlobDownload({ blob, filename: `${safeTitle(title)}.${ext}` });
+    showToast(`已导出 ${fmt.toUpperCase()}`);
+    return;
   } catch (e) {
-    console.error("Export failed:", e);
-    showToast(`导出失败: ${e.message}`);
+    console.warn("Export via backend failed, fallback to local:", e);
+  }
+
+  // —— 前端本地兜底 ——
+  try {
+    const noFm = stripFrontmatter(content);
+    if (fmt === "md" || fmt === "markdown") {
+      const blob = new Blob([noFm], { type: "text/markdown;charset=utf-8" });
+      await triggerBlobDownload({ blob, filename: `${safeTitle(title)}.md` });
+      showToast("已导出 MD（本地降级）");
+      return;
+    }
+    if (fmt === "txt" || fmt === "text") {
+      const plain = await (async () => {
+        const wrap = document.createElement("div");
+        wrap.innerHTML = cachedRenderMarkdown(noFm);
+        return plainText(wrap.innerHTML || wrap.textContent || noFm) || noFm;
+      })();
+      const BOM = "\uFEFF";
+      const blob = new Blob([BOM + plain], { type: "text/plain;charset=utf-8" });
+      await triggerBlobDownload({ blob, filename: `${safeTitle(title)}.txt` });
+      showToast("已导出 TXT（本地降级）");
+      return;
+    }
+    showToast(`导出失败: 不支持的格式 ${fmt}`);
+  } catch (e2) {
+    console.error("Export fallback failed:", e2);
+    showToast(`导出失败: ${e2.message}`);
   }
 }
 
@@ -2386,16 +2574,14 @@ html,body{width:100%;height:100%;overflow:hidden;background:#1a1a2e;font-family:
 </body>
 </html>`;
   const blob = new Blob([presentationHtml], { type: "text/html;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
   const safeName = String(title).replace(/[\\/:*?"<>|]/g, "_").slice(0, 60) || "幻灯片";
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `${safeName}_幻灯片.html`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 5000);
-  showToast(`已导出 ${slides.length} 页幻灯片，双击 HTML 即可演示，按 P 可打印为 PPT`);
+  try {
+    await triggerBlobDownload({ blob, filename: `${safeName}_幻灯片.html` });
+    showToast(`已导出 ${slides.length} 页幻灯片，双击 HTML 即可演示，按 P 可打印为 PPT`);
+  } catch (e) {
+    console.error("PPT 导出失败:", e);
+    showToast(`幻灯片导出失败: ${e.message}`);
+  }
 }
 
 function ensureMarkdownWorker() {
