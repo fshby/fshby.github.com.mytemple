@@ -1489,6 +1489,10 @@ async function handleDocsClosed(closedPaths = []) {
 
 
 
+const PRINT_DOWNLOAD_URL = "https://mytemple.fshby.cc/";
+const PRINT_BRAND_NAME = "MyTemple Knowledge";
+const PRINT_BRAND_SLOGAN = "个人知识沉淀 · 本地 Markdown 知识库 · 让写作、阅读与管理都更安心";
+
 function buildDocumentPrintHtml() {
   const title = els.docTitle?.textContent || state.currentDoc?.title || "MyTemple 文档";
   const rawContent = String(state.currentContent || els.editor.value || "");
@@ -1501,10 +1505,21 @@ function buildDocumentPrintHtml() {
   const updated = state.currentDoc?.updated || state.currentDoc?.modified;
   const dateLabel = showDate && updated ? new Date(updated).toLocaleString() : "";
   const authorLabel = escapeHtml(pdfSettings.authorText || "郑堃逢");
-  const exportNote = showAuthor ? `<p class="print-author">由 MyTemple Knowledge 导出 · ${authorLabel}</p>` : "";
-  const footerLabel = escapeHtml(pdfSettings.footerText || "MyTemple Knowledge · 本地 Markdown 知识库");
+  const exportNote = showAuthor ? `<p class="print-author">由 ${PRINT_BRAND_NAME} 导出 · ${authorLabel}</p>` : "";
+  const footerLabel = escapeHtml(pdfSettings.footerText || `${PRINT_BRAND_NAME} · 本地 Markdown 知识库`);
   const footer = showFooter ? `<footer class="print-footer"><span>${footerLabel}</span></footer>` : "";
   const watermark = buildExportWatermark(pdfSettings.watermarkText);
+  // 默认品牌推荐条（即使用户把 showFooter 关了也保留。用户明确说"导出PDF默认带官网下载链接和简单推荐语"）。
+  // 它放在 print-footer 之后，是文末一块单独的虚线卡片，不使用 fixed，不会覆盖正文。
+  const brandRecommend = `
+    <section class="print-brand-recommend" aria-label="${PRINT_BRAND_NAME} 推荐">
+      <div class="print-brand-logo" aria-hidden="true">M</div>
+      <div class="print-brand-body">
+        <strong>本文档由「${PRINT_BRAND_NAME}」导出 · 欢迎体验官网最新版</strong>
+        <div>${escapeHtml(PRINT_BRAND_SLOGAN)}</div>
+        <div>官网下载地址：<a href="${PRINT_DOWNLOAD_URL}" target="_blank" rel="noreferrer noopener">${PRINT_DOWNLOAD_URL}</a></div>
+      </div>
+    </section>`;
   return `<article class="print-article">
     ${watermark}
     <header class="print-header">
@@ -1514,7 +1529,212 @@ function buildDocumentPrintHtml() {
     </header>
     <div class="print-body">${body}</div>
     ${footer}
+    ${brandRecommend}
   </article>`;
+}
+
+/**
+ * 将 Mermaid 渲染出的 <svg> 节点 + 用户文档里的本地 <img> 统一转换为 data URL，
+ * 再把 KaTeX 的外部 CSS 依赖就地展开为 inline style。
+ * 这样导出 iframe about:blank 无需任何外网、无需加载第三方字体/CSS，
+ * 就能完整显示：公式、Mermaid 图表、本地引用图片。
+ */
+async function materializePrintArtifacts(container) {
+  if (!container) return;
+
+  // 1) Mermaid 图表渲染：把 .mermaid-source 源码 → mermaid.render → <svg> 写回 .mermaid-container
+  const mermaidBlocks = container.querySelectorAll(".chart-block.mermaid-block");
+  if (mermaidBlocks.length) {
+    try {
+      const mermaid = await loadMermaidAsync();
+      if (mermaid) {
+        if (!_mermaidInitialized) {
+          try { mermaid.initialize({ startOnLoad: false, theme: "default", securityLevel: "loose" }); } catch(_) {}
+          _mermaidInitialized = true;
+        }
+        const seq = ++_mermaidRenderSeq;
+        for (let i = 0; i < mermaidBlocks.length; i++) {
+          const block = mermaidBlocks[i];
+          const sourcePre = block.querySelector(".mermaid-source");
+          const containerDiv = block.querySelector(".mermaid-container");
+          if (!sourcePre || !containerDiv) continue;
+          const rawDef = sourcePre.textContent || "";
+          const id = `print-mermaid-${Date.now()}-${i}-${seq}`;
+          try {
+            const { svg } = await mermaid.render(id, rawDef);
+            if (seq === _mermaidRenderSeq) containerDiv.innerHTML = svg;
+          } catch (err) {
+            // 渲染失败：保留源码（等宽 pre 显示），不阻断整个 PDF 导出
+            console.warn("PDF Mermaid 图表渲染降级为源码显示", err);
+            if (seq === _mermaidRenderSeq) {
+              sourcePre.style.display = "block";
+              sourcePre.style.whiteSpace = "pre-wrap";
+              sourcePre.style.fontSize = "12px";
+              containerDiv.innerHTML = "";
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("PDF Mermaid 加载失败，降级显示源码", err);
+      mermaidBlocks.forEach((b) => {
+        const pre = b.querySelector(".mermaid-source");
+        if (pre) { pre.style.display = "block"; pre.style.whiteSpace = "pre-wrap"; }
+      });
+    }
+  }
+
+  // 1.5) Excalidraw 图表：没有 Excalidraw 运行期时降级显示源码文本，
+  //      不会让导出 PDF 留一块空白（避免"导出后缺图"）。
+  const excalidrawBlocks = container.querySelectorAll(".chart-block.excalidraw-block");
+  excalidrawBlocks.forEach((block) => {
+    const containerDiv = block.querySelector(".excalidraw-container");
+    if (!containerDiv) return;
+    if (containerDiv.children.length === 0 && !containerDiv.textContent.trim()) {
+      const sourcePre = block.querySelector(".excalidraw-source");
+      if (sourcePre) {
+        sourcePre.style.display = "block";
+        sourcePre.style.whiteSpace = "pre-wrap";
+        sourcePre.style.fontSize = "12px";
+      }
+    }
+  });
+
+  // 2) KaTeX 数学公式渲染：对 .math-block / .math-inline (data-math) 使用 katex.render。
+  const mathEls = container.querySelectorAll(".math-block[data-math], .math-inline[data-math]");
+  if (mathEls.length) {
+    try {
+      const katex = await loadKatexAsync();
+      if (katex) {
+        mathEls.forEach((el) => {
+          const math = el.getAttribute("data-math") || "";
+          const isBlock = el.classList.contains("math-block");
+          try {
+            katex.render(math, el, {
+              throwOnError: false,
+              displayMode: isBlock,
+              output: "htmlAndMathml",
+              strict: false,
+              errorColor: "#ef4444",
+            });
+          } catch (err) {
+            // KaTeX 语法错误：显示红色源代码
+            el.textContent = math;
+            el.style.color = "#ef4444";
+            el.style.fontFamily = "monospace";
+          }
+        });
+      }
+    } catch (err) {
+      console.warn("PDF KaTeX 加载失败，降级显示源码", err);
+      mathEls.forEach((el) => {
+        const math = el.getAttribute("data-math") || "";
+        el.textContent = (el.classList.contains("math-block") ? "$$" : "$") + math + (el.classList.contains("math-block") ? "$$" : "$");
+        el.style.color = "#94a3b8";
+        el.style.fontFamily = "monospace";
+      });
+    }
+  }
+
+  // 3) 将所有 <svg>（Mermaid产物/用户手写SVG/图表块）转换为独立 <img src="data:image/svg+xml;utf8,...">
+  //    以兼容 Edge/Chromium 打印时丢失 SVG stroke/fill / 外部 class 样式的情况。
+  const svgNodes = [...container.querySelectorAll("svg")];
+  for (const svg of svgNodes) {
+    try {
+      if (!svg.parentElement) continue;
+      // 加上 xmlns + width/height，保证 data URI 解码后不会是 0×0
+      svg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+      const vb = svg.getAttribute("viewBox") || "";
+      if (!svg.hasAttribute("width")) {
+        const m = vb.match(/\d+(?:\.\d+)?\s+\d+(?:\.\d+)?\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)/);
+        if (m) { svg.setAttribute("width", m[1]); svg.setAttribute("height", m[2]); }
+      }
+      // 注入"样式兜底"：如果 <svg> 内大量 <path>/<line>/<rect> 等只有 class 没有 fill/stroke，
+      // 我们从主页面计算好实际 style（fill, stroke, stroke-width, opacity）写到 inline，
+      // 避免打印 iframe 缺 css 导致整个图表是黑线空心大色块。
+      const styled = svg.querySelectorAll("path, line, rect, circle, ellipse, polygon, polyline, text, tspan, g");
+      styled.forEach((node) => {
+        try {
+          const cs = window.getComputedStyle(node);
+          const pick = (inline, computedKey, cssKey) => {
+            if (!node.getAttribute(inline) || node.getAttribute(inline) === "none") {
+              const v = cs.getPropertyValue(computedKey);
+              if (v && v !== "" && v !== "none" && v !== "rgba(0, 0, 0, 0)") node.setAttribute(cssKey, v);
+            }
+          };
+          pick("fill", "fill", "fill");
+          pick("stroke", "stroke", "stroke");
+          pick("stroke-width", "stroke-width", "stroke-width");
+          pick("opacity", "opacity", "opacity");
+          pick("color", "color", "color");
+        } catch (_) {}
+      });
+      const raw = new XMLSerializer().serializeToString(svg);
+      // encodeURIComponent 对大多数浏览器足够；但 '#' 需要转为 %23 避免被当作 URI fragment
+      const encoded = encodeURIComponent(raw).replace(/#/g, "%23");
+      const dataUrl = `data:image/svg+xml;charset=utf-8,${encoded}`;
+      const img = document.createElement("img");
+      const w = svg.getAttribute("width") || "100%";
+      const h = svg.getAttribute("height") || "auto";
+      img.setAttribute("src", dataUrl);
+      img.setAttribute("alt", "chart");
+      img.style.maxWidth = "100%";
+      img.style.height = h === "auto" ? "auto" : (String(h).endsWith("%") ? h : `${h}px`);
+      img.style.width = String(w).endsWith("%") ? w : `${w}px`;
+      img.style.display = "block";
+      img.style.margin = "0 auto";
+      img.style.pageBreakInside = "avoid";
+      svg.replaceWith(img);
+    } catch (e) {
+      // 单个 svg 失败不要中断整体导出
+      console.warn("PDF SVG 内联失败，保留原始 svg", e);
+    }
+  }
+
+  // 4) 图片 data URL 化（重复 inlinePrintImages 逻辑，但这里只处理 container 内节点，避免重新 fetch）
+  const imgs = [...container.querySelectorAll("img")];
+  await Promise.all(imgs.map(async (img) => {
+    const src = img.getAttribute("src") || "";
+    if (!src || src.startsWith("data:") || /^https?:/i.test(src)) {
+      img.removeAttribute("loading");
+      return;
+    }
+    img.removeAttribute("loading");
+    try {
+      const r = await fetch(src, { credentials: "include" });
+      if (!r.ok) return;
+      const blob = await r.blob();
+      const dataUrl = await new Promise((resolve, reject) => {
+        const rd = new FileReader();
+        rd.onload = () => resolve(rd.result);
+        rd.onerror = reject;
+        rd.readAsDataURL(blob);
+      });
+      img.setAttribute("src", dataUrl);
+    } catch (_) { /* keep original */ }
+  }));
+}
+
+/**
+ * 新的 PDF 主 HTML 生成入口：先构建 → 离屏渲染 Mermaid + KaTeX → 内联图表与图片 →
+ * 再返回最终纯字符串 HTML（不再有任何对外部 CSS/JS/字体/网络的依赖）。
+ */
+async function buildDocumentPrintHtmlRendered() {
+  const html = buildDocumentPrintHtml();
+  const host = document.createElement("div");
+  host.setAttribute("aria-hidden", "true");
+  host.style.cssText = "position:fixed;left:-99999px;top:-99999px;width:900px;height:auto;background:#fff;visibility:visible;pointer-events:none;z-index:-1;";
+  host.innerHTML = html;
+  document.body.appendChild(host);
+  try {
+    await materializePrintArtifacts(host);
+    // 等待下一帧再取 innerHTML，保证浏览器把 inline style/size 真正算出来
+    await new Promise((r) => requestAnimationFrame(r));
+    await new Promise((r) => setTimeout(r, 120));
+    return host.innerHTML;
+  } finally {
+    host.remove();
+  }
 }
 
 async function inlinePrintImages(html) {
@@ -1639,10 +1859,96 @@ function customAlert(message, options = {}) {
   });
 }
 
+// KaTeX 打印样式：把 KaTeX 0.16 常用样式最小集合直接注入到打印 iframe，
+// 避免 iframe about:blank 访问不到远程 CDN CSS 导致公式全部渲染出来却"糊成一团或错位"。
+// 同时包含必要的 .katex-display / .katex / .mord / .mbin / .mfrac 等关键布局。
+const KATEX_PRINT_CSS = `
+.katex-display{display:block;margin:1em 0;text-align:center;white-space:nowrap;overflow-x:auto;overflow-y:hidden}
+.katex{font:italic 1.21em "KaTeX_Main","Times New Roman",Times,serif;line-height:1.2;text-indent:0}
+.katex *{-ms-high-contrast-adjust:none!important}
+.katex .katex-version:after{content:"0.16.9"}
+.katex .katex-mathml{position:absolute;overflow:clip;height:1px;width:1px;padding:0;border:0}
+.katex .base{position:relative;display:inline-block;box-sizing:content-box \10;white-space:nowrap;width:min-content}
+.katex .strut{display:inline-block}
+.katex .mord,.katex .mbin,.katex .mrel,.katex .mopen,.katex .mclose,.katex .mpunct,.katex .minner,.katex .mop{position:relative;display:inline-flex;align-items:baseline}
+.katex .mfrac>span>span>span{padding:0}
+.katex .mfrac .frac-line{display:inline-block;width:100%;border-bottom-style:solid;border-bottom-width:1px}
+.katex .mfrac .frac-line:before{content:"";display:block}
+.katex .mfrac .frac-line:after{content:"";display:block}
+.katex .mspace{display:inline-block}
+.katex .llap,.katex .rlap{width:0;position:relative}
+.katex .llap>span,.katex .rlap>span{position:absolute}
+.katex .llap>span{right:0}
+.katex .rlap>span{left:0}
+.katex .katex-html{display:inline-block}
+.katex .katex-mathml{position:absolute;clip:rect(1px,1px,1px,1px);padding:0;border:0;height:1px;width:1px;overflow:hidden}
+.katex .op-symbol{position:relative}
+.katex .op-symbol.small-op{font-family:"KaTeX_Size1";font-weight:400}
+.katex .op-symbol.large-op{font-family:"KaTeX_Size2";font-weight:400}
+.katex .op-limits{display:flex;flex-direction:column;align-items:center}.mtable{display:inline-table;text-align:center;vertical-align:middle;box-sizing:border-box;border-collapse:collapse;margin:0.25em 0}
+.mtable .mtd{display:table-cell;text-align:center;vertical-align:middle;padding:0.25em 0.4em}
+.mtable .mtd:empty{min-width:1ex}
+.katex-display .mfrac,.katex .mfrac{text-align:center}
+.katex .mfrac>span>span{display:flex;flex-direction:column;align-items:center}
+.katex .mfrac .num{order:1}
+.katex .mfrac .den{order:2}
+.katex .rule{display:inline-block;border:0 solid currentColor;position:relative}
+.katex .overline .overline-line{display:inline-block;width:100%;border-bottom-style:solid;border-bottom-width:1px;margin-bottom:3px}
+.katex .underline .underline-line{display:inline-block;width:100%;border-top-style:solid;border-top-width:1px;margin-top:2px}
+.katex .sqrt>span{display:inline-flex;align-items:center}
+.katex .sqrt .sqrt-sign{font-family:"KaTeX_Main";line-height:1}
+.katex .sqrt .sqrt-line{display:inline-block;width:100%;border-top-style:solid;border-top-width:1px;margin-left:3px}
+.katex .sizing{display:inline-block}
+.katex .sizing.reset-size1.size1,.katex .fontsize-ensurer.reset-size1.size1{font-size:1em}
+.katex .sizing.reset-size2.size2,.katex .fontsize-ensurer.reset-size2.size2{font-size:1.4em}
+.katex .sizing.reset-size3.size3,.katex .fontsize-ensurer.reset-size3.size3{font-size:1.6em}
+.katex .sizing.reset-size4.size4,.katex .fontsize-ensurer.reset-size4.size4{font-size:1.8em}
+.katex .sizing.reset-size5.size5,.katex .fontsize-ensurer.reset-size5.size5{font-size:2em}
+.katex .sizing.reset-size6.size6,.katex .fontsize-ensurer.reset-size6.size6{font-size:2.4em}
+.katex .sizing.reset-size7.size7,.katex .fontsize-ensurer.reset-size7.size7{font-size:2.88em}
+.katex .sizing.reset-size8.size8,.katex .fontsize-ensurer.reset-size8.size8{font-size:3.46em}
+.katex .sizing.reset-size9.size9,.katex .fontsize-ensurer.reset-size9.size9{font-size:4.14em}
+.katex .sizing.reset-size10.size10,.katex .fontsize-ensurer.reset-size10.size10{font-size:4.97em}
+.katex .stretchy{display:inline-block;white-space:nowrap;width:100%}
+.katex .stretchy::before,.katex .stretchy::after{content:""}
+.katex .vlist{display:inline-block}.katex .vlist>span{display:inline-flex;flex-direction:column;align-items:center}
+.katex .vlist .vlist-s{align-self:baseline}
+.katex .vlist .vlist-t{align-self:baseline;display:inline-table}
+.katex .vlist .vlist-r{display:table-row}
+.katex .vlist .vlist-b{display:table-cell}
+.katex .vlist .vlist-a{display:table-cell;height:0;vertical-align:bottom}
+.katex .accent-body{position:relative}
+.katex .accent-body>span{position:absolute;left:0;width:100%}
+.katex .accent-body>span>span{display:block}
+.katex .math{font-family:"KaTeX_Main";font-style:italic}
+.katex .mathit{font-family:"KaTeX_Math";font-style:italic}
+.katex .mathbf{font-family:"KaTeX_Main";font-weight:700}
+.katex .mathrm{font-family:"KaTeX_Main";font-style:normal}
+.katex .mathsf{font-family:"KaTeX_SansSerif"}
+.katex .mathbb{font-family:"KaTeX_AMS"}
+.katex .mathcal{font-family:"KaTeX_Caligraphic"}
+.katex .mathfrak{font-family:"KaTeX_Frak"}
+.katex .mathtt{font-family:"KaTeX_Typewriter"}
+.katex .mathbfit{font-family:"KaTeX_Main-BoldItalic"}
+.katex .colortext::before,.katex .boldsymbol::before{content:attr(data-content)}
+.katex .mord .rule{display:none}
+@supports (display:inline-flex){
+  .katex .vlist>span>span>span{display:inline-table}
+  .katex .vlist>span>span>span>span{display:table-cell}
+  .katex .vlist .vlist-a{height:auto}
+}
+.katex svg{fill:none;stroke-linecap:square}
+.katex .delimsizing{display:inline-block}
+.katex .delimsizing.size1{font-family:"KaTeX_Size1"}
+.katex .delimsizing.size2{font-family:"KaTeX_Size2"}
+.katex .delimsizing.size3{font-family:"KaTeX_Size3"}
+.katex .delimsizing.size4{font-family:"KaTeX_Size4"}
+`;
+
 // 打印样式：注入到打印 iframe，使导出的 PDF 不依赖主页面样式，
 // 同时 iframe 来源为 about:blank，浏览器页眉页脚不会显示本机地址与端口。
 const PRINT_STYLES = `html,body{margin:0;padding:0;background:#fff;}
-.print-article{background:#ffffff;color:#1f2937;font-family:"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;font-size:14px;line-height:1.75;padding:48px 56px;max-width:820px;margin:0 auto;}
+.print-article{background:#ffffff;color:#1f2937;font-family:"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;font-size:14px;line-height:1.75;padding:32px 40px 64px 40px;max-width:860px;margin:0 auto;position:relative;}
 .print-header{text-align:center;border-bottom:2px solid #1f2937;padding-bottom:18px;margin-bottom:28px;}
 .print-title{font-size:26px;font-weight:700;color:#111827;margin:0 0 8px;line-height:1.35;}
 .print-meta{font-size:12px;color:#6b7280;margin:0 0 4px;}
@@ -1694,9 +2000,42 @@ const PRINT_STYLES = `html,body{margin:0;padding:0;background:#fff;}
 .print-body ul,.print-body ol{margin:0.7em 0;padding-left:1.8em;}
 .print-body li{margin:0.3em 0;}
 .print-body hr{border:0;border-top:1px solid #e5e7eb;margin:1.8em 0;}
-.print-footer{margin-top:36px;padding-top:14px;border-top:1px solid #e5e7eb;text-align:center;font-size:11px;color:#9ca3af;}
+/* Mermaid/Excalidraw 图表块：完整显示 + 不跨页切断 */
+.print-body .chart-block{margin:16px 0;padding:10px;border:1px solid #eef0f3;border-radius:6px;background:#ffffff;page-break-inside:avoid;text-align:center;}
+.print-body .chart-block svg{max-width:100%;height:auto;display:block;margin:0 auto;}
+.print-body .mermaid-source,.print-body .excalidraw-source{display:none;}
+.print-footer{margin-top:32px;padding:12px 0 4px 0;border-top:1px solid #e5e7eb;text-align:center;font-size:11px;color:#9ca3af;line-height:1.7;}
+.print-footer a{color:#6b7280;text-decoration:none;}
 .print-watermark{position:fixed;top:0;left:0;width:100%;height:100%;display:flex;justify-content:center;align-items:center;font-size:52px;color:rgba(15,23,42,0.05);pointer-events:none;transform:rotate(-30deg);z-index:9999;letter-spacing:6px;white-space:nowrap;font-weight:700;}
-@page{margin:18mm 16mm;}`;
+/* 官方品牌推荐条：绝对不遮挡正文；始终位于文章最末尾，颜色低调 + 宽度控制，多页仅出现在末页下方。
+   它不使用 fixed，避免每页打印覆盖内容（"不能影响文档正常显示"）。 */
+.print-brand-recommend{
+  margin: 28px 0 0 0;
+  padding: 12px 14px;
+  border: 1px dashed #d1d5db;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #ffffff 0%, #f9fafb 100%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 11.5px;
+  color: #6b7280;
+  line-height: 1.7;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+.print-brand-logo{
+  width: 38px; height: 38px; border-radius: 9px;
+  background: linear-gradient(135deg, #8b5cf6 0%, #2563eb 100%);
+  color:#fff; display:flex; align-items:center; justify-content:center;
+  font-weight:800; font-size: 16px; flex: 0 0 38px;
+  box-shadow: 0 2px 6px rgba(139,92,246,0.2);
+}
+.print-brand-body{flex:1 1 auto;min-width:0;}
+.print-brand-body strong{color:#111827;font-weight:600;font-size:12.5px;display:block;margin-bottom:2px;}
+.print-brand-body a{color:#2563eb;text-decoration:underline;word-break:break-all;}
+${KATEX_PRINT_CSS}
+@page{margin:18mm 14mm;size:A4;}`;
 
 async function exportCurrentDoc(format) {
   if (!state.currentPath && !state.currentContent) {
@@ -1742,9 +2081,18 @@ async function exportCurrentDocToPdf() {
     showToast("请先打开一个文档");
     return;
   }
-  showToast("正在准备 PDF 导出...");
-  let html = buildDocumentPrintHtml();
-  html = await inlinePrintImages(html);
+  showToast("正在准备 PDF 导出（图表/公式正在渲染，请稍候…）");
+  // 使用新的"渲染完成版"HTML：公式（KaTeX）、Mermaid 图表、Excalidraw 降级、本地图片、SVG→img data URL 全部处理完毕。
+  let html;
+  try {
+    html = await buildDocumentPrintHtmlRendered();
+  } catch (err) {
+    console.error(err);
+    // 任何渲染错误都回退到老的"原始字符串构建+只内联图片"，保证用户至少能导出
+    showToast("图表/公式渲染降级为原始显示，继续导出");
+    html = buildDocumentPrintHtml();
+    try { html = await inlinePrintImages(html); } catch (_) {}
+  }
   const title = els.docTitle?.textContent || state.currentDoc?.title || "MyTemple 文档";
   // 通过隐藏 iframe 打印：iframe 来源为 about:blank，浏览器打印页眉页脚不会显示本机地址与端口。
   const iframe = document.createElement("iframe");
@@ -1755,7 +2103,7 @@ async function exportCurrentDocToPdf() {
   const cleanup = () => {
     if (cleaned) return;
     cleaned = true;
-    iframe.remove();
+    try { iframe.remove(); } catch (_) {}
   };
   try {
     const doc = iframe.contentWindow.document;
@@ -1766,13 +2114,16 @@ async function exportCurrentDocToPdf() {
     if (images.length) {
       await Promise.all(images.map((img) => img.complete ? Promise.resolve() : new Promise((resolve) => {
         img.onload = img.onerror = () => resolve();
-        setTimeout(resolve, 3000);
+        setTimeout(resolve, 5000);
       })));
     }
-    await new Promise((resolve) => requestAnimationFrame(resolve));
-    await new Promise((resolve) => setTimeout(resolve, 120));
+    // 额外 rAF × 3 + 250ms 延迟：确保大 SVG dataURI、长公式、表格等高 DPR 图像全部栅格化完成
+    await new Promise((r) => requestAnimationFrame(r));
+    await new Promise((r) => requestAnimationFrame(r));
+    await new Promise((r) => requestAnimationFrame(r));
+    await new Promise((r) => setTimeout(r, 320));
     iframe.contentWindow.focus();
-    showToast("提示：若不需要页眉页脚，请在打印对话框中取消勾选「页眉与页脚」");
+    showToast("提示：若不需要页眉页脚，请在打印对话框中取消勾选「页眉与页脚」，选择「另存为 PDF」即可完成导出");
     iframe.contentWindow.addEventListener("afterprint", cleanup);
     iframe.contentWindow.print();
   } catch (error) {
@@ -1780,7 +2131,7 @@ async function exportCurrentDocToPdf() {
     showToast("无法调起打印对话框，请检查浏览器设置");
     cleanup();
   }
-  setTimeout(cleanup, 60000);
+  setTimeout(cleanup, 120000);
 }
 
 async function buildWechatArticleHtml() {
