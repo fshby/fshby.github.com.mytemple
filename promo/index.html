@@ -24,7 +24,7 @@
         <a href="#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.102.exe" download>下载 v1.8.102</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.103.exe" download>下载 v1.8.103</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -32,11 +32,11 @@
     <main id="top">
       <section class="hero section-wrap" aria-labelledby="hero-title">
         <div class="hero-copy reveal">
-          <p class="eyebrow"><span class="status-dot"></span> 本地 Markdown 工作区 <em>v1.8.102 桌面版</em></p>
+          <p class="eyebrow"><span class="status-dot"></span> 本地 Markdown 工作区 <em>v1.8.103 桌面版</em></p>
           <h1 id="hero-title">本地 Markdown 知识库与编辑器</h1>
           <p class="hero-lede">围绕本地 Markdown 文件提供阅读、编辑、目录、图谱、检索、主题与多工作区管理。</p>
           <div class="hero-actions">
-            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.102.exe" download>下载 Windows 安装包</a>
+            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.103.exe" download>下载 Windows 安装包</a>
             <a class="button button-soft" href="#docs">查看使用文档</a>
           </div>
           <p class="hero-note">Windows 桌面端 · 本地文件优先 · 内容助手为可选接入</p>
@@ -183,13 +183,14 @@
         </div>
         <div class="download-block reveal">
           <div class="download-primary">
-            <span class="download-badge">当前稳定版 v1.8.102</span>
+            <span class="download-badge">当前稳定版 v1.8.103</span>
             <p>本地工作区、阅读/修改双模式、图谱、主题、增量索引与可选辅助功能。</p>
-            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.102.exe" download>下载安装包</a>
+            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.103.exe" download>下载安装包</a>
           </div>
           <div class="download-secondary">
             <h3>最近更新</h3>
             <ul>
+              <li>v1.8.103：导出 7 种格式统一接入系统原生「另存为」对话框（扩展名过滤正确），保存成功后 Toast 显示完整绝对路径（点击可复制）+「打开文件 / 在文件夹中查看」两按钮；取消对话框静默不报错；非 Tauri / 插件失败自动降级 Blob 下载并明确告知浏览器默认下载目录。导入新增「系统文件对话框」按钮，DOCX/RTF/ODT 通过 Rust 内置 ZIP/控制字剥离直接提取正文写入 Markdown，不再生成 pandoc 占位文档。</li>
               <li>v1.8.102：其他电脑安装后 404 白屏紧急修复：安装包原 bundle.resources 仅含 WebView2Loader.dll 未含 public/，新安装机启动后 axum 找不到前端文件 → Edge/内置窗口 HTTP ERROR 404。本次把 public/ 整个打进 resources、resolve_public_root 5 级候选 + index.html 校验、7321..7420 端口回退扫描、Rust 内置中文友好错误页不再只显示 Edge 刷新按钮。</li>
               <li>v1.8.101：导出全格式质量+保存修复；7 项导出(HTML/DOCX/PPT/PDF/TXT/MD/公众号)均不包含 frontmatter YAML 块；HTML/DOCX 改为前端本地高品质离线文件(公式/Mermaid/图片全内联)；TXT 新增语法糖剥离 + UTF-8 BOM 防中文乱码；下载 click 偶发丢事件已补 50ms 调度；失败有前端兜底。</li>
               <li>v1.8.100：启动红屏 SyntaxError 紧急修复：KATEX_PRINT_CSS 模板字符串内 IE hack <code>\10</code> 被 WebView2 解析为八进制转义直接抛错、app.js 解析失败；删除无用 IE10 hack + 保持上版跨行公式/Mermaid/Excalidraw 修复 + MARKDOWN_RENDER_VERSION/WORKER URL 强制缓存失效。</li>
@@ -284,6 +285,18 @@
               <li><kbd>Ctrl+Shift+P</kbd> 润色 · <kbd>Ctrl+Shift+X</kbd> 续写</li>
               <li><kbd>Ctrl+U</kbd> 顶部智能检索 · <kbd>Ctrl+I</kbd> 行内对话</li>
               <li>辅助快捷键需在设置中开启对应功能后生效</li>
+            </ul>
+          </article>
+          <article class="doc-section">
+            <h3>v1.8.103 更新日志 · 原生另存为 + 路径查看 + DOCX/RTF/ODT 正文提取</h3>
+            <ul>
+              <li>【一、7 项导出统一接入系统原生「另存为」】新增 Rust 6 条 Tauri 命令：<code>cmd_export_save_as</code>（save file dialog + 真写磁盘 + 返回绝对路径）/ <code>cmd_open_exported_file</code>（系统默认程序打开）/ <code>cmd_reveal_exported_file_in_folder</code>（explorer /select, macOS open -R, Linux xdg-open 父目录）/ <code>cmd_import_pick_files</code>（open file dialog 多选 + 扩展名过滤）/ <code>cmd_import_read_file</code>（按本地绝对路径读，返回 <code>{ext, text, bytes_base64, converted_markdown}</code>）。引入 <code>tauri-plugin-dialog / tauri-plugin-opener / zip</code> 三条 2.x 依赖；命令模块独立 <code>pub mod tauri_cmd</code> 隔离，规避 crate 根级 <code>#[tauri::command]</code> 宏名空间冲突（E0255×18）。</li>
+              <li>【前端统一 tauriSaveAs + 降级链】新增 <code>tauriSaveAs({blob,defaultName,extensions})</code>：Blob → FileReader dataURL → base64 → invoke <code>cmd_export_save_as</code>；非 Tauri / 异常返回 null 作降级；用户在 Tauri 中取消对话框返回 null → 不再触发二次 Blob 下载。<code>exportCurrentDoc</code>（HTML/DOCX/MD/TXT）统一：先 tauriSaveAs → 有路径 <code>showSavedAsToast</code>（显示绝对路径 + 两按钮：打开文件 / 在文件夹查看，路径块点击可复制）；无路径 + 非 Tauri 走 <code>triggerBlobDownload</code> + Toast 明示「浏览器默认下载目录」；Tauri 且取消 = 静默。</li>
+              <li>【PDF / PPT 兼容老流程】PDF 仍保留 iframe print 对话框另存为 PDF（用户熟悉的流程），但在调 print 前先后台 <code>tauriSaveAs</code> 同内容 HTML 到用户自选路径，Toast 合并显示 HTML 保存路径 + 打印对话框提示 + 查看按钮；纯浏览器再额外 triggerBlobDownload。PPT（幻灯片 HTML）走同样的统一流水线。</li>
+              <li>【Toast 交互升级】<code>showToast</code> 字符串旧签名 100% 兼容；新增对象签名 <code>{title, message, path, kind, duration, canClose, actions:[{label,onClick,primary,dismissAfter}]}</code>；等宽路径块点击复制到剪贴板；关闭按钮；dismissAfter 点击后立即关闭。<code>showSavedAsToast</code> 内置两按钮：打开文件 / 在文件夹中查看，分别 invoke Rust 两条命令。</li>
+              <li>【二、导入 DOCX/RTF/ODT 正文自动提取，再无占位文档】Rust 新增 3 个正文提取 helper：<code>extract_docx_markdown</code> ZIP + <code>&lt;w:p&gt;/&lt;w:t&gt;</code> 逐段换行 + 表格/标题简化；<code>extract_rtf_markdown</code> 深度 + 控制字剥离 + <code>\'xx</code> 跳过；<code>extract_odt_markdown</code> ZIP content.xml <code>text:p/text:h</code> + strip_inner_tags 实体还原 + 空行压缩。</li>
+              <li>【导入弹窗原生系统按钮】<code>importModal</code> 按钮区新增「系统文件对话框」（Tauri 环境下自动显示）；accept 与 Rust 过滤器同步（11 类：md/markdown/txt/html/htm/json/csv/docx/doc/rtf/odt）。<code>addImportFiles</code> 三形态统一：File 对象 / 绝对路径 string[] / 合成对象。系统对话框 string 项逐一 invoke <code>cmd_import_read_file</code>；docx/rtf/odt 如果 <code>converted_markdown</code> 非空 → 打 <code>preconverted</code> 标记；<code>confirmImport</code> 检测到 preconverted → 直接走 <code>create-doc + save</code>（新建同名 .md 文档写真实正文），完全绕过旧 /api/import 的占位分支。其他二进制占位文案也同步提示「请改用系统文件对话框可直接正文提取」。</li>
+              <li>【三、全链路兼容与健壮】所有 invoke 双重兼容 <code>window.__TAURI__.core.invoke</code>（Tauri 2.x @tauri-apps/api v2）与 <code>window.__TAURI__.invoke</code>（直接注入）。base64 编解码统一 <code>engine::general_purpose::STANDARD</code> + 空白替换。<code>FilePath</code>（tauri-plugin-fs 2.5.1）使用 <code>fp.into_path().ok()</code>，<code>add_filter</code> 第二参统一 <code>&amp;[&amp;str]</code>。完整保持 v1.8.102 的前端资源打包 / 5 级公共根候选 / 端口扫描 7321..7420 / Rust 内置中文 404 页。</li>
             </ul>
           </article>
           <article class="doc-section">

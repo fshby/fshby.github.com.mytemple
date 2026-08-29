@@ -1,6 +1,6 @@
 [package]
 name = "mytemple-server"
-version = "1.8.102"
+version = "1.8.103"
 edition = "2021"
 description = "MyTemple Knowledge - Rust 原生后端 (Phase 5 纯原生架构)"
 
@@ -53,10 +53,14 @@ env_logger = "0.11"
 # 错误处理
 anyhow = "1"
 thiserror = "1"
+# DOCX/ODT 正文提取（ZIP + XML 扫描）
+zip = "2"
 
 # Tauri 应用外壳（窗口/打包）
 tauri = { version = "2", features = ["devtools"] }
 tauri-plugin-shell = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
 url = "2"
 
 # HTTP 客户端（Ollama / DeepSeek）— rustls 避免 OpenSSL 依赖
