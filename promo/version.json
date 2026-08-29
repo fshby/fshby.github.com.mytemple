@@ -1,7 +1,7 @@
 {
-  "version": "1.8.96",
-  "downloadUrl": "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.96.exe",
-  "latestReleaseNotes": "【v1.8.96】代码文件保存最终修复：打开代码文档即进入编辑态、保存按钮不再显示「非Markdown不支持保存」、状态栏不再显示「不可保存」；工作区折叠/展开视图保持v1.8.95新逻辑（折叠top10+展开目录树）",
-  "releaseNotes": "v1.8.96 代码文件保存链路最终闭环\n1.【UI拒绝彻底清除】openDoc 对非Markdown代码/文本文件：saveBtn.disabled=false、清除旧title、强制替换为「保存(Ctrl+S)」、移除readonly/disabled/unsupported class；底部lastSaveText按编辑器内容正确显示「保存/未保存 HH:MM」而非旧版「不可保存」\n2.【openDoc结尾统一save状态】有草稿≠原内容→未保存+scheduleAutoSave；其余→保存。避免非md分支中setMode后被统一setSaveStatus('保存')再次覆盖引发的时序错乱\n3.【保存链路确认】runAutoSave仅依赖state.mode==edit&&有currentPath；非md文档打开即自动setMode('edit')→自动保存/手动Ctrl+S均能走saveCurrentDoc→/api/save，后端save_file对任意文本后缀已无gate（v1.8.94完成）\n4.【工作区视图】折叠态top10按modified倒序+保当前打开；展开态目录树（renderTree递归文件夹）+每层文件modified倒序",
+  "version": "1.8.97",
+  "downloadUrl": "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.97.exe",
+  "latestReleaseNotes": "【v1.8.97】Ctrl+/-/0编辑器字号快捷键最终修复（编辑器内按键优先捕获+CodeMirror多节点同步字号）；重启保留用户习惯字号；编辑模式字体全面优化：更全的等宽字体栈+连字/抗锯齿/字重/行距/字距让编辑更清晰更美观。",
+  "releaseNotes": "v1.8.97 编辑器快捷键与字体品质全面升级\n1.【Ctrl+/-字号快捷键最终修复】全局listener+编辑器listener双保险处理Ctrl+/-/0；事件在els.editor捕获阶段高优先级前置处理，避免CodeMirror吞掉快捷键导致「没生效」；applyEditorFontSizeToDom同步#editor/.cm-editor/.cm-scroller/.cm-content/.cm-line/.cm-gutters/#cursor-overlay字号并requestMeasure强制CM重绘\n2.【重启保留用户字号】loadSettings→applySettings末尾调用applyEditorFontSizeToDom；setMode('edit')也重放设置，避免切换编辑态/打开文档被默认字号冲掉\n3.【编辑模式字体更清晰更美观】字体栈：Cascadia Mono/Cascadia Code/JetBrains Mono/Fira Code/Sarasa Mono/YaHei/PingFang兜底；连字liga/calt/cv11/ss01；抗锯齿antialiased；text-rendering: optimizeLegibility；行距1.76→1.82(预览隐藏)；字重450适度提升防Windows发虚；字距微开0.002em；.cm-gutters行号tabular-nums+透明度78%；.cm-content上下padding与宽度加大，编辑更从容",
   "releaseDate": "2026-08-29"
 }
