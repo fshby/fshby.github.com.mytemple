@@ -1,0 +1,76 @@
+[package]
+name = "mytemple-server"
+version = "1.8.94"
+edition = "2021"
+description = "MyTemple Knowledge - Rust 原生后端 (Phase 5 纯原生架构)"
+
+[lib]
+name = "mytemple_server"
+crate-type = ["staticlib", "rlib"]
+
+[[bin]]
+name = "mytemple-server"
+path = "src/main.rs"
+
+[dependencies]
+# 序列化
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# 加密 (RSA-SHA256 授权验证)
+sha2 = { version = "0.10", features = ["oid"] }
+rsa = "0.9"
+base64 = "0.22"
+hex = "0.4"
+
+# 异步运行时
+tokio = { version = "1", features = ["full"] }
+
+# HTTP 服务器 (嵌入式 axum：静态前端 + /api handler)
+axum = { version = "0.7", features = ["macros"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["fs"] }
+
+# 正则表达式 (全文搜索/Markdown 解析)
+regex = "1"
+
+# 目录遍历 (目录树构建)
+walkdir = "2"
+
+# 文件监听
+notify = "6"
+
+# 日期时间
+chrono = { version = "0.4", features = ["serde"] }
+
+# UUID
+uuid = { version = "1", features = ["v4"] }
+
+# 日志
+log = "0.4"
+env_logger = "0.11"
+
+# 错误处理
+anyhow = "1"
+thiserror = "1"
+
+# Tauri 应用外壳（窗口/打包）
+tauri = { version = "2", features = ["devtools"] }
+tauri-plugin-shell = "2"
+url = "2"
+
+# HTTP 客户端（Ollama / DeepSeek）— rustls 避免 OpenSSL 依赖
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "gzip"] }
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[features]
+default = []
+
+[profile.release]
+opt-level = "z"      # 体积优先优化 (z = 极致体积)
+lto = true           # 链接时优化 (跨 crate 内联与死代码消除)
+codegen-units = 1    # 单编译单元最大化优化机会
+strip = true         # 移除符号表
+panic = "abort"      # 用 abort 替代 unwind，移除展开代码

@@ -705,6 +705,23 @@ function applyWindowZoom(zoom) {
   if (els.windowZoomValue) els.windowZoomValue.textContent = `${z}%`;
 }
 
+function adjustEditorFontSize(delta) {
+  const settings = loadSettings();
+  if (delta === 0) {
+    settings.contentFontSize = computeOptimalContentFontSize();
+  } else {
+    settings.contentFontSize = clamp(settings.contentFontSize + delta, 10, 32);
+  }
+  localStorage.setItem("docContentFontSize", String(settings.contentFontSize));
+  const scale = (Number(localStorage.getItem("windowZoom")) || computeOptimalZoom()) / 100;
+  document.documentElement.style.setProperty("--doc-font-size", `${Math.round(settings.contentFontSize * scale)}px`);
+  const editorEl = document.querySelector(".editor-pane textarea, .editor-pane .cm-content");
+  if (editorEl) {
+    editorEl.style.fontSize = `${settings.contentFontSize}px`;
+  }
+  showToast(`字体 ${settings.contentFontSize}px`);
+}
+
 function restoreWindowZoom() {
   const saved = localStorage.getItem("windowZoom");
   if (saved) {
@@ -2900,22 +2917,19 @@ function renderTree(nodes, container = els.tree) {
         }
       }
       collectExpandedFolderFiles(node.children);
-      const maxFiles = 10;
       const isExpanded = state.expandedWorkspaceRoots.has(node.workspaceId);
       // 智能化收起状态：默认仅显示当前打开的文档，不渲染文件夹结构，减少视觉噪音。
-      // 展开状态：显示子文件夹 + 根目录文件（子文件夹已递归渲染自身文件）。
+      // 展开状态：显示所有文件（排除已在展开子文件夹内显示的），无数量限制。
       let candidateFiles;
       if (isExpanded) {
-        candidateFiles = rootFiles;
+        candidateFiles = allFiles.filter((f) => !expandedFolderFilePaths.has(f.path));
       } else {
         // 仅显示 state.currentPath 若属于本工作区
         const currentlyOpen = state.currentPath && allFiles.find((f) => f.path === state.currentPath);
         candidateFiles = currentlyOpen ? [currentlyOpen] : [];
       }
-      const displayFiles = isExpanded
-        ? candidateFiles.slice(0, maxFiles)
-        : candidateFiles;
-      const displayTotal = allFiles.filter((f) => !expandedFolderFilePaths.has(f.path)).length;
+      const displayFiles = candidateFiles;
+      const displayTotal = displayFiles.length;
 
       if (isExpanded) {
         renderTree(folders, children);
@@ -2955,19 +2969,18 @@ function renderTree(nodes, container = els.tree) {
       }
 
       if (isExpanded) {
-        if (displayTotal > maxFiles) {
-          const moreBtn = document.createElement("button");
-          moreBtn.type = "button";
-          moreBtn.className = "more-files-btn";
-          moreBtn.textContent = `收起 ${displayTotal - maxFiles} 项`;
-          const workspaceId = node.workspaceId;
-          moreBtn.addEventListener("click", (e) => {
-            e.stopPropagation();
-            state.expandedWorkspaceRoots.delete(workspaceId);
-            rerenderWorkspacePanel(node, panel);
-          });
-          children.append(moreBtn);
-        }
+        // 展开状态：显示"收起"按钮
+        const moreBtn = document.createElement("button");
+        moreBtn.type = "button";
+        moreBtn.className = "more-files-btn";
+        moreBtn.textContent = `收起 ${displayTotal} 项`;
+        const workspaceId = node.workspaceId;
+        moreBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          state.expandedWorkspaceRoots.delete(workspaceId);
+          rerenderWorkspacePanel(node, panel);
+        });
+        children.append(moreBtn);
       } else {
         // 收起状态：显示"展开全部"按钮展示隐藏的文件
         const hiddenCount = displayTotal - displayFiles.length;
@@ -3667,12 +3680,18 @@ async function openDoc(docPath, options = {}) {
       els.markdownView.innerHTML = `<p style="color: var(--danger);">文档渲染失败：${escapeHtml(error?.message || "未知错误")}</p>`;
     }
   } else {
+    // 非Markdown文件：代码/文本预览，带等宽字体和行号风格
     els.markdownView.innerHTML = "";
     const preview = document.createElement("pre");
+    preview.className = "code-preview";
     preview.textContent = doc.content || "";
     preview.style.whiteSpace = "pre-wrap";
-    preview.style.wordBreak = "break-all";
+    preview.style.wordBreak = "break-word";
     preview.style.padding = "16px";
+    preview.style.fontFamily = "var(--mono-font, 'Cascadia Code', 'Fira Code', Consolas, monospace)";
+    preview.style.fontSize = "var(--doc-font-size, 14px)";
+    preview.style.lineHeight = "1.6";
+    preview.style.tabSize = "4";
     els.markdownView.appendChild(preview);
     renderOutlineItems([]);
   }
@@ -5670,11 +5689,6 @@ function setImmersiveEditing(enabled) {
 
 async function saveCurrentDoc({ refreshTree = false, keepEditorState = true, renderAfterSave = true } = {}) {
   if (!state.currentPath) return false;
-  if (!state.currentIsMarkdown) {
-    showToast("非 Markdown 文档不支持保存");
-    setSaveStatus("\u4e0d\u53ef\u4fdd\u5b58", false);
-    return false;
-  }
   const content = els.editor.value;
   if (!refreshTree && content === state.lastSavedContent) return true;
   
@@ -8673,6 +8687,26 @@ document.addEventListener("keydown", (event) => {
     event.preventDefault();
     event.stopPropagation();
     setImmersiveEditing(!state.immersive);
+    return;
+  }
+  // Ctrl/Cmd + +/-: 编辑模式下调整编辑器字体大小
+  if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && (event.key === "=" || event.key === "+")) {
+    event.preventDefault();
+    event.stopPropagation();
+    adjustEditorFontSize(1);
+    return;
+  }
+  if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && event.key === "-") {
+    event.preventDefault();
+    event.stopPropagation();
+    adjustEditorFontSize(-1);
+    return;
+  }
+  // Ctrl/Cmd + 0: 重置编辑器字体大小
+  if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && event.key === "0") {
+    event.preventDefault();
+    event.stopPropagation();
+    adjustEditorFontSize(0);
     return;
   }
   if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "u") {
