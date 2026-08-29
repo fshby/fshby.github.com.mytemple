@@ -31,10 +31,10 @@ const LARGE_PREVIEW_DELAY = 700;
 const CHUNKED_RENDER_BYTES = 500 * 1024;
 const CHUNK_RENDER_SLICE_BYTES = 150 * 1024;
 const GRAPH_WORKER_URL = "/graph-worker.js?v=20260810-graph-1";
-const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20260829-mathblock-excalidraw-fix-1";
+const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20260829-v18100-octal-fix-katexprint-2";
 // Markdown 渲染缓存版本戳：解析器或 CSS 规则升级时递增，确保旧缓存不被复用。
-// 2026-08-29 升级：跨越多行 $$...$$ 块级公式占位符保护 & 还原；Worker 侧 mermaid/excalidraw chart-block 生成。
-const MARKDOWN_RENDER_VERSION = "20260829-mathblock-multiline-excalidraw-mermaid-worker-v1.8.99";
+// 2026-08-29 升级 v1.8.100：跨越多行 $$...$$ 块级公式占位符保护 & Worker 侧 mermaid/excalidraw chart-block 生成 + 修复 KATEX_PRINT_CSS 八进制 \10 模板字符串语法错误。
+const MARKDOWN_RENDER_VERSION = "20260829-v18100-multiline-math-excalidraw-octal-fix";
 const AI_HISTORY_KEY = "mytemple.ai.history.v1";
 const AI_TRANSFORM_LABELS = { summary: "摘要", keypoints: "要点", terms: "术语解释", polish: "润色", continue: "续写", rewrite: "代写", translate: "翻译", hint: "编辑提示", code: "代码补全", comment: "生成注释" };
 
@@ -1869,7 +1869,7 @@ const KATEX_PRINT_CSS = `
 .katex *{-ms-high-contrast-adjust:none!important}
 .katex .katex-version:after{content:"0.16.9"}
 .katex .katex-mathml{position:absolute;overflow:clip;height:1px;width:1px;padding:0;border:0}
-.katex .base{position:relative;display:inline-block;box-sizing:content-box \10;white-space:nowrap;width:min-content}
+.katex .base{position:relative;display:inline-block;box-sizing:content-box;white-space:nowrap;width:min-content}
 .katex .strut{display:inline-block}
 .katex .mord,.katex .mbin,.katex .mrel,.katex .mopen,.katex .mclose,.katex .mpunct,.katex .minner,.katex .mop{position:relative;display:inline-flex;align-items:baseline}
 .katex .mfrac>span>span>span{padding:0}

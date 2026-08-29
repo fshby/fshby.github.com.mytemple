@@ -24,7 +24,7 @@
         <a href="#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.99.exe" download>下载 v1.8.99</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.100.exe" download>下载 v1.8.100</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -32,11 +32,11 @@
     <main id="top">
       <section class="hero section-wrap" aria-labelledby="hero-title">
         <div class="hero-copy reveal">
-          <p class="eyebrow"><span class="status-dot"></span> 本地 Markdown 工作区 <em>v1.8.99 桌面版</em></p>
+          <p class="eyebrow"><span class="status-dot"></span> 本地 Markdown 工作区 <em>v1.8.100 桌面版</em></p>
           <h1 id="hero-title">本地 Markdown 知识库与编辑器</h1>
           <p class="hero-lede">围绕本地 Markdown 文件提供阅读、编辑、目录、图谱、检索、主题与多工作区管理。</p>
           <div class="hero-actions">
-            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.99.exe" download>下载 Windows 安装包</a>
+            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.100.exe" download>下载 Windows 安装包</a>
             <a class="button button-soft" href="#docs">查看使用文档</a>
           </div>
           <p class="hero-note">Windows 桌面端 · 本地文件优先 · 内容助手为可选接入</p>
@@ -183,13 +183,14 @@
         </div>
         <div class="download-block reveal">
           <div class="download-primary">
-            <span class="download-badge">当前稳定版 v1.8.99</span>
+            <span class="download-badge">当前稳定版 v1.8.100</span>
             <p>本地工作区、阅读/修改双模式、图谱、主题、增量索引与可选辅助功能。</p>
-            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.99.exe" download>下载安装包</a>
+            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.100.exe" download>下载安装包</a>
           </div>
           <div class="download-secondary">
             <h3>最近更新</h3>
             <ul>
+              <li>v1.8.100：启动红屏 SyntaxError 紧急修复：KATEX_PRINT_CSS 模板字符串内 IE hack <code>\10</code> 被 WebView2 解析为八进制转义直接抛错、app.js 解析失败；删除无用 IE10 hack + 保持上版跨行公式/Mermaid/Excalidraw 修复 + MARKDOWN_RENDER_VERSION/WORKER URL 强制缓存失效。</li>
               <li>v1.8.99：阅读栏/阅读模式公式图表显示修复：数学公式（含跨行 $$...$$ 块级）、Mermaid 图表、Excalidraw 绘图在阅读栏(右侧预览)和阅读模式(双列只读)都正确渲染；修复 Worker 漏调用、占位结构缺失、块级公式跨行切割 3 根因。</li>
               <li>v1.8.98：PDF导出功能大升级：数学公式(KaTeX真实渲染)与Mermaid图表导出PDF后正确显示、文末默认附官网下载链接+推荐语品牌卡片(非fixed不遮挡正文)、本地图片与SVG图表转DataURL内联离线也完整显示、渲染失败自动降级源码仍可导出。</li>
               <li>v1.8.96：代码文件保存最终修复：打开代码文档即进入编辑态、保存按钮清除「非Markdown不支持保存」提示、状态栏改为「保存/已保存 HH:MM」；同时保留折叠态Top10 + 展开态目录树。</li>
@@ -281,6 +282,16 @@
               <li><kbd>Ctrl+Shift+P</kbd> 润色 · <kbd>Ctrl+Shift+X</kbd> 续写</li>
               <li><kbd>Ctrl+U</kbd> 顶部智能检索 · <kbd>Ctrl+I</kbd> 行内对话</li>
               <li>辅助快捷键需在设置中开启对应功能后生效</li>
+            </ul>
+          </article>
+          <article class="doc-section">
+            <h3>v1.8.100 更新日志 · 启动红屏 SyntaxError 紧急修复</h3>
+            <ul>
+              <li>【致命语法错误修复】<code>public/app.js</code> 第 1872 行 KATEX_PRINT_CSS 中 IE10 老 Hack <code>box-sizing:content-box \10</code> 在模板字符串(Template Literal) 内被 WebView2/Chromium 解析为 <strong>八进制转义序列(Octal escape sequences not allowed in template strings)</strong>，严格模式直接抛 <code>Uncaught SyntaxError</code>，app.js 文件级解析失败、后面全部常量/函数不执行 → 启动红屏。本次删除无用 IE10 hack（2026 无 IE10 用户，KaTeX 0.16 modern 布局无依赖），模板字符串语法合法，红屏立消。</li>
+              <li>【保持 v1.8.99 三项阅读栏/阅读模式修复完整】Worker 三分支补齐 <code>renderMathInPreview + renderChartsInPreview</code>、<code>markdown-worker.js</code> 侧 mermaid/excalidraw chart-block 容器结构生成、<code>renderMarkdown</code> 与 Worker 双处「跨行 $$...$$ 占位符保护 + 还原」三条核心修复继续生效，未回归。</li>
+              <li>【缓存强失效 v1.8.100】<code>MARKDOWN_WORKER_URL</code> query 升级为 <code>20260829-v18100-octal-fix-katexprint-2</code>；<code>MARKDOWN_RENDER_VERSION</code> 升级为 <code>20260829-v18100-multiline-math-excalidraw-octal-fix</code>。编辑预览 / 阅读栏 / 阅读模式 三路缓存全部强制重算。</li>
+              <li>【全目录扫描杜绝同类】<code>public/*.js / public/styles.css / promo/*</code> 全局 grep <code>\\[1-9][0-9]?[; ]</code> 正则 0 命中，杜绝 IE Hack <code>\9 / \10 / \0</code> 再次进入模板字符串造成 SyntaxError。</li>
+              <li>【PDF 导出打印链路验证】红屏修复后 <code>KATEX_PRINT_CSS</code> 正常注入打印 iframe，Mermaid → SVG dataURL 内联、<code>katex.render()</code> → KaTeX DOM + 约 90 条内联样式仍正常工作，文末品牌推荐卡显示无回归。</li>
             </ul>
           </article>
           <article class="doc-section">
