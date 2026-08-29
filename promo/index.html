@@ -24,7 +24,7 @@
         <a href="#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.95.exe" download>下载 v1.8.95</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.96.exe" download>下载 v1.8.96</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -32,11 +32,11 @@
     <main id="top">
       <section class="hero section-wrap" aria-labelledby="hero-title">
         <div class="hero-copy reveal">
-          <p class="eyebrow"><span class="status-dot"></span> 本地 Markdown 工作区 <em>v1.8.95 桌面版</em></p>
+          <p class="eyebrow"><span class="status-dot"></span> 本地 Markdown 工作区 <em>v1.8.96 桌面版</em></p>
           <h1 id="hero-title">本地 Markdown 知识库与编辑器</h1>
           <p class="hero-lede">围绕本地 Markdown 文件提供阅读、编辑、目录、图谱、检索、主题与多工作区管理。</p>
           <div class="hero-actions">
-            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.95.exe" download>下载 Windows 安装包</a>
+            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.96.exe" download>下载 Windows 安装包</a>
             <a class="button button-soft" href="#docs">查看使用文档</a>
           </div>
           <p class="hero-note">Windows 桌面端 · 本地文件优先 · 内容助手为可选接入</p>
@@ -183,14 +183,15 @@
         </div>
         <div class="download-block reveal">
           <div class="download-primary">
-            <span class="download-badge">当前稳定版 v1.8.95</span>
+            <span class="download-badge">当前稳定版 v1.8.96</span>
             <p>本地工作区、阅读/修改双模式、图谱、主题、增量索引与可选辅助功能。</p>
-            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.95.exe" download>下载安装包</a>
+            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.96.exe" download>下载安装包</a>
           </div>
           <div class="download-secondary">
             <h3>最近更新</h3>
             <ul>
-              <li>v1.8.95：缺陷修复与工作区视图重写：修复代码后缀(bat/vbs/js/py等)无法保存问题(默认进入编辑态)；折叠态显示最近10个按修改时间排序的文档；展开态完整目录树(文件夹可独立展开/收起)。</li>
+              <li>v1.8.96：代码文件保存最终修复：打开代码文档即进入编辑态、保存按钮清除「非Markdown不支持保存」提示、状态栏改为「保存/已保存 HH:MM」；同时保留折叠态Top10 + 展开态目录树。</li>
+              <li>v1.8.95：工作区视图重写 + 基础保存修复：折叠态Top10按modified倒序、展开态完整目录树(文件夹独立展开/收起)；代码后缀打开默认进入编辑态。</li>
               <li>v1.8.94：工作区与编辑器增强：支持显示非MD文件(bat/vbs/代码等)、展开全部文档不再限制数量、文件按修改时间排序、Ctrl+/-调整字体、代码文件可打开保存。</li>
               <li>v1.8.93：界面与体验升级：工作区添加对话框UI修复、搜索支持多关键词AND+精确短语+评分排序、快捷键调整(Ctrl+W→Alt+W/新增Alt+E/Alt+O)、自升级真实fetch远程版本比较、窗口启动默认最大化。</li>
               <li>v1.8.72：功能无损性能优化：状态栏 DOM 引用缓存、页面隐藏暂停定时器、编辑器 scroll 监听器合并、resize 去抖。</li>
@@ -281,11 +282,20 @@
             </ul>
           </article>
           <article class="doc-section">
+            <h3>v1.8.96 更新日志</h3>
+            <ul>
+              <li>UI拒绝文案彻底清除：打开 bat/vbs/js/py/ini/css/html/java/c/cpp/go/rb/sh/sql/json/xml/yaml/cs/php 等代码/文本文件时，saveBtn.disabled=false、清除旧 title（例如旧版「非 Markdown 文档不支持保存」）、强制替换为「保存 (Ctrl+S)」、移除 readonly/disabled/unsupported class。</li>
+              <li>底部 lastSaveText 正确显示：非Markdown不再出现「不可保存」。openDoc 末尾按编辑器与原内容一致性判断：有草稿且不同→未保存+scheduleAutoSave，其余→保存；自动/手动保存成功后正常显示「已保存 HH:MM」「已自动保存 HH:MM」。</li>
+              <li>保存链路再确认：非md文档打开即自动 setMode('edit') → runAutoSave gate (mode==edit &amp;&amp; currentPath) 通过 → saveCurrentDoc → /api/save（后端 save_file 已对任意文本后缀放行 v1.8.94）。</li>
+              <li>工作区视图（保留 v1.8.95 新逻辑）：折叠态整个工作区扁平 Top10 按 modified 倒序 + 当前打开文档兜底可见；展开态 renderTree 递归完整目录树（文件夹独立展开/收起 + 每层文件按 modified 倒序）。</li>
+            </ul>
+          </article>
+          <article class="doc-section">
             <h3>v1.8.95 更新日志</h3>
             <ul>
-              <li>修复代码后缀文档无法保存：bat/vbs/js/py/ini/css/html/java/c/cpp/go/rb/sh/sql/json/xml/yaml/cs/php 等代码与文本文件，打开后默认进入编辑态，自动保存与 Ctrl+S 均能正确写入磁盘，不再被 view 模式 gate 短路。</li>
-              <li>工作区折叠态：收起时显示整个工作区全部文件按 modified 倒序（最新在前）取前 10 个展示，并保证当前打开文档始终可见；尾部显示「共 X 项，展开查看全部」。</li>
-              <li>工作区展开态：展开时渲染真正目录树结构：所有文件夹可独立展开/收起，每层文件按 modified 倒序排列，根级文件独立显示；尾部「收起」按钮返回折叠视图。</li>
+              <li>基础保存修复：代码后缀打开默认进入编辑态，避免 runAutoSave 被 view 模式短路。</li>
+              <li>工作区折叠态：收起时整个工作区全部文件按 modified 倒序取前 10 个 + 保证当前打开文档可见；尾部「共 X 项，展开查看全部」。</li>
+              <li>工作区展开态：渲染真正目录树结构；所有文件夹独立展开/收起；每层文件按 modified 倒序；尾部「收起」按钮返回折叠视图。</li>
             </ul>
           </article>
           <article class="doc-section">

@@ -3697,8 +3697,21 @@ async function openDoc(docPath, options = {}) {
     els.markdownView.appendChild(preview);
     renderOutlineItems([]);
     // 非Markdown文档：默认进入编辑态，允许输入、自动保存与手动保存。
-    // 先同步滚动比例避免setMode恢复view scroll时归零导致跳到非预期位置。
     if (state.mode !== "edit") setMode("edit");
+    // 双重保障：强制刷新保存状态 + 清除旧版本遗留的"非Markdown不支持保存"等拒绝性UI
+    if (els.saveBtn) {
+      els.saveBtn.disabled = false;
+      els.saveBtn.removeAttribute("title");
+      els.saveBtn.title = "保存 (Ctrl+S)";
+      els.saveBtn.classList.remove("readonly", "disabled", "unsupported");
+    }
+    // 按当前编辑器内容重新判断保存状态（确保底部lastSaveText 不出现"不可保存"）
+    if (els.editor.value === (doc.content || "")) {
+      setSaveStatus("\u4fdd\u5b58", false);
+    } else {
+      setSaveStatus("\u672a\u4fdd\u5b58", true);
+      scheduleAutoSave();
+    }
   }
   els.preview.classList.remove("preview-pending");
   if (state.largeDocument) {
@@ -3728,7 +3741,23 @@ async function openDoc(docPath, options = {}) {
   resetUndo(doc.content);
   lastInputLength = doc.content.length;
   lastInputValue = effectiveContent;
-  setSaveStatus("\u4fdd\u5b58", false);
+  // 统一在 openDoc 末尾最终设置一次保存状态：
+  // - 如果有草稿且不等于原内容 → 未保存 + 调度自动保存
+  // - 其他情况（包括非Markdown代码/文本文件）→ 保存（等同原始内容）
+  //   对非Markdown还需再次同步 saveBtn 的可见性/可用性/提示，
+  //   避免旧版本遗留"非Markdown不支持保存"title或disabled。
+  if (draftContent != null && draftContent !== doc.content) {
+    setSaveStatus("\u672a\u4fdd\u5b58", true);
+    scheduleAutoSave();
+  } else {
+    setSaveStatus("\u4fdd\u5b58", false);
+  }
+  if (els.saveBtn && !!state.currentPath && !state.currentIsMarkdown) {
+    els.saveBtn.disabled = false;
+    els.saveBtn.removeAttribute("title");
+    els.saveBtn.title = "保存 (Ctrl+S)";
+    els.saveBtn.classList.remove("readonly", "disabled", "unsupported");
+  }
   syncTreeSelectionState();
   // 二次校验：确保编辑器内容与当前文档一致（CodeMirror setter 可能异步或被覆盖）
   const _resyncEditor = (label) => {
