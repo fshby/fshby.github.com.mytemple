@@ -24,7 +24,7 @@
         <a href="#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.100.exe" download>下载 v1.8.100</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.101.exe" download>下载 v1.8.101</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -32,11 +32,11 @@
     <main id="top">
       <section class="hero section-wrap" aria-labelledby="hero-title">
         <div class="hero-copy reveal">
-          <p class="eyebrow"><span class="status-dot"></span> 本地 Markdown 工作区 <em>v1.8.100 桌面版</em></p>
+          <p class="eyebrow"><span class="status-dot"></span> 本地 Markdown 工作区 <em>v1.8.101 桌面版</em></p>
           <h1 id="hero-title">本地 Markdown 知识库与编辑器</h1>
           <p class="hero-lede">围绕本地 Markdown 文件提供阅读、编辑、目录、图谱、检索、主题与多工作区管理。</p>
           <div class="hero-actions">
-            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.100.exe" download>下载 Windows 安装包</a>
+            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.101.exe" download>下载 Windows 安装包</a>
             <a class="button button-soft" href="#docs">查看使用文档</a>
           </div>
           <p class="hero-note">Windows 桌面端 · 本地文件优先 · 内容助手为可选接入</p>
@@ -183,13 +183,14 @@
         </div>
         <div class="download-block reveal">
           <div class="download-primary">
-            <span class="download-badge">当前稳定版 v1.8.100</span>
+            <span class="download-badge">当前稳定版 v1.8.101</span>
             <p>本地工作区、阅读/修改双模式、图谱、主题、增量索引与可选辅助功能。</p>
-            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.100.exe" download>下载安装包</a>
+            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.101.exe" download>下载安装包</a>
           </div>
           <div class="download-secondary">
             <h3>最近更新</h3>
             <ul>
+              <li>v1.8.101：导出全格式质量+保存修复；7 项导出(HTML/DOCX/PPT/PDF/TXT/MD/公众号)均不包含 frontmatter YAML 块；HTML/DOCX 改为前端本地高品质离线文件(公式/Mermaid/图片全内联)；TXT 新增语法糖剥离 + UTF-8 BOM 防中文乱码；下载 click 偶发丢事件已补 50ms 调度；失败有前端兜底。</li>
               <li>v1.8.100：启动红屏 SyntaxError 紧急修复：KATEX_PRINT_CSS 模板字符串内 IE hack <code>\10</code> 被 WebView2 解析为八进制转义直接抛错、app.js 解析失败；删除无用 IE10 hack + 保持上版跨行公式/Mermaid/Excalidraw 修复 + MARKDOWN_RENDER_VERSION/WORKER URL 强制缓存失效。</li>
               <li>v1.8.99：阅读栏/阅读模式公式图表显示修复：数学公式（含跨行 $$...$$ 块级）、Mermaid 图表、Excalidraw 绘图在阅读栏(右侧预览)和阅读模式(双列只读)都正确渲染；修复 Worker 漏调用、占位结构缺失、块级公式跨行切割 3 根因。</li>
               <li>v1.8.98：PDF导出功能大升级：数学公式(KaTeX真实渲染)与Mermaid图表导出PDF后正确显示、文末默认附官网下载链接+推荐语品牌卡片(非fixed不遮挡正文)、本地图片与SVG图表转DataURL内联离线也完整显示、渲染失败自动降级源码仍可导出。</li>
@@ -282,6 +283,18 @@
               <li><kbd>Ctrl+Shift+P</kbd> 润色 · <kbd>Ctrl+Shift+X</kbd> 续写</li>
               <li><kbd>Ctrl+U</kbd> 顶部智能检索 · <kbd>Ctrl+I</kbd> 行内对话</li>
               <li>辅助快捷键需在设置中开启对应功能后生效</li>
+            </ul>
+          </article>
+          <article class="doc-section">
+            <h3>v1.8.101 更新日志 · 全格式导出质量升级 & Frontmatter 不再外漏</h3>
+            <ul>
+              <li>【Frontmatter YAML 不再出现在任何导出文件】菜单 7 项导出（HTML / Word DOCX / 幻灯片 PPT / PDF / 纯文本 TXT / Markdown MD / 复制为公众号）在写入前统一使用 <code>stripFrontmatter()</code> 或 Rust <code>split_frontmatter().body</code> 剥离「<code>--- schema/title/tags/domain/created/updated/status/aliases ---</code>」块；原 MD 文件写入磁盘时仍 100% 保留 frontmatter，不影响编辑 / 检索 / 图谱 / 规范化工作流。</li>
+              <li>【HTML 导出：从 HTTP 400 升级为高品质离线文档】<code>exportCurrentDoc("html")</code> 不再请求后端 <code>/api/export</code>（后端原 match 分支无 html，必 400 "Unsupported format: html"）；改为前端 <code>buildExportableHtml()</code>：离屏 900px 容器 <code>cachedRenderMarkdown</code> → <code>await renderMathInPreview + renderChartsInPreview</code>（拿到真正 KaTeX DOM + Mermaid SVG）→ <code>normalizeAssetUrlsToRelative</code> → <code>inlinePrintImages</code> 本地图片全部转 data URI → 内联 <code>PRINT_STYLES + KATEX_PRINT_CSS</code> + markdown-body 类 → 文末品牌推荐卡片 → Blob 下载。生成文件离线双击也能显示公式 / Mermaid / 中文 / 图片。</li>
+              <li>【Word DOCX 导出：从 HTTP 400 升级为 Word/WPS 可直接打开的兼容格式】<code>buildExportableDocxBlob()</code> 使用 HTML 导出的全链路内联结果 + 写入 UTF-8 BOM + <code>application/msword</code> MIME → 文件名后缀 <code>.doc</code>；Word / WPS / LibreOffice 双击即打开，图表 / 公式 / 中文正常，避免浏览器端引入几十 MB 第三方 docx 生成库依然失败的常见坑；后续可平滑替换为真正 .docx 二进制实现且 API 不变。</li>
+              <li>【TXT 导出：语法糖剥离 + 中文编码防乱码】Rust <code>strip_markdown_for_txt()</code>：删除 fenced <code>```</code> 包裹行 / ATX <code>### </code> 前缀 / Setext <code>==== ----</code> 下划线 / <code>&gt; </code> 引用块前缀 / 成对 <code>**粗**</code> <code>__粗__</code> <code>~~删除线~~</code> <code>`代码`</code> <code>*斜体*</code> <code>_斜体_</code> / 图片 <code>![alt](url)</code> → alt / 链接 <code>[text](url)</code> → text / HTML 注释；前后过密空行压缩 1 条。前端兜底 <code>cachedRenderMarkdown</code> → <code>plainText()</code> → 显式写入 <code>\uFEFF</code> UTF-8 BOM，Windows 记事本 / Typora 打开中文不出现「鎴愭湰」乱码。</li>
+              <li>【MD 导出：后端 strip + 前端兜底双重保障】<code>/api/export?format=md</code> 使用 <code>split_frontmatter</code> 拿到 body；如 Rust 端抛错 / 网络失败，前端自动降级为 <code>stripFrontmatter(raw)</code> 保存，保证 <code>schema:mytemple/v1</code> 与元数据绝不会出现在最终导出的 MD 文件里。</li>
+              <li>【保存成功率统一修复：triggerBlobDownload】所有 Blob 下载改用新函数：<code>&lt;a&gt;</code> 入 DOM 后 <code>setTimeout 50ms</code> 再触发 click（Tauri / Chromium 下载调度偶发丢 click）；3000ms 后 remove 节点 + revokeObjectURL；文件名 Windows 非法字符 <code>\/:*?"&lt;&gt;|</code> 过滤 + 60 字符上限。PPT / 幻灯片导出同步改此函数，避免出现「点击后没反应」。</li>
+              <li>【v1.8.101 缓存版本升级】<code>MARKDOWN_WORKER_URL</code> → <code>20260829-v18101-export-quality-frontmatter-3</code>；<code>MARKDOWN_RENDER_VERSION</code> → <code>20260829-v18101-export-quality-frontmatter-md-txt-html-docx</code>，保证所有解析旧缓存强制 miss。</li>
             </ul>
           </article>
           <article class="doc-section">
