@@ -24,7 +24,7 @@
         <a href="#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.103.exe" download>下载 v1.8.103</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.104.exe" download>下载 v1.8.104</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -32,11 +32,11 @@
     <main id="top">
       <section class="hero section-wrap" aria-labelledby="hero-title">
         <div class="hero-copy reveal">
-          <p class="eyebrow"><span class="status-dot"></span> 本地 Markdown 工作区 <em>v1.8.103 桌面版</em></p>
+          <p class="eyebrow"><span class="status-dot"></span> 本地 Markdown 工作区 <em>v1.8.104 桌面版</em></p>
           <h1 id="hero-title">本地 Markdown 知识库与编辑器</h1>
           <p class="hero-lede">围绕本地 Markdown 文件提供阅读、编辑、目录、图谱、检索、主题与多工作区管理。</p>
           <div class="hero-actions">
-            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.103.exe" download>下载 Windows 安装包</a>
+            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.104.exe" download>下载 Windows 安装包</a>
             <a class="button button-soft" href="#docs">查看使用文档</a>
           </div>
           <p class="hero-note">Windows 桌面端 · 本地文件优先 · 内容助手为可选接入</p>
@@ -183,13 +183,14 @@
         </div>
         <div class="download-block reveal">
           <div class="download-primary">
-            <span class="download-badge">当前稳定版 v1.8.103</span>
+            <span class="download-badge">当前稳定版 v1.8.104</span>
             <p>本地工作区、阅读/修改双模式、图谱、主题、增量索引与可选辅助功能。</p>
-            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.103.exe" download>下载安装包</a>
+            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.104.exe" download>下载安装包</a>
           </div>
           <div class="download-secondary">
             <h3>最近更新</h3>
             <ul>
+              <li>v1.8.104：其他电脑安装后启动失败紧急修复（双重保险）：① tauri.conf.json bundle.resources 从字符串数组改用对象映射 <code>{src:../public,target:resources/public}</code> + <code>{src:WebView2Loader.dll,target:""}</code> 强制写死安装目的地，消除 Tauri 2.x NSIS 字符串资源解包到 $INSTDIR/public 而非 $INSTDIR/resources/public 的版本差异歧义；② <code>resolve_public_root</code> 候选从 5 条扩到 10 条，返回 <code>(root, 全部候选)</code>，内置 404 友好页从此打印编号后的全部候选（不再只展示 1 条误导性 fallback 路径），杀毒/权限/映射哪一层失败一眼可辨。</li>
               <li>v1.8.103：导出 7 种格式统一接入系统原生「另存为」对话框（扩展名过滤正确），保存成功后 Toast 显示完整绝对路径（点击可复制）+「打开文件 / 在文件夹中查看」两按钮；取消对话框静默不报错；非 Tauri / 插件失败自动降级 Blob 下载并明确告知浏览器默认下载目录。导入新增「系统文件对话框」按钮，DOCX/RTF/ODT 通过 Rust 内置 ZIP/控制字剥离直接提取正文写入 Markdown，不再生成 pandoc 占位文档。</li>
               <li>v1.8.102：其他电脑安装后 404 白屏紧急修复：安装包原 bundle.resources 仅含 WebView2Loader.dll 未含 public/，新安装机启动后 axum 找不到前端文件 → Edge/内置窗口 HTTP ERROR 404。本次把 public/ 整个打进 resources、resolve_public_root 5 级候选 + index.html 校验、7321..7420 端口回退扫描、Rust 内置中文友好错误页不再只显示 Edge 刷新按钮。</li>
               <li>v1.8.101：导出全格式质量+保存修复；7 项导出(HTML/DOCX/PPT/PDF/TXT/MD/公众号)均不包含 frontmatter YAML 块；HTML/DOCX 改为前端本地高品质离线文件(公式/Mermaid/图片全内联)；TXT 新增语法糖剥离 + UTF-8 BOM 防中文乱码；下载 click 偶发丢事件已补 50ms 调度；失败有前端兜底。</li>
@@ -285,6 +286,17 @@
               <li><kbd>Ctrl+Shift+P</kbd> 润色 · <kbd>Ctrl+Shift+X</kbd> 续写</li>
               <li><kbd>Ctrl+U</kbd> 顶部智能检索 · <kbd>Ctrl+I</kbd> 行内对话</li>
               <li>辅助快捷键需在设置中开启对应功能后生效</li>
+            </ul>
+          </article>
+          <article class="doc-section">
+            <h3>v1.8.104 更新日志 · 安装后启动失败（前端资源缺失）紧急修复·双重保险</h3>
+            <ul>
+              <li>【根因锁定】v1.8.103 发布后同事电脑安装后红屏「启动失败：前端资源缺失」。从用户截图与构建产物 <code>target/release/_up_/public/index.html</code> 存在 24 个文件验证：<b>① tauri 2.x NSIS 字符串资源写法 <code>"../public"</code> 解包到 <code>$INSTDIR/public/</code>（候选 4）而不是 <code>$INSTDIR/resources/public/</code>（候选 2）。</b> 旧内置 404 页用 <code>format!("{}", public_root.display())</code> 只展示 fallback 首条（候选 2），完全掩盖其他 9 条候选，误导为"安装时没打 resources/public"。② 杀毒软件/企业杀软删除 resources/public 的真实缺失，旧页也无法和第①种情况区分。</li>
+              <li>【修复 A：打包侧强制目标映射】tauri.conf.json 的 <code>bundle.resources</code> 从字符串数组 <code>["WebView2Loader.dll","../public"]</code> 改为 Tauri 2.x <b>对象映射</b>：<code>{ "src": "WebView2Loader.dll", "target": "" }</code> + <code>{ "src": "../public", "target": "resources/public" }</code>。官方安装位置强制为 <code>$INSTDIR/resources/public/index.html</code>，与 Rust 候选 2 <code>exe_dir/resources/public</code> 严格一致，不再受 bundler 版本默认推断影响。</li>
+              <li>【修复 B：运行时 10 级候选 + 404 页完整枚举】<code>resolve_public_root()</code> 从返回 <code>PathBuf</code> 升级为返回 <code>(PathBuf, Vec&lt;PathBuf&gt;)</code>，候选从 5 条扩充到 10 条：<code>① MYTEMPLE_PUBLIC_ROOT ② exe_dir/resources/public ③ exe_dir/resources/resources/public（套娃兜底）④ exe_dir/public（绿色便携/字符串资源解包）⑤ exe_dir/_up_/public（Tauri 中间态）⑥ CARGO_MANIFEST_DIR/../public（开发）⑦ CARGO_MANIFEST_DIR/public ⑧ %APPDATA%/MyTemple Knowledge/public ⑨ ./public ⑩ ./resources/public</code>。</li>
+              <li>【404 友好页彻底重写】不再仅展示 <code>public_root.display()</code> 一条误导路径。改为编号显示「已尝试的静态资源目录（共 N 条）」全部候选，4 步急救方案顺序说明：卸载杀毒重装 v1.8.104+ / 手动拷贝 resources/public / 设 MYTEMPLE_PUBLIC_ROOT / 截图反馈。就算再报错，管理员只要看截图里哪 1/2/3/4 条候选命中/没命中，就能立刻判断是资源映射错位、杀软误删、还是便携版布局。</li>
+              <li>【日志强可见】<code>[FATAL] 未找到可用的前端 public 目录</code> 日志现在逐行打印 10 条候选，排障不用再问用户"你手动打开安装目录看一下"。</li>
+              <li>【保持 v1.8.103 全部大升级不回退】7 项导出原生另存为 + Toast 绝对路径复制 + 打开/定位按钮；导入「系统文件对话框」按钮 + DOCX/RTF/ODT Rust 正文提取不写占位文档；前端双 <code>invoke</code> 兼容；base64 engine 统一；showToast 对象签名 + actions。</li>
             </ul>
           </article>
           <article class="doc-section">
