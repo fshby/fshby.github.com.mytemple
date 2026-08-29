@@ -1,6 +1,6 @@
 [package]
 name = "mytemple-server"
-version = "1.8.94"
+version = "1.8.95"
 edition = "2021"
 description = "MyTemple Knowledge - Rust 原生后端 (Phase 5 纯原生架构)"
 
