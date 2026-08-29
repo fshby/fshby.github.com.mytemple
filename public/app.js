@@ -31,10 +31,10 @@ const LARGE_PREVIEW_DELAY = 700;
 const CHUNKED_RENDER_BYTES = 500 * 1024;
 const CHUNK_RENDER_SLICE_BYTES = 150 * 1024;
 const GRAPH_WORKER_URL = "/graph-worker.js?v=20260810-graph-1";
-const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20260829-v18101-export-quality-frontmatter-3";
+const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20260829-v18102-fix-install-static-port-4";
 // Markdown 渲染缓存版本戳：解析器或 CSS 规则升级时递增，确保旧缓存不被复用。
-// 2026-08-29 v1.8.101：导出质量升级（HTML/DOCX/MD/TXT/PPT 统一 strip frontmatter + 质量提升）。
-const MARKDOWN_RENDER_VERSION = "20260829-v18101-export-quality-frontmatter-md-txt-html-docx";
+// 2026-08-29 v1.8.102：安装包 resources 包含 public/ 前端静态文件、端口回滚；修正其他电脑安装后 404 白屏。
+const MARKDOWN_RENDER_VERSION = "20260829-v18102-install-static-bundle-port-scan";
 const AI_HISTORY_KEY = "mytemple.ai.history.v1";
 const AI_TRANSFORM_LABELS = { summary: "摘要", keypoints: "要点", terms: "术语解释", polish: "润色", continue: "续写", rewrite: "代写", translate: "翻译", hint: "编辑提示", code: "代码补全", comment: "生成注释" };
 

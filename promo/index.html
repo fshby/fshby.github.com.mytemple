@@ -24,7 +24,7 @@
         <a href="#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.101.exe" download>下载 v1.8.101</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.102.exe" download>下载 v1.8.102</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -32,11 +32,11 @@
     <main id="top">
       <section class="hero section-wrap" aria-labelledby="hero-title">
         <div class="hero-copy reveal">
-          <p class="eyebrow"><span class="status-dot"></span> 本地 Markdown 工作区 <em>v1.8.101 桌面版</em></p>
+          <p class="eyebrow"><span class="status-dot"></span> 本地 Markdown 工作区 <em>v1.8.102 桌面版</em></p>
           <h1 id="hero-title">本地 Markdown 知识库与编辑器</h1>
           <p class="hero-lede">围绕本地 Markdown 文件提供阅读、编辑、目录、图谱、检索、主题与多工作区管理。</p>
           <div class="hero-actions">
-            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.101.exe" download>下载 Windows 安装包</a>
+            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.102.exe" download>下载 Windows 安装包</a>
             <a class="button button-soft" href="#docs">查看使用文档</a>
           </div>
           <p class="hero-note">Windows 桌面端 · 本地文件优先 · 内容助手为可选接入</p>
@@ -183,13 +183,14 @@
         </div>
         <div class="download-block reveal">
           <div class="download-primary">
-            <span class="download-badge">当前稳定版 v1.8.101</span>
+            <span class="download-badge">当前稳定版 v1.8.102</span>
             <p>本地工作区、阅读/修改双模式、图谱、主题、增量索引与可选辅助功能。</p>
-            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.101.exe" download>下载安装包</a>
+            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.102.exe" download>下载安装包</a>
           </div>
           <div class="download-secondary">
             <h3>最近更新</h3>
             <ul>
+              <li>v1.8.102：其他电脑安装后 404 白屏紧急修复：安装包原 bundle.resources 仅含 WebView2Loader.dll 未含 public/，新安装机启动后 axum 找不到前端文件 → Edge/内置窗口 HTTP ERROR 404。本次把 public/ 整个打进 resources、resolve_public_root 5 级候选 + index.html 校验、7321..7420 端口回退扫描、Rust 内置中文友好错误页不再只显示 Edge 刷新按钮。</li>
               <li>v1.8.101：导出全格式质量+保存修复；7 项导出(HTML/DOCX/PPT/PDF/TXT/MD/公众号)均不包含 frontmatter YAML 块；HTML/DOCX 改为前端本地高品质离线文件(公式/Mermaid/图片全内联)；TXT 新增语法糖剥离 + UTF-8 BOM 防中文乱码；下载 click 偶发丢事件已补 50ms 调度；失败有前端兜底。</li>
               <li>v1.8.100：启动红屏 SyntaxError 紧急修复：KATEX_PRINT_CSS 模板字符串内 IE hack <code>\10</code> 被 WebView2 解析为八进制转义直接抛错、app.js 解析失败；删除无用 IE10 hack + 保持上版跨行公式/Mermaid/Excalidraw 修复 + MARKDOWN_RENDER_VERSION/WORKER URL 强制缓存失效。</li>
               <li>v1.8.99：阅读栏/阅读模式公式图表显示修复：数学公式（含跨行 $$...$$ 块级）、Mermaid 图表、Excalidraw 绘图在阅读栏(右侧预览)和阅读模式(双列只读)都正确渲染；修复 Worker 漏调用、占位结构缺失、块级公式跨行切割 3 根因。</li>
@@ -286,6 +287,17 @@
             </ul>
           </article>
           <article class="doc-section">
+            <h3>v1.8.102 更新日志 · 其他电脑安装后 HTTP 404 白屏紧急修复</h3>
+            <ul>
+              <li>【致命根因：前端静态文件完全没被打进安装包】<code>tauri.conf.json bundle.resources</code> 原本只有 <code>[WebView2Loader.dll]</code>，前端 <code>public/</code> 目录（<code>index.html / app.js / styles.css / splash.html / boot.webp / modules/*.js / graph-worker.js / markdown-worker.js / 图标图片</code> 等 40+ 个文件/子目录）<b>完全没有进入 NSIS 安装包</b>。用户电脑安装完后安装目录只有 exe + WebView2Loader.dll 两个文件；axum 的 <code>resolve_public_root()</code> 用编译期 <code>CARGO_MANIFEST_DIR/../public</code> 指向开发机的 <code>D:\game\mytemple\public</code>（其他电脑不存在），兜底 <code>./public</code> 也不存在 → 请求 <code>http://127.0.0.1:7321/</code>、<code>/splash.html</code>、<code>/app.js</code>、<code>/styles.css</code> 全部返回 <b>HTTP ERROR 404</b>，正好对应您截图 Edge 浏览器「找不到此 127.0.0.1 页」。</li>
+              <li>【打包侧修复】<code>tauri.conf.json bundle.resources</code> 追加 <code>"../public"</code>：NSIS 安装器会把 public 整个目录解包到 <code>安装目录/resources/public/</code>（Tauri 标准位置）；安装后 <code>index.html</code> 物理存在，axum ServeDir 正确服务静态资源。</li>
+              <li>【运行时 <code>resolve_public_root</code> 5 级候选 + <code>index.html</code> 真校验】优先级：① <code>MYTEMPLE_PUBLIC_ROOT</code> 环境变量（开发/管理员强制指定）② <code>&lt;exe_dir&gt;/resources/public</code>（安装位置 NSIS 解包）③ <code>&lt;exe_dir&gt;/public</code>（绿色便携版）④ <code>CARGO_MANIFEST_DIR/../public</code>（开发机 cargo） ⑤ <code>./public</code>（进程 CWD 兜底）。候选目录必须同时"是目录 + 含 index.html 文件"才会被选中；空目录也 warn 日志记录继续下一级。</li>
+              <li>【端口占用自动回退】原写死 7321：其他电脑上 VPN/虚拟网卡/WMI/企业杀毒/浏览器 devtools/迅雷 经常占用 7321；原 <code>TcpListener::bind("127.0.0.1:7321")</code> 直接抛 AddrInUse，Tauri 窗口仍然 navigate 7321 → 404。修复：<code>server::run</code> 新增 <code>bind_first_available(start_port)</code>，按 <code>7321..=7420</code> 顺序扫描返回第一个空闲端口；<code>lib.rs</code> 通过 <code>tokio::sync::oneshot</code> 把真实端口回填，<b>轮询 axum / splash 加载 / 首页导航 / 30s 超时提示</b> 全部使用真实端口。</li>
+              <li>【前端资源缺失内置中文错误页 & 30s 超时中文引导】如果以上 5 级候选都找不到 <code>public/index.html</code>（如企业杀毒删除 resources/public 下文件），Rust 端直接返回 <b>内置最小 HTML 错误页</b>（深色主题 + 当前尝试路径列表 + 3 步解决操作提示：卸载重装最新版 / 关闭杀毒实时防护 / 设 <code>MYTEMPLE_PUBLIC_ROOT</code>），不再显示 Edge 浏览器默认"找不到此页 + 蓝色刷新按钮"。</li>
+              <li>【完整保持 v1.8.101 的 7 项导出修复】Frontmatter YAML 不外漏 / HTML DOCX 高品质离线 / TXT 语法糖剥离 + UTF-8 BOM / PPT triggerBlobDownload 调度 / MD 前端失败兜底全部不回退。</li>
+            </ul>
+          </article>
+          <article class="doc-section">
             <h3>v1.8.101 更新日志 · 全格式导出质量升级 & Frontmatter 不再外漏</h3>
             <ul>
               <li>【Frontmatter YAML 不再出现在任何导出文件】菜单 7 项导出（HTML / Word DOCX / 幻灯片 PPT / PDF / 纯文本 TXT / Markdown MD / 复制为公众号）在写入前统一使用 <code>stripFrontmatter()</code> 或 Rust <code>split_frontmatter().body</code> 剥离「<code>--- schema/title/tags/domain/created/updated/status/aliases ---</code>」块；原 MD 文件写入磁盘时仍 100% 保留 frontmatter，不影响编辑 / 检索 / 图谱 / 规范化工作流。</li>
@@ -294,7 +306,7 @@
               <li>【TXT 导出：语法糖剥离 + 中文编码防乱码】Rust <code>strip_markdown_for_txt()</code>：删除 fenced <code>```</code> 包裹行 / ATX <code>### </code> 前缀 / Setext <code>==== ----</code> 下划线 / <code>&gt; </code> 引用块前缀 / 成对 <code>**粗**</code> <code>__粗__</code> <code>~~删除线~~</code> <code>`代码`</code> <code>*斜体*</code> <code>_斜体_</code> / 图片 <code>![alt](url)</code> → alt / 链接 <code>[text](url)</code> → text / HTML 注释；前后过密空行压缩 1 条。前端兜底 <code>cachedRenderMarkdown</code> → <code>plainText()</code> → 显式写入 <code>\uFEFF</code> UTF-8 BOM，Windows 记事本 / Typora 打开中文不出现「鎴愭湰」乱码。</li>
               <li>【MD 导出：后端 strip + 前端兜底双重保障】<code>/api/export?format=md</code> 使用 <code>split_frontmatter</code> 拿到 body；如 Rust 端抛错 / 网络失败，前端自动降级为 <code>stripFrontmatter(raw)</code> 保存，保证 <code>schema:mytemple/v1</code> 与元数据绝不会出现在最终导出的 MD 文件里。</li>
               <li>【保存成功率统一修复：triggerBlobDownload】所有 Blob 下载改用新函数：<code>&lt;a&gt;</code> 入 DOM 后 <code>setTimeout 50ms</code> 再触发 click（Tauri / Chromium 下载调度偶发丢 click）；3000ms 后 remove 节点 + revokeObjectURL；文件名 Windows 非法字符 <code>\/:*?"&lt;&gt;|</code> 过滤 + 60 字符上限。PPT / 幻灯片导出同步改此函数，避免出现「点击后没反应」。</li>
-              <li>【v1.8.101 缓存版本升级】<code>MARKDOWN_WORKER_URL</code> → <code>20260829-v18101-export-quality-frontmatter-3</code>；<code>MARKDOWN_RENDER_VERSION</code> → <code>20260829-v18101-export-quality-frontmatter-md-txt-html-docx</code>，保证所有解析旧缓存强制 miss。</li>
+              <li>【v1.8.102 缓存版本升级】<code>MARKDOWN_WORKER_URL</code> → <code>20260829-v18101-export-quality-frontmatter-3</code>；<code>MARKDOWN_RENDER_VERSION</code> → <code>20260829-v18101-export-quality-frontmatter-md-txt-html-docx</code>，保证所有解析旧缓存强制 miss。</li>
             </ul>
           </article>
           <article class="doc-section">
