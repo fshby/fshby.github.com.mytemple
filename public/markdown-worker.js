@@ -194,9 +194,74 @@ function inlineMarkdown(value, searchTerm = "") {
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, url) => `<a href="${safeMarkdownUrl(url)}">${label}</a>`);
 }
 
+// 把文本中非代码 fence 段里的 $$...$$ 用占位符保护起来，供 renderMarkdown 逐行处理后再还原。
+// 代码 fence 本身（包含闭合 ``` 行）不做替换，避免代码块里字面量的 $$ 被误解析成公式。
+function protectBlockMathPlaceholders(source, placeholders) {
+  const rawLines = String(source || "").replace(/\r\n/g, "\n").split("\n");
+  let inF = false;
+  const segments = [];
+  let buf = "";
+  for (const line of rawLines) {
+    if (line.startsWith("```")) {
+      if (!inF) {
+        segments.push({ fence: false, text: buf });
+        buf = line + "\n";
+        inF = true;
+      } else {
+        buf += line + "\n";
+        segments.push({ fence: true, text: buf });
+        buf = "";
+        inF = false;
+      }
+      continue;
+    }
+    buf += line + "\n";
+  }
+  if (buf) segments.push({ fence: inF, text: buf });
+  const protectOne = (text, store) => text.replace(/\$\$([\s\S]+?)\$\$/g, (match, math) => {
+    const idx = store.length;
+    store.push(math);
+    // 使用极少出现在 Markdown 里的控制字符做 token 边界，避免 inlineMarkdown（escapeHtml + 正则）
+    // 把占位符截断或二次编码；\n 不会被转义，逐行 split 时可跨越多行。
+    return `\u0000MBLK_${idx}_MBLK\u0000`;
+  });
+  let rebuilt = "";
+  for (const seg of segments) {
+    if (seg.fence) rebuilt += seg.text;
+    else rebuilt += protectOne(seg.text, placeholders);
+  }
+  // 去除 buf 循环里每行追加的多余末尾换行，让 split("\n") 与原 source 一致（不影响公式占位符）
+  if (rebuilt.endsWith("\n")) rebuilt = rebuilt.slice(0, -1);
+  return rebuilt;
+}
+
+function restoreBlockMathPlaceholders(html, placeholders) {
+  if (!placeholders || !placeholders.length) return html;
+  let out = html;
+  const restoreOne = (idxStr) => {
+    const i = parseInt(idxStr, 10);
+    const math = i >= 0 && i < placeholders.length ? placeholders[i] : "";
+    return `<span class="math-block" data-math="${escapeHtml(String(math).trim())}"></span>`;
+  };
+  // 先处理占位符跨行被 <br /> 或 \n 切散的情况：因为 \u0000MBLK...MBLK\u0000 内部的 \n
+  // 可能被段落行处理替换为 <br /> 或被包裹 <p>，所以用 [\s\S]*? 跨行匹配，
+  // 中间允许 <br> / <br /> / \n / 空白，不允许跨其他占位符。
+  out = out.replace(/\u0000MBLK_(\d+)_MBLK\u0000/g, (_, i) => restoreOne(i));
+  // 二次兜底：占位符跨行被多个 <p>/<br> 切开时拼 \u0000MBLK_{n} 开头 + _MBLK\u0000 结尾
+  out = out.replace(/\u0000MBLK_(\d+)[\s\S]*?_MBLK\u0000/g, (_, i) => restoreOne(i));
+  return out;
+}
+
 function renderMarkdown(source, options = {}) {
   const searchTerm = options.searchTerm || "";
-  const lines = String(source || "").replace(/\r\n/g, "\n").split("\n");
+  // bugfix: 原实现逐行 for + <p>${inlineMarkdown(line)}</p> 会把 $$\n公式体\n$$ 切成多段，
+  // inlineMarkdown 的 $$ 正则（[\s\S]+?）虽可跨行，但此时已被不同 <p> 包裹，根本跨不过去；
+  // 导致多行块级公式（绝大多数用户写法）在阅读栏（Worker 渲染）和阅读模式下都是空白。
+  // 这里先把非代码区 $$...$$ 整段替换为唯一占位符，所有 placeholders 保存在数组内，
+  // 整份 HTML 产出后再用 restoreBlockMathPlaceholders 还原为 math-block span。
+  const mathBlockPlaceholders = [];
+  const preprocessed = protectBlockMathPlaceholders(source, mathBlockPlaceholders);
+  const lines = preprocessed.split("\n");
   const html = [];
   let h1Index = 0;
   let h2Index = 0;
@@ -205,6 +270,7 @@ function renderMarkdown(source, options = {}) {
   let inCode = false;
   let code = [];
   let codeLanguage = "text";
+  let codeStartLine = -1;
   let list = null;
   let table = [];
   let blockquote = [];
@@ -354,10 +420,25 @@ function renderMarkdown(source, options = {}) {
       flushTable();
       flushBlockquote();
       if (inCode) {
-        html.push(`<div class="code-block" data-language="${codeLanguage}"><span class="code-language">${escapeHtml(codeLanguage)}</span><button class="code-copy" type="button">复制</button><pre><code class="language-${codeLanguage}">${escapeHtml(code.join("\n"))}</code></pre></div>`);
+        const raw = code.join("\n");
+        const normalizedLang = normalizeCodeLanguage(codeLanguage);
+        // bugfix: 阅读栏 / Worker 渲染主路径原先只输出 .code-block pre code，
+        // 导致 mermaid/excalidraw 的代码块没有 .chart-block + 空 .mermaid-container / .excalidraw-container，
+        // 后续 renderChartsInPreview querySelectorAll(".chart-block.mermaid-block") 永远查不到——
+        // 表现为“阅读模式和阅读栏里 Mermaid 都是 code 不渲染、Excalidraw 都是纯 JSON 不显示卡片”。
+        // 与主 app.js renderMarkdown L2887-2891 对齐，保证两端产出相同占位结构。
+        if (normalizedLang === "mermaid") {
+          html.push(`<div class="chart-block mermaid-block" data-chart="mermaid" data-source-line="${codeStartLine}"><pre class="mermaid-source">${escapeHtml(raw)}</pre><div class="mermaid-container" aria-label="Mermaid 图表"></div></div>`);
+        } else if (normalizedLang === "excalidraw") {
+          html.push(`<div class="chart-block excalidraw-block" data-chart="excalidraw" data-source-line="${codeStartLine}"><pre class="excalidraw-source">${escapeHtml(raw)}</pre><div class="excalidraw-container" aria-label="Excalidraw 绘图"></div></div>`);
+        } else {
+          html.push(`<div class="code-block" data-language="${codeLanguage}"><span class="code-language">${escapeHtml(codeLanguage)}</span><button class="code-copy" type="button">复制</button><pre><code class="language-${codeLanguage}">${escapeHtml(raw)}</code></pre></div>`);
+        }
         code = [];
         codeLanguage = "text";
+        codeStartLine = -1;
       } else {
+        codeStartLine = index;
         codeLanguage = normalizeCodeLanguage(line.slice(3).trim().split(/\s+/)[0]);
       }
       inCode = !inCode;
@@ -494,7 +575,15 @@ function renderMarkdown(source, options = {}) {
   if (inCode) {
     html.push(`<div class="code-block" data-language="${codeLanguage}"><span class="code-language">${escapeHtml(codeLanguage)}</span><button class="code-copy" type="button">复制</button><pre><code class="language-${codeLanguage}">${escapeHtml(code.join("\n"))}</code></pre></div>`);
   }
-  return html.join("\n");
+  // bugfix: 还原预处理阶段保护的块级公式占位符 → <span class="math-block" data-math="...">。
+  // 必须在 html.join 后做：因为逐行 <p> 包裹、段落换行、footnotes/links 等标签已经产出，
+  // 此时还原出的 span 不再被 <p> 二次包裹或跨行切断，KaTeX 渲染拿到完整公式体。
+  const joinedHtml = html.join("\n");
+  try {
+    return restoreBlockMathPlaceholders(joinedHtml, mathBlockPlaceholders);
+  } catch (_) {
+    return joinedHtml;
+  }
 }
 
 self._markdownCache = self._markdownCache || new Map();

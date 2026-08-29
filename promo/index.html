@@ -24,7 +24,7 @@
         <a href="#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.98.exe" download>下载 v1.8.98</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.99.exe" download>下载 v1.8.99</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -32,11 +32,11 @@
     <main id="top">
       <section class="hero section-wrap" aria-labelledby="hero-title">
         <div class="hero-copy reveal">
-          <p class="eyebrow"><span class="status-dot"></span> 本地 Markdown 工作区 <em>v1.8.98 桌面版</em></p>
+          <p class="eyebrow"><span class="status-dot"></span> 本地 Markdown 工作区 <em>v1.8.99 桌面版</em></p>
           <h1 id="hero-title">本地 Markdown 知识库与编辑器</h1>
           <p class="hero-lede">围绕本地 Markdown 文件提供阅读、编辑、目录、图谱、检索、主题与多工作区管理。</p>
           <div class="hero-actions">
-            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.98.exe" download>下载 Windows 安装包</a>
+            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.99.exe" download>下载 Windows 安装包</a>
             <a class="button button-soft" href="#docs">查看使用文档</a>
           </div>
           <p class="hero-note">Windows 桌面端 · 本地文件优先 · 内容助手为可选接入</p>
@@ -183,15 +183,15 @@
         </div>
         <div class="download-block reveal">
           <div class="download-primary">
-            <span class="download-badge">当前稳定版 v1.8.98</span>
+            <span class="download-badge">当前稳定版 v1.8.99</span>
             <p>本地工作区、阅读/修改双模式、图谱、主题、增量索引与可选辅助功能。</p>
-            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.98.exe" download>下载安装包</a>
+            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.99.exe" download>下载安装包</a>
           </div>
           <div class="download-secondary">
             <h3>最近更新</h3>
             <ul>
+              <li>v1.8.99：阅读栏/阅读模式公式图表显示修复：数学公式（含跨行 $$...$$ 块级）、Mermaid 图表、Excalidraw 绘图在阅读栏(右侧预览)和阅读模式(双列只读)都正确渲染；修复 Worker 漏调用、占位结构缺失、块级公式跨行切割 3 根因。</li>
               <li>v1.8.98：PDF导出功能大升级：数学公式(KaTeX真实渲染)与Mermaid图表导出PDF后正确显示、文末默认附官网下载链接+推荐语品牌卡片(非fixed不遮挡正文)、本地图片与SVG图表转DataURL内联离线也完整显示、渲染失败自动降级源码仍可导出。</li>
-              <li>v1.8.97：编辑器字体与快捷键大升级：Ctrl+/-/0字号快捷键(编辑区焦点也生效)、重启保留用户习惯字号、编辑模式字体全面优化(等宽字体栈+连字+抗锯齿+字重行距字距)更清晰更美观。</li>
               <li>v1.8.96：代码文件保存最终修复：打开代码文档即进入编辑态、保存按钮清除「非Markdown不支持保存」提示、状态栏改为「保存/已保存 HH:MM」；同时保留折叠态Top10 + 展开态目录树。</li>
               <li>v1.8.95：工作区视图重写 + 基础保存修复：折叠态Top10按modified倒序、展开态完整目录树(文件夹独立展开/收起)；代码后缀打开默认进入编辑态。</li>
               <li>v1.8.94：工作区与编辑器增强：支持显示非MD文件(bat/vbs/代码等)、展开全部文档不再限制数量、文件按修改时间排序、Ctrl+/-调整字体、代码文件可打开保存。</li>
@@ -281,6 +281,16 @@
               <li><kbd>Ctrl+Shift+P</kbd> 润色 · <kbd>Ctrl+Shift+X</kbd> 续写</li>
               <li><kbd>Ctrl+U</kbd> 顶部智能检索 · <kbd>Ctrl+I</kbd> 行内对话</li>
               <li>辅助快捷键需在设置中开启对应功能后生效</li>
+            </ul>
+          </article>
+          <article class="doc-section">
+            <h3>v1.8.99 更新日志 · 阅读栏/阅读模式公式/图表全面修复</h3>
+            <ul>
+              <li>【阅读栏/阅读模式渲染调用补齐】<code>renderReaderContent</code> 主路径（Worker 成功非 chunked）、catch 回退路径（非 chunked）、<code>renderReaderContentChunked</code> 单 slice 分支三处全部在写入 <code>markdownView.innerHTML</code> 后立即调用 <code>renderMathInPreview + renderChartsInPreview</code>，与 chunked 多片分支尾部、编辑模式 <code>swapPreviewHtml</code> L5902-5903 保持一致；解决 < 500KB 常见文档 & 150KB 阈值附近单 slice 文档下公式、Mermaid、Excalidraw 永远不渲染的主因。</li>
+              <li>【Worker 端 Mermaid / Excalidraw 占位生成补齐】<code>public/markdown-worker.js</code> 渲染主路径 fenced 代码块闭合分支与主线程 <code>renderMarkdown</code> L2887-2891 严格对齐：<code>```mermaid</code> 输出 <code>.chart-block.mermaid-block + pre.mermaid-source + div.mermaid-container(空占位)</code>；<code>```excalidraw</code> 输出 <code>.chart-block.excalidraw-block + pre.excalidraw-source + div.excalidraw-container(空占位)</code>；阅读栏/阅读模式(Worker HTML 主供源) 从此产出与编辑模式预览相同的占位结构，<code>renderChartsInPreview</code> querySelectorAll 可命中，Mermaid 不再显示为代码块、Excalidraw 不再只显示纯 JSON。</li>
+              <li>【跨行块级公式 $$...$$ 修复】<code>public/markdown-worker.js</code> 与 <code>public/app.js:renderMarkdown</code> 都新增「先保护后还原」占位符机制：按 fence 分段 → 非 fence 段用 <code>\u0000MBLK_i_MBLK\u0000</code> 把整段 <code>$$\n公式体\n$$</code> 替换为一行 token → HTML 生成完成后 <code>restoreBlockMathPlaceholders</code> 还原为 <code>&lt;span class="math-block" data-math="..."&gt;</code>；彻底解决旧逐行 <code>for + &lt;p&gt;${inlineMarkdown(line)}&lt;/p&gt;</code> 切割跨行公式、导致 inlineMarkdown 多行正则永远跨不过 <code>&lt;/p&gt;&lt;p&gt;</code> 的问题；代码块内字面量 $$ 不被替换；块级公式单行、多行写法都正确被 KaTeX 识别并 displayMode 居中。</li>
+              <li>【缓存与脚本版本强制失效】<code>MARKDOWN_RENDER_VERSION</code> 升级为 <code>20260829-mathblock-multiline-excalidraw-mermaid-worker-v1.8.99</code>，<code>MARKDOWN_WORKER_URL</code> query 升级为 <code>20260829-mathblock-excalidraw-fix-1</code>；保证 <code>cachedRenderMarkdown</code> LRU + Worker 脚本 + 前端静态资源浏览器缓存全部强制走新解析。</li>
+              <li>【鲁棒性不变】占位符还原包裹 try/catch；CDN 不可达时 <code>renderMathInPreview</code> 已降级为红色公式源码 / 灰色等宽源码，<code>renderChartsInPreview</code> 已降级图表错误提示；所有兜底路径仍保证可正常阅读与 PDF 导出（PDF 导出链路在上版已独立渲染，不受 Worker 影响）。</li>
             </ul>
           </article>
           <article class="doc-section">

@@ -31,9 +31,10 @@ const LARGE_PREVIEW_DELAY = 700;
 const CHUNKED_RENDER_BYTES = 500 * 1024;
 const CHUNK_RENDER_SLICE_BYTES = 150 * 1024;
 const GRAPH_WORKER_URL = "/graph-worker.js?v=20260810-graph-1";
-const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20260825-worker-blob-1";
+const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20260829-mathblock-excalidraw-fix-1";
 // Markdown 渲染缓存版本戳：解析器或 CSS 规则升级时递增，确保旧缓存不被复用。
-const MARKDOWN_RENDER_VERSION = "callout-v9-final-v13-20260824-url-auto-1.8.63";
+// 2026-08-29 升级：跨越多行 $$...$$ 块级公式占位符保护 & 还原；Worker 侧 mermaid/excalidraw chart-block 生成。
+const MARKDOWN_RENDER_VERSION = "20260829-mathblock-multiline-excalidraw-mermaid-worker-v1.8.99";
 const AI_HISTORY_KEY = "mytemple.ai.history.v1";
 const AI_TRANSFORM_LABELS = { summary: "摘要", keypoints: "要点", terms: "术语解释", polish: "润色", continue: "续写", rewrite: "代写", translate: "翻译", hint: "编辑提示", code: "代码补全", comment: "生成注释" };
 
@@ -2524,8 +2525,20 @@ async function renderReaderContent(source, options = {}) {
       if (seq !== state.readerRenderSeq) return;
       els.markdownView.innerHTML = finalHtml;
       renderOutline(content);
+      // bugfix: Worker 成功非 chunked 分支没有调用公式/图表渲染；catch 非 chunked 分支这里补齐，
+      // 与 chunked 分支尾部 L2552-2554 对齐，保证阅读栏/阅读模式下 placeholder 节点真正产出 KaTeX/Mermaid/Excalidraw。
+      renderMathInPreview(els.markdownView);
+      renderChartsInPreview(els.markdownView);
     }
+    return;
   }
+  // bugfix: Worker 成功分支（主路径）写入 markdownView.innerHTML 后没有调用公式/图表渲染，
+  // 此前只有 useChunked 分支 L2552-2554 才会触发，导致 <=500KB 文档下所有 $$...$$ / excalidraw / mermaid
+  // 都是空占位不显示——阅读栏（Worker 主渲染源）和阅读模式（renderReaderContent）都受影响。
+  // 与编辑模式预览 swapPreviewHtml L5902-5903 / renderReaderContentChunked L2552-2554 保持一致。
+  if (seq !== state.readerRenderSeq) return;
+  renderMathInPreview(els.markdownView);
+  renderChartsInPreview(els.markdownView);
 }
 
 async function renderReaderContentChunked(html, outline, seq) {
@@ -2534,6 +2547,11 @@ async function renderReaderContentChunked(html, outline, seq) {
     if (seq != null && seq !== state.readerRenderSeq) return;
     els.markdownView.innerHTML = html;
     renderOutlineItems(outline);
+    // bugfix: 只有 1 片时直接 return，没调公式/图表渲染——表现为 150KB<=文件<=500KB 的文档：
+    // 用 Worker 且启用 chunked（150KB）但只产出 1 片时，公式、mermaid、excalidraw 全不显示。
+    // 与其他路径保持一致：写入 innerHTML + renderOutlineItems 后立即调用。
+    renderMathInPreview(els.markdownView);
+    renderChartsInPreview(els.markdownView);
     return;
   }
   if (seq != null && seq !== state.readerRenderSeq) return;
@@ -2699,7 +2717,47 @@ function normalizeCodeLanguage(value) {
 function renderMarkdown(source, options = {}) {
   const searchTerm = options.searchTerm || "";
   const editTools = options.editTools === true;
-  const lines = source.replace(/\r\n/g, "\n").split("\n");
+  // bugfix: 多行块级公式 $$\n公式体\n$$ 会被逐行 for + <p>${inlineMarkdown(line)}</p> 拆开，
+  // inlineMarkdown 的 $$[\s\S]+? 正则跨不过 <p> 边界（且逐行正则本质也跨行不到），
+  // 导致阅读模式/编辑预览里常见的"换行写的块级公式"全部空白。
+  // 处理流程与 markdown-worker 保持一致：先按代码 fence 分段，非 fence 段把 $$...$$
+  // 整段替换为占位符，HTML 生成完再还原为 math-block span。
+  const mathBlockPlaceholders = [];
+  const preprocessed = (() => {
+    const rawLines = String(source || "").replace(/\r\n/g, "\n").split("\n");
+    let inF = false;
+    const segments = [];
+    let buf = "";
+    for (const line of rawLines) {
+      if (line.startsWith("```")) {
+        if (!inF) {
+          segments.push({ fence: false, text: buf });
+          buf = line + "\n";
+          inF = true;
+        } else {
+          buf += line + "\n";
+          segments.push({ fence: true, text: buf });
+          buf = "";
+          inF = false;
+        }
+        continue;
+      }
+      buf += line + "\n";
+    }
+    if (buf) segments.push({ fence: inF, text: buf });
+    let rebuilt = "";
+    for (const seg of segments) {
+      if (seg.fence) rebuilt += seg.text;
+      else rebuilt += seg.text.replace(/\$\$([\s\S]+?)\$\$/g, (match, math) => {
+        const idx = mathBlockPlaceholders.length;
+        mathBlockPlaceholders.push(math);
+        return `\u0000MBLK_${idx}_MBLK\u0000`;
+      });
+    }
+    if (rebuilt.endsWith("\n")) rebuilt = rebuilt.slice(0, -1);
+    return rebuilt;
+  })();
+  const lines = preprocessed.split("\n");
   const html = [];
   let h1Index = 0;
   let h2Index = 0;
@@ -3065,7 +3123,24 @@ function renderMarkdown(source, options = {}) {
     const items = footnoteDefs.map((fn) => `<li id="fn-${escapeHtml(fn.id)}">${inlineMarkdown(fn.text || "", searchTerm)}</li>`).join("");
     html.push(`<section class="footnotes"><ol>${items}</ol></section>`);
   }
-  return html.join("\n");
+  // bugfix: 还原块级公式占位符（与 markdown-worker 同步）。
+  const joinedHtml = html.join("\n");
+  if (!mathBlockPlaceholders.length) return joinedHtml;
+  try {
+    return joinedHtml
+      .replace(/\u0000MBLK_(\d+)_MBLK\u0000/g, (_, idx) => {
+        const i = parseInt(idx, 10);
+        const math = (i >= 0 && i < mathBlockPlaceholders.length) ? mathBlockPlaceholders[i] : "";
+        return `<span class="math-block" data-math="${escapeHtml(String(math).trim())}"></span>`;
+      })
+      .replace(/\u0000MBLK_(\d+)[\s\S]*?_MBLK\u0000/g, (_, idx) => {
+        const i = parseInt(idx, 10);
+        const math = (i >= 0 && i < mathBlockPlaceholders.length) ? mathBlockPlaceholders[i] : "";
+        return `<span class="math-block" data-math="${escapeHtml(String(math).trim())}"></span>`;
+      });
+  } catch (_) {
+    return joinedHtml;
+  }
 }
 
 function markdownCacheKey(source, options = {}) {
