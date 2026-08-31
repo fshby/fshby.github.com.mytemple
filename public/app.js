@@ -3054,6 +3054,13 @@ function scheduleMarkdownWorkerIdle() {
 function requestMarkdownRender({ source = "", searchTerm = "", includeHtml = true, includeOutline = false } = {}) {
   const worker = ensureMarkdownWorker();
   if (!worker) {
+    // Bugfix C1: Markdown Worker 创建失败（首次）时给出 toast 提示"已降级"，
+    // 不再静默回退到主线程渲染（否则 Worker 挂了 100 次用户也感知不到）。
+    // 限频：用 state 上一个 flag，避免每次渲染都 toast。
+    if (!state._markdownWorkerWarned) {
+      state._markdownWorkerWarned = true;
+      try { showToast("Markdown 渲染服务降级，已切换到主线程渲染（部分渲染功能可能变慢）"); } catch (_) {}
+    }
     return Promise.resolve({
       html: includeHtml ? cachedRenderMarkdown(source, { searchTerm }) : null,
       outline: includeOutline ? extractOutline(source) : null,
@@ -3122,13 +3129,21 @@ async function renderReaderContent(source, options = {}) {
   } catch (error) {
     console.error(error);
     if (seq !== state.readerRenderSeq) return;
+    // Bugfix C2: Worker 抛错后不再只在控制台静默；在 reader 栏顶部写一条红色警告 banner，
+    // 明确告知用户"渲染异常已自动降级为本地缓存渲染"，同时保留 error.message 便于截图反馈。
+    const errBanner = `<div style="padding: 10px 14px;margin: 8px 12px;border: 1px solid #fecaca;border-radius: 6px;background: #fef2f2;color: #991b1b;font-size: 13px;line-height:1.6;">
+        ⚠️ Markdown 渲染服务出现异常，已切换到本地渲染模式。<br/>
+        错误信息：<code style="background:#fee2e2;padding:1px 4px;border-radius:3px;">${escapeHtml(String(error?.message || error || "未知错误"))}</code>
+      </div>\n`;
     let finalHtml = cachedRenderMarkdown(content, { searchTerm });
     try { if (typeof applySpellCheckHighlight === "function") finalHtml = applySpellCheckHighlight(finalHtml, content); } catch (_) {}
     if (useChunked) {
+      // chunked 首片前插入 banner：在 split 前手动 prepend（splitHtmlForChunkedRender 不会丢失 banner，因为直接在第 0 片写）
+      finalHtml = errBanner + finalHtml;
       await renderReaderContentChunked(finalHtml, extractOutline(content), seq);
     } else {
       if (seq !== state.readerRenderSeq) return;
-      els.markdownView.innerHTML = finalHtml;
+      els.markdownView.innerHTML = errBanner + finalHtml;
       renderOutline(content);
       // bugfix: Worker 成功非 chunked 分支没有调用公式/图表渲染；catch 非 chunked 分支这里补齐，
       // 与 chunked 分支尾部 L2552-2554 对齐，保证阅读栏/阅读模式下 placeholder 节点真正产出 KaTeX/Mermaid/Excalidraw。
@@ -4728,6 +4743,44 @@ async function openDoc(docPath, options = {}) {
     return false;
   }
 
+  // === Bugfix B: 内容为空或全空白时不再默默渲染空白屏 ===
+  // 场景：(1) 磁盘文件真的 0 字节；(2) 编码解码兜底 utf-8-lossy 后仅留 U+FFFD 或空白；
+  // (3) WPS/Word 导出时另存错产生 0B UTF-8 空壳。用户感知"打不开/没内容"，必须给出可见提示。
+  const isEmptyContent = typeof doc.content === "string" && doc.content.trim() === "";
+  // lossy 标记：content 里含替换字符 且 后端返回 encoding 标签中包含 lossy/bom 未命中说明
+  const hasEncodingReplacement =
+    typeof doc.content === "string" &&
+    (doc.content.indexOf("\uFFFD") >= 0) &&
+    /lossy|gbk|gb18030|utf-16|utf-32/i.test(String(doc.encoding || "utf-8"));
+  const emptyTipStyle = [
+    "padding: 48px 16px;",
+    "text-align: center;",
+    "color: var(--muted, #6b7280);",
+    "font-size: 14px;",
+    "line-height: 1.8;",
+    "border: 1px dashed var(--border, #e5e7eb);",
+    "border-radius: 8px;",
+    "margin: 24px 12px;",
+    "background: var(--bg-subtle, #fafafa);",
+  ].join("");
+  const encodingTagLabel = (doc.encoding && doc.encoding !== "utf-8")
+    ? `<div style="margin-top:12px;font-size:12px;color:var(--danger,#dc2626);">当前识别编码：${escapeHtml(doc.encoding)}${hasEncodingReplacement ? "（存在无法解码字符，请用记事本另存为 UTF-8）" : ""}</div>`
+    : "";
+  if (isEmptyContent) {
+    els.markdownView.classList.remove("empty-state");
+    const tip = document.createElement("div");
+    tip.style.cssText = emptyTipStyle;
+    tip.innerHTML =
+      `📄 <strong>本文档暂无内容</strong><br/>` +
+      `<div style="margin-top:8px;">若文档来源于 WPS / Word / 江西电信系统导出的 Markdown，` +
+      `请用记事本打开该文件 → <strong>另存为</strong> → 编码选择 <strong>UTF-8</strong> 后覆盖原文件，再重新打开。</div>` +
+      `<div style="margin-top:8px;color:var(--muted,#6b7280);font-size:12px;">也可尝试：把文件重命名为英文短名（如 JXDX-MR622.md），或把工作区从网络共享盘/NAS 复制到本地磁盘后再试。</div>` +
+      encodingTagLabel;
+    els.markdownView.innerHTML = "";
+    els.markdownView.appendChild(tip);
+    renderOutlineItems([]);
+  }
+
   const item = state.flatFiles.find((file) => file.path === doc.path) || doc;
   state.activeWorkspaceId = item.workspaceId || doc.path.split(":", 1)[0] || state.activeWorkspaceId;
   state.currentPath = doc.path;
@@ -4750,13 +4803,25 @@ async function openDoc(docPath, options = {}) {
   const draftContent = restoreDraft(doc.path);
   const effectiveContent = (draftContent != null && draftContent !== doc.content) ? draftContent : doc.content;
   els.editor.value = effectiveContent;
+  // Bugfix B-编辑器侧：空内容 + 无草稿 时给编辑器一个可见占位符，避免左栏也是一片白
+  if (isEmptyContent && (draftContent == null || draftContent.trim() === "")) {
+    els.editor.placeholder =
+      "（文档暂无内容 / 或编码识别失败）\n\n" +
+      "请使用记事本打开原始文件 → 另存为 → 编码选择 UTF-8 覆盖原文件，\n" +
+      "或直接在这里输入新内容后按 Ctrl+S 保存。";
+  } else if (!els.editor.placeholder) {
+    els.editor.placeholder = "从这里开始输入正文…（支持 Markdown 语法）";
+  }
   state.lastSavedContent = doc.content;
   if (draftContent != null && draftContent !== doc.content) {
     state.currentContent = draftContent;
     setSaveStatus("\u672a\u4fdd\u5b58", true);
     scheduleAutoSave();
   }
-  if (state.currentIsMarkdown) {
+  // 空内容已在上方写了 tip，跳过 Markdown 渲染（renderReaderContent("") 不会出错，但会清空 tip）
+  if (isEmptyContent) {
+    /* 跳过 renderReaderContent；tip 已置入 els.markdownView */
+  } else if (state.currentIsMarkdown) {
     try {
       await renderReaderContent(doc.content, { searchTerm: options.searchTerm || "" });
     } catch (error) {

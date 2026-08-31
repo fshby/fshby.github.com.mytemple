@@ -1,4 +1,5 @@
-// // app.rs - 区?统一应用状态管区?// 替代 Node.js server.js 中的全局缓存、工作区管理、文件索引等区?
+// // app.rs - 全局应用状态管理
+// 替代 Node.js server.js 中的全局缓存、工作区管理、文件索引等模块
 
 use serde::{Deserialize, Serialize};
 
@@ -14,9 +15,135 @@ use walkdir::WalkDir;
 
 use sha2::Digest;
 
+use unicode_normalization::UnicodeNormalization;
+
 
 
 pub const DEFAULT_WORKSPACE_ID: &str = "default";
+
+/// Unicode NFC 归一化：保证 Mac HFS+ (NFD 分解式) 与 Win NTFS / NAS (NFC 合成式)
+/// 的相同视觉中文字符，在 String == 比较、HashMap key、file cache 查询时 100% 命中。
+/// 全局搜索搜索结果 ref_path 来自 scan_workspace；openDoc 输入来自前端 click dataset，
+/// 两处都经由 nfc() 后再比较，消除 NFC/NFD 不一致导致的 cache 漏查（搜得到但点不开）。
+#[inline]
+pub fn nfc<S: AsRef<str>>(s: S) -> String {
+    s.as_ref().nfc().collect::<String>()
+}
+
+/// 取路径 basename（忽略尾部 /，跨正反斜杠），再做 NFC。
+/// 用于 read_file 三级弱匹配兜底的 basename 精确匹配。
+pub fn nfc_basename<S: AsRef<str>>(path: S) -> String {
+    let p = path.as_ref().trim_end_matches('/').trim_end_matches('\\');
+    let base = match (p.rfind('/'), p.rfind('\\')) {
+        (Some(a), Some(b)) => &p[a.max(b) + 1..],
+        (Some(a), None) => &p[a + 1..],
+        (None, Some(b)) => &p[b + 1..],
+        (None, None) => p,
+    };
+    nfc(base)
+}
+
+/// UTF-32 手工解码器（encoding_rs crate 未单独导出 UTF_32_LE / UTF_32_BE 静态）。
+/// 每 4 字节按端序取 u32，转 char 后 push；非法码位返回 None（由外层走 UTF-8 lossy）。
+pub fn decode_utf32(body: &[u8], little_endian: bool) -> Option<String> {
+    if body.len() % 4 != 0 { return None; }
+    let mut out = String::with_capacity(body.len() / 4);
+    for chunk in body.chunks_exact(4) {
+        let u = if little_endian {
+            u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]])
+        } else {
+            u32::from_be_bytes([chunk[0], chunk[1], chunk[2], chunk[3]])
+        };
+        match char::from_u32(u) {
+            Some(c) => out.push(c),
+            None => return None,
+        }
+    }
+    Some(out)
+}
+
+/// 智能解码原始字节 -> (UTF-8 字符串, 识别出的编码标签)
+/// 优先级：UTF-8 strict -> BOM 检测 (UTF8 / UTF16 LE/BE / UTF32 LE/BE)
+///       -> encoding_rs (GBK / GB18030 / Big5 / EUC-KR / Shift_JIS)
+///       -> 最后 lossy UTF-8（替换非法字节，保证 UI 不空白）
+/// 江西电信 WPS 导出 md 默认 GBK；中文 Win 记事本另存常用 UTF16 LE BOM。
+pub fn decode_bytes_smart(raw: &[u8]) -> (String, String) {
+    use encoding_rs::*;
+
+    // 1) 尝试纯 UTF-8（无 BOM）
+    if let Ok(s) = std::str::from_utf8(raw) {
+        return (s.to_string(), "utf-8".into());
+    }
+
+    // 2) BOM 优先（匹配后跳过对应字节长度再解码）
+    if raw.len() >= 3 && &raw[0..3] == b"\xef\xbb\xbf" {
+        // UTF-8 BOM
+        let body = &raw[3..];
+        let (cow, _enc, _had_err) = UTF_8.decode(body);
+        return (cow.into_owned(), "utf-8-bom".into());
+    }
+    if raw.len() >= 4 && &raw[0..4] == b"\xff\xfe\x00\x00" {
+        // UTF-32 LE BOM：手工按 4 字节切小端 u16，避免依赖 encoding_rs 未导出的 UTF_32_LE
+        let body = &raw[4..];
+        let decoded = decode_utf32(body, /*little_endian*/ true);
+        return (decoded.unwrap_or_else(|| String::from_utf8_lossy(body).into_owned()), "utf-32le-bom".into());
+    }
+    if raw.len() >= 4 && &raw[0..4] == b"\x00\x00\xfe\xff" {
+        // UTF-32 BE BOM：encoding_rs 不单独导出 UTF_32_BE，手工解码
+        let body = &raw[4..];
+        let decoded = decode_utf32(body, /*little_endian*/ false);
+        return (decoded.unwrap_or_else(|| String::from_utf8_lossy(body).into_owned()), "utf-32be-bom".into());
+    }
+    if raw.len() >= 2 && &raw[0..2] == b"\xff\xfe" {
+        // UTF-16 LE BOM
+        let body = &raw[2..];
+        let (cow, _enc, _had_err) = UTF_16LE.decode(body);
+        return (cow.into_owned(), "utf-16le-bom".into());
+    }
+    if raw.len() >= 2 && &raw[0..2] == b"\xfe\xff" {
+        // UTF-16 BE BOM
+        let body = &raw[2..];
+        let (cow, _enc, _had_err) = UTF_16BE.decode(body);
+        return (cow.into_owned(), "utf-16be-bom".into());
+    }
+
+    // 3) encoding_rs 猜测序列（中文环境下命中概率由高到低，GB18030 兼容 GBK）
+    // 注意：encoding_rs 导出名 BIG5（不是 BIG5_2003）、SHIFT_JIS（不是 SHIFTJIS）
+    let candidates: &[&Encoding] = &[
+        GB18030, GBK, BIG5, SHIFT_JIS, EUC_KR, WINDOWS_1252,
+    ];
+    for enc in candidates {
+        // 非侵入式：尝试 decode 后判断是否产生大量替换字符
+        let (cow, _used_encoding, had_errors) = enc.decode(raw);
+        // 启发：若解码没替换错误 或 替换比例极低(<0.1%)，接受该编码
+        if !had_errors {
+            return (cow.into_owned(), enc.name().to_string().to_ascii_lowercase());
+        }
+        let sub_count = cow.matches('\u{fffd}').count();
+        if cow.len() > 1000 && (sub_count as f64 / cow.len() as f64) < 0.001 {
+            return (cow.into_owned(), enc.name().to_string().to_ascii_lowercase());
+        }
+    }
+
+    // 4) 终级兜底：UTF-8 lossy 替换非法字节，保证 UI 不空白，用户可见乱码后可自行改编码
+    let (cow, _enc, _had_err) = UTF_8.decode(raw);
+    (cow.into_owned(), "utf-8-lossy".into())
+}
+
+/// 对齐字符边界工具（中文字节切片不会 panic）：
+/// 把 start/end 向最近的 char boundary 内缩。与项目 memory 中 align_boundary 规则保持一致。
+#[allow(dead_code)]
+pub fn align_boundary(text: &str, mut start: usize, mut end: usize) -> (usize, usize) {
+    if start > end { std::mem::swap(&mut start, &mut end); }
+    let bytes = text.as_bytes();
+    while start < bytes.len() && (bytes[start] as i8) > -0x41 && (bytes[start] as i8) < -0x80 {
+        start = start.saturating_add(1);
+    }
+    while end > start && end < bytes.len() && (bytes[end] as i8) > -0x41 && (bytes[end] as i8) < -0x80 {
+        end = end.saturating_sub(1);
+    }
+    (start.min(text.len()), end.min(text.len()))
+}
 
 
 
@@ -678,25 +805,141 @@ impl AppState {
 
 
     pub async fn read_file(&self, path: &str) -> anyhow::Result<FileEntry> {
+        let input_nfc = nfc(path);
 
-        let files = self.files.read().await;
-
-        if let Some(entry) = files.iter().find(|f| f.path == path) {
-
-            return Ok(entry.clone());
-
+        // Level 1: cache 精确匹配 (原始 ==) 或 NFC 归一后匹配
+        // 解决 Mac NFD / Win NFC 路径字符串字面不相等但语义相同造成"搜得到但点不开"
+        {
+            let files = self.files.read().await;
+            if let Some(entry) = files.iter().find(|f| {
+                f.path == path || nfc(&f.path) == input_nfc
+            }) {
+                return Ok(entry.clone());
+            }
         }
 
-        drop(files);
+        // Level 2: 按文件名弱匹配（3 级兜底，命中任何一级直接读取磁盘）
+        //   a) basename NFC 精确相等 + 同 workspace（若能从 input 解析出 workspace_id）
+        //   b) 去掉数字/版本后缀的 basename 相等（兼容江西电信 MR622-MK / MR622-MK-1）
+        //   c) 同一个 workspace 内 basename 全局唯一命中（即使路径前缀全错）
+        // 所有弱匹配命中后，重新 normalize 再读磁盘，避免把缓存里的陈旧内容返回。
+        let input_basename = nfc_basename(&input_nfc);
+        let input_ws = {
+            let decoded = path.replace('\\', "/");
+            if let Some(idx) = decoded.find(':') {
+                let prefix = &decoded[..idx];
+                if !prefix.is_empty() && prefix.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-') {
+                    Some(prefix.to_string())
+                } else { None }
+            } else if let Some(idx) = decoded.find('/') {
+                let prefix = &decoded[..idx];
+                if prefix.starts_with("ws_") || (prefix.chars().all(|c| c.is_alphanumeric() || c == '_') && !prefix.is_empty()) {
+                    Some(prefix.to_string())
+                } else { None }
+            } else { None }
+        };
 
-        let normalized = self.normalize_doc_path(path)?;
+        let mut fallback_ref_path: Option<String> = None;
+        {
+            let files = self.files.read().await;
+            // 2a) basename NFC + 同 workspace_id
+            if !input_basename.is_empty() {
+                let mut matched: Vec<String> = files.iter()
+                    .filter(|f| nfc_basename(&f.path) == input_basename)
+                    .filter(|f| input_ws.as_ref().map_or(true, |w| f.workspace_id == *w))
+                    .map(|f| f.path.clone())
+                    .collect();
+                if matched.len() == 1 {
+                    fallback_ref_path = Some(matched.swap_remove(0));
+                }
+            }
+            // 2b) 去掉尾部数字 / 分隔符后缀后再比较（例如 MR622-MK.md vs MR622-MK-副本.md）
+            if fallback_ref_path.is_none() && !input_basename.is_empty() {
+                let trimmed_input = input_basename
+                    .trim_end_matches(|c: char| c.is_ascii_digit() || c == '-' || c == '_' || c == ' ')
+                    .to_string();
+                let mut candidates: Vec<String> = files.iter()
+                    .filter(|f| {
+                        let tb = nfc_basename(&f.path)
+                            .trim_end_matches(|c: char| c.is_ascii_digit() || c == '-' || c == '_' || c == ' ')
+                            .to_string();
+                        !tb.is_empty() && tb == trimmed_input
+                    })
+                    .filter(|f| input_ws.as_ref().map_or(true, |w| f.workspace_id == *w))
+                    .map(|f| f.path.clone())
+                    .collect();
+                if candidates.len() == 1 {
+                    fallback_ref_path = Some(candidates.swap_remove(0));
+                }
+            }
+            // 2c) workspace 内 basename 全局唯一命中（允许 input 是缺路径前缀的裸文件名）
+            if fallback_ref_path.is_none() && !input_basename.is_empty() {
+                let mut by_basename: Vec<&FileEntry> = files.iter()
+                    .filter(|f| nfc_basename(&f.path) == input_basename)
+                    .collect();
+                if by_basename.len() == 1 {
+                    fallback_ref_path = Some(by_basename.swap_remove(0).path.clone());
+                }
+            }
+        }
 
-        let content = std::fs::read_to_string(&normalized.absolute)?;
+        // 归一化：优先用原始 path；弱匹配命中则用命中的 ref_path（来自 cache 的真实存在路径）
+        let target_ref = fallback_ref_path.as_deref().unwrap_or(path);
+        let normalized = match self.normalize_doc_path(target_ref) {
+            Ok(n) => n,
+            Err(e) => {
+                let first_bytes_hex: String = path.as_bytes().iter().take(4)
+                    .map(|b| format!("{:02X}", b)).collect::<Vec<_>>().join(" ");
+                log::error!(
+                    "[read_file] normalize_doc_path failed | path={} | len={} | head=[{}] | err={}",
+                    path, path.len(), first_bytes_hex, e
+                );
+                return Err(e);
+            }
+        };
 
-        let entry = self.build_file_entry(&normalized, &content).await;
+        // 读磁盘：先读 bytes，再走智能编码解码；read_to_string UTF-8 失败不再直接 Err 404
+        let bytes = match std::fs::read(&normalized.absolute) {
+            Ok(b) => b,
+            Err(e) => {
+                log::error!(
+                    "[read_file] fs::read IO 失败 | ref={} | abs={} | len(raw_path)={} | err={}",
+                    normalized.r#ref, normalized.absolute, path.len(), e
+                );
+                return Err(anyhow::anyhow!("读取文件失败: {}", e));
+            }
+        };
+
+        let (content, encoding_detected) = decode_bytes_smart(&bytes);
+        // 编码识别失败（utf-8-lossy 且内容几乎全是 U+FFFD）时，仍然继续返回，上层 openDoc 会显示"空内容/编码异常"提示；
+        // 这里打一条 error 日志方便用户通过日志直接定位编码未命中。
+        let lossy_replacement_count = content.matches('\u{fffd}').count();
+        if encoding_detected == "utf-8-lossy" && lossy_replacement_count > 0 {
+            let first_bytes_hex: String = bytes.iter().take(4)
+                .map(|b| format!("{:02X}", b)).collect::<Vec<_>>().join(" ");
+            log::error!(
+                "[read_file] 编码兜底至 utf-8-lossy,替换字符={} | ref={} | abs={} | total_bytes={} | head=[{}]",
+                lossy_replacement_count, normalized.r#ref, normalized.absolute, bytes.len(), first_bytes_hex
+            );
+        }
+
+        // normalize_doc_path 算出的 workspace_id/relative 在弱匹配命中后可能和 cache 不一致，
+        // 强制把归一后的 ref_path 用命中的 cache entry path（若有）对齐：保证前端拿到的 path 与搜索结果 path 同源，
+        // 后续 save_file / refresh_cache 可以正确找同 entry 更新。
+        let final_normalized = if let Some(cache_ref) = fallback_ref_path.as_ref() {
+            let mut merged = normalized.clone();
+            merged.r#ref = cache_ref.clone();
+            merged
+        } else {
+            normalized.clone()
+        };
+
+        let mut entry = self.build_file_entry(&final_normalized, &content).await;
+        // build_file_entry 里 encoding 字段默认写 utf-8；这里覆盖为我们真实识别出的编码，
+        // 前端 openDoc 拿到后在状态栏可显示（state.currentEncoding = doc.encoding），便于排查编码命中问题。
+        entry.encoding = encoding_detected;
 
         Ok(entry)
-
     }
 
 
@@ -724,7 +967,10 @@ impl AppState {
 
         let mut files = self.files.write().await;
 
-        if let Some(entry) = files.iter_mut().find(|f| f.path == normalized.r#ref) {
+        let target_ref_nfc = nfc(&normalized.r#ref);
+        if let Some(entry) = files.iter_mut().find(|f| {
+            f.path == normalized.r#ref || nfc(&f.path) == target_ref_nfc
+        }) {
 
             entry.content = content.to_string();
 
@@ -1773,19 +2019,26 @@ async fn scan_workspace(ws: &Workspace) -> Vec<FileEntry> {
 
 
 
-        let content = match std::fs::read_to_string(path) {
-
-            Ok(c) => c,
-
-            Err(_) => continue,
-
+        let content = {
+            // scan_workspace 也统一走智能解码，保证 GBK/BOM/UTF16LE 的 md 至少能进入 files cache，
+            // 使得全局搜索可以命中（否则 UTF-8 失败就 continue，用户搜不到江西电信的 md）。
+            match std::fs::read(path) {
+                Ok(bytes) => {
+                    let (decoded, _enc) = decode_bytes_smart(&bytes);
+                    decoded
+                }
+                Err(_) => continue,
+            }
         };
 
 
 
         let relative = path.strip_prefix(root).unwrap_or(path);
 
-        let rel_str = relative.to_string_lossy().replace('\\', "/");
+        let rel_str_raw = relative.to_string_lossy().replace('\\', "/");
+        // 扫描入库的路径先做 NFC，与 openDoc -> read_file 输入端的 nfc() 保持同源，
+        // 消除 Mac NFD 中文路径入库后、Win 端打开时字符串字面值不相等的问题。
+        let rel_str = nfc(&rel_str_raw);
 
         let ref_path = format!("{}/{}", ws.id, rel_str);
 

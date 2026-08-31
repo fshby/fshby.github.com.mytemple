@@ -1,6 +1,6 @@
 [package]
 name = "mytemple-server"
-version = "1.8.104"
+version = "1.8.105"
 edition = "2021"
 description = "MyTemple Knowledge - Rust 原生后端 (Phase 5 纯原生架构)"
 
@@ -65,6 +65,11 @@ url = "2"
 
 # HTTP 客户端（Ollama / DeepSeek）— rustls 避免 OpenSSL 依赖
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "gzip"] }
+
+# 中文路径 NFC/NFD 归一（Mac HFS+ 分解式 vs Win NTFS 合成式），解决全局搜索 == 命中失败
+unicode-normalization = "0.1"
+# 智能编码兜底（UTF8 失败后：BOM→UTF16/UTF32，或按 GBK/GB18030/Big5/EUC-KR/ShiftJIS 解码回转 UTF8）
+encoding_rs = "0.8"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

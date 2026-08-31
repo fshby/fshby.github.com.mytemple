@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
@@ -24,7 +24,7 @@
         <a href="#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.104.exe" download>下载 v1.8.104</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.105.exe" download>下载 v1.8.105</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -32,11 +32,11 @@
     <main id="top">
       <section class="hero section-wrap" aria-labelledby="hero-title">
         <div class="hero-copy reveal">
-          <p class="eyebrow"><span class="status-dot"></span> 本地 Markdown 工作区 <em>v1.8.104 桌面版</em></p>
+          <p class="eyebrow"><span class="status-dot"></span> 本地 Markdown 工作区 <em>v1.8.105 桌面版</em></p>
           <h1 id="hero-title">本地 Markdown 知识库与编辑器</h1>
           <p class="hero-lede">围绕本地 Markdown 文件提供阅读、编辑、目录、图谱、检索、主题与多工作区管理。</p>
           <div class="hero-actions">
-            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.104.exe" download>下载 Windows 安装包</a>
+            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.105.exe" download>下载 Windows 安装包</a>
             <a class="button button-soft" href="#docs">查看使用文档</a>
           </div>
           <p class="hero-note">Windows 桌面端 · 本地文件优先 · 内容助手为可选接入</p>
@@ -183,13 +183,14 @@
         </div>
         <div class="download-block reveal">
           <div class="download-primary">
-            <span class="download-badge">当前稳定版 v1.8.104</span>
+            <span class="download-badge">当前稳定版 v1.8.105</span>
             <p>本地工作区、阅读/修改双模式、图谱、主题、增量索引与可选辅助功能。</p>
-            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.104.exe" download>下载安装包</a>
+            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.105.exe" download>下载安装包</a>
           </div>
           <div class="download-secondary">
             <h3>最近更新</h3>
             <ul>
+              <li>v1.8.105：全局搜索中文 MD「打不开/没内容」空白屏三重修复：① <b>NFC 路径全链路归一</b> + <b>cache 漏查后 basename 三级弱匹配兜底</b>（Mac HFS+ NFD / Win NTFS NFC / NAS 短名/UNC 中文路径搜索结果点不开的根因就是字符串==字节序列不同漏查）；② <b>空内容/空白屏不再静默</b>：右侧阅读栏渲染灰底虚线卡片提示「WPS/Word/江西电信导出 MD 请记事本另存为 UTF-8 覆盖原文件」，左侧编辑器设置多行空内容占位符，Worker 抛错 catch 分支顶部 prepend 红色异常 banner + Worker 创建失败首次 toast 降级提示；③ <b>BOM + GBK/UTF16/UTF32 智能编码解码兜底</b>（引入 unicode-normalization + encoding_rs），scan_workspace 和 read_file 都从 read_to_string UTF-8 改为 read bytes→BOM→GB18030/GBK/BIG5/SHIFT_JIS/EUC_KR 序列候选，识别出的非 UTF-8 编码写入 FileEntry.encoding 前端状态栏可见，lossy 分支 log::error 打 ref_path+absolute+首字节 hex+长度方便管理员反查具体文件。</li>
               <li>v1.8.104：其他电脑安装后启动失败紧急修复（双重保险）：① tauri.conf.json bundle.resources 从字符串数组改用对象映射 <code>{src:../public,target:resources/public}</code> + <code>{src:WebView2Loader.dll,target:""}</code> 强制写死安装目的地，消除 Tauri 2.x NSIS 字符串资源解包到 $INSTDIR/public 而非 $INSTDIR/resources/public 的版本差异歧义；② <code>resolve_public_root</code> 候选从 5 条扩到 10 条，返回 <code>(root, 全部候选)</code>，内置 404 友好页从此打印编号后的全部候选（不再只展示 1 条误导性 fallback 路径），杀毒/权限/映射哪一层失败一眼可辨。</li>
               <li>v1.8.103：导出 7 种格式统一接入系统原生「另存为」对话框（扩展名过滤正确），保存成功后 Toast 显示完整绝对路径（点击可复制）+「打开文件 / 在文件夹中查看」两按钮；取消对话框静默不报错；非 Tauri / 插件失败自动降级 Blob 下载并明确告知浏览器默认下载目录。导入新增「系统文件对话框」按钮，DOCX/RTF/ODT 通过 Rust 内置 ZIP/控制字剥离直接提取正文写入 Markdown，不再生成 pandoc 占位文档。</li>
               <li>v1.8.102：其他电脑安装后 404 白屏紧急修复：安装包原 bundle.resources 仅含 WebView2Loader.dll 未含 public/，新安装机启动后 axum 找不到前端文件 → Edge/内置窗口 HTTP ERROR 404。本次把 public/ 整个打进 resources、resolve_public_root 5 级候选 + index.html 校验、7321..7420 端口回退扫描、Rust 内置中文友好错误页不再只显示 Edge 刷新按钮。</li>
@@ -289,12 +290,25 @@
             </ul>
           </article>
           <article class="doc-section">
+            <h3>v1.8.105 更新日志 · 全局搜索中文 MD「打不开/没内容」空白屏·三重修复</h3>
+            <ul>
+              <li>【用户现象】v1.8.104 反馈：在顶部全局搜索（Ctrl+U）输入「江西电信」搜到 <code>江西电信MR622-MK.md</code> → 点击条目 → 左编辑栏/右阅读栏全白，底部 Toast 偶尔不报错误，但内容打不开。</li>
+              <li>【根因 A — NFC/NFD 路径比较漏查】<code>scan_workspace()</code> 入库 ref_path 用 <code>format!("{ws.id}/{rel}")</code>；前端点击后 <code>openDoc(item.path)</code> 传回后端 <code>read_file(path)</code> 第一步 <code>files.iter().find(|f| f.path == path)</code> 做 Rust 字符串严格 <code>==</code>。Mac HFS+ / Samba NAS 返回中文路径为 NFD（Unicode 分解式）；Win NTFS/大多数应用生成为 NFC（合成式）。视觉上完全相同的「江西电信」四个字，NFC/NFD 字节序列不同 → <code>==</code> 返回 false → cache 命中失败，fallback 到磁盘重新读取时若 <code>canonicalize</code> 再引入 UNC/短名前缀差异进一步错位 → 直接 404 或空白。<b>修复</b>：引入 <code>unicode-normalization</code> crate，新增顶部 <code>nfc()</code> / <code>nfc_basename()</code> 辅助；scan_workspace ref_path 入库前先 nfc；read_file 输入端先 nfc；save_file cache 更新比较也先 nfc，全链路 ref_path 字节序列同源。</li>
+              <li>【根因 A 附加 — 三级弱匹配兜底】主路径 cache==/NFC 都 miss 后，新增三级 basename 弱匹配 (a) basename NFC 精确相等+同 workspace 唯一 (b) 去掉尾部数字/分隔符后缀（MR622-MK vs MR622-MK-副本）再唯一 (c) 全局 workspace 内 basename 全局唯一。命中则强制把返回 FileEntry.path 对齐到 cache 同源 ref_path，保证 save_file/refresh_cache 后续继续命中同一 entry，不直接 404。</li>
+              <li>【根因 B — 空内容空白屏无 UI 提示】<code>content==""</code> 通过 <code>typeof doc.content!=="string"</code> → <code>els.markdownView.innerHTML=""</code> → 左编辑器无 placeholder → 全白无任何视觉反馈。<b>修复</b>：openDoc 刚过数据完整性校验插入 <code>isEmptyContent=doc.content.trim()===""</code> 判断，右侧阅读栏灰底虚线卡片展示「📄 本文档暂无内容 + WPS/Word/江西电信 MD 记事本另存为 UTF-8 + 改名 ASCII 短名+从 NAS 拷到本地盘」两步急救方案；识别出的非 UTF-8 编码（<code>doc.encoding</code>）红字展示，含 U+FFFD 替换字符时额外提示。左侧编辑器同步写多行空内容占位符；命中 isEmptyContent 时显式跳过 renderReaderContent 防止把 tip 清空。</li>
+              <li>【根因 B 附加 — Worker 异常可见】<code>renderReaderContent</code> Worker catch 分支在 markdownView 顶部 prepend 红色警告 banner「Markdown 渲染服务出现异常，已切换到本地渲染模式」+ error.message；<code>requestMarkdownRender</code> ensureMarkdownWorker 返回 null 时首次 toast 一次「Markdown 渲染服务降级，已切换到主线程渲染」（限频一次不再打扰），两处都不再只 console.error 静默。</li>
+              <li>【根因 C — GBK/UTF16/UTF8-BOM/UTF32 智能编码解码兜底】江西电信 WPS 导出 md 默认中文 Win 区域设置=GBK/GB18030；记事本另存产生 UTF-16 LE BOM / UTF-8 BOM；scan_workspace & read_file 此前都 <code>std::fs::read_to_string</code> 严格 UTF-8 → FromUtf8Error → continue/404。<b>修复</b>：引入 <code>encoding_rs</code> crate；顶部新增 <code>decode_utf32()</code>（encoding_rs 未单独导出 UTF_32_LE/BE 静态，自编每 4B u32→char）+ <code>decode_bytes_smart()</code> 优先级链 = UTF-8 strict → BOM(UTF-8 / UTF-16 LE / UTF-16 BE / UTF-32 LE / UTF-32 BE) → encoding_rs 候选序列 GB18030→GBK→BIG5→SHIFT_JIS→EUC_KR→WINDOWS_1252（启发：no-error 或 替换率<0.1% 接受）→ 终极 UTF-8 lossy 兜底。scan_workspace & read_file 都改为先 <code>fs::read</code> 取 bytes 再 decode。</li>
+              <li>【编码标签 + 日志反查】read_file 把 <code>encoding_detected</code> 写入返回 FileEntry.encoding → 前端 <code>state.currentEncoding = doc.encoding</code> 底部状态栏直接显示；若走到 utf-8-lossy 且替换字符>0，<code>log::error!</code> 记录 ref_path + absolute + total_bytes + 首字节 4B hex（管理员日志一眼可定位「江西电信」极端未命中编码的具体文件）。normalize_doc_path 失败 / fs::read IO 失败同样带 abs path + head hex 打 error。</li>
+              <li>【保持 v1.8.104 全部大升级不回退】bundle.resources 对象映射（强制 $INSTDIR/resources/public）；resolve_public_root 10 条候选 + 编号展示 404 页；7 项导出原生另存为+两按钮+Toast 路径；DOCX/RTF/ODT Rust 正文提取。</li>
+            </ul>
+          </article>
+          <article class="doc-section">
             <h3>v1.8.104 更新日志 · 安装后启动失败（前端资源缺失）紧急修复·双重保险</h3>
             <ul>
               <li>【根因锁定】v1.8.103 发布后同事电脑安装后红屏「启动失败：前端资源缺失」。从用户截图与构建产物 <code>target/release/_up_/public/index.html</code> 存在 24 个文件验证：<b>① tauri 2.x NSIS 字符串资源写法 <code>"../public"</code> 解包到 <code>$INSTDIR/public/</code>（候选 4）而不是 <code>$INSTDIR/resources/public/</code>（候选 2）。</b> 旧内置 404 页用 <code>format!("{}", public_root.display())</code> 只展示 fallback 首条（候选 2），完全掩盖其他 9 条候选，误导为"安装时没打 resources/public"。② 杀毒软件/企业杀软删除 resources/public 的真实缺失，旧页也无法和第①种情况区分。</li>
               <li>【修复 A：打包侧强制目标映射】tauri.conf.json 的 <code>bundle.resources</code> 从字符串数组 <code>["WebView2Loader.dll","../public"]</code> 改为 Tauri 2.x <b>对象映射</b>：<code>{ "src": "WebView2Loader.dll", "target": "" }</code> + <code>{ "src": "../public", "target": "resources/public" }</code>。官方安装位置强制为 <code>$INSTDIR/resources/public/index.html</code>，与 Rust 候选 2 <code>exe_dir/resources/public</code> 严格一致，不再受 bundler 版本默认推断影响。</li>
               <li>【修复 B：运行时 10 级候选 + 404 页完整枚举】<code>resolve_public_root()</code> 从返回 <code>PathBuf</code> 升级为返回 <code>(PathBuf, Vec&lt;PathBuf&gt;)</code>，候选从 5 条扩充到 10 条：<code>① MYTEMPLE_PUBLIC_ROOT ② exe_dir/resources/public ③ exe_dir/resources/resources/public（套娃兜底）④ exe_dir/public（绿色便携/字符串资源解包）⑤ exe_dir/_up_/public（Tauri 中间态）⑥ CARGO_MANIFEST_DIR/../public（开发）⑦ CARGO_MANIFEST_DIR/public ⑧ %APPDATA%/MyTemple Knowledge/public ⑨ ./public ⑩ ./resources/public</code>。</li>
-              <li>【404 友好页彻底重写】不再仅展示 <code>public_root.display()</code> 一条误导路径。改为编号显示「已尝试的静态资源目录（共 N 条）」全部候选，4 步急救方案顺序说明：卸载杀毒重装 v1.8.104+ / 手动拷贝 resources/public / 设 MYTEMPLE_PUBLIC_ROOT / 截图反馈。就算再报错，管理员只要看截图里哪 1/2/3/4 条候选命中/没命中，就能立刻判断是资源映射错位、杀软误删、还是便携版布局。</li>
+              <li>【404 友好页彻底重写】不再仅展示 <code>public_root.display()</code> 一条误导路径。改为编号显示「已尝试的静态资源目录（共 N 条）」全部候选，4 步急救方案顺序说明：卸载杀毒重装 v1.8.105+ / 手动拷贝 resources/public / 设 MYTEMPLE_PUBLIC_ROOT / 截图反馈。就算再报错，管理员只要看截图里哪 1/2/3/4 条候选命中/没命中，就能立刻判断是资源映射错位、杀软误删、还是便携版布局。</li>
               <li>【日志强可见】<code>[FATAL] 未找到可用的前端 public 目录</code> 日志现在逐行打印 10 条候选，排障不用再问用户"你手动打开安装目录看一下"。</li>
               <li>【保持 v1.8.103 全部大升级不回退】7 项导出原生另存为 + Toast 绝对路径复制 + 打开/定位按钮；导入「系统文件对话框」按钮 + DOCX/RTF/ODT Rust 正文提取不写占位文档；前端双 <code>invoke</code> 兼容；base64 engine 统一；showToast 对象签名 + actions。</li>
             </ul>
