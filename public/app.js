@@ -4,6 +4,7 @@ import { escapeHtml, displayName, displayRelativePath, splitPathRef, joinPathRef
 import { extractOutline, addCnEnSpaces } from "./modules/editor-utils.js";
 import { stripFrontmatter, escapeRegex, splitIntoLogicalBlocks, estimateBlockLines, splitMarkdownIntoSlides, normalizeAssetUrlsToRelative } from "./modules/export-utils.js";
 import { highlightCode } from "./modules/preview-utils.js";
+import { openDrawEditor } from "./modules/draw-editor.js";
 
 /*
  * 文档处理原则：企业级编辑器标准，对文档异常零容忍。
@@ -41,6 +42,33 @@ const AI_TRANSFORM_LABELS = { summary: "摘要", keypoints: "要点", terms: "�
 const state = {
   tree: [],
   flatFiles: [],
+  // 懒构建索引：首次被访问时从 flatFiles 派生，避免 bootstrap 阶段不必要 Map 构建
+  // 使用方式：state.flatFilesByPath.get(path) 替代 state.flatFiles.find(f => f.path === path)
+  _flatFilesByPath: null,
+  get flatFilesByPath() {
+    if (!this._flatFilesByPath || this._flatFilesByPath._len !== this.flatFiles.length) {
+      const m = new Map(this.flatFiles.map((f) => [f.path, f]));
+      (m)._len = this.flatFiles.length;
+      this._flatFilesByPath = m;
+    }
+    return this._flatFilesByPath;
+  },
+  // 对 flatFiles 的 title → file[] 做反向索引（wikilink 解析 wikiTitle.md 精准命中）
+  _flatFilesByTitleLower: null,
+  get flatFilesByTitleLower() {
+    if (!this._flatFilesByTitleLower || this._flatFilesByTitleLower._len !== this.flatFiles.length) {
+      const m = new Map();
+      for (const f of this.flatFiles) {
+        const k = (f.title || "").toLowerCase();
+        if (!k) continue;
+        const arr = m.get(k);
+        if (arr) arr.push(f); else m.set(k, [f]);
+      }
+      (m)._len = this.flatFiles.length;
+      this._flatFilesByTitleLower = m;
+    }
+    return this._flatFilesByTitleLower;
+  },
   currentPath: "",
   currentContent: "",
   currentDocCreated: 0,
@@ -94,6 +122,12 @@ const state = {
       breathing: parseFloat(localStorage.getItem("graphBreathing")) || 1.0,
       restore: parseFloat(localStorage.getItem("graphRestore")) || 1.0,
     },
+    // 渐进涌现机制：节点多时分批添加到 visibleNodes，每批 emergeBatchSize 个，
+    // 每批后触发 chainUntil 让物理模拟把新节点从中心涌现到合适位置，减少一次性加载卡顿。
+    emergeQueue: [],          // 待涌现的节点数组
+    emergeBatchSize: 80,      // 每批涌现节点数
+    emergeTimer: 0,           // setTimeout id
+    emergeActive: false,      // 是否正在涌现中
   },
   selectedNode: "",
   selectedFolder: "",
@@ -543,41 +577,124 @@ _editorPlaceholderEl.style.whiteSpace = "pre-wrap";
 _editorPlaceholderEl.style.display = "none";
 document.getElementById("editor")?.appendChild(_editorPlaceholderEl);
 
+// ==========================================================
+// Tauri IPC <-> HTTP shunt (fetchOrInvoke 分流器)
+// Tauri env prefers IPC for 4~25x latency reduction.
+// Non-Tauri / non-mapped paths fall back to fetch.
+// ==========================================================
+
+function parseQuery(qs) {
+  const out = {};
+  if (!qs) return out;
+  const s = qs.charAt(0) === "?" ? qs.slice(1) : qs;
+  s.split("&").forEach(part => {
+    if (!part) return;
+    const eq = part.indexOf("=");
+    const k = eq === -1 ? part : part.slice(0, eq);
+    const v = eq === -1 ? "" : decodeURIComponent(part.slice(eq + 1));
+    out[k] = v;
+  });
+  return out;
+}
+
+const IPC_ROUTE_MAP = (() => {
+  const M = { GET: Object.create(null), POST: Object.create(null) };
+  function add(method, p, cmd, argF) { M[method][p] = { cmd, argF }; }
+  add("GET",  "/api/health",                "api_health",               () => ({}));
+  add("GET",  "/api/knowledge/health",      "api_knowledge_health",     () => ({}));
+  add("GET",  "/api/version",               "api_get_version",          q => ({ refresh: q.refresh }));
+  add("GET",  "/api/system-paths",          "api_get_system_paths",     () => ({}));
+  add("GET",  "/api/workspaces",            "api_get_workspaces",       () => ({}));
+  add("POST", "/api/workspaces/add",        "api_add_workspace",        p => ({ path: String(p.path||""), name: p.name }));
+  add("POST", "/api/workspaces/remove",     "api_remove_workspace",     p => ({ id: String(p.id) }));
+  add("POST", "/api/workspaces/rename",     "api_rename_workspace",     p => ({ id: String(p.id), name: String(p.name) }));
+  add("POST", "/api/workspaces/set-default","api_set_default_workspace",p => ({ id: String(p.id) }));
+  add("POST", "/api/workspaces/show",       "api_show_workspace",       p => ({ id: String(p.id), visible: p.visible === undefined ? undefined : Boolean(p.visible) }));
+  add("POST", "/api/workspaces/set-md-only","api_set_md_only",          p => ({ id: String(p.id), md_only: p.mdOnly === undefined ? undefined : Boolean(p.mdOnly) }));
+  add("GET",  "/api/tree",                  "api_get_tree",             q => ({ refresh: q.refresh === "1" ? "1" : "" }));
+  add("POST", "/api/refresh-cache",         "api_refresh_cache",        () => ({}));
+  add("GET",  "/api/files",                 "api_list_files",           () => ({}));
+  add("POST", "/api/file/read",             "api_read_file",            p => ({ path: String(p.path) }));
+  add("POST", "/api/file/save",             "api_save_file",            p => ({ path: String(p.path), content: String(p.content) }));
+  add("POST", "/api/file/delete",           "api_delete_file",          p => ({ path: String(p.path) }));
+  add("GET",  "/api/doc",                   "api_get_doc",              q => ({ path: String(q.path||""), force: q.force }));
+  add("GET",  "/api/doc-check",             "api_check_doc",            q => ({ path: String(q.path||"") }));
+  add("POST", "/api/save",                  "api_save_doc",             p => ({ path: String(p.path), content: String(p.content), baseHash: p.baseHash }));
+  add("POST", "/api/delete",                "api_delete_docs",          p => ({ path: p.path }));
+  add("POST", "/api/create-folder",         "api_create_folder",        p => ({ parent: String(p.parent), name: String(p.name) }));
+  add("POST", "/api/create-doc",            "api_create_document",      p => ({ parent: String(p.parent), name: String(p.name) }));
+  add("GET",  "/api/search",                "api_search",               q => ({ q: String(q.q||"") }));
+  add("GET",  "/api/graph",                 "api_get_graph",            () => ({}));
+  add("POST", "/api/move",                  "api_move_entry",           p => ({ source: String(p.source), targetFolder: String(p.targetFolder||"") }));
+  add("POST", "/api/copy",                  "api_copy_entry",           p => ({ source: String(p.source), targetFolder: String(p.targetFolder||"") }));
+  add("POST", "/api/rename",                "api_rename_entry",         p => ({ path: String(p.path), newName: String(p.newName) }));
+  add("GET",  "/api/frontmatter",           "api_get_frontmatter",      q => ({ path: String(q.path||"") }));
+  add("POST", "/api/frontmatter/preview",   "api_preview_frontmatter",  p => ({ path: String(p.path), metadata: p.metadata }));
+  add("POST", "/api/frontmatter/apply",     "api_apply_frontmatter",    p => ({ path: String(p.path), metadata: p.metadata, baseHash: String(p.baseHash||""), confirmed: p.confirmed === undefined ? undefined : Boolean(p.confirmed) }));
+  add("POST", "/api/open-folder",           "api_open_folder",          p => ({ path: String(p.path) }));
+  add("POST", "/api/open-url",              "api_open_url",             p => ({ url: String(p.url) }));
+  add("POST", "/api/browse-folder",         "api_browse_folder",        () => ({}));
+  add("GET",  "/api/license/status",        "api_license_status",       () => ({}));
+  add("GET",  "/api/license/check",         "api_license_check",        () => ({}));
+  add("POST", "/api/license/activate",      "api_license_activate",     p => ({ licenseKey: String(p.licenseKey || p.license_key || "") }));
+  add("POST", "/api/license/deactivate",    "api_license_deactivate",   () => ({}));
+  return M;
+})();
+
+async function fetchOrInvoke(method, urlPath, payload) {
+  const qIdx = urlPath.indexOf("?");
+  const barePath = qIdx === -1 ? urlPath : urlPath.slice(0, qIdx);
+  const query = qIdx === -1 ? {} : parseQuery(urlPath.slice(qIdx + 1));
+  const route = IPC_ROUTE_MAP[method] && IPC_ROUTE_MAP[method][barePath];
+
+  // 关键判断：只有在 asset:// 协议（Tauri 原生模式）下才尝试走 IPC。
+  // External URL（http://127.0.0.1 / localhost）模式下，即使 withGlobalTauri=true，
+  // WebView 可能因 Tauri 安全沙箱限制无法调用 IPC 命令，强制走 HTTP 更可靠。
+  const isAssetProto = window.location.protocol === "asset:";
+  const hasInvoke = isAssetProto && !!(window.__TAURI__ && (window.__TAURI__.core && window.__TAURI__.core.invoke || window.__TAURI__.invoke));
+
+  if (route && hasInvoke) {
+    const args = route.argF(method === "GET" ? query : (payload || {}));
+    try {
+      return await tauriInvoke(route.cmd, args);
+    } catch (err) {
+      const msg = typeof err === "string" ? err : (err && err.message ? err.message : String(err));
+      const code = err && typeof err === "object" ? (err.code || null) : null;
+      if (code === "LICENSE_REQUIRED" || (msg && msg.indexOf("LICENSE_REQUIRED") !== -1)) {
+        window.dispatchEvent(new CustomEvent("license-required", { detail: { code: code || "LICENSE_REQUIRED", error: msg } }));
+      } else if (code === "LICENSE_TEMPORARY") {
+        console.warn("License temporarily unavailable:", msg);
+      }
+      throw new Error(msg);
+    }
+  }
+  let finalUrl = urlPath;
+  const init = { cache: "no-store" };
+  if (method === "GET") {
+    finalUrl = finalUrl + (qIdx === -1 ? "?" : "&") + "_license=" + Date.now();
+  } else {
+    init.method = "POST";
+    init.headers = { "Content-Type": "application/json" };
+    init.body = JSON.stringify(payload !== undefined ? payload : {});
+  }
+  const response = await fetch(finalUrl, init);
+  if (!response.ok) {
+    const body = await response.text();
+    let detail = {};
+    try { detail = JSON.parse(body); } catch (_e) {}
+    if (response.status === 403 && detail.code === "LICENSE_REQUIRED") {
+      window.dispatchEvent(new CustomEvent("license-required", { detail }));
+    } else if (response.status === 503 && detail.code === "LICENSE_TEMPORARY") {
+      console.warn("License temporarily unavailable:", detail.error);
+    }
+    throw new Error(detail.error || body);
+  }
+  return response.json();
+}
+
 const api = {
-  async get(path) {
-      const response = await fetch(`${path}${path.includes("?") ? "&" : "?"}_license=${Date.now()}`, { cache: "no-store" });
-    if (!response.ok) {
-      const body = await response.text();
-      let detail = {};
-      try { detail = JSON.parse(body); } catch (_) {}
-      if (response.status === 403 && detail.code === "LICENSE_REQUIRED") {
-        window.dispatchEvent(new CustomEvent("license-required", { detail }));
-      } else if (response.status === 503 && detail.code === "LICENSE_TEMPORARY") {
-        console.warn("License temporarily unavailable:", detail.error);
-      }
-      throw new Error(detail.error || body);
-    }
-    return response.json();
-  },
-  async post(path, payload) {
-    const response = await fetch(path, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    if (!response.ok) {
-      const body = await response.text();
-      let detail = {};
-      try { detail = JSON.parse(body); } catch (_) {}
-      if (response.status === 403 && detail.code === "LICENSE_REQUIRED") {
-        window.dispatchEvent(new CustomEvent("license-required", { detail }));
-      } else if (response.status === 503 && detail.code === "LICENSE_TEMPORARY") {
-        console.warn("License temporarily unavailable:", detail.error);
-      }
-      throw new Error(detail.error || body);
-    }
-    return response.json();
-  },
+  async get(path) { return fetchOrInvoke("GET", path); },
+  async post(path, payload) { return fetchOrInvoke("POST", path, payload); },
 };
 
 function applyPaperTexture() {
@@ -789,18 +906,26 @@ function showToast(arg) {
 /** 方便统一调用：另存为成功后 1 个 path toast（打开文件 / 在文件夹中查看） */
 function showSavedAsToast({ path, formatName = "文档", extraActions = [] }) {
   if (!path) return;
+  // External URL 模式（http://127.0.0.1 / localhost）通过后端 HTTP endpoint 执行原生操作；
+  // asset:// 模式（Tauri 原生）直接 IPC。
+  const isAssetProto = window.location.protocol === "asset:";
   const actions = [
     {
       label: "打开文件", primary: true, dismissAfter: true,
       async onClick() {
         try {
-          if (window.__TAURI__?.core?.invoke) {
+          if (isAssetProto && window.__TAURI__?.core?.invoke) {
             await window.__TAURI__.core.invoke("cmd_open_exported_file", { path });
-          } else if (window.__TAURI__?.invoke) {
+          } else if (isAssetProto && window.__TAURI__?.invoke) {
             await window.__TAURI__.invoke("cmd_open_exported_file", { path });
           } else {
-            // 非 Tauri（纯浏览器）无法 open path，降级提示
-            showToast({ title: "已复制路径", message: "当前环境不支持直接打开，已复制路径到剪贴板。", path, duration: 3000, kind: "warn" });
+            // External URL 模式 → HTTP endpoint（后端 shell::open 系统默认程序）
+            const r = await fetch("/api/export/open-file", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ path }),
+            });
+            if (!r.ok) throw new Error((await r.json()).error || "打开失败");
           }
         } catch (err) {
           showToast({ title: "打开失败", message: String(err?.message || err), kind: "error", duration: 4000 });
@@ -811,12 +936,18 @@ function showSavedAsToast({ path, formatName = "文档", extraActions = [] }) {
       label: "在文件夹中查看", dismissAfter: true,
       async onClick() {
         try {
-          if (window.__TAURI__?.core?.invoke) {
+          if (isAssetProto && window.__TAURI__?.core?.invoke) {
             await window.__TAURI__.core.invoke("cmd_reveal_exported_file_in_folder", { path });
-          } else if (window.__TAURI__?.invoke) {
+          } else if (isAssetProto && window.__TAURI__?.invoke) {
             await window.__TAURI__.invoke("cmd_reveal_exported_file_in_folder", { path });
           } else {
-            showToast({ title: "已复制路径", message: "当前环境不支持定位文件，已复制路径到剪贴板。", path, duration: 3000, kind: "warn" });
+            // External URL 模式 → HTTP endpoint（后端 explorer /select,path）
+            const r = await fetch("/api/export/reveal-folder", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ path }),
+            });
+            if (!r.ok) throw new Error((await r.json()).error || "定位失败");
           }
         } catch (err) {
           showToast({ title: "定位失败", message: String(err?.message || err), kind: "error", duration: 4000 });
@@ -1061,7 +1192,7 @@ function addRecentDoc(docPath) {
   if (existingIndex >= 0) {
     state.recentDocs.splice(existingIndex, 1);
   }
-  const file = state.flatFiles.find((f) => f.path === docPath);
+  const file = state.flatFilesByPath.get(docPath);
   state.recentDocs.unshift({
     path: docPath,
     name: displayName(file) || docPath.split("/").pop(),
@@ -2217,6 +2348,81 @@ const PRINT_STYLES = `html,body{margin:0;padding:0;background:#fff;}
 ${KATEX_PRINT_CSS}
 @page{margin:18mm 14mm;size:A4;}`;
 
+/**
+ * 等待容器内所有 html-inline-frame iframe 内容（含脚本渲染）就绪，
+ * 将其实际高度写入内联 style/height 属性，便于导出 HTML 时 iframe 不被固定 min-height 裁剪。
+ * 返回成功设置高度的 iframe 数量。
+ */
+async function settleHtmlInlineFrames(container) {
+  if (!container) return 0;
+  const iframes = container.querySelectorAll('iframe.html-inline-frame[srcdoc]');
+  if (!iframes.length) return 0;
+
+  const waitOne = (iframe) => new Promise((resolve) => {
+    let attempts = 0;
+    const MAX = 40;       // 最多 40 次 * 250ms = 10s
+    const INTERVAL = 250;
+    let loaded = false;
+
+    const measure = () => {
+      let doc;
+      try {
+        doc = iframe.contentDocument || iframe.contentWindow?.document;
+      } catch (_) { doc = null; }
+
+      if (!doc) {
+        attempts++;
+        if (attempts >= MAX) { resolve(false); return; }
+        setTimeout(measure, INTERVAL);
+        return;
+      }
+
+      // 尝试读取实际内容高度（含动态 canvas/图表渲染后扩展的高度）
+      const body = doc.body;
+      const html = doc.documentElement;
+      const h = Math.max(
+        body?.scrollHeight || 0,
+        html?.scrollHeight || 0,
+        body?.offsetHeight || 0,
+        html?.offsetHeight || 0,
+        body?.getBoundingClientRect?.().height || 0,
+      );
+
+      // 高度有效且已触发过 load 事件 → 认为稳定
+      if (h > 0 && (loaded || h >= 320)) {
+        const safeH = Math.max(h, 120);
+        iframe.style.height = safeH + 'px';
+        iframe.setAttribute('height', String(safeH));
+        resolve(true);
+        return;
+      }
+
+      // 还没 load 完：继续等
+      loaded = true;
+      attempts++;
+      if (attempts >= MAX) {
+        // 超时兜底：用当前高度（即使是 0）或给 400px
+        const fallback = h > 0 ? h : 400;
+        iframe.style.height = fallback + 'px';
+        iframe.setAttribute('height', String(fallback));
+        resolve(h > 0);
+        return;
+      }
+      setTimeout(measure, INTERVAL);
+    };
+
+    // srcdoc 可能在 DOM 插入后就已可访问
+    if (iframe.contentDocument) {
+      measure();
+    } else {
+      iframe.addEventListener('load', measure, { once: true });
+    }
+  });
+
+  const results = await Promise.all([...iframes].map(waitOne));
+  return results.filter(Boolean).length;
+}
+
 async function buildExportableHtml({ withBrandFooter = true } = {}) {
   // 高品质离线 HTML 导出：
   //  - strip frontmatter（读者视角不需要写作者元数据）
@@ -2261,6 +2467,7 @@ async function buildExportableHtml({ withBrandFooter = true } = {}) {
   try {
     try { await renderMathInPreview(stage); } catch (_) {}
     try { await renderChartsInPreview(stage); } catch (_) {}
+    try { await settleHtmlInlineFrames(stage); } catch (_) {}
   } finally {
     // 即使 render 抛错也要移除 stage
   }
@@ -2283,6 +2490,9 @@ ${PRINT_STYLES}
 ${KATEX_PRINT_CSS}
 /* 图片内联打印边距（inlinePrintImages 会把 img src 改为 data URL，但显示样式要用当前 markdown-body 视觉） */
 .print-body img{max-width:100%;height:auto;display:block;margin:16px auto;border-radius:6px;}
+/* html-inline iframe 导出样式：运行时已将实际高度写入内联 style，这里只做容器去裁剪 + 视觉 */
+.print-body .html-inline-block{margin:16px 0;border:1px solid #e5e7eb;border-radius:8px;background:#fff;overflow:visible;height:auto;}
+.print-body .html-inline-frame{display:block;width:100%;border:none;background:#fff;min-height:0;}
 .print-body .chart-block{margin:16px 0;padding:12px;border:1px solid #e5e7eb;border-radius:8px;background:#fcfcfd;}
 .print-body .mermaid-container svg{max-width:100%;height:auto;display:block;margin:0 auto;}
 .print-body .excalidraw-block .excalidraw-preview{background:#f5f5f4;border:1px dashed #d6d3d1;border-radius:8px;padding:12px;}
@@ -2414,34 +2624,79 @@ async function tauriSaveAs({ blob, defaultName, extensions, allowFallback = true
     .map((s) => s.trim().replace(/^\.+/, "").toLowerCase())
     .filter(Boolean);
 
-  // 4) 构造传给 Rust 的扩展名列表
+  // 4) 构造传给 Rust 的扩展名列表 + 清理文件名
+  //    关键：无论原始 defaultName 里带了什么扩展名（如 .md / .txt / .html 残留），
+  //    都要先剥干净，然后重新附加"目标扩展名"。
+  //    典型 bug：原始 Markdown 标题 = "1111111.md"，叠加 .html → "1111111.md.html"，
+  //    只剥掉 .html → 残留 "1111111.md" → 对话框默认显示 .md。
   let extForRust = extsList.slice();
   if (!extForRust.length) {
-    // 没指定扩展名：从 defaultName 拆
+    // 没指定扩展名：从 defaultName 拆扩展名作为目标
     const m = name.match(/\.([^./\\]+)$/);
     if (m) extForRust = [m[1].toLowerCase()];
-    name = name.replace(/\.[^./\\]+$/, ""); // 给 Rust 用 set_file_name 不带扩展名（Rust 的 filter 会自动拼）
-  } else {
-    // 即使指定了扩展名，如果 defaultName 末尾带同名扩展名，也剥掉，避免变成 xx.doc.docx
-    const last = `.${extForRust[0].toLowerCase()}`;
-    if (name.toLowerCase().endsWith(last)) {
-      name = name.slice(0, name.length - last.length);
+  }
+
+  // 剥掉 name 末尾所有"形如扩展名"的后缀（.[a-z0-9]{1,5}），处理 .md.html → .md 残留
+  // 循环剥，直到不再以扩展名结尾（防止双后缀如 .tar.gz — 但常见 1-5 字符足够了）
+  // 先剥离目标扩展名自身（防止 .html.html 重复，也防止 .docx.docx）
+  if (extForRust.length) {
+    const targetExt = extForRust[0].toLowerCase();
+    const targetSuffix = `.${targetExt}`;
+    while (name.toLowerCase().endsWith(targetSuffix)) {
+      name = name.slice(0, name.length - targetSuffix.length);
     }
   }
-  if (!name) name = "未命名";
+  // 再剥离任何其他扩展名残留（.md / .txt / .doc 等）
+  let guard = 0;
+  while (guard++ < 3) {
+    const m = name.match(/\.([a-zA-Z0-9]{1,5})$/);
+    if (!m) break;
+    // 如果这个扩展名本身就是目标扩展名之一（刚才 while 循环漏的），也剥
+    const isTarget = extForRust.some((e) => e.toLowerCase() === m[1].toLowerCase());
+    if (isTarget) { name = name.replace(/\.[a-zA-Z0-9]{1,5}$/, ""); continue; }
+    // 非目标扩展名：也剥掉（因为我们马上要重新附加目标扩展名）
+    name = name.replace(/\.[a-zA-Z0-9]{1,5}$/, "");
+  }
+  // 最后附加目标扩展名（确保传 set_file_name 的是干净的"basename.ext"）
+  if (extForRust.length) {
+    name = `${name}.${extForRust[0].toLowerCase()}`;
+  }
+  if (!name || name === ".") name = "未命名";
 
-  // 5) 真正 invoke
+  // 5) 真正调用：asset:// → Tauri IPC；http(s):// → HTTP endpoint（后端弹原生对话框）
   try {
-    const res = await invoke("cmd_export_save_as", {
-      defaultName: name,
-      extensions: extForRust,
-      dataBase64: b64,
-    });
+    const isAssetProto = window.location.protocol === "asset:";
+    let res;
+    if (isAssetProto && invoke) {
+      // Tauri IPC 路径
+      res = await invoke("cmd_export_save_as", {
+        defaultName: name,
+        extensions: extForRust,
+        dataBase64: b64,
+      });
+    } else {
+      // External URL 模式（http://127.0.0.1）→ 走后端 HTTP endpoint
+      const httpRes = await fetch("/api/export/save-as", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          defaultName: name,
+          extensions: extForRust,
+          dataBase64: b64,
+        }),
+      });
+      if (!httpRes.ok) {
+        const errData = await httpRes.json().catch(() => ({}));
+        throw new Error(errData.error || `保存失败 (HTTP ${httpRes.status})`);
+      }
+      const data = await httpRes.json();
+      res = data?.data?.path ?? data?.path;
+    }
     // res: string | null | undefined
     if (!res) return null; // 用户取消
     return String(res);
   } catch (err) {
-    console.warn("[tauriSaveAs] invoke failed, will fallback:", err?.message || err);
+    console.warn("[tauriSaveAs] save failed, will fallback:", err?.message || err);
     if (allowFallback) return null;
     throw err;
   }
@@ -2612,24 +2867,9 @@ async function exportCurrentDocToPdf() {
   const safeTitle = (t) => String(t || "导出文档").replace(/[\\/:*?"<>|]/g, "_").slice(0, 60) || "导出文档";
   const baseName = safeTitle(title);
 
-  // 先另存一份 HTML（与 PDF 完全同内容，样式+图片全内联）到用户明确路径，
-  // 方便用户"清楚知道保存位置"；同时 iframe print 对话框仍保留（可再另存为 PDF）。
-  // 这样：用户既能拿到路径，也没丢原有的"直接打印 / 另存为 PDF"通道。
+  // 组装完整 HTML（含 PRINT_STYLES），直接写入隐藏 iframe 调 print。
+  // 不再额外另存 HTML——用户点"导出 PDF"就是要 PDF。
   const fullHtml = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>${PRINT_STYLES}</style></head><body>${html}</body></html>`;
-  const htmlBlob = new Blob([fullHtml], { type: "text/html;charset=utf-8" });
-  let htmlPath = null;
-  try {
-    htmlPath = await tauriSaveAs({
-      blob: htmlBlob,
-      defaultName: `${baseName}.html`,
-      extensions: ["html", "htm"],
-      allowFallback: true,
-    });
-  } catch (e) {
-    console.warn("PDF 后台另存 HTML 失败（不影响打印）", e);
-    htmlPath = null;
-  }
-  const hasTauri = !!(window.__TAURI__ && (window.__TAURI__.core?.invoke || window.__TAURI__.invoke));
 
   // 通过隐藏 iframe 打印：iframe 来源为 about:blank，浏览器打印页眉页脚不会显示本机地址与端口。
   const iframe = document.createElement("iframe");
@@ -2661,56 +2901,15 @@ async function exportCurrentDocToPdf() {
     await new Promise((r) => setTimeout(r, 320));
     iframe.contentWindow.focus();
 
-    // —— 路径 / 另存提示 toast：合并"HTML 已保存位置"与"PDF 对话框提示"两条信息 ——
-    if (htmlPath) {
-      const actions = [
-        { label: "打开 HTML 源文件", dismissAfter: true,
-          async onClick() {
-            try {
-              const invoke = window.__TAURI__?.core?.invoke || window.__TAURI__?.invoke;
-              if (typeof invoke === "function") await invoke("cmd_open_exported_file", { path: htmlPath });
-            } catch (_) {}
-          } },
-        { label: "在文件夹中查看", dismissAfter: true,
-          async onClick() {
-            try {
-              const invoke = window.__TAURI__?.core?.invoke || window.__TAURI__?.invoke;
-              if (typeof invoke === "function") await invoke("cmd_reveal_exported_file_in_folder", { path: htmlPath });
-            } catch (_) {}
-          } },
-      ];
-      showToast({
-        title: "PDF 导出准备完成",
-        message:
-          "① 打印对话框已打开，选择「另存为 PDF」即可得到最终 PDF 文件（建议取消「页眉与页脚」）。\n" +
-          "② 同时同内容 HTML 已保存在下方路径，双击打开浏览或再次打印都可以。",
-        path: htmlPath,
-        kind: "ok",
-        duration: 18000,
-        actions,
-      });
-    } else if (hasTauri) {
-      // Tauri 但 htmlPath=null：用户在另存为 HTML 那一步已取消 / 插件失败；仍继续调 print。
-      showToast({
-        title: "打印对话框已弹出",
-        kind: "ok",
-        duration: 7000,
-        message: "请选择「另存为 PDF」或目标打印机；建议取消「页眉与页脚」得到更干净的 PDF。",
-        actions: [{ label: "知道了", dismissAfter: true }],
-      });
-    } else {
-      // 纯浏览器：无原生另存为，只能依赖 print 另存 PDF + 浏览器 HTML 下载
-      await triggerBlobDownload({ blob: htmlBlob, filename: `${baseName}.html` });
-      showToast({
-        title: "打印对话框已弹出",
-        kind: "warn",
-        duration: 10000,
-        message:
-          "请在打印对话框中选择「另存为 PDF」完成导出。\n" +
-          "同时 HTML 源文件已保存至浏览器默认下载目录，供您随时查看。",
-        actions: [{ label: "知道了", dismissAfter: true }],
-      });
-    }
+    showToast({
+      title: "PDF 导出",
+      kind: "ok",
+      duration: 12000,
+      message:
+        "打印对话框已打开，选择「另存为 PDF」即可完成导出。\n" +
+        "建议取消「页眉与页脚」得到更干净的 PDF。",
+      actions: [{ label: "知道了", dismissAfter: true }],
+    });
 
     iframe.contentWindow.addEventListener("afterprint", cleanup);
     iframe.contentWindow.print();
@@ -3149,6 +3348,8 @@ async function renderReaderContent(source, options = {}) {
       // 与 chunked 分支尾部 L2552-2554 对齐，保证阅读栏/阅读模式下 placeholder 节点真正产出 KaTeX/Mermaid/Excalidraw。
       renderMathInPreview(els.markdownView);
       renderChartsInPreview(els.markdownView);
+      // 问题4: catch 非 chunked fallback 路径也调用代码高亮
+      highlightCodeBlocks(els.markdownView);
     }
     return;
   }
@@ -3159,6 +3360,59 @@ async function renderReaderContent(source, options = {}) {
   if (seq !== state.readerRenderSeq) return;
   renderMathInPreview(els.markdownView);
   renderChartsInPreview(els.markdownView);
+  // 问题4: 代码块语法高亮（highlight.js），渲染完成后对 pre code 调用 hljs.highlightElement
+  highlightCodeBlocks(els.markdownView);
+}
+
+// 问题4: 对容器内所有 pre > code 元素应用 highlight.js 语法高亮。
+// 优先使用 hljs，不可用时 fallback 到 preview-utils 的自定义 highlightCode（tok-* spans）。
+// 同时支持外部代码文件的 code-preview 结构。
+let _hljsConfigured = false;
+function highlightCodeBlocks(container) {
+  if (!container) return;
+  // 同时匹配 markdown 代码块 <pre><code> 和外部代码文件 <pre class="code-preview"><code>
+  const blocks = container.querySelectorAll("pre code");
+  if (!blocks.length) return;
+  const useHljs = typeof window.hljs !== "undefined" && window.hljs.highlightElement;
+  if (useHljs && !_hljsConfigured) {
+    try {
+      // 一次性安全配置：忽略 HTML 注入 + 允许未知语言自动 fallback
+      window.hljs.configure({ ignoreUnescapedHTML: true });
+      _hljsConfigured = true;
+    } catch (_) {}
+  }
+  const runHighlight = () => {
+    let i = 0;
+    const step = () => {
+      const end = Math.min(i + 12, blocks.length);  // 每批 12 个，避免单帧卡顿
+      for (; i < end; i++) {
+        const el = blocks[i];
+        if (!el || el.dataset.highlighted === "1") continue;  // 防重复高亮
+        // 跳过已被 mermaid/excalidraw 等占位占用的 code
+        if (el.parentElement?.parentElement?.classList?.contains("chart-block")) { el.dataset.highlighted = "1"; continue; }
+        const lang = (el.className.match(/language-([a-zA-Z0-9_+-]+)/) || [])[1] ||
+                      (el.parentElement?.parentElement?.dataset?.language) || "text";
+        try {
+          if (useHljs) {
+            // hljs 11.x 的 highlightElement 会自动读 language-xxx class：
+            //   已知语言 → 该语言高亮
+            //   未知语言 / text → highlightAuto 自动检测
+            window.hljs.highlightElement(el);
+          } else {
+            // fallback: 自定义轻量高亮，使用 tok-* spans
+            const raw = el.textContent || "";
+            el.innerHTML = highlightCode(raw, lang);
+          }
+          el.dataset.highlighted = "1";
+        } catch (_) { /* 个别语言识别失败不影响其他块 */ }
+      }
+      if (i < blocks.length) {
+        (window.requestIdleCallback || window.requestAnimationFrame)(step);
+      }
+    };
+    (window.requestIdleCallback || window.requestAnimationFrame)(step);
+  };
+  (window.requestIdleCallback || window.requestAnimationFrame)(runHighlight);
 }
 
 async function renderReaderContentChunked(html, outline, seq) {
@@ -3172,6 +3426,8 @@ async function renderReaderContentChunked(html, outline, seq) {
     // 与其他路径保持一致：写入 innerHTML + renderOutlineItems 后立即调用。
     renderMathInPreview(els.markdownView);
     renderChartsInPreview(els.markdownView);
+    // 问题4: chunked 单片路径也调用代码高亮
+    highlightCodeBlocks(els.markdownView);
     return;
   }
   if (seq != null && seq !== state.readerRenderSeq) return;
@@ -3190,6 +3446,8 @@ async function renderReaderContentChunked(html, outline, seq) {
   if (seq != null && seq !== state.readerRenderSeq) return;
   renderMathInPreview(els.markdownView);
   renderChartsInPreview(els.markdownView);
+  // 问题4: chunked 多片路径全部写入后调用代码高亮
+  highlightCodeBlocks(els.markdownView);
 }
 
 function splitHtmlForChunkedRender(html, sliceBytes) {
@@ -3318,17 +3576,101 @@ function markdownTableAlignment(cell) {
   return "left";
 }
 
+// highlight.js 11.10 支持的语言白名单（common 版 + 扩展语言包 langs/）
+// 不在此列表中的语言会被映射到近似语言，hljs 无法识别时会自动 fallback 到 text
+const HLJS_SUPPORTED = new Set([
+  // highlight.min.js common 版
+  "python","javascript","typescript","java","c","cpp","csharp","rust","go",
+  "php","ruby","bash","shell","sql","html","css","scss","less","xml","json",
+  "yaml","markdown","kotlin","swift","scala","lua","r","perl","fortran",
+  "ini","toml","makefile","tex","bat","diff","git","graphql","proto","handlebars",
+  "jsx","tsx","js","ts","py","rb","rs","cs","sh","hbs",
+  // langs/ 扩展语言包
+  "powershell","dockerfile","cmake","groovy","dart","nginx","nsis","apache",
+  "properties","haskell","elixir","clojure","vb",
+]);
+// highlight.js 不支持但有近似语言可映射
+const HLJS_FALLBACK = {
+  solidity: "javascript",          // hljs 暂无 solidity，近似 JS
+  terraform: "hcl",                // hljs 暂无 terraform，若 hcl 也没有则 fallback text
+  hcl: "text",                     // hljs 暂无 hcl
+  matlab: "octave",                // hljs 可能有 octave
+  "objective-c": "c",              // objc 近似 c
+  m: "c",                          // iOS .m 扩展名默认当 c 处理
+  mm: "cpp",                       // iOS .mm 默认当 cpp 处理
+  cof: "coffeescript",             // coffeescript
+  elm: "elm",
+  reasonml: "ocaml",
+};
+
 function normalizeCodeLanguage(value) {
   const raw = String(value || "").trim().toLowerCase();
   const aliases = {
     js: "javascript", jsx: "javascript", mjs: "javascript", cjs: "javascript",
-    ts: "typescript", tsx: "typescript", py: "python", rb: "ruby",
+    ts: "typescript", tsx: "typescript", py: "python", pyw: "python", rb: "ruby",
     sh: "bash", shell: "bash", zsh: "bash", ps: "powershell", ps1: "powershell",
-    yml: "yaml", md: "markdown", c: "c", h: "c", cc: "cpp", cxx: "cpp",
-    "c++": "cpp", cs: "csharp", "c#": "csharp", rs: "rust", golang: "go",
+    yml: "yaml", md: "markdown", c: "c", h: "c", cc: "cpp", cxx: "cpp", hpp: "cpp", hh: "cpp",
+    "c++": "cpp", cs: "csharp", "c#": "csharp", rs: "rust", golang: "go", goh: "go",
     txt: "text", plain: "text", "text/plain": "text",
+    // Windows 脚本
+    bat: "bat", cmd: "bat", batch: "bat", psm1: "powershell",
+    // 脚本语言
+    vbs: "vb", vba: "vb", vb: "vb",
+    pl: "perl", pm: "perl",
+    php: "php", php3: "php", php4: "php", php5: "php", phtml: "php",
+    lua: "lua",
+    r: "r", rmd: "r",
+    scala: "scala", sc: "scala",
+    swift: "swift",
+    kt: "kotlin", kts: "kotlin",
+    dart: "dart",
+    // 配置/标记语言
+    ini: "ini", cfg: "ini", conf: "ini", properties: "properties", prop: "properties",
+    toml: "toml",
+    xml: "xml", svg: "xml", xhtml: "xml", wsdl: "xml", xslt: "xml", jsp: "xml", aspx: "xml", cshtml: "xml",
+    sql: "sql", ddl: "sql", dml: "sql",
+    html: "html", htm: "html",
+    css: "css", scss: "scss", sass: "scss", less: "less",
+    json: "json", jsonc: "json", json5: "json",
+    // 构建/脚本
+    make: "makefile", makefile: "makefile", mk: "makefile", gmk: "makefile", gnumake: "makefile",
+    dockerfile: "dockerfile", docker: "dockerfile",
+    cmake: "cmake", cmakelists: "cmake",
+    groovy: "groovy", gradle: "groovy",
+    // 其他常见
+    nsis: "nsis", nsh: "nsis",
+    nginx: "nginx",
+    htaccess: "apache", apache: "apache",
+    gitignore: "git", git: "git", dockerignore: "dockerfile", gitattributes: "git",
+    // 更多工程语言（hljs 支持的）
+    graphql: "graphql", gql: "graphql",
+    proto: "proto", protobuf: "proto",
+    handlebars: "handlebars", hbs: "handlebars",
+    tex: "tex", latex: "tex",
+    diff: "diff", patch: "diff",
+    haskell: "haskell", hs: "haskell",
+    elixir: "elixir", ex: "elixir", exs: "elixir",
+    clojure: "clojure", clj: "clojure", cljs: "clojure",
+    // 框架/扩展：Vue / React(JSX) / TSX → 近似映射
+    vue: "html", vuejs: "html", svelte: "html",
+    jsx: "javascript", react: "javascript", "react-jsx": "javascript",
+    tsx: "typescript", "react-tsx": "typescript",
+    // CSV/表格 → 纯文本（hljs 没有原生 csv）
+    csv: "text", tsv: "text",
+    // hljs 不支持但有近似可映射
+    solidity: HLJS_FALLBACK.solidity,
+    terraform: HLJS_FALLBACK.terraform,
+    matlab: "text",
+    "objective-c": "c",
+    m: "c", mm: "cpp",
   };
-  const normalized = aliases[raw] || raw;
+  // 自定义特殊渲染标记（非 hljs 语言，绕过白名单校验）
+  const SPECIAL = new Set(["mermaid", "excalidraw", "chart", "html-inline", "html-web", "raw-html"]);
+  let normalized = aliases[raw] || raw;
+  // hljs 实际不支持 且 非特殊渲染标记 → 用 text
+  if (!SPECIAL.has(normalized) && normalized !== "text" && !HLJS_SUPPORTED.has(normalized)) {
+    normalized = "text";
+  }
   return /^[a-z0-9_+-]{1,24}$/.test(normalized) ? normalized : "text";
 }
 
@@ -3567,8 +3909,26 @@ function renderMarkdown(source, options = {}) {
           html.push(`<div class="chart-block mermaid-block" data-chart="mermaid" data-source-line="${codeStartLine}"><pre class="mermaid-source">${escapeHtml(raw)}</pre><div class="mermaid-container" aria-label="Mermaid 图表"></div></div>`);
         } else if (normalizedLang === "excalidraw") {
           html.push(`<div class="chart-block excalidraw-block" data-chart="excalidraw" data-source-line="${codeStartLine}"><pre class="excalidraw-source">${escapeHtml(raw)}</pre><div class="excalidraw-container" aria-label="Excalidraw 绘图"></div></div>`);
+        } else if (normalizedLang === "chart") {
+          // Chart.js / ECharts JSON：识别后转自包含 iframe，识别失败 fallback 为 JSON 代码块
+          const chartHtml = detectAndBuildChartHtml(raw);
+          if (chartHtml) {
+            html.push(`<div class="html-inline-block"><iframe class="html-inline-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-popups" srcdoc="${escapeHtml(chartHtml)}"></iframe></div>`);
+          } else {
+            html.push(`<div class="code-block" data-language="chart"><span class="code-language">chart JSON</span><button class="code-copy" type="button">\u590d\u5236</button><pre><code class="language-json">${escapeHtml(raw)}</code></pre></div>`);
+          }
+        } else if (normalizedLang === "html-inline" || normalizedLang === "raw-html") {
+          html.push(`<div class="html-inline-block"><iframe class="html-inline-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-popups" srcdoc="${escapeHtml(raw)}"></iframe></div>`);
+        } else if (normalizedLang === "html-web") {
+          const url = String(raw || "").trim().split("\n")[0].trim();
+          const safeUrl = /^https?:\/\//i.test(url) ? url : "";
+          if (safeUrl) {
+            html.push(`<div class="html-inline-block"><iframe class="html-inline-frame" src="${escapeHtml(safeUrl)}" sandbox="allow-scripts allow-same-origin allow-forms allow-popups" loading="lazy"></iframe></div>`);
+          } else {
+            html.push(`<div class="code-block"><pre><code class="language-text">html-web 需要一个有效 URL：https://example.com</code></pre></div>`);
+          }
         } else {
-          html.push(`<div class="code-block" data-language="${codeLanguage}"><span class="code-language">${escapeHtml(codeLanguage)}</span><button class="code-copy" type="button">\u590d\u5236</button><pre><code class="language-${codeLanguage}">${highlightCode(raw, codeLanguage)}</code></pre></div>`);
+          html.push(`<div class="code-block" data-language="${codeLanguage}"><span class="code-language">${escapeHtml(codeLanguage)}</span><button class="code-copy" type="button">\u590d\u5236</button><pre><code class="language-${codeLanguage}">${escapeHtml(raw)}</code></pre></div>`);
         }
         code = [];
         codeLanguage = "text";
@@ -3736,7 +4096,7 @@ function renderMarkdown(source, options = {}) {
   flushDetails();
   if (inCode) {
     const raw = code.join("\n");
-    html.push(`<div class="code-block" data-language="${codeLanguage}"><span class="code-language">${escapeHtml(codeLanguage)}</span><button class="code-copy" type="button">\u590d\u5236</button><pre><code class="language-${codeLanguage}">${highlightCode(raw, codeLanguage)}</code></pre></div>`);
+    html.push(`<div class="code-block" data-language="${codeLanguage}"><span class="code-language">${escapeHtml(codeLanguage)}</span><button class="code-copy" type="button">\u590d\u5236</button><pre><code class="language-${codeLanguage}">${escapeHtml(raw)}</code></pre></div>`);
   }
   // 脚注定义统一渲染到文末。
   if (footnoteDefs.length) {
@@ -3941,24 +4301,26 @@ function renderTree(nodes, container = els.tree) {
 
       const actions = document.createElement("div");
       actions.className = "ws-actions";
-      const pasteBtn = document.createElement("button");
-      pasteBtn.type = "button";
-      pasteBtn.className = "ws-paste";
-      pasteBtn.title = "粘贴到该工作路径根目录（先按 Ctrl+C 复制，再点击此处）";
-      pasteBtn.textContent = "\u2199 \u7c98\u8d34";
-      pasteBtn.addEventListener("click", async () => {
-        if (!state.clipboardItems.length) return showToast("请先按 Ctrl+C 复制文件或文件夹");
+      const refreshBtn = document.createElement("button");
+      refreshBtn.type = "button";
+      refreshBtn.className = "ws-refresh";
+      refreshBtn.title = "刷新该工作区，重新加载未成功显示的文件和目录";
+      refreshBtn.textContent = "\u21bb \u5237\u65b0";
+      refreshBtn.addEventListener("click", async () => {
+        // 用户手动点击刷新：强制立即刷新，不受 15s 节流限制
+        if (_treeRefreshInFlight) return showToast("正在刷新中，请稍候...");
+        _treeRefreshInFlight = true;
+        _treeRefreshLastTs = Date.now();
         try {
-          const copied = await api.post("/api/workspaces/paste", { source: state.clipboardItems, targetFolder: node.path });
-          state.graphReady = false;
-          await bootstrap(true);
-          if (copied.type === "file" && copied.path) openDoc(copied.path);
-          showToast(`已粘贴 ${state.clipboardItems.length} 项`);
+          await bootstrap(true);  // refresh=true → /api/tree?refresh=1 → 后端 refresh_cache() 全量扫描
+          showToast("工作区已刷新");
         } catch (error) {
-          showToast(error.message || "粘贴失败");
+          showToast(error.message || "刷新失败");
+        } finally {
+          _treeRefreshInFlight = false;
         }
       });
-      actions.append(pasteBtn);
+      actions.append(refreshBtn);
       head.append(actions);
 
       const children = document.createElement("div");
@@ -4548,7 +4910,27 @@ async function dropOnRoot(event) {
   }
 }
 
-function flatten(nodes, out = []) {
+// 预分配容量版 flatten：先一趟 count files 得到准确容量，再一趟收集。
+// 10k 文件下节省 ~5 轮 realloc + 底层 move 拷贝（大数组 grow 代价 ≈ O(n²/2)）
+function flatten(nodes, out) {
+  if (!out) {
+    let count = 0;
+    (function c(list) {
+      for (const x of list) {
+        if (x.type === "file") count++;
+        if (x.children) c(x.children);
+      }
+    })(nodes);
+    const result = new Array(count);
+    let i = 0;
+    (function w(list) {
+      for (const x of list) {
+        if (x.type === "file") result[i++] = x;
+        if (x.children) w(x.children);
+      }
+    })(nodes);
+    return result;
+  }
   for (const node of nodes) {
     if (node.type === "file") out.push(node);
     if (node.children) flatten(node.children, out);
@@ -4724,9 +5106,14 @@ async function openDoc(docPath, options = {}) {
   // 避免 800ms 防抖窗口内切换导致旧文档未保存内容丢失。
   saveDraftNow();
   clearAutoSaveTimers();
+  // Issue 2: 切换文档时清除外部修改轮询，新文档打开后重新调度
+  clearExternalCheck();
+  // Issue 2 补充: 外部修改 Toast / 保存冲突的「重新加载」按钮带 forceReload=true，
+  // 绕过后端 cache 从磁盘重读（否则 openDoc 命中内存 cache 返回旧 content，用户点重新加载却看不到变更）
+  const force = options.forceReload ? "&force=1" : "";
   let doc;
   try {
-    doc = await api.get(`/api/doc?path=${encodeURIComponent(docPath)}`);
+    doc = await api.get(`/api/doc?path=${encodeURIComponent(docPath)}${force}`);
   } catch (error) {
     console.error("openDoc failed", error);
     showToast(`打开文档失败：${error?.message || "未知错误"}`);
@@ -4781,7 +5168,7 @@ async function openDoc(docPath, options = {}) {
     renderOutlineItems([]);
   }
 
-  const item = state.flatFiles.find((file) => file.path === doc.path) || doc;
+  const item = state.flatFilesByPath.get(doc.path) || doc;
   state.activeWorkspaceId = item.workspaceId || doc.path.split(":", 1)[0] || state.activeWorkspaceId;
   state.currentPath = doc.path;
   state.currentContent = doc.content;
@@ -4830,12 +5217,13 @@ async function openDoc(docPath, options = {}) {
     }
   } else {
     // 非Markdown文件（代码/文本）：默认进入编辑态以便直接修改+自动保存；
-    // readerPanel 里仍然渲染一份代码预览作为参考（但编辑态下readerPanel隐藏，
-    // 不影响正常使用；用户切回view态时可见）。
+    // readerPanel 里仍然渲染一份带语法高亮的代码预览（编辑态下 readerPanel 隐藏，
+    // 不影响正常使用；用户切回 view 态时可见）。
     els.markdownView.innerHTML = "";
+    const ext = (doc.path || "").split(".").pop()?.toLowerCase() || "txt";
+    const lang = normalizeCodeLanguage(ext);
     const preview = document.createElement("pre");
     preview.className = "code-preview";
-    preview.textContent = doc.content || "";
     preview.style.whiteSpace = "pre-wrap";
     preview.style.wordBreak = "break-word";
     preview.style.padding = "16px";
@@ -4843,7 +5231,14 @@ async function openDoc(docPath, options = {}) {
     preview.style.fontSize = "var(--doc-font-size, 14px)";
     preview.style.lineHeight = "1.6";
     preview.style.tabSize = "4";
+    preview.dataset.language = lang;
+    const codeEl = document.createElement("code");
+    codeEl.className = `language-${lang}`;
+    codeEl.textContent = doc.content || "";
+    preview.appendChild(codeEl);
     els.markdownView.appendChild(preview);
+    // 对外部代码文件同样应用 hljs 语法高亮
+    highlightCodeBlocks(els.markdownView);
     renderOutlineItems([]);
     // 非Markdown文档：默认进入编辑态，允许输入、自动保存与手动保存。
     if (state.mode !== "edit") setMode("edit");
@@ -4955,6 +5350,31 @@ async function openDoc(docPath, options = {}) {
       }
     }
   }
+  // Issue 1: 恢复编辑位置（光标+滚动）——无 searchTerm 时从 draftState 恢复
+  if (!options.searchTerm) {
+    const _draftState = restoreDraftState(doc.path);
+    if (_draftState) {
+      const _ds = _draftState;
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (seq !== state.openSeq) return;
+          try {
+            if (typeof els.editor.focus === "function") els.editor.focus();
+            if (typeof els.editor.setSelectionRange === "function") {
+              const _max = (els.editor.value || "").length;
+              const _s = Math.min(_ds.s || 0, _max);
+              const _e = Math.min(_ds.e || 0, _max);
+              els.editor.setSelectionRange(_s, _e);
+            }
+            els.editor.scrollTop = _ds.et || 0;
+            if (els.markdownView && state.mode === "view") {
+              els.markdownView.scrollTop = _ds.rt || 0;
+            }
+          } catch (_) {}
+        });
+      });
+    }
+  }
   addRecentDoc(doc.path);
   try { localStorage.setItem("lastOpenedDoc", doc.path); } catch (_) {}
   // 智能化工作区：当前打开文档变化时，重新渲染目录树以更新收起状态下显示的文件
@@ -4964,6 +5384,8 @@ async function openDoc(docPath, options = {}) {
   updateStatusCreated(state.currentDocCreated);
   updateStatusEncoding(state.currentEncoding);
   refreshStatusBar();
+  // Issue 2: 文档打开后启动外部修改轮询
+  scheduleExternalCheck();
   return true;
 }
 
@@ -5393,10 +5815,12 @@ async function insertTextAtCursor(text) {
   if (state.mode !== "edit") setMode("edit");
   const content = text.trim();
   if (!content) return;
+  // AI 生成的 HTML/Mermaid 自动包裹为 fence block
+  const finalContent = wrapAiContentForMarkdown(content);
   const cursorPos = els.editor.selectionStart ?? els.editor.value.length;
   const prefix = cursorPos > 0 && els.editor.value[cursorPos - 1] !== "\n" ? "\n\n" : "";
   const suffix = els.editor.value[cursorPos] && els.editor.value[cursorPos] !== "\n" ? "\n\n" : "";
-  const insert = `${prefix}${content}${suffix}`;
+  const insert = `${prefix}${finalContent}${suffix}`;
   if (await replaceEditorRange(insert, cursorPos, cursorPos, "end")) {
     showToast("已插入到当前光标位置");
   } else {
@@ -5440,10 +5864,7 @@ function positionAiInlineDialog() {
 function openAiInlineDialog() {
   if (!els.editorAiDialog || !els.editorAiDialogInput) return;
   if (state.mode !== "edit" || !state.currentPath) return;
-  if (!_isCursorLineBlank()) {
-    showToast("请将光标放在空白行上再使用 AI 对话");
-    return;
-  }
+  // 允许在任意光标位置使用，不再强制空白行
   if (state.aiInline.visible) {
     closeAiInlineDialog();
     return;
@@ -5488,25 +5909,133 @@ async function submitAiInlineDialog() {
   }
   state.aiInline.historyIndex = -1;
   try {
-    const result = await api.post("/api/ai/query", {
-      question: text,
-      scope: "all",
-      path: state.currentPath,
+    // —— 增强上下文提取：不仅取前后 300 字符，还捕获光标附近的完整 Markdown fence / 代码块 / 标题块，
+    //    让 AI 二次优化时能看到「上面刚生成的一大段 HTML/Mermaid/Chart/代码」，不会因超长 context 被截断。
+    let context = "";
+    try {
+      const full = els.editor.value || "";
+      const cursorPos = els.editor.selectionStart ?? full.length;
+
+      function findFenceBounds(src, pos) {
+        // 查找包含 pos 的 fence（```...```）边界；若 pos 不在 fence 内，尝试 pos 前面最接近的 fence
+        const fences = [];
+        const re = /^```[a-zA-Z0-9_+\-]*[\u0020\u0009]*$/gm;
+        let m;
+        const starts = [];
+        while ((m = re.exec(src)) !== null) {
+          // 判断开 fence 还是闭 fence：开 → 入栈，闭 → 出栈
+          if (!starts.length || starts[starts.length - 1].line !== m.index) {
+            starts.push({ line: m.index });
+          } else {
+            const openIdx = starts[starts.length - 1].line;
+            fences.push([openIdx, re.lastIndex]);
+            starts.pop();
+          }
+        }
+        // 处理嵌套失败时未闭合的（简单忽略）
+        let inside = null, nearestPrev = null;
+        for (const [s, e] of fences) {
+          if (pos >= s && pos <= e) inside = [s, e];
+          if (e <= pos) nearestPrev = [s, e];
+        }
+        return { inside, nearestPrev };
+      }
+
+      // 1) 收集光标上方最近的 fence（如果在 800 字距离内），把 fence 完整正文放进来（上限 4000 字）
+      const beforeShort = full.slice(Math.max(0, cursorPos - 600), cursorPos);
+      const afterShort = full.slice(cursorPos, Math.min(full.length, cursorPos + 300));
+      let nearbyBlocks = "";
+
+      const bounds = findFenceBounds(full, cursorPos);
+      // 光标在 fence 里
+      if (bounds.inside) {
+        const [s, e] = bounds.inside;
+        const body = full.slice(s, Math.min(e, s + 4000));
+        nearbyBlocks += `\n—— 当前光标所在代码块 ——\n${body}\n—— 结束 ——\n`;
+      }
+      // 光标不在 fence 里，找最近的上方 fence（距离 < 1000 字 + fence 长度 < 5000 字）
+      if (!nearbyBlocks && bounds.nearestPrev) {
+        const [s, e] = bounds.nearestPrev;
+        if (cursorPos - e < 1000 && e - s < 5000) {
+          const body = full.slice(s, Math.min(e, s + 4500));
+          nearbyBlocks += `\n—— 光标上方最近的代码块 ——\n${body}\n—— 结束 ——\n`;
+        }
+      }
+
+      // 2) 光标所在段落（从空行/标题上边界到下边界）—— 给普通文本/列表场景更多上下文
+      let paraStart = cursorPos;
+      while (paraStart > 0) {
+        const ch = full[paraStart - 1];
+        if (ch === "\n" && (paraStart === 1 || full[paraStart - 2] === "\n" || /^#{1,6}\s/.test(full.slice(paraStart, paraStart + 8)))) break;
+        // 标题边界
+        if (/^\n#{1,6}\s/.test(full.slice(paraStart - 1, paraStart + 8))) break;
+        paraStart--;
+      }
+      let paraEnd = cursorPos;
+      while (paraEnd < full.length) {
+        const ch = full[paraEnd];
+        if (ch === "\n" && (paraEnd === full.length - 1 || full[paraEnd + 1] === "\n" || /^#{1,6}\s/.test(full.slice(paraEnd + 1, paraEnd + 10)))) break;
+        paraEnd++;
+      }
+      const para = full.slice(Math.max(paraStart, cursorPos - 3000), Math.min(paraEnd, cursorPos + 2000));
+
+      context = (nearbyBlocks ? nearbyBlocks + "\n" : "") +
+        (para ? `光标所在段落：${para}\n\n` : "") +
+        `上文上下文：${beforeShort || "(无)"}\n[[CURSOR]]\n下文上下文：${afterShort || "(无)"}`;
+    } catch (_) {}
+    // 走 transform 的 inline-chat 模式：纯 chat（不做向量检索），让 AI 自由生成内容
+    const result = await api.post("/api/ai/transform", {
+      mode: "inline-chat",
+      text: text,
+      context: context,
     });
-    if (result?.answer) {
-      await insertTextAtCursor(result.answer);
+    const answer = result?.content || result?.answer;
+    if (answer) {
+      // 先确保光标可见 + 关闭对话框
       closeAiInlineDialog();
+      // 逐字流式插入效果
+      await insertTextStream(answer);
     } else if (result?.error) {
       showToast(result.error);
+      closeAiInlineDialog();
     }
   } catch (err) {
-    showToast("AI 检索失败：" + (err.message || err));
+    showToast("AI 调用失败：" + (err.message || err));
+    closeAiInlineDialog();
   } finally {
     state.aiInline.inflight = false;
     if (els.editorAiDialogSubmit) {
       els.editorAiDialogSubmit.classList.remove("ai-inline-spinner");
       els.editorAiDialogSubmit.textContent = "↑";
     }
+  }
+}
+
+// AI 内容插入：一次性块插入（避免逐字插入的脆弱性）
+// 插入前先清洗控制字符（防止 AI 返回非法字节破坏 JSON/编辑器）
+async function insertTextStream(text) {
+  if (!text || !state.currentPath) return;
+  // 清洗：去掉 < 0x20 的控制字符（保留 \t \n \r），以及 U+FFFE/U+FFFF 非法字符
+  const content = String(text).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, "").trim();
+  if (!content) return;
+  // AI 生成的 HTML/Mermaid 自动包裹为 fence block，让 markdown-worker 以 iframe/图表方式渲染
+  const finalContent = wrapAiContentForMarkdown(content);
+  if (state.mode !== "edit") setMode("edit");
+  const cursorPos = els.editor.selectionStart ?? els.editor.value.length;
+  const prefix = cursorPos > 0 && els.editor.value[cursorPos - 1] !== "\n" ? "\n" : "";
+  const insertFull = prefix + finalContent;
+  try {
+    const ok = await replaceEditorRange(insertFull, cursorPos, cursorPos, "end");
+    if (!ok) {
+      showToast("AI 内容插入失败，请重试");
+      return;
+    }
+    // 滚动到光标位置
+    els.editor.focus?.();
+    showToast(`AI 已插入 ${content.length} 字`);
+  } catch (err) {
+    console.error("insertTextStream failed", err);
+    showToast("插入中断：" + (err?.message || err));
   }
 }
 
@@ -5799,6 +6328,16 @@ function getAiSelection() {
 }
 
 function refreshAiSelectionMenu() {
+  // AI Transform 弹窗打开时，不要用 selectionchange 覆盖已保存的选区数据。
+  // 否则点击弹窗按钮会让编辑器失焦 → getAiSelection() 返回 null → 之前保存的选区被清空。
+  if (state.ai.transform && !els.aiTransformModal?.classList.contains("hidden")) return;
+  // 问题1: 阅读模式（state.mode === "view"）下选中文本不弹 AI 菜单，
+  // 避免遮挡阅读视线、打断复制操作；仅编辑模式下保留 AI 选区菜单
+  if (state.mode === "view") {
+    els.aiSelectionMenu?.classList.add("hidden");
+    state.ai.selection = null;
+    return;
+  }
   const selection = getAiSelection();
   state.ai.selection = selection;
   if (!els.aiSelectionMenu) return;
@@ -5836,8 +6375,17 @@ function closeAiTransformModal() {
 
 async function runAiTransform(mode, { preserveInstruction = false } = {}) {
   const requestId = ++aiTransformRequestSeq;
-  const selection = state.ai.selection || getAiSelection();
+  // preserveInstruction=true（用户点了"生成结果"按钮）时，
+  // 优先从 state.ai.transform 恢复选区数据，避免 selectionchange 事件已清空 state.ai.selection
+  let selection;
+  if (preserveInstruction && state.ai.transform) {
+    selection = state.ai.transform;
+  } else {
+    selection = state.ai.selection || getAiSelection();
+  }
   const isRewrite = mode === "rewrite";
+  // 润色/翻译/续写/改写/注释/代码补全：都支持自定义 instruction
+  const hasCustomInstruction = ["polish", "translate", "continue", "rewrite", "comment", "code"].includes(mode);
   // 代写、代码补全、生成注释模式允许无选区（基于上下文/光标位置生成），其余模式需选中文本。
   const allowEmpty = isRewrite || mode === "code" || mode === "comment";
   if (!allowEmpty && !selection?.text) return showToast("请先选中一段文本");
@@ -5855,40 +6403,79 @@ async function runAiTransform(mode, { preserveInstruction = false } = {}) {
     return cjkRatio >= 0.3 ? "zh2en" : "en2zh";
   }
   let titleLabel = AI_TRANSFORM_LABELS[mode] || "结果";
+  let directionForTranslate = null;
   if (mode === "translate") {
-    const direction = detectLanguageDirection(selection?.text || "");
-    titleLabel = direction === "zh2en" ? "中译英" : "英译中";
+    directionForTranslate = detectLanguageDirection(selection?.text || "");
+    titleLabel = directionForTranslate === "zh2en" ? "中译英" : "英译中";
   }
   els.aiTransformTitle.textContent = `生成${titleLabel}`;
-  // 代写模式显示「写作要求」输入框，其余模式隐藏。
+  // 显示 instruction 输入框（润色/翻译/续写/改写/注释/代码补全都需要）
   const instrWrap = document.querySelector("#aiTransformInstructionWrap");
-  if (instrWrap) instrWrap.classList.toggle("hidden", !isRewrite);
+  if (instrWrap) {
+    instrWrap.classList.toggle("hidden", !hasCustomInstruction);
+    // 给不同模式设置不同 placeholder
+    const instrLabel = instrWrap.querySelector("label");
+    const instrInput = instrWrap.querySelector("textarea, input");
+    if (instrInput) {
+      const placeholder = {
+        rewrite: "写作要求（必填）：例如：写给 10 岁小朋友看的科普风格",
+        polish: "润色要求（可选）：例如：改为更正式的学术风格 / 精简到 100 字",
+        translate: "翻译要求（可选）：例如：保留原文格式 / 译法偏好",
+        continue: "续写要求（可选）：例如：以故事形式展开 / 增加数据支撑",
+        comment: "注释风格（可选）：例如：JSDoc / 行内中文注释",
+        code: "补全要求（可选）：例如：返回一个带类型注解的异步函数",
+      }[mode] || "额外要求（可选）";
+      instrInput.placeholder = placeholder;
+    }
+    if (instrLabel) instrLabel.textContent = "自定义要求";
+  }
   if (els.aiTransformInstruction && !preserveInstruction) els.aiTransformInstruction.value = "";
+  // 有自定义要求输入框的模式：显示「生成」按钮，等用户点击后才生成
+  // rewrite 模式：必填 instruction，空填时阻止生成
   if (els.aiTransformGenerateBtn) {
-    els.aiTransformGenerateBtn.classList.toggle("hidden", !isRewrite);
+    els.aiTransformGenerateBtn.classList.toggle("hidden", !hasCustomInstruction);
     els.aiTransformGenerateBtn.disabled = isRewrite;
   }
   els.aiTransformCreateBtn.textContent = isRewrite ? "新建文档" : "新建摘要文档";
-  state.ai.transform = null;
+  // 存储 mode 到 state.ai.transform，让生成按钮能取到当前模式
+  state.ai.transform = { mode, ...(selection || {}), result: "" };
   const sourceText = selection?.text || "";
   els.aiTransformSource.textContent = sourceText
     ? `${selection.source === "editor" ? "编辑器选区" : "阅读器选区"} · ${sourceText.length} 字`
     : (mode === "code" ? "代码补全：根据光标处上下文生成代码" : mode === "comment" ? "生成注释：为当前段落添加注释" : "代写模式：根据写作要求生成新文档");
-  els.aiTransformResult.value = isRewrite ? "正在根据要求生成文档…" : "正在处理选中文本…";
-  els.aiTransformResult.disabled = true;
+  // 有自定义要求的模式：提示用户输入要求后点击生成
+  // preserveInstruction=true 表示用户点了生成按钮，此时应显示"正在处理"
+  if (hasCustomInstruction && !preserveInstruction) {
+    els.aiTransformResult.value = "请在上方填写自定义要求后，点击「生成结果」按钮\n（不填写要求直接点击将使用默认方式生成）";
+    els.aiTransformResult.disabled = true;
+  } else {
+    els.aiTransformResult.value = "正在处理选中文本…";
+    els.aiTransformResult.disabled = true;
+  }
   const canInsertFromEditor = selection?.source === "editor" || mode === "code" || mode === "comment" || isRewrite;
   els.aiTransformInsertBtn.disabled = !canInsertFromEditor;
   els.aiTransformCreateBtn.disabled = true;
-  const instruction = isRewrite ? (els.aiTransformInstruction?.value || "").trim() : "";
-  if (isRewrite && !instruction) {
-    els.aiTransformResult.value = "";
-    els.aiTransformResult.disabled = false;
-    if (els.aiTransformGenerateBtn) els.aiTransformGenerateBtn.disabled = false;
-    return showToast("请在「写作要求」中填写需求");
+  // 有自定义要求输入框的模式（polish/translate/continue/rewrite/comment/code）：
+  // 首次打开时不立即生成，等用户点击「生成结果」按钮
+  // preserveInstruction=true 表示用户点了生成按钮，应读取 instruction 并生成
+  if (hasCustomInstruction && !preserveInstruction) {
+    els.aiTransformResult.value = "请在上方填写自定义要求后，点击「生成结果」按钮";
+    els.aiTransformResult.disabled = true;
+    if (els.aiTransformGenerateBtn) {
+      els.aiTransformGenerateBtn.disabled = false;
+      els.aiTransformGenerateBtn.textContent = "生成结果";
+    }
+    return;
   }
+  // 读取用户输入的自定义要求（preserveInstruction=true 时从输入框取值，空则用默认方式）
+  const instruction = hasCustomInstruction ? (els.aiTransformInstruction?.value || "").trim() : "";
   try {
     const payload = { text: sourceText, mode };
     if (instruction) payload.instruction = instruction;
+    // 翻译模式：传递方向，支持中英互译（direction 为 "zh2en"/"en2zh"）或自定义语种
+    if (mode === "translate" && directionForTranslate) {
+      payload.direction = directionForTranslate;
+    }
     // 代码补全/生成注释模式：无选区时，传入光标附近上下文作为生成依据。
     if ((mode === "code" || mode === "comment") && !sourceText && state.mode === "edit") {
       const para = currentEditorParagraph();
@@ -5919,17 +6506,19 @@ async function runAiTransform(mode, { preserveInstruction = false } = {}) {
 
 async function insertAiTransform() {
   const transform = state.ai.transform;
-  const content = els.aiTransformResult.value.trim();
-  if (!transform || !content) return;
+  const rawContent = els.aiTransformResult.value.trim();
+  if (!transform || !rawContent) return;
   const mode = transform.mode;
   const hasSelection = Boolean(transform.text);
   const isComment = mode === "comment";
   const isRewrite = mode === "rewrite";
   const range = hasSelection ? resolveAiEditorRange(transform) : null;
   if (hasSelection && !range) return showToast("原文已变化，请重新生成 AI 结果后再插入");
-  if (hasSelection && !isComment && content === els.editor.value.slice(range.start, range.end).trim()) {
+  if (hasSelection && !isComment && rawContent === els.editor.value.slice(range.start, range.end).trim()) {
     return showToast("AI 结果与原文相同，请重新生成后再插入");
   }
+  // AI 生成的 HTML/Mermaid 自动包裹为 fence block，让 markdown-worker 以 iframe/图表方式渲染
+  const content = wrapAiContentForMarkdown(rawContent);
   if (isComment && hasSelection) {
     const commentText = content.startsWith("\n>") ? content : `\n> ${content.split("\n").join("\n> ")}\n`;
     if (!await replaceEditorRange(commentText, range.end, range.end, "end")) {
@@ -6613,7 +7202,7 @@ async function renderChartsInPreview(container) {
       });
     }
   }
-  // Excalidraw 渲染
+  // Excalidraw 渲染：Canvas 缩略图预览 + 双击打开绘图编辑器
   const excalidrawBlocks = container.querySelectorAll(".chart-block.excalidraw-block");
   if (excalidrawBlocks.length) {
     excalidrawBlocks.forEach((block) => {
@@ -6623,12 +7212,142 @@ async function renderChartsInPreview(container) {
       const rawText = sourcePre.textContent || "";
       try {
         const data = JSON.parse(rawText);
-        containerDiv.innerHTML = `<div class="excalidraw-preview" data-excalidraw='${escapeHtml(rawText)}'><pre class="excalidraw-json" contenteditable="false">${escapeHtml(rawText)}</pre><p class="excalidraw-hint">Excalidraw 绘图（JSON 数据，双击可编辑源码）</p></div>`;
+        // 先渲染一个 Canvas 缩略图，让用户看到实际绘图
+        const canvasId = "exc-" + Math.random().toString(36).slice(2, 10);
+        containerDiv.innerHTML = `<div class="excalidraw-preview" style="cursor:pointer;text-align:center;padding:8px;"><canvas id="${canvasId}" width="480" height="320" style="max-width:100%;border:1px dashed #d1d5db;border-radius:6px;background:#fff;"></canvas><p class="excalidraw-hint" style="margin:6px 0 0;color:#6b7280;font-size:12px;">Excalidraw 绘图 · 双击打开编辑器</p></div>`;
+        renderExcalidrawThumb(data, canvasId);
+        // 双击 → 打开绘图编辑器，保存后更新代码块
+        containerDiv.querySelector(".excalidraw-preview")?.addEventListener("dblclick", async (e) => {
+          e.stopPropagation();
+          const json = await openDrawEditor(data);
+          if (!json) return;
+          const newBlock = `\n\`\`\`excalidraw\n${JSON.stringify(json, null, 2)}\n\`\`\`\n`;
+          replaceFencedBlockInEditor("excalidraw", rawText, newBlock);
+        });
       } catch (_) {
         containerDiv.innerHTML = `<div class="chart-error">Excalidraw 数据格式错误</div>`;
       }
     });
   }
+}
+
+// ── Excalidraw JSON → Canvas 缩略图渲染 ────────────────────
+function renderExcalidrawThumb(data, canvasId) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || !data?.elements?.length) return;
+  const ctx = canvas.getContext("2d");
+  const w = canvas.width, h = canvas.height;
+
+  // 计算所有元素的 bbox
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const el of data.elements) {
+    if (el.isDeleted) continue;
+    let bx, by, bw, bh;
+    if (el.type === "ellipse" || el.type === "diamond") {
+      bx = el.x - el.width / 2; by = el.y - el.height / 2;
+      bw = el.width; bh = el.height;
+    } else if (el.points) {
+      const xs = el.points.map(p => el.x + p[0]);
+      const ys = el.points.map(p => el.y + p[1]);
+      bx = Math.min(...xs); by = Math.min(...ys);
+      bw = Math.max(...xs) - bx; bh = Math.max(...ys) - by;
+    } else {
+      bx = el.x; by = el.y; bw = el.width; bh = el.height;
+    }
+    minX = Math.min(minX, bx); minY = Math.min(minY, by);
+    maxX = Math.max(maxX, bx + bw); maxY = Math.max(maxY, by + bh);
+  }
+  // 空画布兜底
+  if (!isFinite(minX)) { minX = 0; minY = 0; maxX = 400; maxY = 300; }
+  const contentW = maxX - minX, contentH = maxY - minY;
+  const pad = 20;
+  const scale = Math.min((w - pad * 2) / (contentW || 1), (h - pad * 2) / (contentH || 1), 1.5);
+  const offsetX = pad + (w - pad * 2 - contentW * scale) / 2 - minX * scale;
+  const offsetY = pad + (h - pad * 2 - contentH * scale) / 2 - minY * scale;
+
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, w, h);
+  ctx.save();
+  ctx.translate(offsetX, offsetY);
+  ctx.scale(scale, scale);
+
+  for (const el of data.elements) {
+    if (el.isDeleted) continue;
+    ctx.save();
+    ctx.lineWidth = el.strokeWidth || 2;
+    ctx.strokeStyle = el.strokeColor || "#000000";
+    ctx.fillStyle = el.backgroundColor && el.backgroundColor !== "transparent" ? el.backgroundColor : "transparent";
+    ctx.lineCap = "round"; ctx.lineJoin = "round";
+    switch (el.type) {
+      case "rectangle": {
+        const r = el.roundness?.type === 3 ? 4 : 0;
+        ctx.beginPath();
+        ctx.roundRect(el.x, el.y, el.width, el.height, r);
+        if (ctx.fillStyle !== "transparent") ctx.fill();
+        ctx.stroke();
+        break;
+      }
+      case "ellipse": {
+        ctx.beginPath();
+        ctx.ellipse(el.x, el.y, el.width / 2, el.height / 2, 0, 0, Math.PI * 2);
+        if (ctx.fillStyle !== "transparent") ctx.fill();
+        ctx.stroke();
+        break;
+      }
+      case "diamond": {
+        ctx.beginPath();
+        ctx.moveTo(el.x, el.y - el.height / 2);
+        ctx.lineTo(el.x + el.width / 2, el.y);
+        ctx.lineTo(el.x, el.y + el.height / 2);
+        ctx.lineTo(el.x - el.width / 2, el.y);
+        ctx.closePath();
+        if (ctx.fillStyle !== "transparent") ctx.fill();
+        ctx.stroke();
+        break;
+      }
+      case "line":
+      case "arrow": {
+        ctx.beginPath();
+        const pts = el.points || [[0, 0], [el.width, el.height]];
+        ctx.moveTo(el.x + pts[0][0], el.y + pts[0][1]);
+        for (let i = 1; i < pts.length; i++) ctx.lineTo(el.x + pts[i][0], el.y + pts[i][1]);
+        ctx.stroke();
+        if (el.type === "arrow" && el.endArrowhead === "arrow" && pts.length >= 2) {
+          const ex = el.x + pts[pts.length - 1][0], ey = el.y + pts[pts.length - 1][1];
+          const sx = el.x + pts[pts.length - 2][0], sy = el.y + pts[pts.length - 2][1];
+          const angle = Math.atan2(ey - sy, ex - sx);
+          const sz = 12 / scale;
+          ctx.fillStyle = el.strokeColor || "#000";
+          ctx.beginPath();
+          ctx.moveTo(ex, ey);
+          ctx.lineTo(ex - sz * Math.cos(angle - Math.PI / 6), ey - sz * Math.sin(angle - Math.PI / 6));
+          ctx.lineTo(ex - sz * Math.cos(angle + Math.PI / 6), ey - sz * Math.sin(angle + Math.PI / 6));
+          ctx.closePath();
+          ctx.fill();
+        }
+        break;
+      }
+      case "freedraw": {
+        if (!el.points || el.points.length < 2) break;
+        ctx.beginPath();
+        for (let i = 0; i < el.points.length; i++) {
+          const px = el.x + el.points[i][0], py = el.y + el.points[i][1];
+          if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+        break;
+      }
+      case "text": {
+        ctx.font = `${el.fontSize || 20}px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif`;
+        ctx.fillStyle = el.strokeColor || "#000";
+        ctx.textBaseline = "top";
+        ctx.fillText(el.text || "", el.x, el.y);
+        break;
+      }
+    }
+    ctx.restore();
+  }
+  ctx.restore();
 }
 
 // 降低全量替换 innerHTML 造成的视觉抖动：先微降不透明度，rAF 写回内容后恢复，
@@ -6646,6 +7365,8 @@ function swapPreviewHtml(html) {
   preview.scrollTop = savedScroll;
   renderChartsInPreview(preview);
   renderMathInPreview(preview);
+  // 问题4: 编辑模式分屏预览的代码块也调用高亮
+  highlightCodeBlocks(preview);
   if (_previewSwapScheduled) return;
   _previewSwapScheduled = true;
   requestAnimationFrame(() => {
@@ -6721,6 +7442,41 @@ function schedulePreviewUpdate({ immediate = false, forceContent = state.current
     }, wait);
   }
   scheduleEditorOutlineUpdate(content);
+}
+
+/**
+ * 在编辑器源码里找到并替换指定内容的围栏代码块。
+ * @param {string} lang 代码块语言（如 "excalidraw"）
+ * @param {string} oldContent 要匹配替换的代码块内容（不含围栏标记）
+ * @param {string} newBlock 新的完整围栏代码块（含前后 ``` 标记和换行）
+ */
+function replaceFencedBlockInEditor(lang, oldContent, newBlock) {
+  const source = els.editor.value || "";
+  // 匹配 ```lang ... ``` 代码块，内容精确匹配 oldContent
+  const escaped = oldContent.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\r?\n/g, "\\r?\\n");
+  const re = new RegExp(`\\n?\\\`\\\`\\\`${lang}\\r?\\n${escaped}\\r?\\n\\\`\\\`\\\`\\n?`, "m");
+  const match = re.exec(source);
+  if (!match) {
+    showToast("未在编辑器中找到对应的 Excalidraw 代码块，请手动粘贴");
+    return;
+  }
+  const newValue = source.slice(0, match.index) + newBlock + source.slice(match.index + match[0].length);
+  try {
+    const view = els.editor.view;
+    if (view && view.dispatch) {
+      view.dispatch({
+        changes: { from: match.index, to: match.index + match[0].length, insert: newBlock },
+        scrollIntoView: true,
+      });
+      els.editor.value = newValue;
+    } else {
+      els.editor.value = newValue;
+    }
+  } catch (_) {
+    els.editor.value = newValue;
+  }
+  els.editor.dispatchEvent(new Event("input", { bubbles: true }));
+  schedulePreviewUpdate({ immediate: true });
 }
 
 function setPreviewVisible(visible, { automatic = false } = {}) {
@@ -6886,14 +7642,36 @@ async function saveCurrentDoc({ refreshTree = false, keepEditorState = true, ren
     // currentVersion 更新必须在 seq 检查之后：连续保存时旧请求晚返回会用旧 hash 覆盖新 hash，
     // 导致后续保存的 baseHash 不对，可能引发冲突或覆盖他人修改。
     if (seq !== state.saveSeq) return true;
-    // 服务端应返回 contentSha256 用于乐观锁；缺失时视为保存成功但跳过版本号更新，
-    // 兼容旧服务端（仅返回 {ok, path}），同时记录警告便于排查
-    if (!result || typeof result.contentSha256 !== "string" || !result.contentSha256) {
+    // Issue 2: 冲突响应——外部编辑器（如 Notepad）修改了同一文件，磁盘 hash 与 baseHash 不一致
+    if (result && result.conflict) {
+      const choice = await customConfirm(
+        "文件已被外部编辑器修改。保存将覆盖外部修改的内容。\n\n选择「确定」= 用当前编辑器内容覆盖磁盘文件\n选择「取消」= 放弃保存并重新加载磁盘文件（外部修改优先）",
+        { title: "保存冲突", confirmText: "覆盖保存", cancelText: "重新加载", danger: true }
+      );
+      if (choice) {
+        // 强制保存：不带 baseHash 跳过冲突检测
+        const forceResult = await api.post("/api/save", { path: state.currentPath, content, baseHash: "" });
+        if (seq !== state.saveSeq) return true;
+        if (forceResult && typeof forceResult.contentSha256 === "string" && forceResult.contentSha256) {
+          state.currentVersion = forceResult.contentSha256;
+          _externalChangeNotified = false;
+        }
+      } else {
+        // 用户选择重新加载：放弃当前编辑，从磁盘重新加载（带 force=1 绕过 cache）
+        setSaveStatus("已重新加载", false);
+        await openDoc(state.currentPath, { forceReload: true });
+        return false;
+      }
+    } else if (!result || typeof result.contentSha256 !== "string" || !result.contentSha256) {
+      // 服务端应返回 contentSha256 用于乐观锁；缺失时视为保存成功但跳过版本号更新，
+      // 兼容旧服务端（仅返回 {ok, path}），同时记录警告便于排查
       console.warn("[文档异常] stage=保存-返回校验 服务端未返回 contentSha256，跳过版本号更新");
       // 保存成功但无 hash：不更新 currentVersion，下次保存 baseHash 为空字符串，
       // 仅乐观锁检查可能失效，不影响基本保存功能
     } else {
       state.currentVersion = result.contentSha256;
+      // 保存成功后重置外部修改通知状态，下次轮询以新 hash 为基准
+      _externalChangeNotified = false;
     }
   } catch (e) {
     const errorMessage = e?.response?.data?.error || e?.message || "保存失败";
@@ -7036,6 +7814,8 @@ function saveDraft() {
       } else {
         localStorage.removeItem("draft:" + state.currentPath);
       }
+      // Issue 1: 同时保存编辑位置
+      saveDraftState(state.currentPath);
     } catch (e) {
       // 草稿保存失败（如 localStorage 满）：必须提示用户，否则编辑内容可能在崩溃时丢失
       logDocError("草稿保存", e);
@@ -7055,6 +7835,8 @@ function saveDraftNow() {
     } else {
       localStorage.removeItem("draft:" + state.currentPath);
     }
+    // Issue 1: 同时保存编辑位置（光标+滚动），切换回来时可恢复
+    saveDraftState(state.currentPath);
   } catch (e) {
     logDocError("切换前草稿保存", e);
   }
@@ -7074,6 +7856,142 @@ function restoreDraft(docPath) {
 function clearDraft(docPath) {
   try { localStorage.removeItem("draft:" + docPath); }
   catch (e) { logDocError("草稿清理", e, docPath); }
+  clearDraftState(docPath);
+}
+
+// === Issue 1: 保留编辑位置（光标 + 滚动）===
+// 切换文档时将当前编辑位置保存到 localStorage，切回来时恢复，避免每次切换都从头开始。
+// 独立 key draftState: 与 draft: 内容草稿分开，互不干扰。
+function saveDraftState(docPath) {
+  if (!docPath) return;
+  try {
+    const st = {
+      s: els.editor.selectionStart ?? 0,  // cursor start
+      e: els.editor.selectionEnd ?? 0,    // cursor end
+      et: els.editor.scrollTop ?? 0,       // editor scroll
+      rt: els.markdownView?.scrollTop ?? 0, // reader scroll
+      ts: Date.now(),
+    };
+    localStorage.setItem("draftState:" + docPath, JSON.stringify(st));
+  } catch (_) { /* localStorage 满 or editor 不可用，忽略 */ }
+}
+
+function restoreDraftState(docPath) {
+  try {
+    const raw = localStorage.getItem("draftState:" + docPath);
+    if (raw) return JSON.parse(raw);
+  } catch (_) {}
+  return null;
+}
+
+function clearDraftState(docPath) {
+  try { localStorage.removeItem("draftState:" + docPath); }
+  catch (_) {}
+}
+
+// === 问题2: 外部保存新文件到工作区目录后，软件内文件树自动刷新 ===
+// 后端无文件系统监听（notify/watcher），只有 bootstrap(refresh=true) 触发 /api/tree?refresh=1
+// → refresh_cache() 全量扫描。前端策略：页面恢复可见 + 窗口聚焦时节流刷新（距上次 >15s），
+// 加 60s 低频定时兜底，覆盖用户长时间停留时的外部变更。
+let _treeRefreshLastTs = 0;
+let _treeRefreshInFlight = false;
+let _treeRefreshInterval = 0;
+
+async function refreshTreeThrottled(reason = "") {
+  const now = Date.now();
+  if (_treeRefreshInFlight) return;
+  if (now - _treeRefreshLastTs < 15000) return;  // 节流 15s
+  _treeRefreshInFlight = true;
+  _treeRefreshLastTs = now;
+  try {
+    await bootstrap(true);  // refresh=true → /api/tree?refresh=1 → 后端 refresh_cache()
+    // 刷新后若当前打开的文档仍存在于新树中，保持选中态；bootstrap 内部已处理 syncTreeSelectionState
+  } catch (e) {
+    console.warn("[refreshTreeThrottled] reason=" + reason, e);
+  } finally {
+    _treeRefreshInFlight = false;
+  }
+}
+
+function startTreeRefreshInterval() {
+  if (_treeRefreshInterval) return;
+  _treeRefreshInterval = setInterval(() => {
+    if (document.hidden) return;  // 页面隐藏时不刷新，避免无谓 IO
+    refreshTreeThrottled("interval-60s");
+  }, 60000);
+}
+
+function stopTreeRefreshInterval() {
+  if (_treeRefreshInterval) {
+    clearInterval(_treeRefreshInterval);
+    _treeRefreshInterval = 0;
+  }
+}
+
+// === Issue 2: 外部修改检测——每 5s 轮询当前文档磁盘 hash，与加载时 hash 不同则提示用户 ===
+let _externalCheckTimer = 0;
+let _externalChangeNotified = false;  // 防止同一外部修改反复 Toast
+
+function clearExternalCheck() {
+  clearTimeout(_externalCheckTimer);
+  _externalCheckTimer = 0;
+  _externalChangeNotified = false;
+}
+
+function scheduleExternalCheck() {
+  clearTimeout(_externalCheckTimer);
+  if (!state.currentPath) return;
+  _externalCheckTimer = setTimeout(async () => {
+    if (!state.currentPath) return;
+    // 用户正在保存中（inFlight）或正在编辑有草稿时不轮询（避免与自动保存冲突检测打架）
+    if (state.autoSave?.inFlight) { scheduleExternalCheck(); return; }
+    try {
+      const result = await api.get(`/api/doc-check?path=${encodeURIComponent(state.currentPath)}`);
+      if (!result || !result.sha256) { scheduleExternalCheck(); return; }
+      // 打开时的 contentSha256 = state.currentVersion；若磁盘 hash 不同 = 外部已修改
+      if (state.currentVersion && result.sha256 !== state.currentVersion && !_externalChangeNotified) {
+        _externalChangeNotified = true;
+        showToast({
+          message: "文件已被外部编辑器修改，点击「重新加载」加载最新内容",
+          title: "外部修改",
+          kind: "warn",
+          duration: 12000,
+          canClose: true,
+          actions: [
+            {
+              label: "重新加载",
+              primary: true,
+              onClick: () => {
+                // 重新加载文档（丢弃当前编辑内容，外部修改优先）
+                // 但如果用户有未保存草稿，提示一下
+                // 注意：必须带 forceReload=true 绕过后端 cache，否则 openDoc 命中内存 cache 返回旧 content，
+                // 用户点「重新加载」看不到磁盘上外部编辑器刚修改的内容
+                const hasDraft = els.editor.value !== state.lastSavedContent;
+                if (hasDraft) {
+                  // 不直接 reload，提示用户先保存或放弃
+                  customConfirm("当前有未保存的编辑内容，重新加载将丢失这些内容。是否继续？", { title: "确认重新加载", danger: true })
+                    .then((ok) => { if (ok) openDoc(state.currentPath, { forceReload: true }); });
+                } else {
+                  openDoc(state.currentPath, { forceReload: true });
+                }
+                return false; // 保持 toast 不自动关闭
+              },
+              dismissAfter: 200,
+            },
+            {
+              label: "忽略",
+              onClick: () => { _externalChangeNotified = true; return false; },
+              dismissAfter: 200,
+            },
+          ],
+        });
+      } else if (state.currentVersion && result.sha256 === state.currentVersion) {
+        // 文件恢复一致（如外部编辑器保存后又撤销），重置通知状态
+        _externalChangeNotified = false;
+      }
+    } catch (_) { /* 轮询失败静默，下次再试 */ }
+    scheduleExternalCheck();
+  }, 5000);
 }
 
 async function normalizeAllToMarkdown() {
@@ -7158,7 +8076,9 @@ async function runSearch() {
   if (seq !== state.searchSeq) return;
   const fragment = document.createDocumentFragment();
   if (results.length) {
-    const fileByPath = new Map(state.flatFiles.map((entry) => [entry.path, entry]));
+    // 复用共享索引（flatFilesByPath 内部已按 flatFiles.length 失效重建），
+    // 不再为每次搜索单独构建一次 Map，10k 文件下搜索延迟 ~-2-5ms。
+    const fileByPath = state.flatFilesByPath;
     const visible = results.slice(0, 80);
     for (const item of visible) {
       const file = fileByPath.get(item.path) || item;
@@ -7419,7 +8339,7 @@ function resizeCanvas() {
   const rect = els.canvas.getBoundingClientRect();
   const deviceRatio = window.devicePixelRatio || 1;
   const area = Math.max(1, rect.width * rect.height);
-  const pixelBudget = state.graphView.visibleNodes.length > 600 ? 2200000 : 3000000;
+  const pixelBudget = state.graphView.visibleNodes.length > 1200 ? 2200000 : 3000000;
   const ratio = clamp(Math.min(deviceRatio, 1.5, Math.sqrt(pixelBudget / area)), 1, 1.5);
   els.canvas.width = Math.max(1, Math.floor(rect.width * ratio));
   els.canvas.height = Math.max(1, Math.floor(rect.height * ratio));
@@ -7429,6 +8349,13 @@ function resizeCanvas() {
 function releaseGraphCanvas() {
   if (state.graphView.frame) cancelAnimationFrame(state.graphView.frame);
   state.graphView.frame = 0;
+  // 清理渐进涌现状态，避免图谱关闭后 timer 还挂着
+  if (state.graphView.emergeTimer) {
+    clearTimeout(state.graphView.emergeTimer);
+    state.graphView.emergeTimer = 0;
+  }
+  state.graphView.emergeQueue = [];
+  state.graphView.emergeActive = false;
   els.canvas.width = 1;
   els.canvas.height = 1;
   els.canvas.getContext("2d").setTransform(1, 0, 0, 1, 0, 0);
@@ -7832,6 +8759,13 @@ function layoutGraph(graph) {
 
 function refreshGraphView(refit = false) {
   const view = state.graphView;
+  // 清理上一轮渐进涌现状态：模式切换/搜索/过滤变化时重新计算
+  if (view.emergeTimer) {
+    clearTimeout(view.emergeTimer);
+    view.emergeTimer = 0;
+  }
+  view.emergeQueue = [];
+  view.emergeActive = false;
   const kindAllowed = (node) => {
     if (node.kind === "tag" && !view.showTags) return false;
     if (node.kind === "keyword" && !view.showKeywords) return false;
@@ -7877,12 +8811,32 @@ function refreshGraphView(refit = false) {
   nodeIds = new Set(nodes.map((node) => node.id));
   edges = edges.filter((edge) => nodeIds.has(edge.source) && nodeIds.has(edge.target));
 
-  view.visibleNodes = nodes;
-  view.visibleEdges = edges;
+  // 渐进涌现：节点数 > 240 时分批加载，减少一次性渲染卡顿
+  // 按 degree 降序排序，骨干节点（高度数）先显示，普通节点分批涌现
+  const EMERGE_THRESHOLD = 240;
+  if (nodes.length > EMERGE_THRESHOLD) {
+    // 按 degree 降序排，骨干先显示
+    const sorted = [...nodes].sort((a, b) => (b.degree - a.degree) || (b.weight - a.weight));
+    const initialCount = Math.min(120, sorted.length);  // 首批骨干节点
+    const initialNodes = sorted.slice(0, initialCount);
+    const remaining = sorted.slice(initialCount);
+    const initialIds = new Set(initialNodes.map((n) => n.id));
+    const initialEdges = edges.filter((e) => initialIds.has(e.source) && initialIds.has(e.target));
+    view.visibleNodes = initialNodes;
+    view.visibleEdges = initialEdges;
+    view.simulationCache = null;
+    view.emergeQueue = remaining;
+    view.emergeActive = true;
+  } else {
+    view.visibleNodes = nodes;
+    view.visibleEdges = edges;
+    view.simulationCache = null;
+    view.emergeQueue = [];
+    view.emergeActive = false;
+  }
   // Visible graph arrays define the lifetime of all simulation caches. A
   // filter/scope change gets a fresh cache; ordinary frames and pointer moves
   // keep reusing the same indexes, springs, force buffers and spatial buckets.
-  view.simulationCache = null;
   const docCount = nodes.filter((node) => node.kind === "doc").length;
   const backboneCount = edges.filter((edge) => edge.backbone).length;
   const totalDocs = state.graph.stats?.documents || docCount;
@@ -7892,6 +8846,72 @@ function refreshGraphView(refit = false) {
   resizeCanvas();
   if (refit || !view.fitted) fitGraphView();
   else scheduleGraphDraw();
+  // 启动分批涌现调度（节点少时 emergeQueue 为空，立即结束）
+  if (view.emergeActive) scheduleEmergeBatch();
+}
+
+// 渐进涌现：从 emergeQueue 取一批节点添加到 visibleNodes，触发物理模拟涌现到合适位置
+function scheduleEmergeBatch() {
+  const view = state.graphView;
+  if (view.emergeTimer) clearTimeout(view.emergeTimer);
+  if (!view.emergeActive || !view.emergeQueue.length) {
+    view.emergeActive = false;
+    return;
+  }
+  view.emergeTimer = setTimeout(emergeNextBatch, 120);
+}
+
+function emergeNextBatch() {
+  const view = state.graphView;
+  if (!view.emergeActive || !view.emergeQueue.length) {
+    view.emergeActive = false;
+    return;
+  }
+  // 用户正在交互（hover/drag）时暂停涌现，避免干扰
+  if (view.hoveredId || state.graphDrag) {
+    view.emergeTimer = setTimeout(emergeNextBatch, 200);
+    return;
+  }
+  const batch = view.emergeQueue.splice(0, view.emergeBatchSize);
+  if (!batch.length) {
+    view.emergeActive = false;
+    return;
+  }
+  // 新节点初始位置设在视口中心，让它们从中心涌现到外圈
+  const rect = els.canvas.getBoundingClientRect();
+  const cx = rect.width / 2;
+  const cy = rect.height / 2;
+  for (const node of batch) {
+    if (node.x === undefined || node.y === undefined) {
+      // 在中心附近随机偏移，避免全部重叠在同一点
+      const angle = Math.random() * Math.PI * 2;
+      const r = 20 + Math.random() * 40;
+      node.x = (cx + Math.cos(angle) * r - view.tx) / view.scale;
+      node.y = (cy + Math.sin(angle) * r - view.ty) / view.scale;
+    }
+  }
+  view.visibleNodes = view.visibleNodes.concat(batch);
+  // 重新过滤 edges，把新节点相关的边也加入
+  const visibleIds = new Set(view.visibleNodes.map((n) => n.id));
+  view.visibleEdges = state.graph.edges.filter((e) => visibleIds.has(e.source) && visibleIds.has(e.target));
+  view.simulationCache = null;  // 节点数变了，缓存失效
+  // 触发轻量物理模拟涌现：chainUntil 让 simulation 运行 1.2s 把新节点推开
+  view.chainUntil = performance.now() + 1200;
+  startGraphSimulation();
+  resizeCanvas();
+  scheduleGraphDraw();
+  // 更新统计显示
+  const docCount = view.visibleNodes.filter((n) => n.kind === "doc").length;
+  const totalDocs = state.graph.stats?.documents || docCount;
+  const docLabel = docCount === totalDocs ? `${docCount}` : `${docCount}/${totalDocs}`;
+  const pruned = state.graph.stats?.pruned ? " · 已裁剪" : "";
+  els.graphStats.textContent = `${graphModeName()} · ${docLabel} 篇文档 · ${view.visibleEdges.filter((e) => e.backbone).length} 条主干 · ${view.visibleEdges.length} 条关联${pruned}`;
+  // 调度下一批
+  if (view.emergeQueue.length) {
+    scheduleEmergeBatch();
+  } else {
+    view.emergeActive = false;
+  }
 }
 
 function graphPoint(node) {
@@ -8925,6 +9945,144 @@ function detectPastedCodeLanguage(source) {
   return "text";
 }
 
+/**
+ * 检测 AI 生成内容是否为 HTML / Mermaid / 图表 JSON / 代码，
+ * 若是则包裹为对应的 fenced code block，让 markdown-worker 以 iframe / 图表方式渲染。
+ * 普通文本原样返回。
+ */
+function wrapAiContentForMarkdown(text) {
+  const content = String(text || "").trim();
+  if (!content) return text;
+  // 已经是 fence 包裹的 → 原样返回
+  if (/^```[\w-]*\n[\s\S]*?\n```$/.test(content)) return text;
+
+  // —— Chart.js / ECharts JSON 图表：用 html-inline iframe 加载 CDN 渲染 ——
+  const chartHtml = detectAndBuildChartHtml(content);
+  if (chartHtml) return `\`\`\`html-inline\n${chartHtml}\n\`\`\``;
+
+  // Mermaid 图表：含 graph / flowchart / sequenceDiagram / classDiagram / stateDiagram / gantt / pie / erDiagram / journey 等关键字
+  const mermaidPatterns = [
+    /^\s*(graph|flowchart|sequenceDiagram|classDiagram|stateDiagram|gantt|pie|erDiagram|journey|timeline|mindmap)\b/i,
+    /^\s*(requirementDiagram|gitGraph|c4Context|c4Container|c4Component|c4Dynamic|c4Deployment)\b/i,
+  ];
+  if (mermaidPatterns.some(p => p.test(content))) {
+    return `\`\`\`mermaid\n${content}\n\`\`\``;
+  }
+
+  // Excalidraw：AI 很少生成，暂不支持（需要特殊 JSON 格式）
+
+  // HTML 内容：完整 HTML 页面或包含显著 HTML 结构
+  const htmlFullPattern = /^\s*<!doctype\s+html|<html[\s>]/i;
+  const htmlRichPattern = /<(?:div|section|article|header|footer|nav|main|aside|table|form|svg|canvas|style|script|link|meta)[\s>]/i;
+  const hasClosingHtml = /<\/(?:div|section|article|header|footer|nav|main|aside|table|form|svg|canvas|style|script|body|html)>/i;
+  if (htmlFullPattern.test(content) || (htmlRichPattern.test(content) && hasClosingHtml.test(content))) {
+    return `\`\`\`html-inline\n${content}\n\`\`\``;
+  }
+
+  // 含 <style> 或 <script> 标签的也视为 HTML 内容
+  if (/<style[\s>]/i.test(content) || /<script[\s>]/i.test(content)) {
+    return `\`\`\`html-inline\n${content}\n\`\`\``;
+  }
+
+  return text;
+}
+
+/**
+ * 尝试检测 Chart.js / ECharts JSON 配置，并返回能直接渲染的完整 HTML 字符串。
+ * 无法识别时返回 null。
+ */
+function detectAndBuildChartHtml(content) {
+  // 必须是合法 JSON（可能前后夹杂少量注释/说明，先提取 JSON 对象）
+  let jsonStr = content;
+  // 尝试提取最外层的 { ... } JSON 对象（兼容前后有说明文本的情况）
+  const jsonMatch = content.match(/\{[\s\S]*\}/);
+  if (jsonMatch) jsonStr = jsonMatch[0];
+
+  let cfg;
+  try {
+    cfg = JSON.parse(jsonStr);
+  } catch {
+    return null;
+  }
+  if (!cfg || typeof cfg !== "object") return null;
+
+  // Chart.js 识别：type + (data.labels + data.datasets) 或 常见图表类型
+  const chartjsTypes = ["pie", "doughnut", "bar", "line", "radar", "polarArea", "bubble", "scatter"];
+  const isChartjs =
+    (typeof cfg.type === "string" && chartjsTypes.includes(cfg.type)) ||
+    (cfg.data && Array.isArray(cfg.data.labels) && Array.isArray(cfg.data.datasets));
+
+  // ECharts 识别：含 option / series / xAxis / yAxis / tooltip / legend 等关键字段
+  const echartsKeys = ["series", "xAxis", "yAxis", "tooltip", "legend", "grid", "title", "visualMap", "dataset"];
+  const echartsHitCount = echartsKeys.filter(k => cfg[k] !== undefined).length;
+  const isECharts =
+    (cfg.series && Array.isArray(cfg.series) && cfg.series.length > 0) ||
+    (cfg.option && (cfg.option.series || cfg.option.xAxis)) ||
+    echartsHitCount >= 2;
+
+  if (isChartjs) {
+    const configJson = JSON.stringify(cfg);
+    return `<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Chart.js</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<style>html,body{margin:0;padding:12px;height:100%;box-sizing:border-box;font-family:Arial,sans-serif;background:#fff}#c{width:100%;height:calc(100vh - 24px);min-height:360px}</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+try {
+  const cfg = ${configJson};
+  if (cfg.options) {
+    cfg.options.responsive = true;
+    cfg.options.maintainAspectRatio = false;
+  } else {
+    cfg.options = { responsive: true, maintainAspectRatio: false };
+  }
+  new Chart(document.getElementById('c'), cfg);
+} catch (e) {
+  document.body.innerHTML = '<pre style="color:#c00;padding:12px">' + String(e && e.message || e) + '<br>' + JSON.stringify(${configJson}, null, 2).slice(0, 800) + '</pre>';
+}
+</script>
+</body>
+</html>`;
+  }
+
+  if (isECharts) {
+    // ECharts 优先使用 cfg.option（如果外层包了 option）
+    const option = cfg.option ? cfg.option : cfg;
+    const optionJson = JSON.stringify(option);
+    return `<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>ECharts</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+<style>html,body{margin:0;padding:0;height:100%;background:#fff}#c{width:100%;height:100vh;min-height:420px}</style>
+</head>
+<body>
+<div id="c"></div>
+<script>
+try {
+  const chart = echarts.init(document.getElementById('c'));
+  const opt = ${optionJson};
+  chart.setOption(opt);
+  window.addEventListener('resize', () => chart.resize());
+} catch (e) {
+  document.body.innerHTML = '<pre style="color:#c00;padding:12px">' + String(e && e.message || e) + '<br>' + JSON.stringify(${optionJson}, null, 2).slice(0, 800) + '</pre>';
+}
+</script>
+</body>
+</html>`;
+  }
+
+  return null;
+}
+
 function wrapSelection(before, after = before, placeholder = "text") {
   let start = els.editor.selectionStart ?? els.editor.value.length;
   let end = els.editor.selectionEnd ?? start;
@@ -9249,39 +10407,105 @@ function applyFormat(format) {
       mindmap: `mindmap\n  root((思维导图))\n    核心功能\n      功能一\n      功能二\n    技术架构\n      前端\n      后端`,
       "architecture-beta": `architecture-beta\n    root(应用)\n    group 前端\n      direction TB\n      A[UI组件] --> B[状态管理]\n    end\n    group 后端\n      direction TB\n      C[API服务] --> D[数据存储]\n    end\n    A --> C`,
     };
-    const excalidrawTemplate = `{\n  "type": "excalidraw",\n  "version": 2,\n  "source": "MyTemple Knowledge",\n  "elements": [\n    {\n      "id": "rect1",\n      "type": "rectangle",\n      "x": 100,\n      "y": 100,\n      "width": 200,\n      "height": 100,\n      "text": "双击编辑"\n    }\n  ]\n}`;
-    let block;
+    // Excalidraw：打开轻量绘图编辑器，用户画完后生成 JSON 代码块插入。
+    // 不再只是插入空模板 —— 让用户真正能用鼠标拖拽画图。
     if (lang === "excalidraw") {
-      block = `\n\`\`\`excalidraw\n${excalidrawTemplate}\n\`\`\`\n`;
-    } else {
+      (async () => {
+        const json = await openDrawEditor(null);
+        if (!json) return; // 用户取消
+        const block = `\n\`\`\`excalidraw\n${JSON.stringify(json, null, 2)}\n\`\`\`\n`;
+        insertBlockAtCursor(block);
+      })();
+      return;
+    }
+    // 通用：在光标所在行级位置插入 block 代码块，并把光标定位到代码块内
+    function insertBlockAtCursor(block) {
+      const cursor = els.editor.selectionEnd ?? els.editor.value.length;
+      const source = els.editor.value;
+      const lineStart = source.lastIndexOf("\n", cursor - 1) + 1;
+      const lineEnd = source.indexOf("\n", cursor);
+      const insertAtStart = lineStart;
+      const insertAtEnd = lineEnd === -1 ? source.length : lineEnd;
+      const newValue = source.slice(0, insertAtStart) + block + source.slice(insertAtEnd);
+      const anchor = insertAtStart + 3;
+      const head = anchor + (block.split("\n")[1]?.length || 0);
+      try {
+        const view = els.editor.view;
+        if (view && view.dispatch) {
+          view.dispatch({
+            changes: { from: insertAtStart, to: insertAtEnd, insert: block },
+            selection: { anchor, head },
+            scrollIntoView: true,
+          });
+          els.editor.value = newValue;
+        } else {
+          els.editor.value = newValue;
+          els.editor.setSelectionRange?.(anchor, head);
+        }
+      } catch (_) {
+        els.editor.value = newValue;
+        els.editor.setSelectionRange?.(anchor, head);
+      }
+      els.editor.dispatchEvent(new Event("input", { bubbles: true }));
+      schedulePreviewUpdate({ immediate: true });
+    }
+
+    let block;
+    {
       const template = mermaidTemplates[diagramType] || "flowchart TD\n  A[Start] --> B[End]";
       block = `\n\`\`\`mermaid\n${template}\n\`\`\`\n`;
     }
+    insertBlockAtCursor(block);
+  }
+  // 代码块（fenced）：支持指定语言；有选区则包裹成代码块，无选区插入空模板。
+  function insertCodeBlock(languageRaw) {
+    const lang = (languageRaw || "plain").toLowerCase() === "plain" ? "" : (languageRaw || "");
     const cursor = els.editor.selectionEnd ?? els.editor.value.length;
+    const start = els.editor.selectionStart ?? cursor;
     const source = els.editor.value;
-    const lineStart = source.lastIndexOf("\n", cursor - 1) + 1;
-    const lineEnd = source.indexOf("\n", cursor);
-    const insertAtStart = lineStart;
-    const insertAtEnd = lineEnd === -1 ? source.length : lineEnd;
-    const newValue = source.slice(0, insertAtStart) + block + source.slice(insertAtEnd);
-    const anchor = insertAtStart + 3;
-    const head = anchor + (block.split("\n")[1]?.length || 0);
+    const hasSelection = start !== cursor && source.slice(start, cursor).trim().length > 0;
+    const selected = hasSelection ? source.slice(start, cursor) : "在这里写代码";
+
+    // 为避免 fence 被内容截断，如果选区内含有 ``` 就用 ~~~ 替代
+    const hasTick = /```/.test(selected);
+    const fence = hasTick ? "~~~" : "```";
+    const open = `${fence}${lang}`;
+    const close = `${fence}`;
+
+    // 前后空行对齐（Markdown 要求 fence 独占一行，前后最好空行）
+    let prefix = "";
+    if (start > 0 && source[start - 1] !== "\n") prefix = "\n";
+    if (start > 0 && source[start - 1] === "\n" && source[start - 2] !== "\n") prefix = "\n";
+    let suffix = "\n";
+
+    let block;
+    if (hasSelection) {
+      // 保留选区前后内容的换行
+      block = `${prefix}${open}\n${selected}\n${close}${suffix}`;
+    } else {
+      block = `${prefix}${open}\n${selected}\n${close}${suffix}`;
+    }
+    const newValue = source.slice(0, start) + block + source.slice(cursor);
+    const insertedLen = (prefix + open + "\n").length;
+    const selAnchor = start + insertedLen;
+    const selHead = selAnchor + selected.length;
+
     try {
       const view = els.editor.view;
       if (view && view.dispatch) {
         view.dispatch({
-          changes: { from: insertAtStart, to: insertAtEnd, insert: block },
-          selection: { anchor, head },
+          changes: { from: start, to: cursor, insert: block },
+          selection: { anchor: selAnchor, head: selHead },
           scrollIntoView: true,
         });
         els.editor.value = newValue;
       } else {
         els.editor.value = newValue;
-        els.editor.setSelectionRange?.(anchor, head);
+        els.editor.setSelectionRange?.(selAnchor, selHead);
       }
     } catch (_) {
       els.editor.value = newValue;
-      els.editor.setSelectionRange?.(anchor, head);
+      els.editor.setSelectionRange?.(selAnchor, selHead);
     }
     els.editor.dispatchEvent(new Event("input", { bubbles: true }));
     schedulePreviewUpdate({ immediate: true });
@@ -9448,6 +10672,47 @@ function applyFormat(format) {
     "chart-git": () => insertChartBlock("mermaid", "gitGraph"),
     "chart-mindmap": () => insertChartBlock("mermaid", "mindmap"),
     "chart-architecture": () => insertChartBlock("mermaid", "architecture-beta"),
+    // 代码块：按语言插入 fenced 代码块（```xxx ... ```）
+    "codeblock-plain": () => insertCodeBlock("plain"),
+    "codeblock-javascript": () => insertCodeBlock("javascript"),
+    "codeblock-typescript": () => insertCodeBlock("typescript"),
+    "codeblock-python": () => insertCodeBlock("python"),
+    "codeblock-java": () => insertCodeBlock("java"),
+    "codeblock-php": () => insertCodeBlock("php"),
+    "codeblock-c": () => insertCodeBlock("c"),
+    "codeblock-cpp": () => insertCodeBlock("cpp"),
+    "codeblock-csharp": () => insertCodeBlock("csharp"),
+    "codeblock-go": () => insertCodeBlock("go"),
+    "codeblock-rust": () => insertCodeBlock("rust"),
+    "codeblock-ruby": () => insertCodeBlock("ruby"),
+    "codeblock-kotlin": () => insertCodeBlock("kotlin"),
+    "codeblock-swift": () => insertCodeBlock("swift"),
+    "codeblock-lua": () => insertCodeBlock("lua"),
+    "codeblock-r": () => insertCodeBlock("r"),
+    "codeblock-scala": () => insertCodeBlock("scala"),
+    "codeblock-perl": () => insertCodeBlock("perl"),
+    "codeblock-html": () => insertCodeBlock("html"),
+    "codeblock-css": () => insertCodeBlock("css"),
+    "codeblock-scss": () => insertCodeBlock("scss"),
+    "codeblock-vue": () => insertCodeBlock("vue"),
+    "codeblock-react": () => insertCodeBlock("jsx"),
+    "codeblock-sql": () => insertCodeBlock("sql"),
+    "codeblock-mysql": () => insertCodeBlock("mysql"),
+    "codeblock-bash": () => insertCodeBlock("bash"),
+    "codeblock-cmd": () => insertCodeBlock("cmd"),
+    "codeblock-powershell": () => insertCodeBlock("powershell"),
+    "codeblock-docker": () => insertCodeBlock("dockerfile"),
+    "codeblock-nginx": () => insertCodeBlock("nginx"),
+    "codeblock-json": () => insertCodeBlock("json"),
+    "codeblock-yaml": () => insertCodeBlock("yaml"),
+    "codeblock-xml": () => insertCodeBlock("xml"),
+    "codeblock-toml": () => insertCodeBlock("toml"),
+    "codeblock-csv": () => insertCodeBlock("text"),
+    "codeblock-ini": () => insertCodeBlock("ini"),
+    "codeblock-markdown": () => insertCodeBlock("markdown"),
+    "codeblock-diff": () => insertCodeBlock("diff"),
+    "codeblock-makefile": () => insertCodeBlock("makefile"),
+    "codeblock-cmake": () => insertCodeBlock("cmake"),
     clearFormat: () => {
       let start = els.editor.selectionStart ?? els.editor.value.length;
       let end = els.editor.selectionEnd ?? start;
@@ -9597,28 +10862,51 @@ async function handleVideoUpload(file) {
     showToast("请选择视频文件");
     return;
   }
+  // 视频文件通常较大，先检查是否超过 200MB 提示用户
+  if (file.size > 200 * 1024 * 1024) {
+    if (!confirm(`视频文件较大（${formatFileSizeLocal(file.size)}），上传可能需要一些时间，是否继续？`)) return;
+  }
   const targetWorkspaceId = resolveScreenshotWorkspaceId();
-  const formData = new FormData();
-  formData.append("video", file);
-  if (targetWorkspaceId) formData.append("workspaceId", targetWorkspaceId);
-  showToast(`正在上传视频（${formatFileSizeLocal(file.size)}）…`);
+  showToast(`正在读取视频文件（${formatFileSizeLocal(file.size)}）…`);
   try {
+    // 读取文件为 base64（dataURL），与后端 Json<UploadVideoRequest> 格式匹配
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+    // 从 dataURL 中提取纯 base64 数据
+    const commaIdx = dataUrl.indexOf(",");
+    const base64 = commaIdx >= 0 ? dataUrl.substring(commaIdx + 1) : dataUrl;
+
+    showToast(`正在上传视频（${formatFileSizeLocal(file.size)}）…`);
+    const payload = {
+      filename: file.name,
+      base64: base64,
+    };
+    if (targetWorkspaceId) payload.workspaceId = targetWorkspaceId;
+
     const response = await fetch("/api/upload-video", {
       method: "POST",
-      body: formData,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
     });
     if (!response.ok) {
       const detail = await response.json().catch(() => ({}));
       throw new Error(detail.error || `上传失败 (${response.status})`);
     }
     const result = await response.json();
-    insertAtCursor(`\n${result.markdown}\n`);
+    if (!result.ok) {
+      throw new Error(result.error || "上传失败");
+    }
+    // 后端返回 url，前端生成 markdown 语法
+    const markdown = `![${file.name}](${result.url})`;
+    insertAtCursor(`\n${markdown}\n`);
     if (!state.previewVisible) setPreviewVisible(true, { automatic: true });
     schedulePreviewUpdate({ immediate: true });
-    const sizeNote = result.compressed
-      ? `（已压缩至 ${formatFileSizeLocal(result.size)}，${result.note}）`
-      : `（${formatFileSizeLocal(result.size)}）`;
-    showToast(`视频已插入${sizeNote}`);
+    const sizeStr = result.size ? formatFileSizeLocal(result.size) : formatFileSizeLocal(file.size);
+    showToast(`视频已插入（${sizeStr}）`);
   } catch (e) {
     showToast(`视频上传失败：${e.message}`);
   }
@@ -10021,7 +11309,7 @@ const gsDebounced = debounce(async (query) => {
     const order = [];
     for (let i = 0; i < gsCurrentItems.length; i++) {
       const item = gsCurrentItems[i];
-      const file = state.flatFiles.find((f) => f.path === item.path) || item;
+      const file = state.flatFilesByPath.get(item.path) || item;
       const refPath = displayRelativePath(item.path); const folder = refPath.split(/[\\/]/).slice(0, -1).join("/") || "根目录";
       if (!groups[folder]) { groups[folder] = []; order.push(folder); }
       groups[folder].push({ item, file, origIdx: i });
@@ -10909,7 +12197,19 @@ els.markdownView.addEventListener("click", (event) => {
   event.preventDefault();
   event.stopPropagation();
   const label = link.dataset.docLink.toLowerCase();
-  const file = state.flatFiles.find((item) => item.title.toLowerCase() === label || item.path.toLowerCase().endsWith(`${label}.md`));
+  // 优先按 title 精确命中（O(1) 索引），失败再按 path endWith(`${label}.md`) 扫。
+  // wikilink 绝大多数是 [[标题]] 或 [[xxx.md]]，title 索引命中可从 O(N) → O(1)。
+  let file = null;
+  const byTitle = state.flatFilesByTitleLower.get(label);
+  if (byTitle && byTitle.length === 1) file = byTitle[0];
+  if (!file) {
+    const mdSuffix = `${label}.md`;
+    for (const f of state.flatFiles) {
+      if (f.path.length >= mdSuffix.length && f.path.toLowerCase().slice(-mdSuffix.length) === mdSuffix) {
+        file = f; break;
+      }
+    }
+  }
   if (file) openDoc(file.path);
   else showToast("未找到对应文档");
 });
@@ -10948,7 +12248,17 @@ els.preview.addEventListener("click", async (event) => {
     event.preventDefault();
     event.stopPropagation();
     const label = wikiLink.dataset.docLink.toLowerCase();
-    const file = state.flatFiles.find((item) => item.title.toLowerCase() === label || item.path.toLowerCase().endsWith(`${label}.md`));
+    let file = null;
+    const byTitle = state.flatFilesByTitleLower.get(label);
+    if (byTitle && byTitle.length === 1) file = byTitle[0];
+    if (!file) {
+      const mdSuffix = `${label}.md`;
+      for (const f of state.flatFiles) {
+        if (f.path.length >= mdSuffix.length && f.path.toLowerCase().slice(-mdSuffix.length) === mdSuffix) {
+          file = f; break;
+        }
+      }
+    }
     if (file) openDoc(file.path);
     else showToast("未找到对应文档");
     return;
@@ -11493,7 +12803,11 @@ els.aiTransformCancelBtn?.addEventListener("click", closeAiTransformModal);
 els.aiTransformModal?.addEventListener("click", (event) => {
   if (event.target === els.aiTransformModal) closeAiTransformModal();
 });
-els.aiTransformGenerateBtn?.addEventListener("click", () => runAiTransform("rewrite", { preserveInstruction: true }));
+els.aiTransformGenerateBtn?.addEventListener("click", () => {
+  // 生成按钮：用当前模式 + 保留用户已输入的自定义要求
+  const mode = state.ai.transform?.mode || "rewrite";
+  runAiTransform(mode, { preserveInstruction: true });
+});
 els.aiTransformInsertBtn?.addEventListener("click", insertAiTransform);
 els.aiTransformCreateBtn?.addEventListener("click", createAiTransformDocument);
 document.addEventListener("selectionchange", debounce(refreshAiSelectionMenu, 80));
@@ -11523,44 +12837,113 @@ els.goToLicenseBtn?.addEventListener("click", () => {
   checkLicenseStatus();
 });
 
-// 授权管理
-async function checkLicenseStatus() {
-  try {
-    const result = await api.get("/api/license/check");
-    if (result.activated) {
-      state.licenseValidatedAt = Date.now();
-      els.licenseUnactivated?.classList.add("hidden");
-      els.licenseActivated?.classList.remove("hidden");
-      if (els.activatedMachineCode) els.activatedMachineCode.textContent = result.machineCode || "";
-      if (els.licenseExpiry) {
-        if (result.expiry > 0) {
-          els.licenseExpiry.textContent = new Date(result.expiry).toLocaleDateString("zh-CN");
-          els.licenseExpiryRow.classList.remove("hidden");
-        } else {
-          els.licenseExpiry.textContent = "永久";
-          els.licenseExpiryRow.classList.remove("hidden");
-        }
-      }
-      if (result.timeRolledBack && els.licenseWarning) {
-        els.licenseWarning.textContent = "⚠️ 检测到系统时间曾回拨，当前授权仍有效。请勿再次回拨时间。";
-        els.licenseWarning.classList.remove("hidden");
-      } else if (els.licenseWarning) {
-        els.licenseWarning.classList.add("hidden");
-      }
-    } else {
-      state.licenseValidatedAt = 0;
-      els.licenseUnactivated?.classList.remove("hidden");
-      els.licenseActivated?.classList.add("hidden");
-      if (els.machineCodeDisplay) els.machineCodeDisplay.textContent = result.machineCode || "获取失败";
-      if (els.licenseWarning && result.error && result.error.includes("时间回拨")) {
-        els.licenseWarning.textContent = `⚠️ ${result.error}`;
-        els.licenseWarning.classList.remove("hidden");
-      } else if (els.licenseWarning) {
-        els.licenseWarning.classList.add("hidden");
+// 授权管理 —— localStorage 持久化 + 首屏本地缓存优先 + 后台联网确认
+const LICENSE_CACHE_KEY = "license_cache_v1";
+const LICENSE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 分钟有效（同后台定时检查周期）
+const LICENSE_NET_TIMEOUT_MS = 1500;           // 联网校验 1.5s 超时，避免网络波动拖慢启动
+
+function applyLicenseResultUI(result) {
+  if (!result) return;
+  if (result.activated) {
+    els.licenseUnactivated?.classList.add("hidden");
+    els.licenseActivated?.classList.remove("hidden");
+    if (els.activatedMachineCode) els.activatedMachineCode.textContent = result.machineCode || "";
+    if (els.licenseExpiry) {
+      if (result.expiry > 0) {
+        els.licenseExpiry.textContent = new Date(result.expiry).toLocaleDateString("zh-CN");
+        els.licenseExpiryRow.classList.remove("hidden");
+      } else {
+        els.licenseExpiry.textContent = "永久";
+        els.licenseExpiryRow.classList.remove("hidden");
       }
     }
+    if (result.timeRolledBack && els.licenseWarning) {
+      els.licenseWarning.textContent = "⚠️ 检测到系统时间曾回拨，当前授权仍有效。请勿再次回拨时间。";
+      els.licenseWarning.classList.remove("hidden");
+    } else if (els.licenseWarning) {
+      els.licenseWarning.classList.add("hidden");
+    }
+  } else {
+    els.licenseUnactivated?.classList.remove("hidden");
+    els.licenseActivated?.classList.add("hidden");
+    if (els.machineCodeDisplay) els.machineCodeDisplay.textContent = result.machineCode || "获取失败";
+    if (els.licenseWarning && result.error && result.error.includes("时间回拨")) {
+      els.licenseWarning.textContent = `⚠️ ${result.error}`;
+      els.licenseWarning.classList.remove("hidden");
+    } else if (els.licenseWarning) {
+      els.licenseWarning.classList.add("hidden");
+    }
+  }
+}
+
+function getLicenseCache() {
+  try {
+    const raw = localStorage.getItem(LICENSE_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !parsed.result) return null;
+    const age = Date.now() - (parsed.savedAt || 0);
+    if (age < 0) return null; // 时间回拨，缓存丢弃
+    return { result: parsed.result, savedAt: parsed.savedAt || 0, age };
+  } catch (_) { return null; }
+}
+
+function setLicenseCache(result) {
+  try {
+    localStorage.setItem(LICENSE_CACHE_KEY, JSON.stringify({
+      result, savedAt: Date.now(),
+    }));
+  } catch (_) {}
+}
+
+async function checkLicenseStatus(opts) {
+  const skipNet = opts && opts.skipNetwork === true;
+  // 1) 先走缓存（skipNetwork=true 的首屏快速路径只返回缓存）
+  if (skipNet) {
+    const c = getLicenseCache();
+    if (c && c.age < LICENSE_CACHE_TTL_MS && c.result) {
+      state.licenseValidatedAt = c.savedAt || Date.now();
+      applyLicenseResultUI(c.result);
+      return c.result;
+    }
+    return { activated: false, _cacheMiss: true };
+  }
+  // 2) 正常路径：/api/license/check 拉取，带 1.5s 超时避免网络波动拖慢启动
+  //    注意：api.get 的底层可能走 Tauri IPC（无 AbortSignal），因此这里 Promise.race 超时只是
+  //    *逻辑层面* 的早返回，底层 HTTP/IPC 请求仍可能继续执行并更新缓存（不影响启动时间）。
+  try {
+    let timer = null;
+    const timeoutP = new Promise((_, rej) => {
+      timer = setTimeout(() => rej(new Error("timeout")), LICENSE_NET_TIMEOUT_MS);
+    });
+    const reqPromise = api.get("/api/license/check").then((r) => {
+      // 请求在超时后才回来也刷新缓存（静默），下次启动命中
+      try {
+        if (r.activated) { setLicenseCache(r); state.licenseValidatedAt = Date.now(); }
+        else { setLicenseCache(r); state.licenseValidatedAt = 0; }
+      } catch (_) {}
+      return r;
+    });
+    const result = await Promise.race([reqPromise, timeoutP]);
+    if (timer) clearTimeout(timer);
+    if (result.activated) {
+      state.licenseValidatedAt = Date.now();
+      setLicenseCache(result);
+    } else {
+      state.licenseValidatedAt = 0;
+      setLicenseCache(result);
+    }
+    applyLicenseResultUI(result);
     return result;
   } catch (err) {
+    // 网络失败：退回到缓存（若缓存有效则静默用缓存，不再标记 error UI）
+    const c = getLicenseCache();
+    if (c && c.age < LICENSE_CACHE_TTL_MS && c.result && c.result.activated) {
+      state.licenseValidatedAt = c.savedAt || Date.now();
+      applyLicenseResultUI(c.result);
+      console.warn("License check network failed, using cache:", err && err.message);
+      return c.result;
+    }
     console.error("License check failed:", err);
     els.licenseActivated?.classList.add("hidden");
     els.licenseUnactivated?.classList.remove("hidden");
@@ -12800,6 +14183,8 @@ document.addEventListener("visibilitychange", () => {
   } else {
     startGraphSimulation();
     _startSystemTimeInterval();
+    // 问题2: 页面恢复可见时节流刷新文件树，覆盖外部保存新文件场景
+    refreshTreeThrottled("visibilitychange");
   }
   // 页面隐藏时立即保存草稿
   if (document.hidden) saveDraft();
@@ -12823,7 +14208,11 @@ window.addEventListener("blur", () => {
 window.addEventListener("focus", () => {
   state.graphView.pageActive = true;
   startGraphSimulation();
+  // 问题2: 窗口聚焦时节流刷新文件树，覆盖从外部编辑器切回软件时的新增文件
+  refreshTreeThrottled("window-focus");
 });
+// 问题2: 应用启动后启动 60s 低频定时刷新文件树兜底
+startTreeRefreshInterval();
 const graphMotionPreference = window.matchMedia?.("(prefers-reduced-motion: reduce)");
 graphMotionPreference?.addEventListener?.("change", () => {
   if (graphMotionReduced()) stopGraphSimulation();
@@ -13086,6 +14475,21 @@ _deferIdle(() => {
 
 // 启动流程：开机图片 logo.png 立即显示，后台并行加载服务，加载完成后直接进入应用。
 async function beginLoading() {
+  // 双 splash 合并：Rust 端 splash.html 已展示过进度，导航到 /?skipSplash=1
+  // 时前端跳过 appSplash 进度条，立即隐藏启动层并标记 appStarted（避免
+  // index.html 内 15s 超时误判触发自动刷新），后台仍正常跑 license + bootstrap。
+  try {
+    const skip = new URLSearchParams(window.location.search).get("skipSplash") === "1";
+    if (skip) {
+      if (typeof window.__markAppStarted === "function") window.__markAppStarted();
+      _splashProgress = 100;
+      if (splashProgressFill) splashProgressFill.style.width = "100%";
+      if (appSplash && !appSplash.classList.contains("hidden")) {
+        appSplash.classList.add("hidden");
+        appSplash.remove();
+      }
+    }
+  } catch (e) { console.warn("skipSplash detection failed:", e); }
   // 直接启动授权与文档库加载，与开机图片并行进行。
   await startupLicenseCheck();
 }
@@ -13138,20 +14542,41 @@ function showWelcomeIfNeeded() {
 async function startupLicenseCheck() {
   setSplashProgress(15, "正在初始化…");
 
-  const licensePromise = checkLicenseStatus();
-  const result = await licensePromise;
+  // 首屏：本地缓存优先（skipNetwork），避免等 HTTP/网络。5 分钟内的有效缓存直接用。
+  let result = await checkLicenseStatus({ skipNetwork: true });
+  let usedCache = !!result.activated;
+  if (!usedCache) {
+    // 缓存未命中（首次启动 / 5 分钟 TTL 过期 / 明确未授权）→ 联网校验一次
+    result = await checkLicenseStatus();
+  }
+
   setSplashProgress(55, result.activated ? "正在加载文档库…" : "等待授权…");
 
   if (result.activated) {
-    await bootstrap();
-    clearLicenseGate();
-    setSplashProgress(85, "正在完成初始化…");
-    await Promise.resolve();
-    setSplashProgress(100, "加载完成");
-    // 加载完成后直接隐藏开机图片，进入应用。
-    hideSplash();
-    // 启动后台定时授权检查（每5分钟一次，检测授权是否在使用期间失效）
-    startPeriodicLicenseCheck();
+    // 并行启动：bootstrap +（若用了缓存）后台联网二次确认授权
+    const bootPromise = (async () => {
+      await bootstrap();
+      clearLicenseGate();
+      setSplashProgress(85, "正在完成初始化…");
+      await Promise.resolve();
+      setSplashProgress(100, "加载完成");
+      hideSplash();
+      startPeriodicLicenseCheck();
+    })();
+
+    if (usedCache) {
+      // fire-and-forget：联网确认结果若发现授权实际失效 → 出弹窗。不阻塞 bootstrap。
+      (async () => {
+        try {
+          const netResult = await checkLicenseStatus();
+          if (!netResult.activated) {
+            state.licenseValidatedAt = 0;
+            showLicenseGate(netResult.error || "授权已失效，请重新授权");
+          }
+        } catch (_) { /* ignore — network issue, let periodic re-check take over */ }
+      })();
+    }
+    await bootPromise;
   } else {
     state.tree = [];
     state.flatFiles = [];

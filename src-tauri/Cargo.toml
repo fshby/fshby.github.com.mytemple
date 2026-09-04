@@ -1,6 +1,6 @@
 [package]
 name = "mytemple-server"
-version = "1.8.105"
+version = "2.0.1"
 edition = "2021"
 description = "MyTemple Knowledge - Rust 原生后端 (Phase 5 纯原生架构)"
 
@@ -32,7 +32,11 @@ tower = "0.5"
 tower-http = { version = "0.6", features = ["fs"] }
 
 # 正则表达式 (全文搜索/Markdown 解析)
-regex = "1"
+# 关闭 perf/unicode/perl 默认 features：项目里的 regex 用法只有
+#   `(?i)^...$` (glob) / 简单字符类 / `\s+` / `\p{L}\p{N}` (CJK tag)
+# 全部属于基础 unicode + 最基本语法，Unicode 分类靠 perf* 预生成 DFA 不会命中；
+# 关 default 后保留 std + unicode 就能覆盖（unicode-perl 实际也不命中）。
+regex = { version = "1", default-features = false, features = ["std", "unicode", "unicode-perl"] }
 
 # 目录遍历 (目录树构建)
 walkdir = "2"
@@ -54,7 +58,10 @@ env_logger = "0.11"
 anyhow = "1"
 thiserror = "1"
 # DOCX/ODT 正文提取（ZIP + XML 扫描）
-zip = "2"
+# 目前 converter 走 npm scripts；Rust 侧留空壳依赖预留给后续 converter 原生实现。
+# 关 bzip2/deflate64/zstd 等默认压缩算法 features（都需要额外 C crate 编译），
+# 保留 `deflate`（最常用的 Zip DEFLATE 即 .docx/.xlsx/.odt 标准）避免后续启用时漏带。
+zip = { version = "2", default-features = false, features = ["deflate"] }
 
 # Tauri 应用外壳（窗口/打包）
 tauri = { version = "2", features = ["devtools"] }
@@ -64,12 +71,17 @@ tauri-plugin-opener = "2"
 url = "2"
 
 # HTTP 客户端（Ollama / DeepSeek）— rustls 避免 OpenSSL 依赖
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "gzip"] }
+# 关闭 gzip：Ollama / DeepSeek / 本机 localhost 接口基本不会返回 gzip，
+# 省掉 flate2/miniz_oxide 编译 & 链接体积。如果后续接云端 API 需要解压再重新打开。
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 # 中文路径 NFC/NFD 归一（Mac HFS+ 分解式 vs Win NTFS 合成式），解决全局搜索 == 命中失败
 unicode-normalization = "0.1"
 # 智能编码兜底（UTF8 失败后：BOM→UTF16/UTF32，或按 GBK/GB18030/Big5/EUC-KR/ShiftJIS 解码回转 UTF8）
 encoding_rs = "0.8"
+
+# 向量 mmap 只读映射（避免大向量表全量堆拷贝）
+memmap2 = "0.9"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

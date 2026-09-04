@@ -17,6 +17,11 @@ use std::sync::Arc;
 use std::os::windows::process::CommandExt;
 use crate::server::ServerState;
 
+// ── 重导出：ipc.rs 的 get_version 需要调用 handlers 内部的 fetch_remote_version
+pub async fn fetch_remote_version_pub() -> Result<serde_json::Value, String> {
+    fetch_remote_version().await
+}
+
 // ── 通用响应封装 ──────────────────────────────────────────
 
 #[derive(Serialize)]
@@ -75,6 +80,7 @@ pub fn build_native_router(state: Arc<ServerState>) -> Router {
         .route("/api/files/*path", delete(delete_file))
         // 文档
         .route("/api/doc", get(get_doc))
+        .route("/api/doc-check", get(check_doc))
         .route("/api/save", post(save_doc))
         .route("/api/delete", post(delete_docs))
         .route("/api/create-folder", post(create_folder))
@@ -113,6 +119,10 @@ pub fn build_native_router(state: Arc<ServerState>) -> Router {
         // Import/Export
         .route("/api/import", post(import_document))
         .route("/api/export", post(export_document))
+        // 原生对话框导出（External URL 模式下替代 Tauri IPC）
+        .route("/api/export/save-as", post(export_save_as_http))
+        .route("/api/export/open-file", post(export_open_file_http))
+        .route("/api/export/reveal-folder", post(export_reveal_in_folder_http))
         // 语义标签
         .route("/api/semantic-tags", post(semantic_tags))
         // Markdown 规范化
@@ -144,15 +154,14 @@ pub fn build_native_router(state: Arc<ServerState>) -> Router {
 
 /// GET /api/health
 async fn health() -> impl IntoResponse {
-    raw_json(serde_json::json!({ "status": "ok" }))
+    crate::ipc::ok_response(crate::ipc::health().await)
 }
 
 /// GET /api/knowledge/health
 async fn knowledge_health(
     State(state): State<Arc<ServerState>>,
 ) -> impl IntoResponse {
-    let health = state.app.health_check().await;
-    raw_json(health)
+    crate::ipc::ok_response(crate::ipc::knowledge_health(&state).await)
 }
 
 /// GET /api/version
@@ -164,32 +173,18 @@ struct VersionQuery {
     refresh: String,
 }
 
+#[derive(Deserialize)]
+struct TreeQuery {
+    /// refresh=1 / refresh=true 时，返回前强制 refresh_cache() 全量扫描磁盘
+    /// —— 修复：前端 bootstrap(true) / refreshTreeThrottled / 手动刷新按钮 调 /api/tree?refresh=1
+    ///        但原 get_tree 没有 Query 参数，refresh=1 被完全忽略，后端只读 cache 不重读磁盘，
+    ///        导致外部写入新文件/软件内新建文档后树不显示。
+    #[serde(default)]
+    refresh: String,
+}
+
 async fn get_version(query: Query<VersionQuery>) -> impl IntoResponse {
-    let should_refresh = query.refresh == "1" || query.refresh.eq_ignore_ascii_case("true");
-
-    if should_refresh {
-        // 优先 fetch 远程
-        match fetch_remote_version().await {
-            Ok(remote) => return raw_json(remote),
-            Err(e) => {
-                eprintln!("[get_version] 远程失败，降级本地: {}", e);
-            }
-        }
-    }
-
-    // 本地 fallback
-    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-    let version_path = manifest_dir.parent().unwrap_or(manifest_dir).join("version.json");
-    match std::fs::read_to_string(&version_path) {
-        Ok(content) => match serde_json::from_str::<serde_json::Value>(&content) {
-            Ok(value) => raw_json(value),
-            Err(_) => raw_json(serde_json::json!({ "raw": content })),
-        },
-        Err(_) => raw_json(serde_json::json!({
-            "version": env!("CARGO_PKG_VERSION"),
-            "name": "MyTemple Knowledge"
-        })),
-    }
+    crate::ipc::ok_response(crate::ipc::get_version(&query.refresh).await)
 }
 
 // ── 远程版本拉取 + 版本比较 ──────────────────────────────────
@@ -229,16 +224,7 @@ fn cmp_versions(a: &str, b: &str) -> std::cmp::Ordering {
 
 /// GET /api/system-paths
 async fn get_system_paths() -> impl IntoResponse {
-    let home = std::env::var("USERPROFILE")
-        .or_else(|_| std::env::var("HOME"))
-        .unwrap_or_else(|_| ".".to_string());
-    let appdata = std::env::var("APPDATA").unwrap_or_default();
-    let local_appdata = std::env::var("LOCALAPPDATA").unwrap_or_default();
-    raw_json(serde_json::json!({
-        "home": home,
-        "appdata": appdata,
-        "localAppData": local_appdata,
-    }))
+    crate::ipc::ok_response(crate::ipc::get_system_paths().await)
 }
 
 // ── 工作区 ───────────────────────────────────────────────
@@ -247,23 +233,7 @@ async fn get_system_paths() -> impl IntoResponse {
 async fn get_workspaces(
     State(state): State<Arc<ServerState>>,
 ) -> impl IntoResponse {
-    let workspaces = state.app.get_workspaces().await;
-    let default_id = state.app.get_default_workspace_id().await;
-    let visible: Vec<crate::app::Workspace> = workspaces
-        .iter()
-        .filter(|w| w.visible)
-        .take(2)
-        .cloned()
-        .collect();
-    let mut recent = workspaces.clone();
-    recent.sort_by(|a, b| b.last_used.cmp(&a.last_used));
-    recent.truncate(8);
-    raw_json(serde_json::json!({
-        "workspaces": workspaces,
-        "defaultWorkspaceId": default_id,
-        "visible": visible,
-        "recent": recent,
-    }))
+    crate::ipc::ok_response(crate::ipc::get_workspaces(&state).await)
 }
 
 #[derive(Deserialize)]
@@ -276,11 +246,7 @@ async fn add_workspace(
     State(state): State<Arc<ServerState>>,
     Json(req): Json<AddWorkspaceRequest>,
 ) -> impl IntoResponse {
-    let name = req.name.unwrap_or_default();
-    match state.app.add_workspace(&req.path, &name).await {
-        Ok(ws) => json_ok(ws),
-        Err(e) => json_err(StatusCode::BAD_REQUEST, e.to_string()),
-    }
+    crate::ipc::to_response(crate::ipc::add_workspace(&state, req.path, req.name).await)
 }
 
 #[derive(Deserialize)]
@@ -292,10 +258,7 @@ async fn remove_workspace(
     State(state): State<Arc<ServerState>>,
     Json(req): Json<RemoveWorkspaceRequest>,
 ) -> impl IntoResponse {
-    match state.app.remove_workspace(&req.id).await {
-        Ok(()) => raw_json(serde_json::json!({ "ok": true })),
-        Err(e) => json_err(StatusCode::BAD_REQUEST, e.to_string()),
-    }
+    crate::ipc::to_response(crate::ipc::remove_workspace(&state, req.id).await)
 }
 
 #[derive(Deserialize)]
@@ -308,10 +271,7 @@ async fn rename_workspace(
     State(state): State<Arc<ServerState>>,
     Json(req): Json<RenameWorkspaceRequest>,
 ) -> impl IntoResponse {
-    match state.app.rename_workspace(&req.id, &req.name).await {
-        Ok(()) => raw_json(serde_json::json!({ "ok": true })),
-        Err(e) => json_err(StatusCode::BAD_REQUEST, e.to_string()),
-    }
+    crate::ipc::to_response(crate::ipc::rename_workspace(&state, req.id, req.name).await)
 }
 
 #[derive(Deserialize)]
@@ -323,10 +283,7 @@ async fn set_default_workspace(
     State(state): State<Arc<ServerState>>,
     Json(req): Json<SetDefaultRequest>,
 ) -> impl IntoResponse {
-    match state.app.set_default_workspace(&req.id).await {
-        Ok(()) => raw_json(serde_json::json!({ "ok": true })),
-        Err(e) => json_err(StatusCode::BAD_REQUEST, e.to_string()),
-    }
+    crate::ipc::to_response(crate::ipc::set_default_workspace(&state, req.id).await)
 }
 
 #[derive(Deserialize)]
@@ -339,11 +296,7 @@ async fn show_workspace(
     State(state): State<Arc<ServerState>>,
     Json(req): Json<ShowWorkspaceRequest>,
 ) -> impl IntoResponse {
-    let visible = req.visible.unwrap_or(true);
-    match state.app.show_workspace(&req.id, visible).await {
-        Ok(()) => raw_json(serde_json::json!({ "ok": true })),
-        Err(e) => json_err(StatusCode::BAD_REQUEST, e.to_string()),
-    }
+    crate::ipc::to_response(crate::ipc::show_workspace(&state, req.id, req.visible).await)
 }
 
 #[derive(Deserialize)]
@@ -357,29 +310,16 @@ async fn set_md_only(
     State(state): State<Arc<ServerState>>,
     Json(req): Json<SetMdOnlyRequest>,
 ) -> impl IntoResponse {
-    let md_only = req.md_only.unwrap_or(false);
-    match state.app.set_md_only(&req.id, md_only).await {
-        Ok(()) => raw_json(serde_json::json!({ "ok": true })),
-        Err(e) => json_err(StatusCode::BAD_REQUEST, e.to_string()),
-    }
+    crate::ipc::to_response(crate::ipc::set_md_only(&state, req.id, req.md_only).await)
 }
 
 // ── 文件树 ───────────────────────────────────────────────
 
 async fn get_tree(
     State(state): State<Arc<ServerState>>,
+    Query(query): Query<TreeQuery>,
 ) -> impl IntoResponse {
-    let tree = state.app.get_tree().await;
-    let workspace_nodes = tree.children;
-    let files = state.app.get_files().await;
-    let workspaces = state.app.get_workspaces().await;
-    let default_id = state.app.get_default_workspace_id().await;
-    raw_json(serde_json::json!({
-        "tree": workspace_nodes,
-        "count": files.len(),
-        "workspaces": workspaces,
-        "defaultWorkspaceId": default_id,
-    }))
+    crate::ipc::ok_response(crate::ipc::get_tree(&state, query.refresh).await)
 }
 
 // ── 文件 CRUD ────────────────────────────────────────────
@@ -387,18 +327,17 @@ async fn get_tree(
 async fn list_files(
     State(state): State<Arc<ServerState>>,
 ) -> impl IntoResponse {
-    let files = state.app.get_files().await;
-    json_ok(files)
+    crate::ipc::ok_response(crate::ipc::list_files(&state).await)
 }
 
 async fn read_file(
     State(state): State<Arc<ServerState>>,
     Path(path): Path<String>,
 ) -> impl IntoResponse {
-    match state.app.read_file(&path).await {
-        Ok(entry) => json_ok(entry),
-        Err(e) => json_err(StatusCode::NOT_FOUND, e.to_string()),
-    }
+    crate::ipc::to_response_err(
+        crate::ipc::read_file(&state, path).await,
+        StatusCode::NOT_FOUND,
+    )
 }
 
 #[derive(Deserialize)]
@@ -411,20 +350,17 @@ async fn save_file(
     State(state): State<Arc<ServerState>>,
     Json(req): Json<SaveFileRequest>,
 ) -> impl IntoResponse {
-    match state.app.save_file(&req.path, &req.content).await {
-        Ok(hash) => json_ok(serde_json::json!({ "sha256": hash })),
-        Err(e) => json_err(StatusCode::BAD_REQUEST, e.to_string()),
-    }
+    crate::ipc::to_response(crate::ipc::save_file_raw(&state, req.path, req.content).await)
 }
 
 async fn delete_file(
     State(state): State<Arc<ServerState>>,
     Path(path): Path<String>,
 ) -> impl IntoResponse {
-    match state.app.delete_file(&path).await {
-        Ok(()) => json_ok(serde_json::json!({})),
-        Err(e) => json_err(StatusCode::NOT_FOUND, e.to_string()),
-    }
+    crate::ipc::to_response_err(
+        crate::ipc::delete_file(&state, path).await,
+        StatusCode::NOT_FOUND,
+    )
 }
 
 // ── 文档 API ─────────────────────────────────────────────
@@ -432,45 +368,48 @@ async fn delete_file(
 #[derive(Deserialize)]
 struct DocQuery {
     path: String,
+    #[serde(default)]
+    force: Option<String>,
 }
 
 async fn get_doc(
     State(state): State<Arc<ServerState>>,
     Query(params): Query<DocQuery>,
 ) -> impl IntoResponse {
-    match state.app.read_file(&params.path).await {
-        Ok(entry) => raw_json(serde_json::json!({
-            "path": entry.path,
-            "title": entry.title,
-            "content": entry.content,
-            "tags": entry.tags,
-            "terms": entry.terms,
-            "encoding": entry.encoding,
-            "contentSha256": entry.content_sha256,
-            "created": entry.created,
-            "modified": entry.modified,
-        })),
-        Err(e) => json_err(StatusCode::NOT_FOUND, e.to_string()),
-    }
+    crate::ipc::to_response_err(
+        crate::ipc::get_doc(&state, params.path, params.force).await,
+        StatusCode::NOT_FOUND,
+    )
+}
+
+/// Issue 2: 轻量级文件修改检查——返回磁盘文件当前 sha256 + modified 毫秒。
+async fn check_doc(
+    State(state): State<Arc<ServerState>>,
+    Query(params): Query<DocQuery>,
+) -> impl IntoResponse {
+    crate::ipc::to_response_err(
+        crate::ipc::check_doc(&state, params.path).await,
+        StatusCode::NOT_FOUND,
+    )
 }
 
 #[derive(Deserialize)]
 struct SaveDocRequest {
     path: String,
     content: String,
+    #[serde(rename = "baseHash", default)]
+    base_hash: Option<String>,
 }
 
 async fn save_doc(
     State(state): State<Arc<ServerState>>,
     Json(req): Json<SaveDocRequest>,
 ) -> impl IntoResponse {
-    match state.app.save_file(&req.path, &req.content).await {
-        Ok(hash) => raw_json(serde_json::json!({
-            "ok": true,
-            "path": req.path,
-            "contentSha256": hash,
-        })),
-        Err(e) => json_err(StatusCode::BAD_REQUEST, e.to_string()),
+    // ipc::save_doc 内部处理 __CONFLICT__: 前缀 → 返回 {ok:false,conflict:true,...}（200）
+    // 其它错误仍按约定转为 BAD_REQUEST
+    match crate::ipc::save_doc(&state, req.path, req.content, req.base_hash).await {
+        Ok(v) => (StatusCode::OK, Json(v)).into_response(),
+        Err(msg) => json_err(StatusCode::BAD_REQUEST, msg),
     }
 }
 
@@ -483,24 +422,10 @@ async fn delete_docs(
     State(state): State<Arc<ServerState>>,
     Json(req): Json<DeleteDocRequest>,
 ) -> impl IntoResponse {
-    let paths: Vec<String> = match req.path {
-        serde_json::Value::String(s) => vec![s],
-        serde_json::Value::Array(arr) => arr.into_iter()
-            .filter_map(|v| v.as_str().map(|s| s.to_string()))
-            .collect(),
-        _ => return json_err(StatusCode::BAD_REQUEST, "path must be a string or array of strings"),
-    };
-    let mut errors = Vec::new();
-    for path in &paths {
-        if let Err(e) = state.app.delete_file(path).await {
-            errors.push(format!("{}: {}", path, e));
-        }
-    }
-    if errors.is_empty() {
-        raw_json(serde_json::json!({ "ok": true }))
-    } else {
-        json_err(StatusCode::PARTIAL_CONTENT, errors.join("; "))
-    }
+    crate::ipc::to_response_err(
+        crate::ipc::delete_docs(&state, req.path).await,
+        StatusCode::PARTIAL_CONTENT,
+    )
 }
 
 #[derive(Deserialize)]
@@ -513,10 +438,7 @@ async fn create_folder(
     State(state): State<Arc<ServerState>>,
     Json(req): Json<CreateFolderRequest>,
 ) -> impl IntoResponse {
-    match state.app.create_folder(&req.parent, &req.name).await {
-        Ok(path) => raw_json(serde_json::json!({ "ok": true, "path": path })),
-        Err(e) => json_err(StatusCode::BAD_REQUEST, e.to_string()),
-    }
+    crate::ipc::to_response(crate::ipc::create_folder(&state, req.parent, req.name).await)
 }
 
 #[derive(Deserialize)]
@@ -529,14 +451,7 @@ async fn create_document(
     State(state): State<Arc<ServerState>>,
     Json(req): Json<CreateDocRequest>,
 ) -> impl IntoResponse {
-    match state.app.create_doc(&req.parent, &req.name).await {
-        Ok((path, hash)) => raw_json(serde_json::json!({
-            "ok": true,
-            "path": path,
-            "contentSha256": hash,
-        })),
-        Err(e) => json_err(StatusCode::BAD_REQUEST, e.to_string()),
-    }
+    crate::ipc::to_response(crate::ipc::create_document(&state, req.parent, req.name).await)
 }
 
 // ── 搜索 ─────────────────────────────────────────────────
@@ -550,8 +465,7 @@ async fn search(
     State(state): State<Arc<ServerState>>,
     Query(params): Query<SearchQuery>,
 ) -> impl IntoResponse {
-    let results = state.app.search(&params.q).await;
-    raw_json(serde_json::json!({ "results": results }))
+    crate::ipc::ok_response(crate::ipc::search(&state, params.q).await)
 }
 
 // ── 知识图谱 ─────────────────────────────────────────────
@@ -559,30 +473,7 @@ async fn search(
 async fn get_graph(
     State(state): State<Arc<ServerState>>,
 ) -> impl IntoResponse {
-    let files = state.app.get_files().await;
-    let graph_files: Vec<crate::utils::GraphFile> = files
-        .iter()
-        .map(|f| crate::utils::GraphFile {
-            path: f.path.clone(),
-            relative: f.path.clone(),
-            title: f.title.clone(),
-            content: f.content.clone(),
-            tags: f.tags.clone(),
-            terms: f
-                .terms
-                .iter()
-                .map(|t| crate::utils::TermCount {
-                    term: t.clone(),
-                    count: 1,
-                })
-                .collect(),
-            workspace_id: f.workspace_id.clone(),
-            workspace_name: Some(f.workspace_name.clone()),
-            modified: f.modified,
-        })
-        .collect();
-    let graph = crate::utils::build_graph(&graph_files);
-    raw_json(graph)
+    crate::ipc::ok_response(crate::ipc::get_graph(&state).await)
 }
 
 // ── 缓存刷新 ─────────────────────────────────────────────
@@ -590,10 +481,10 @@ async fn get_graph(
 async fn refresh_cache(
     State(state): State<Arc<ServerState>>,
 ) -> impl IntoResponse {
-    match state.app.refresh_cache().await {
-        Ok(()) => raw_json(serde_json::json!({ "ok": true })),
-        Err(e) => json_err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
-    }
+    crate::ipc::to_response_err(
+        crate::ipc::refresh_cache(&state).await,
+        StatusCode::INTERNAL_SERVER_ERROR,
+    )
 }
 
 // ── 文件操作 ─────────────────────────────────────────────
@@ -609,15 +500,7 @@ async fn move_entry(
     State(state): State<Arc<ServerState>>,
     Json(req): Json<MoveRequest>,
 ) -> impl IntoResponse {
-    match state.app.move_entry(&req.source, &req.target_folder).await {
-        Ok((path, is_dir)) => raw_json(serde_json::json!({
-            "ok": true,
-            "from": req.source,
-            "path": path,
-            "type": if is_dir { "folder" } else { "file" },
-        })),
-        Err(e) => json_err(StatusCode::BAD_REQUEST, e.to_string()),
-    }
+    crate::ipc::to_response(crate::ipc::move_entry(&state, req.source, req.target_folder).await)
 }
 
 #[derive(Deserialize)]
@@ -631,10 +514,7 @@ async fn copy_entry(
     State(state): State<Arc<ServerState>>,
     Json(req): Json<CopyRequest>,
 ) -> impl IntoResponse {
-    match state.app.copy_entry(&req.source, &req.target_folder).await {
-        Ok(path) => raw_json(serde_json::json!({ "ok": true, "path": path })),
-        Err(e) => json_err(StatusCode::BAD_REQUEST, e.to_string()),
-    }
+    crate::ipc::to_response(crate::ipc::copy_entry(&state, req.source, req.target_folder).await)
 }
 
 #[derive(Deserialize)]
@@ -648,10 +528,7 @@ async fn rename_entry(
     State(state): State<Arc<ServerState>>,
     Json(req): Json<RenameRequest>,
 ) -> impl IntoResponse {
-    match state.app.rename_entry(&req.path, &req.new_name).await {
-        Ok(new_path) => raw_json(serde_json::json!({ "ok": true, "newPath": new_path })),
-        Err(e) => json_err(StatusCode::BAD_REQUEST, e.to_string()),
-    }
+    crate::ipc::to_response(crate::ipc::rename_entry(&state, req.path, req.new_name).await)
 }
 
 // ── Frontmatter ──────────────────────────────────────────
@@ -665,10 +542,10 @@ async fn get_frontmatter(
     State(state): State<Arc<ServerState>>,
     Query(params): Query<FrontmatterQuery>,
 ) -> impl IntoResponse {
-    match state.app.get_frontmatter(&params.path).await {
-        Ok(data) => raw_json(data),
-        Err(e) => json_err(StatusCode::NOT_FOUND, e.to_string()),
-    }
+    crate::ipc::to_response_err(
+        crate::ipc::get_frontmatter(&state, params.path).await,
+        StatusCode::NOT_FOUND,
+    )
 }
 
 #[derive(Deserialize)]
@@ -681,11 +558,7 @@ async fn preview_frontmatter(
     State(state): State<Arc<ServerState>>,
     Json(req): Json<FrontmatterPreviewRequest>,
 ) -> impl IntoResponse {
-    let metadata = req.metadata.unwrap_or_else(|| serde_json::json!({}));
-    match state.app.preview_frontmatter(&req.path, &metadata).await {
-        Ok(data) => raw_json(data),
-        Err(e) => json_err(StatusCode::BAD_REQUEST, e.to_string()),
-    }
+    crate::ipc::to_response(crate::ipc::preview_frontmatter(&state, req.path, req.metadata).await)
 }
 
 #[derive(Deserialize)]
@@ -701,14 +574,7 @@ async fn apply_frontmatter(
     State(state): State<Arc<ServerState>>,
     Json(req): Json<FrontmatterApplyRequest>,
 ) -> impl IntoResponse {
-    if req.confirmed != Some(true) {
-        return json_err(StatusCode::BAD_REQUEST, "Confirmation required");
-    }
-    let metadata = req.metadata.unwrap_or_else(|| serde_json::json!({}));
-    match state.app.apply_frontmatter(&req.path, &metadata, &req.base_hash).await {
-        Ok(data) => raw_json(data),
-        Err(e) => json_err(StatusCode::BAD_REQUEST, e.to_string()),
-    }
+    crate::ipc::to_response(crate::ipc::apply_frontmatter(&state, req.path, req.metadata, req.base_hash, req.confirmed).await)
 }
 
 // ── 系统操作 ─────────────────────────────────────────────
@@ -721,23 +587,7 @@ struct OpenFolderRequest {
 async fn open_folder(
     Json(req): Json<OpenFolderRequest>,
 ) -> impl IntoResponse {
-    #[cfg(target_os = "windows")]
-    {
-        std::process::Command::new("explorer")
-            .arg(&req.path)
-            .creation_flags(0x08000000)
-            .spawn()
-            .ok();
-    }
-    #[cfg(target_os = "macos")]
-    {
-        std::process::Command::new("open").arg(&req.path).spawn().ok();
-    }
-    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
-    {
-        let _ = &req.path;
-    }
-    raw_json(serde_json::json!({ "ok": true }))
+    crate::ipc::ok_response(crate::ipc::open_folder(req.path).await)
 }
 
 #[derive(Deserialize)]
@@ -748,58 +598,11 @@ struct OpenUrlRequest {
 async fn open_url(
     Json(req): Json<OpenUrlRequest>,
 ) -> impl IntoResponse {
-    let url = &req.url;
-    if !url.starts_with("http://") && !url.starts_with("https://") {
-        return json_err(StatusCode::BAD_REQUEST, "Only http/https URLs are supported");
-    }
-    #[cfg(target_os = "windows")]
-    {
-        std::process::Command::new("cmd")
-            .args(["/c", "start", "", url])
-            .creation_flags(0x08000000)
-            .spawn()
-            .ok();
-    }
-    #[cfg(target_os = "macos")]
-    {
-        std::process::Command::new("open").arg(url).spawn().ok();
-    }
-    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
-    {
-        let _ = url;
-    }
-    raw_json(serde_json::json!({ "ok": true }))
+    crate::ipc::to_response(crate::ipc::open_url(req.url).await)
 }
 
 async fn browse_folder() -> impl IntoResponse {
-    #[cfg(target_os = "windows")]
-    {
-        let script = r#"Add-Type -AssemblyName System.Windows.Forms
-$fb = New-Object System.Windows.Forms.FolderBrowserDialog
-$fb.Description = "Select workspace folder"
-if ($fb.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
-    $fb.SelectedPath
-}"#;
-        let output = std::process::Command::new("powershell.exe")
-            .args(["-NoProfile", "-NonInteractive", "-Command", script])
-            .creation_flags(0x08000000)
-            .output();
-        match output {
-            Ok(o) if o.status.success() => {
-                let path = String::from_utf8_lossy(&o.stdout).trim().to_string();
-                if !path.is_empty() {
-                    raw_json(serde_json::json!({ "path": path }))
-                } else {
-                    raw_json(serde_json::json!({ "path": serde_json::Value::Null }))
-                }
-            }
-            _ => raw_json(serde_json::json!({ "path": serde_json::Value::Null })),
-        }
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        raw_json(serde_json::json!({ "path": serde_json::Value::Null }))
-    }
+    crate::ipc::ok_response(crate::ipc::browse_folder().await)
 }
 
 // ── AI 智能功能 ──────────────────────────────────────────
@@ -851,10 +654,18 @@ impl Default for AiTestRequest {
 }
 
 async fn ai_test(
-    State(_state): State<Arc<ServerState>>,
-    Json(req): Json<AiTestRequest>,
+    State(state): State<Arc<ServerState>>,
+    Json(mut req): Json<AiTestRequest>,
 ) -> impl IntoResponse {
     let provider = req.chat_provider.trim().to_lowercase();
+    // 前端 API Key 输入框为空（已配置密钥时不回显）时，使用已保存的密钥进行测试
+    if req.deepseek_api_key.trim().is_empty() {
+        let _ = state.rag.load();
+        let saved = state.rag.settings.lock().unwrap().deepseek_api_key.clone();
+        if !saved.trim().is_empty() {
+            req.deepseek_api_key = saved;
+        }
+    }
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(15))
         .build();
@@ -1151,12 +962,13 @@ async fn ai_config(
         if let Some(v) = req.retrieval_mode { settings.retrieval_mode = v; }
     }
 
-    // Save settings
+    // Save settings — 路径必须与 RagService::new 中的 settings_path 一致（data_root/ai-settings.json），
+    // 不能使用 rag.root.join("..") 这种相对路径，升级/不同环境下可能指向不同位置。
     let settings = rag.settings.lock().unwrap();
     let settings_json = serde_json::to_string_pretty(&*settings).unwrap_or_default();
     drop(settings);
 
-    let settings_path = rag.root.join("..").join("ai-settings.json");
+    let settings_path = rag.settings_path.clone();
     if let Some(parent) = settings_path.parent() {
         std::fs::create_dir_all(parent).ok();
     }
@@ -1175,14 +987,22 @@ async fn ai_reindex(
     let files = state.app.get_files().await;
 
     // Build index from files
-    let mut all_chunks: Vec<crate::rag::Chunk> = Vec::new();
-    let mut manifest_docs = std::collections::HashMap::new();
+    // 预分配：1 文件 ≈ 2~6 个 chunk（取 4 中值）；避免文件数 × 多轮 realloc
+    let est_chunks = files.len().saturating_mul(4).max(64);
+    let mut all_chunks: Vec<crate::rag::Chunk> = Vec::with_capacity(est_chunks);
+    let mut manifest_docs = std::collections::HashMap::with_capacity(files.len().max(16));
 
     for file in &files {
+        // FileEntry.content 采用懒加载（scan_workspace 时为 None），RAG 索引需要真实正文，
+        // 通过 read_file_force 触发磁盘读取并回填缓存，确保 chunk_markdown 拿到非空内容。
+        let entry = match state.app.read_file_force(&file.path).await {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
         let indexed = crate::rag::IndexedFile {
             path: file.path.clone(),
             title: file.title.clone(),
-            content: file.content.clone(),
+            content: entry.content.clone().unwrap_or_default(),
             content_sha256: file.content_sha256.clone(),
             workspace_id: file.workspace_id.clone(),
         };
@@ -1220,12 +1040,30 @@ async fn ai_reindex(
         *m = manifest.clone();
     }
 
-    // Save chunks
-    let chunks_json: String = all_chunks.iter()
-        .filter_map(|c| serde_json::to_string(c).ok())
-        .collect::<Vec<_>>()
-        .join("\n");
-    let _ = std::fs::write(&rag.chunks_path, chunks_json);
+    // Save chunks — 流式写避免把全部 JSON 再拼一份大 String 放堆上
+    // （万 chunk 量级下 chunks_json 可达几十 MB，流式写直接 reduce 到文件 fd buffer）
+    if let Some(parent) = rag.chunks_path.parent() {
+        std::fs::create_dir_all(parent).ok();
+    }
+    {
+        use std::io::Write;
+        match std::fs::File::create(&rag.chunks_path) {
+            Ok(mut f) => {
+                // 8 MiB 缓冲：比默认 BufWriter 8 KiB 大 1024×，对几万行 NDJSON 约少 1000× syscall
+                let mut buf = std::io::BufWriter::with_capacity(8 * 1024 * 1024, &mut f);
+                let mut first = true;
+                for c in &all_chunks {
+                    if !first { let _ = buf.write_all(b"\n"); }
+                    first = false;
+                    if let Ok(line) = serde_json::to_string(c) {
+                        let _ = buf.write_all(line.as_bytes());
+                    }
+                }
+                let _ = buf.flush();
+            }
+            Err(e) => log::warn!("[ai_reindex] 创建 chunks.ndjson 失败: {}", e),
+        }
+    }
 
     // Save manifest
     let _ = std::fs::write(&rag.manifest_path, serde_json::to_string_pretty(&manifest).unwrap_or_default());
@@ -1305,6 +1143,9 @@ struct AiTransformRequest {
     transform_mode: String,
     instruction: Option<String>,
     context: Option<String>,
+    /// 翻译方向："zh2en" / "en2zh" / 自定义目标语种（如 "fr" / "ja"）
+    #[serde(default)]
+    direction: Option<String>,
 }
 
 async fn ai_transform(
@@ -1312,9 +1153,57 @@ async fn ai_transform(
     Json(req): Json<AiTransformRequest>,
 ) -> impl IntoResponse {
     let rag = &state.rag;
+    let mode = req.transform_mode.as_str();
 
-    // 构建系统提示词
-    let mode_labels = match req.transform_mode.as_str() {
+    // inline-chat：纯 AI 对话模式（Ctrl+I 入口），不做向量检索
+    if mode == "inline-chat" {
+        let system_prompt = "你是一个写作助手。请根据用户的要求，在当前文档光标位置生成或补充内容。直接输出要插入的内容，不要添加额外解释、标题或前后缀。";
+        let mut user_prompt = String::new();
+        if let Some(ref ctx) = req.context {
+            if !ctx.is_empty() {
+                user_prompt.push_str(&format!("当前文档上下文：\n{}\n\n", ctx));
+            }
+        }
+        user_prompt.push_str(&format!("用户请求：{}\n\n请直接输出要插入到光标位置的内容：", req.text));
+        return match rag.chat(&system_prompt, &user_prompt).await {
+            Ok(content) => raw_json(serde_json::json!({ "ok": true, "content": content, "mode": mode })),
+            Err(e) => json_err(StatusCode::BAD_REQUEST, format!("AI 调用失败: {}", e)),
+        };
+    }
+
+    // 翻译模式：根据 direction 构建明确 prompt，支持中英互译 + 自定义语种
+    if mode == "translate" {
+        let direction = req.direction.clone().unwrap_or_default();
+        let mut system_prompt = String::new();
+        let user_instruction = req.instruction.clone().unwrap_or_default();
+        if direction == "zh2en" || direction.is_empty() {
+            system_prompt = "你是专业翻译。请将中文文本翻译成英文，保持原意、格式和语气，直接输出译文。".to_string();
+        } else if direction == "en2zh" {
+            system_prompt = "你是专业翻译。请将英文文本翻译成中文，保持原意、格式和语气，直接输出译文。".to_string();
+        } else {
+            // 自定义目标语种
+            system_prompt = format!(
+                "你是专业翻译。请将以下文本翻译成「{}」，保持原意、格式和语气，直接输出译文。",
+                direction
+            );
+        }
+        let mut user_prompt = String::new();
+        if !user_instruction.is_empty() {
+            user_prompt.push_str(&format!("用户额外要求：{}\n\n", user_instruction));
+        }
+        user_prompt.push_str(&format!("待翻译文本：\n{}", req.text));
+        return match rag.chat(&system_prompt, &user_prompt).await {
+            Ok(content) => raw_json(serde_json::json!({
+                "ok": true, "content": content, "mode": mode,
+            })),
+            Err(e) => json_err(StatusCode::BAD_REQUEST, format!("AI 调用失败: {}", e)),
+        };
+    }
+
+    // 其他模式：润色/续写/摘要/改写/代码补全/注释/提示
+    let mode_labels = match mode {
+        "polish" => "润色",
+        "continue" => "续写",
         "summary" => "摘要",
         "keypoints" => "要点",
         "terms" => "术语解释",
@@ -1325,17 +1214,22 @@ async fn ai_transform(
         _ => "整理",
     };
 
-    let system_prompt = format!(
-        "你是一个文本处理助手。用户要求执行「{}」操作。请根据要求处理文本，直接输出结果，不要添加额外解释。",
-        mode_labels
-    );
+    // 润色模式：更自然的 prompt
+    let system_prompt: String = match mode {
+        "polish" => "你是专业文字润色助手。请在保持原意不变的前提下，让文本更通顺、更专业，直接输出润色后的结果。".to_string(),
+        "continue" => "你是写作助手。请根据给定的内容，续写合理的后续，直接输出续写部分。".to_string(),
+        "rewrite" => "你是专业写作助手。请根据用户的要求重写文本，直接输出改写后的结果。".to_string(),
+        "code" => "你是代码助手。请根据上下文生成合适的代码，直接输出代码。".to_string(),
+        "comment" => "你是代码助手。请为代码添加清晰的注释，直接输出添加注释后的代码或注释内容。".to_string(),
+        _ => format!("你是一个文本处理助手。用户要求执行「{}」操作。请根据要求处理文本，直接输出结果，不要添加额外解释。", mode_labels),
+    };
 
     let instruction = req.instruction.unwrap_or_default();
     let context = req.context.unwrap_or_default();
 
     let mut user_prompt = String::new();
     if !instruction.is_empty() {
-        user_prompt.push_str(&format!("用户要求：{}\n\n", instruction));
+        user_prompt.push_str(&format!("用户额外要求：{}\n\n", instruction));
     }
     if !context.is_empty() {
         user_prompt.push_str(&format!("上下文：\n{}\n\n", context));
@@ -1350,7 +1244,7 @@ async fn ai_transform(
         })),
         Err(e) => {
             // AI 调用失败时降级为本地 fallback
-            let fallback = crate::rag::fallback_transform_selection(&req.text, &req.transform_mode);
+            let fallback = crate::rag::fallback_transform_selection(&req.text, mode);
             match fallback {
                 Ok(transformed) => raw_json(serde_json::json!({
                     "ok": true,
@@ -1880,7 +1774,7 @@ async fn import_document(
 
     let relative = format!("{}/{}", ws_id, md_name);
 
-    match state.app.save_file(&relative, &content).await {
+    match state.app.save_file(&relative, &content, None).await {
         Ok(hash) => raw_json(serde_json::json!({
             "ok": true,
             "path": relative,
@@ -1913,7 +1807,7 @@ async fn export_document(
         c.to_string()
     } else if let Some(p) = req.path.as_deref() {
         match state.app.read_file(p).await {
-            Ok(entry) => entry.content,
+            Ok(entry) => entry.content.unwrap_or_default(),
             Err(e) => return json_err(StatusCode::NOT_FOUND, e.to_string()),
         }
     } else {
@@ -2323,10 +2217,11 @@ async fn check_update(
 
 #[derive(Deserialize)]
 struct UploadVideoRequest {
-    #[serde(rename = "filename")]
     filename: String,
     #[serde(rename = "base64")]
     base64_data: String,
+    #[serde(rename = "workspaceId")]
+    workspace_id: Option<String>,
 }
 
 async fn upload_video(
@@ -2334,30 +2229,54 @@ async fn upload_video(
     Json(req): Json<UploadVideoRequest>,
 ) -> impl IntoResponse {
     use base64::Engine;
-    
+
     // Decode base64 data
     let decoded = match base64::engine::general_purpose::STANDARD.decode(&req.base64_data) {
         Ok(bytes) => bytes,
         Err(e) => return json_err(StatusCode::BAD_REQUEST, format!("Invalid base64 data: {}", e)),
     };
-    
-    // Ensure videos directory
-    let video_dir = state.app.data_root.join("assets").join("videos");
-    std::fs::create_dir_all(&video_dir).ok();
-    
-    // Safe filename
-    let safe_name = req.filename
-        .replace(['\\', '/', ':', '*', '?', '"', '<', '>', '|'], "_");
-    let unique_name = format!("{}_{}", 
+
+    // Resolve workspace root if workspaceId provided
+    let ws_root: Option<std::path::PathBuf> = if let Some(ws_id) = req.workspace_id.as_deref().filter(|id| !id.is_empty()) {
+        let workspaces = state.app.get_workspaces().await;
+        workspaces.iter().find(|w| w.id == ws_id).map(|w| std::path::PathBuf::from(&w.root))
+    } else {
+        None
+    };
+
+    // Safe filename - extract extension, sanitize stem
+    let p = std::path::Path::new(&req.filename);
+    let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("video");
+    let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("mp4");
+
+    let safe_stem: String = stem.chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .collect();
+    let safe_ext: String = ext.chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
+        .collect::<String>().to_lowercase();
+
+    let unique_name = format!("{}_{}.{}",
+        safe_stem,
         chrono::Utc::now().timestamp_millis(),
-        safe_name
+        if safe_ext.is_empty() { "mp4".to_string() } else { safe_ext }
     );
-    
+
+    // Resolve directory: workspace/source if workspaceId valid, else global assets/videos
+    let (video_dir, url_path) = if let Some(root) = ws_root {
+        let dir = root.join("source");
+        std::fs::create_dir_all(&dir).ok();
+        (dir, format!("source/{}", unique_name))
+    } else {
+        let dir = state.app.data_root.join("assets").join("videos");
+        std::fs::create_dir_all(&dir).ok();
+        (dir, format!("source/assets/videos/{}", unique_name))
+    };
+
     let video_path = video_dir.join(&unique_name);
-    
+
     match std::fs::write(&video_path, &decoded) {
         Ok(()) => {
-            let url_path = format!("source/assets/videos/{}", unique_name);
             raw_json(serde_json::json!({
                 "ok": true,
                 "url": url_path,
@@ -2400,7 +2319,7 @@ async fn paste_workspace(
                 let target = format!("{}/{}", req.dest_path, source_name);
                 
                 if req.action == "copy" {
-                    match state.app.save_file(&target, &entry.content).await {
+                    match state.app.save_file(&target, &entry.content.clone().unwrap_or_default(), None).await {
                         Ok(_) => results.push(serde_json::json!({
                             "source": source,
                             "target": target,
@@ -2414,7 +2333,7 @@ async fn paste_workspace(
                         })),
                     }
                 } else if req.action == "cut" {
-                    match state.app.save_file(&target, &entry.content).await {
+                    match state.app.save_file(&target, &entry.content.clone().unwrap_or_default(), None).await {
                         Ok(_) => {
                             // Delete source after copy
                             let _ = state.app.delete_file(source).await;
@@ -2750,7 +2669,7 @@ async fn agent_action_apply(
         }
         "create" => {
             if let Some(path) = &req.target_path {
-                match state.app.save_file(path, "").await {
+                match state.app.save_file(path, "", None).await {
                     Ok(_) => raw_json(serde_json::json!({
                         "ok": true,
                         "action": "create",
@@ -2790,41 +2709,17 @@ fn read_saved_license(data_root: &std::path::Path) -> Option<String> {
 async fn license_status(
     State(state): State<Arc<ServerState>>,
 ) -> impl IntoResponse {
-    let data_root = state.app.data_root.clone();
-    let status = crate::license::get_license_status(&data_root);
-    raw_json(status)
+    crate::ipc::ok_response(crate::ipc::license_status(&state).await)
 }
 
 /// GET /api/license/check
-/// 检查本地授权文件是否存在并验证，返回 { activated, machineCode, ... }
 async fn license_check(
     State(state): State<Arc<ServerState>>,
 ) -> impl IntoResponse {
-    let data_root = state.app.data_root.clone();
-    let machine_code = crate::license::get_machine_code();
-
-    match read_saved_license(&data_root) {
-        None => {
-            raw_json(serde_json::json!({
-                "activated": false,
-                "machineCode": machine_code,
-            }))
-        }
-        Some(key) => {
-            let result = crate::license::verify_license(&key, &data_root);
-            // 合并 activated 字段与 LicenseResult 全部字段
-            let mut obj = serde_json::to_value(&result).unwrap_or_default();
-            if let Some(map) = obj.as_object_mut() {
-                map.insert("activated".to_string(), serde_json::Value::Bool(result.valid));
-            }
-            raw_json(obj)
-        }
-    }
+    crate::ipc::ok_response(crate::ipc::license_check(&state).await)
 }
 
 /// POST /api/license/activate
-/// 请求体: { licenseKey: string }
-/// 验证授权码，若有效则保存到本地
 async fn license_activate(
     State(state): State<Arc<ServerState>>,
     body: axum::body::Bytes,
@@ -2834,45 +2729,125 @@ async fn license_activate(
     struct ActivateRequest {
         license_key: String,
     }
-
     let req: ActivateRequest = match serde_json::from_slice(&body) {
         Ok(r) => r,
         Err(_) => return json_err(StatusCode::BAD_REQUEST, "请求格式错误"),
     };
-
-    let key = req.license_key.trim();
-    if key.is_empty() {
-        return json_err(StatusCode::BAD_REQUEST, "请输入授权码");
-    }
-
-    let data_root = state.app.data_root.clone();
-    let result = crate::license::verify_license(key, &data_root);
-
-    if result.valid {
-        // 保存授权码到本地文件
-        let path = license_file_path(&data_root);
-        if let Some(parent) = path.parent() {
-            let _ = std::fs::create_dir_all(parent);
-        }
-        if let Err(e) = std::fs::write(&path, key) {
-            log::warn!("保存授权文件失败: {}", e);
-        }
-    }
-
-    raw_json(serde_json::to_value(&result).unwrap_or_default())
+    crate::ipc::to_response(crate::ipc::license_activate(&state, req.license_key).await)
 }
 
 /// POST /api/license/deactivate
-/// 删除本地授权文件
 async fn license_deactivate(
     State(state): State<Arc<ServerState>>,
 ) -> impl IntoResponse {
-    let data_root = state.app.data_root.clone();
-    let path = license_file_path(&data_root);
-    let _ = std::fs::remove_file(&path);
-    let machine_code = crate::license::get_machine_code();
-    raw_json(serde_json::json!({
-        "activated": false,
-        "machineCode": machine_code,
-    }))
+    crate::ipc::ok_response(crate::ipc::license_deactivate(&state).await)
+}
+
+// ── 原生对话框 HTTP endpoints ──
+// 这些 handler 是 External URL 模式下替代 Tauri IPC 的。
+// 在 HTTP handler 内通过全局 APP_HANDLE OnceLock 获取 AppHandle，
+// 调用 tauri_plugin_dialog 弹原生文件对话框。
+
+#[derive(Deserialize)]
+struct SaveAsRequest {
+    #[serde(rename = "defaultName")]
+    default_name: String,
+    extensions: Vec<String>,
+    #[serde(rename = "dataBase64")]
+    data_base64: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SaveAsResponse {
+    path: Option<String>,
+}
+
+/// POST /api/export/save-as
+/// 接收 base64 编码的文件数据，弹系统原生另存为对话框让用户选择保存位置。
+/// 成功返回绝对路径；用户取消返回 { path: null }。
+async fn export_save_as_http(
+    State(_state): State<Arc<ServerState>>,
+    Json(req): Json<SaveAsRequest>,
+) -> impl IntoResponse {
+    use tauri_plugin_dialog::DialogExt;
+    let app_handle = match crate::APP_HANDLE.get() {
+        Some(h) => h,
+        None => return json_err(StatusCode::INTERNAL_SERVER_ERROR, "AppHandle 未初始化"),
+    };
+
+    let extensions_list: Vec<&str> = req.extensions.iter().map(|s| s.as_str()).collect();
+    let (tx, rx) = tokio::sync::oneshot::channel::<Option<String>>();
+
+    app_handle.dialog().file()
+        .add_filter("Documents", &extensions_list)
+        .set_file_name(&req.default_name)
+        .save_file(move |p| { let _ = tx.send(p.map(|x| x.to_string())); });
+
+    let picked = match rx.await {
+        Ok(v) => v,
+        Err(_) => return json_err(StatusCode::INTERNAL_SERVER_ERROR, "对话框 channel 关闭"),
+    };
+
+    let Some(path) = picked else {
+        return (StatusCode::OK, Json(ApiResponse::success(SaveAsResponse { path: None }))).into_response();
+    };
+
+    // base64 decode
+    use base64::Engine;
+    let bytes = match base64::engine::general_purpose::STANDARD.decode(&req.data_base64) {
+        Ok(b) => b,
+        Err(e) => return json_err(StatusCode::BAD_REQUEST, format!("base64 解码失败: {}", e)),
+    };
+
+    // 原子写入：先写 .tmp 再 rename，避免写一半用户杀进程留下坏文件
+    let tmp_path = format!("{}.tmp", path);
+    if let Some(parent) = std::path::Path::new(&path).parent() {
+        if let Err(e) = std::fs::create_dir_all(parent) {
+            return json_err(StatusCode::INTERNAL_SERVER_ERROR, format!("创建目录失败: {}", e));
+        }
+    }
+    if let Err(e) = std::fs::write(&tmp_path, &bytes) {
+        let _ = std::fs::remove_file(&tmp_path);
+        return json_err(StatusCode::INTERNAL_SERVER_ERROR, format!("写入失败: {}", e));
+    }
+    if let Err(e) = std::fs::rename(&tmp_path, &path) {
+        let _ = std::fs::remove_file(&tmp_path);
+        return json_err(StatusCode::INTERNAL_SERVER_ERROR, format!("重命名失败: {}", e));
+    }
+
+    json_ok(SaveAsResponse { path: Some(path) })
+}
+
+#[derive(Deserialize)]
+struct OpenFileRequest {
+    path: String,
+}
+
+/// POST /api/export/open-file
+/// 用系统默认程序打开已导出的文件。
+async fn export_open_file_http(
+    Json(req): Json<OpenFileRequest>,
+) -> impl IntoResponse {
+    // 复用 cmd_open_exported_file 的实现
+    match crate::tauri_cmd::cmd_open_exported_file(req.path).await {
+        Ok(()) => json_ok(serde_json::json!({ "ok": true })),
+        Err(e) => json_err(StatusCode::INTERNAL_SERVER_ERROR, e),
+    }
+}
+
+#[derive(Deserialize)]
+struct RevealFolderRequest {
+    path: String,
+}
+
+/// POST /api/export/reveal-folder
+/// 在资源管理器中定位到已导出的文件。
+async fn export_reveal_in_folder_http(
+    Json(req): Json<RevealFolderRequest>,
+) -> impl IntoResponse {
+    match crate::tauri_cmd::cmd_reveal_exported_file_in_folder(req.path).await {
+        Ok(()) => json_ok(serde_json::json!({ "ok": true })),
+        Err(e) => json_err(StatusCode::INTERNAL_SERVER_ERROR, e),
+    }
 }

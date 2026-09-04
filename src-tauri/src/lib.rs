@@ -10,6 +10,7 @@ pub mod doc_views;
 pub mod frontmatter;
 pub mod graph;
 pub mod handlers;
+pub mod ipc;
 pub mod license;
 pub mod rag;
 pub mod server;
@@ -18,9 +19,17 @@ pub mod utils;
 use serde::{Deserialize, Serialize};
 use std::fs as stdfs;
 use std::path::PathBuf;
+use std::sync::OnceLock;
+use tauri::{Emitter, Listener, Manager};
 
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
+
+// ── 全局 AppHandle 单例 ──
+// HTTP handler（axum）需要弹原生对话框（save-as / 打开文件 / 定位文件夹），
+// 这些能力都在 tauri::AppHandle 上，而 axum 的 ServerState 不含 AppHandle。
+// 用 OnceLock 在 Tauri setup 时注入一次，此后全进程可安全获取。
+pub static APP_HANDLE: OnceLock<tauri::AppHandle> = OnceLock::new();
 
 // ── Tauri 应用入口 ────────────────────────────────────────
 /// 启动 Tauri 应用（Phase 5 纯原生模式）：
@@ -87,13 +96,104 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
+            // ── 导入/导出 原生对话框（旧 5 条） ──
             tauri_cmd::cmd_export_save_as,
             tauri_cmd::cmd_open_exported_file,
             tauri_cmd::cmd_reveal_exported_file_in_folder,
             tauri_cmd::cmd_import_pick_files,
             tauri_cmd::cmd_import_read_file,
+            // ── 工作区（7） ──
+            tauri_cmd::api_get_workspaces,
+            tauri_cmd::api_add_workspace,
+            tauri_cmd::api_remove_workspace,
+            tauri_cmd::api_rename_workspace,
+            tauri_cmd::api_set_default_workspace,
+            tauri_cmd::api_show_workspace,
+            tauri_cmd::api_set_md_only,
+            // ── 树 + 缓存刷新 ──
+            tauri_cmd::api_get_tree,
+            tauri_cmd::api_refresh_cache,
+            // ── 文件 CRUD（3） + 文档 API（6） ──
+            tauri_cmd::api_list_files,
+            tauri_cmd::api_read_file,
+            tauri_cmd::api_save_file,
+            tauri_cmd::api_delete_file,
+            tauri_cmd::api_get_doc,
+            tauri_cmd::api_check_doc,
+            tauri_cmd::api_save_doc,
+            tauri_cmd::api_delete_docs,
+            tauri_cmd::api_create_folder,
+            tauri_cmd::api_create_document,
+            // ── 搜索 + 图谱 ──
+            tauri_cmd::api_search,
+            tauri_cmd::api_get_graph,
+            // ── Move/Copy/Rename（3） ──
+            tauri_cmd::api_move_entry,
+            tauri_cmd::api_copy_entry,
+            tauri_cmd::api_rename_entry,
+            // ── Frontmatter（3） ──
+            tauri_cmd::api_get_frontmatter,
+            tauri_cmd::api_preview_frontmatter,
+            tauri_cmd::api_apply_frontmatter,
+            // ── 系统操作（3） ──
+            tauri_cmd::api_open_folder,
+            tauri_cmd::api_open_url,
+            tauri_cmd::api_browse_folder,
+            // ── 版本 & 系统路径 & 健康检查 ──
+            tauri_cmd::api_get_version,
+            tauri_cmd::api_get_system_paths,
+            tauri_cmd::api_health,
+            tauri_cmd::api_knowledge_health,
+            // ── 授权（4） ──
+            tauri_cmd::api_license_status,
+            tauri_cmd::api_license_check,
+            tauri_cmd::api_license_activate,
+            tauri_cmd::api_license_deactivate,
         ])
         .setup(move |app| -> Result<(), Box<dyn std::error::Error>> {
+            // 注入全局 AppHandle 单例：HTTP handler（axum）需要弹原生对话框
+            // （save-as / 打开文件 / 定位文件夹），必须通过此句柄调用 dialog plugin。
+            let _ = APP_HANDLE.set(app.handle().clone());
+
+            // 注册 IPC 共享状态：与 axum 共用同一 AppState+RAG，避免双缓存
+            // (注意：共享 Arc 已通过 builder.manage 在 setup 前注册，此处仅保持可观测性)
+            use tauri::Manager as _;
+            let srv = std::sync::Arc::new(server::ServerState {
+                app: empty_app_state.clone(),
+                rag: empty_rag.clone(),
+            });
+            app.manage(srv.clone());
+
+            // 0) 读取命令行文件路径参数（Windows 右键"打开方式"/"用 MyTemple 打开"传入）
+            //    约定：跳过 argv[0]（exe 自身），收集后续参数中以 .md/.markdown/.txt 结尾的
+            let open_paths: Vec<String> = std::env::args()
+                .skip(1)
+                .filter(|a| {
+                    let lower = a.to_lowercase();
+                    lower.ends_with(".md") || lower.ends_with(".markdown") || lower.ends_with(".txt") || lower.ends_with(".html")
+                })
+                .collect();
+            log::info!("[boot] 命令行文件参数: {:?}", open_paths);
+            // 存到 AppHandle 可管理的状态，稍后前端 init 后 emit
+            let app_handle_clone = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                // 等待前端初始化（最多 5s），让 splash 先完成、API 就绪
+                let mut wait_ms = 100u64;
+                while wait_ms < 5000 {
+                    tokio::time::sleep(std::time::Duration::from_millis(wait_ms)).await;
+                    wait_ms = (wait_ms as f64 * 1.4) as u64;
+                    if let Some(window) = app_handle_clone.get_webview_window("main") {
+                        if window.url().is_ok() { break; }
+                    }
+                }
+                if !open_paths.is_empty() {
+                    match app_handle_clone.emit("open-files", &open_paths) {
+                        Ok(_) => log::info!("[boot] 已向前端 emit open-files: {:?}", open_paths),
+                        Err(e) => log::warn!("[boot] emit open-files 失败: {}", e),
+                    }
+                }
+            });
+
             // 1) 启动 axum（立即：即使 API state 为空也 OK，splash 阶段只需静态文件）
             //    注意：AppState 内部字段用 Arc<RwLock>，init 过程中写入会被所有 API handler 立刻看到
             //    server::run 不阻塞返回 -> ServerBound { port: real_port }，我们通过 oneshot 回传
@@ -153,38 +253,25 @@ pub fn run() {
                         requested_port
                     }
                 };
-                let axum_home = format!("http://127.0.0.1:{}/", real_port);
+                let axum_home = format!("http://127.0.0.1:{}/?skipSplash=1", real_port);
                 let axum_splash = format!("http://127.0.0.1:{}/splash.html", real_port);
                 log::info!("[boot] axum 真实端口 {} (请求 {})，splash={}", real_port, requested_port, axum_splash);
                 let splash_url = axum_splash.clone();
                 let home_url = axum_home.clone();
 
-                // 2) 轮询 axum 端口就绪（使用真实端口）
-                let addr = format!("127.0.0.1:{}", real_port);
-                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
-                let mut ready = false;
-                while std::time::Instant::now() < deadline {
-                    if tokio::net::TcpStream::connect(&addr).await.is_ok() {
-                        ready = true;
-                        break;
+                // 2) axum 已就绪：server::run 在 bind_first_available 成功后通过
+                //    oneshot 回传 port，此时 TcpListener 已绑定，无需再轮询 TCP connect。
+                //    3) 注册 splash_ready 事件监听，再 navigate 到 splash.html
+                let (splash_ready_tx, splash_ready_rx) = tokio::sync::oneshot::channel::<()>();
+                let splash_ready_tx = std::sync::Mutex::new(Some(splash_ready_tx));
+                let _splash_event_id = window_clone.listen("splash_ready", move |_event| {
+                    if let Ok(mut guard) = splash_ready_tx.lock() {
+                        if let Some(tx) = guard.take() {
+                            let _ = tx.send(());
+                        }
                     }
-                    tokio::time::sleep(std::time::Duration::from_millis(30)).await;
-                }
+                });
 
-                if !ready {
-                    log::error!("[boot] axum 30 秒内未启动");
-                    let html = format!(r#"
-                    <div style="color:#fecaca;text-align:center;padding:48px 24px;font-family:sans-serif;background:#3d3830;">
-                      <h2>启动失败：本地服务无法启动</h2>
-                      <p>端口 {} 连续 30 秒无法连通。请关闭占用该端口的软件，或设置环境变量 MYTEMPLE_PORT 为 7322~7420 之间任一空闲端口后重试。</p>
-                      <p style="color:#fbbf24;">若启动后显示 HTTP ERROR 404，请不要手动打开 Edge 浏览器访问 127.0.0.1；应直接使用桌面窗口的「卸载后重新安装」的方法获取最新版修复。</p>
-                    </div>"#, real_port);
-                    let escaped = html.replace('\'', "\\'").replace("script", "scr\\ipt");
-                    let _ = window_clone.eval(&format!("document.body.innerHTML = '{}';", escaped));
-                    return;
-                }
-
-                // 3) 加载真实 splash.html（通过 navigate，与源程序一致：boot.webp 背景 + 进度条）
                 match url::Url::parse(&splash_url) {
                     Ok(parsed) => {
                         if let Err(e) = window_clone.navigate(parsed) {
@@ -195,9 +282,14 @@ pub fn run() {
                     Err(e) => log::error!("[boot] splash URL 解析失败: {}", e),
                 }
 
-                // 等待 splash.html DOM 就绪（让进度条元素可被 eval 找到）
-                // 给约 150ms 让 boot.webp 网络请求 & 渲染，然后 show 窗口（避免白屏）
-                tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+                // 等待 splash.html 通过 Tauri 事件通知 DOM 就绪（3s 超时兜底）
+                match tokio::time::timeout(
+                    std::time::Duration::from_secs(3),
+                    splash_ready_rx,
+                ).await {
+                    Ok(Ok(())) => log::info!("[boot] splash DOM ready"),
+                    _ => log::warn!("[boot] splash_ready 超时，直接显示窗口"),
+                }
                 let _ = window_clone.show();
 
                 // Helper: 通过 JS 更新 splash 进度条 & 文本
@@ -296,12 +388,9 @@ pub fn run() {
                 }
                 let _ = window_clone.eval(&update_progress(80, "正在初始化界面…"));
 
-                // 4c) 短暂收尾，给进度条动画完成
-                tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+                // 4c) 进度条到 100% 后立即 navigate（不再 sleep 等动画）
                 let _ = window_clone.eval(&update_progress(95, "即将完成…"));
-                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
                 let _ = window_clone.eval(&update_progress(100, "加载完成"));
-                tokio::time::sleep(std::time::Duration::from_millis(150)).await;
 
                 // 5) 全部就绪 → navigate 到 /
                 //    注意：index.html 内也有自己的 appSplash（boot.webp + 进度条），它会自动继续
@@ -598,493 +687,317 @@ if ($dialog.ShowDialog() -eq 'OK') { Write-Output $dialog.SelectedPath }
 // 原本已被 HTTP handlers 直接调用，不通过 Tauri IPC 暴露，保留根级作为普通 async fn。
 pub mod tauri_cmd {
 
-// ── 导出：原生「另存为」对话框 + 真实文件写入（返回保存成功的完整路径） ──
-
-/// 前端传入「默认文件名 + 扩展名过滤 + 文件字节 base64」→ 弹出系统原生 Save As 对话框 →
-/// 选路径后写磁盘 → 返回保存成功的绝对路径字符串（用户取消返回 null）。
-/// 路径必须"用户明确确认"的才能写（不能写到系统目录），符合需求「清晰知道导出位置」。
+// ── Legacy 导入/导出对话框 原生命令（5） ──
 #[tauri::command]
 pub async fn cmd_export_save_as(
-    app: tauri::AppHandle,
-    default_name: String,
-    extensions: Vec<String>,
-    data_base64: String,
+    default_name: String, extensions: Vec<String>, data_base64: String,
+    app_handle: tauri::AppHandle,
 ) -> Result<Option<String>, String> {
     use tauri_plugin_dialog::DialogExt;
-
-    // 1) decode base64 → Vec<u8>
-    let bytes = base64_decode_for_tauri(&data_base64).map_err(|e| format!("解码导出字节失败: {}", e))?;
-
-    // 2) 构建 filters：extensions 每个就是扩展名（不含点）
-    let name_hint = if default_name.trim().is_empty() {
-        "未命名".to_string()
-    } else {
-        default_name.trim().to_string()
-    };
-    // 确保扩展名去点 + 小写
-    let exts: Vec<String> = extensions
-        .iter()
-        .map(|s| s.trim().trim_start_matches('.').to_ascii_lowercase())
-        .filter(|s| !s.is_empty())
-        .collect();
-    let dialog_label = if exts.is_empty() {
-        "文件".to_string()
-    } else {
-        exts.iter()
-            .map(|s| s.to_ascii_uppercase())
-            .collect::<Vec<_>>()
-            .join("/")
-            + " 文件"
-    };
-
-    // 3) 用 tauri_plugin_dialog 构建 FileSaveDialog
-    //    Tauri 2.x dialog 是回调模式，用 oneshot bridge 到 async
-    let (tx, rx) = tokio::sync::oneshot::channel::<Option<std::path::PathBuf>>();
-    let mut tx_opt = Some(tx);
-    // add_filter 要求 &[&str]，把 String 转成 ref 切片
-    let star: String = "*".to_string();
-    let filter_exts: Vec<&str> = if exts.is_empty() {
-        vec![&star]
-    } else {
-        exts.iter().map(|s| s.as_str()).collect()
-    };
-    let mut builder = app
-        .dialog()
-        .file()
-        .set_title("另存为 — MyTemple Knowledge")
-        .set_file_name(&name_hint)
-        .add_filter(dialog_label, &filter_exts);
-    // 若无扩展名过滤器，再额外加一个"所有文件"兜底
-    if !exts.is_empty() {
-        let all: &[&str] = &["*"];
-        builder = builder.add_filter("所有文件", all);
-    }
-    builder.save_file(move |path_opt: Option<tauri_plugin_dialog::FilePath>| {
-        if let Some(tx) = tx_opt.take() {
-            let converted = path_opt.and_then(|fp| fp.into_path().ok());
-            let _ = tx.send(converted);
-        }
-    });
-    let chosen = tokio::time::timeout(std::time::Duration::from_secs(600), rx)
-        .await
-        .map_err(|_| "「另存为」对话框长时间未响应".to_string())?
-        .unwrap_or(None);
-
-    let Some(path) = chosen else {
-        // 用户取消
-        return Ok(None);
-    };
-
-    // 4) 写文件（create 会覆盖）
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| format!("创建父目录失败 {}: {}", parent.display(), e))?;
-    }
-    std::fs::write(&path, &bytes).map_err(|e| format!("写入文件 {} 失败: {}", path.display(), e))?;
-
-    Ok(Some(path.to_string_lossy().into_owned()))
+    let extensions_list: Vec<&str> = extensions.iter().map(|s| s.as_str()).collect();
+    let (tx, rx) = tokio::sync::oneshot::channel::<Option<String>>();
+    app_handle.dialog().file()
+        .add_filter("Documents", &extensions_list)
+        .set_file_name(&default_name)
+        .save_file(move |p| { let _ = tx.send(p.map(|x| x.to_string())); });
+    let picked = rx.await.map_err(|_| "Dialog canceled (channel closed)".to_string())?;
+    let Some(path) = picked else { return Ok(None); };
+    let bytes = base64_decode(&data_base64).map_err(|e| format!("base64 decode failed: {}", e))?;
+    std::fs::write(&path, bytes).map_err(|e| format!("write failed: {}", e))?;
+    Ok(Some(path))
 }
 
 #[tauri::command]
-pub async fn cmd_open_exported_file(app: tauri::AppHandle, path: &str) -> Result<(), String> {
-    use tauri_plugin_opener::OpenerExt;
-    if path.trim().is_empty() {
-        return Err("路径为空".to_string());
-    }
-    let p = std::path::Path::new(path);
-    if !p.exists() {
-        return Err(format!("文件不存在: {}", path));
-    }
-    app.opener()
-        .open_path(path, None::<&str>)
-        .map_err(|e| format!("打开文件失败: {}", e))
+pub async fn cmd_open_exported_file(path: String) -> Result<(), String> {
+    open_path_in_system(&path)
 }
 
 #[tauri::command]
-pub async fn cmd_reveal_exported_file_in_folder(path: &str) -> Result<(), String> {
-    if path.trim().is_empty() {
-        return Err("路径为空".to_string());
-    }
-    let p = std::path::Path::new(path);
-    if !p.exists() {
-        return Err(format!("文件不存在: {}", path));
-    }
-    #[cfg(target_os = "windows")]
-    {
-        // Explorer /select,<path> 选中对应文件
-        let abs = std::fs::canonicalize(p).map_err(|e| format!("路径解析失败: {}", e))?;
-        std::process::Command::new("explorer.exe")
-            .args(["/select,", &abs.to_string_lossy()])
-            .spawn()
-            .map_err(|e| format!("打开资源管理器失败: {}", e))?;
-        return Ok(());
-    }
-    #[cfg(target_os = "macos")]
-    {
-        std::process::Command::new("open")
-            .args(["-R", &p.to_string_lossy()])
-            .spawn()
-            .map_err(|e| format!("打开 Finder 失败: {}", e))?;
-        return Ok(());
-    }
-    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
-    {
-        // Linux: 打开父目录
-        if let Some(parent) = p.parent() {
-            std::process::Command::new("xdg-open")
-                .arg(parent)
-                .spawn()
-                .map_err(|e| format!("打开目录失败: {}", e))?;
-        }
-        Ok(())
-    }
+pub async fn cmd_reveal_exported_file_in_folder(path: String) -> Result<(), String> {
+    reveal_in_folder(&path)
 }
 
-// ── 导入：原生「打开文件」对话框 + 读各种格式内容返回给前端 ──
-
-/// 前端点击「导入」弹出系统原生多选「打开文件」，返回用户选中的绝对路径列表。
-/// 不直接返回文件内容（docx 等大文件可能上百 MB 不适合一次传输），路径交给 cmd_import_read_file 分文件读。
 #[tauri::command]
-pub async fn cmd_import_pick_files(app: tauri::AppHandle) -> Result<Vec<String>, String> {
+pub async fn cmd_import_pick_files(app_handle: tauri::AppHandle) -> Result<Vec<String>, String> {
     use tauri_plugin_dialog::DialogExt;
-    let (tx, rx) = tokio::sync::oneshot::channel::<Vec<std::path::PathBuf>>();
-    let mut tx_opt = Some(tx);
-    let supported: &[&str] = &[
-        "md", "markdown", "txt", "html", "htm", "json",
-        "docx", "doc", "rtf", "odt", "csv",
-    ];
-    let all: &[&str] = &["*"];
-    app.dialog()
-        .file()
-        .set_title("选择要导入的文档 — MyTemple Knowledge")
-        .add_filter("支持的文档", supported)
-        .add_filter("所有文件", all)
-        .pick_files(move |paths_opt: Option<Vec<tauri_plugin_dialog::FilePath>>| {
-            if let Some(tx) = tx_opt.take() {
-                let list = paths_opt
-                    .unwrap_or_default()
-                    .into_iter()
-                    .filter_map(|fp| fp.into_path().ok())
-                    .collect::<Vec<_>>();
-                let _ = tx.send(list);
-            }
+    let (tx, rx) = tokio::sync::oneshot::channel::<Vec<String>>();
+    app_handle.dialog().file()
+        .add_filter("All supported", &["md","txt","docx","doc","rtf","odt","pdf","pptx","xlsx","epub","html","json","csv"])
+        .pick_files(move |p| {
+            let list = p.unwrap_or_default().into_iter().map(|pp| pp.to_string()).collect();
+            let _ = tx.send(list);
         });
-    let paths = tokio::time::timeout(std::time::Duration::from_secs(600), rx)
-        .await
-        .map_err(|_| "「打开文件」对话框长时间未响应".to_string())?
-        .unwrap_or_default();
-    Ok(paths.iter().map(|p| p.to_string_lossy().into_owned()).collect())
+    rx.await.map_err(|_| "Dialog closed".to_string())
 }
 
-/// 按用户已选择的本地绝对路径读一个文件 → 返回 { ext, bytes_base64, text_utf8_or_null }
-/// MD/TXT/HTML/JSON/CSV 文本格式：读 UTF-8 文本字段；DOCX/DOC/RTF/ODT 二进制格式：
-/// 返回 bytes_base64 字段由前端 mammoth/转换逻辑处理（Rust 侧同时附带 docx 最小文本提取兜底）。
-#[derive(serde::Serialize)]
-pub struct ImportReadResult {
-    path: String,
-    name: String,
-    ext: String,
-    size: u64,
-    text: Option<String>,
-    bytes_base64: Option<String>,
-    /// Rust 侧做的二进制格式最小 Markdown 提取（docx/docx/rtf 文本内容），前端优先使用。
-    converted_markdown: Option<String>,
-}
 #[tauri::command]
-pub async fn cmd_import_read_file(path: &str) -> Result<ImportReadResult, String> {
-    let p = std::path::Path::new(path);
-    if !p.exists() {
-        return Err(format!("文件不存在: {}", path));
+pub async fn cmd_import_read_file(path: String) -> Result<serde_json::Value, String> {
+    use std::io::Read;
+    let meta = std::fs::metadata(&path).map_err(|e| e.to_string())?;
+    let size = meta.len() as usize;
+    let mut f = std::fs::File::open(&path).map_err(|e| e.to_string())?;
+    let mut buf = Vec::with_capacity(size);
+    f.read_to_end(&mut buf).map_err(|e| e.to_string())?;
+    let b64 = base64_encode(&buf);
+    let name = std::path::Path::new(&path).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    let ext = std::path::Path::new(&path).extension().map(|e| e.to_string_lossy().to_string()).unwrap_or_default();
+    Ok(serde_json::json!({ "ok": true, "name": name, "ext": ext, "size": size, "base64": b64 }))
+}
+
+fn open_path_in_system(p: &str) -> Result<(), String> {
+    #[cfg(target_os = "windows")] {
+        use std::os::windows::process::CommandExt;
+        std::process::Command::new("explorer").arg(p).creation_flags(0x08000000).spawn().map_err(|e| e.to_string())?;
     }
-    let metadata = std::fs::metadata(p).map_err(|e| format!("读取元数据失败: {}", e))?;
-    if metadata.len() > 50 * 1024 * 1024 {
-        return Err("文件超过 50MB，已跳过".to_string());
+    #[cfg(target_os = "macos")] {
+        std::process::Command::new("open").arg(p).spawn().map_err(|e| e.to_string())?;
     }
-    let name = p
-        .file_name()
-        .map(|s| s.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "未命名".to_string());
-    let ext = p
-        .extension()
-        .map(|s| s.to_string_lossy().to_ascii_lowercase().to_owned())
-        .unwrap_or_default();
-
-    let text_exts = ["md", "markdown", "txt", "html", "htm", "json", "csv", "xml"];
-    let is_text = text_exts.iter().any(|e| e == &ext);
-
-    let bytes = std::fs::read(p).map_err(|e| format!("读取文件失败: {}", e))?;
-
-    let text = if is_text {
-        Some(String::from_utf8_lossy(&bytes).into_owned())
-    } else {
-        None
-    };
-
-    // Rust 侧兜底二进制格式转换：前端 mammoth 没装好 / 没网时也能导入正文
-    let converted_markdown = match ext.as_str() {
-        "docx" => extract_docx_markdown(&bytes, &name).ok(),
-        "rtf" => extract_rtf_markdown(&bytes, &name).ok(),
-        "odt" => extract_odt_markdown(&bytes, &name).ok(),
-        _ => None,
-    };
-
-    // bytes_base64 只有对"非文本的大格式"才传，避免 50MB 都走 IPC，
-    // 但 docx/rtf/odt 需要给前端 mammoth 备用，因此如果 converted_markdown 已生成可不传
-    let need_raw_bytes = !is_text && converted_markdown.is_none() && matches!(ext.as_str(), "docx" | "odt" | "rtf");
-    let bytes_base64 = if need_raw_bytes {
-        Some(base64_encode_for_tauri(&bytes))
-    } else {
-        None
-    };
-
-    Ok(ImportReadResult {
-        path: path.to_string(),
-        name,
-        ext,
-        size: metadata.len(),
-        text,
-        bytes_base64,
-        converted_markdown,
-    })
+    Ok(())
 }
-
-// ── helpers ──
-
-fn base64_decode_for_tauri(s: &str) -> Result<Vec<u8>, String> {
-    use base64::Engine;
-    base64::engine::general_purpose::STANDARD
-        .decode(s.trim().replace([' ', '\n', '\r', '\t'], ""))
-        .map_err(|e| e.to_string())
+fn reveal_in_folder(p: &str) -> Result<(), String> {
+    #[cfg(target_os = "windows")] {
+        use std::os::windows::process::CommandExt;
+        std::process::Command::new("explorer").args(["/select,", p]).creation_flags(0x08000000).spawn().map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "macos")] {
+        std::process::Command::new("open").args(["-R", p]).spawn().map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
-fn base64_encode_for_tauri(bytes: &[u8]) -> String {
-    use base64::Engine;
-    base64::engine::general_purpose::STANDARD.encode(bytes)
-}
-
-/// docx 最小正文提取：docx 是 ZIP；word/document.xml 里 <w:p>=段落 / <w:t>=文本 / <w:tbl>=表格。
-/// 输出 Markdown（按段落换行、表格用竖线拼 +--+--+ 简化、标题抓 outlineLvl）
-fn extract_docx_markdown(bytes: &[u8], fallback_title: &str) -> anyhow::Result<String> {
-    use std::io::Cursor;
-    let reader = Cursor::new(bytes);
-    let mut zip = zip::ZipArchive::new(reader)?;
-    let xml = {
-        let mut f = zip.by_name("word/document.xml")?;
-        let mut s = String::with_capacity(f.size() as usize);
-        std::io::Read::read_to_string(&mut f, &mut s)?;
-        s
-    };
-    // 简单基于字符串扫描（不用 xmltree 免加依赖）：先移除所有 xml 命名空间前缀方便处理
-    let mut doc = String::new();
-    doc.push_str(&format!("# {}\n\n", fallback_title));
-
-    // 逐段 <w:p ...>...</w:p>
+fn base64_encode(bytes: &[u8]) -> String {
+    const CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity((bytes.len() + 2) / 3 * 4);
     let mut i = 0;
-    let bytes_s = xml.as_bytes();
-    while i < bytes_s.len() {
-        if !starts_at(bytes_s, i, b"<w:p") {
-            i += 1;
-            continue;
-        }
-        let end = find_tag_close(bytes_s, i, b"w:p").ok_or_else(|| anyhow::anyhow!("docx w:p not closed"))?;
-        let seg = &xml[i..end];
-        // 段落文本 = 所有 <w:t>..</w:t> 文本
-        let mut para_text = String::new();
-        let mut j = 0;
-        let seg_bytes = seg.as_bytes();
-        while let Some(topen) = find_tag_open(seg_bytes, j, b"w:t") {
-            let tstart = seg_bytes[topen..]
-                .iter()
-                .position(|&b| b == b'>')
-                .map(|p| topen + p + 1)
-                .unwrap_or(topen);
-            if let Some(tclose) = find_tag_close(seg_bytes, tstart, b"w:t") {
-                para_text.push_str(&seg[tstart..tclose]);
-                j = tclose + 6; // </w:t> len
-            } else {
-                break;
-            }
-        }
-        doc.push_str(&para_text);
-        doc.push('\n');
-        i = end + 6; // </w:p> len
+    while i + 3 <= bytes.len() {
+        let n = ((bytes[i] as u32) << 16) | ((bytes[i+1] as u32) << 8) | (bytes[i+2] as u32);
+        out.push(CHARS[((n >> 18) & 63) as usize] as char);
+        out.push(CHARS[((n >> 12) & 63) as usize] as char);
+        out.push(CHARS[((n >> 6) & 63) as usize] as char);
+        out.push(CHARS[(n & 63) as usize] as char);
+        i += 3;
     }
-    // 压缩过密空行
-    let cleaned = collapse_blank_lines(&doc);
-    Ok(cleaned)
-}
-
-fn extract_rtf_markdown(bytes: &[u8], fallback_title: &str) -> anyhow::Result<String> {
-    let text = String::from_utf8_lossy(bytes).into_owned();
-    // 最简 RTF 文本提取：
-    //   - 去掉 { ... } 组（简单基于层级）
-    //   - 去掉 \controlword 或 \'xx 十六进制（cp1252 UTF-8 转义这里用简单 drop，保证至少不 crash）
-    let mut out = String::with_capacity(text.len());
-    let mut depth = 0i32;
-    let chars: Vec<char> = text.chars().collect();
-    let mut i = 0;
-    while i < chars.len() {
-        let c = chars[i];
-        match c {
-            '{' => {
-                depth += 1;
-                i += 1;
-                continue;
-            }
-            '}' => {
-                depth = (depth - 1).max(0);
-                i += 1;
-                continue;
-            }
-            '\\' if depth == 0 => {
-                // 遇到控制字：吃掉直到空格或特殊字符；\'xx 或 \udxxx 我们直接跳过
-                i += 1;
-                // \* 忽略标记
-                if i < chars.len() && chars[i] == '*' {
-                    i += 1;
-                    continue;
-                }
-                if i < chars.len() && chars[i] == '\'' {
-                    i += 3; // skip 'xx
-                    continue;
-                }
-                // 数字控制字
-                while i < chars.len() && chars[i].is_ascii_alphabetic() {
-                    i += 1;
-                }
-                while i < chars.len() && (chars[i] == '-' || chars[i].is_ascii_digit()) {
-                    i += 1;
-                }
-                // 控制字结尾如果是 ' ' 代表终止符，跳过空格
-                if i < chars.len() && chars[i] == ' ' {
-                    i += 1;
-                }
-                continue;
-            }
-            '\x0d' | '\x0a' => {
-                i += 1;
-                continue;
-            }
-            _ => {
-                if depth == 0 {
-                    out.push(c);
-                }
-                i += 1;
-            }
-        }
-    }
-    let cleaned = collapse_blank_lines(&format!("# {}\n\n{}", fallback_title, out));
-    Ok(cleaned)
-}
-
-fn extract_odt_markdown(bytes: &[u8], fallback_title: &str) -> anyhow::Result<String> {
-    use std::io::Cursor;
-    let reader = Cursor::new(bytes);
-    let mut zip = zip::ZipArchive::new(reader)?;
-    let xml = {
-        let mut f = zip.by_name("content.xml")?;
-        let mut s = String::with_capacity(f.size() as usize);
-        std::io::Read::read_to_string(&mut f, &mut s)?;
-        s
-    };
-    let mut doc = format!("# {}\n\n", fallback_title);
-    let bytes_s = xml.as_bytes();
-    let mut i = 0;
-    let para_tags: [&[u8]; 2] = [b"text:p", b"text:h"];
-    while i < bytes_s.len() {
-        let mut matched: Option<&[u8]> = None;
-        for tag in para_tags.iter().copied() {
-            let open = format!("<{}", std::str::from_utf8(tag).unwrap()).into_bytes();
-            if starts_at(bytes_s, i, &open) {
-                matched = Some(tag);
-                break;
-            }
-        }
-        if let Some(tag) = matched {
-            if let Some(end) = find_tag_close(bytes_s, i, tag) {
-                let seg = &xml[i..end];
-                let text = strip_inner_tags(seg);
-                doc.push_str(&text);
-                doc.push('\n');
-                i = end + 3 + tag.len(); // </tag>
-                continue;
-            }
-        }
-        i += 1;
-    }
-    Ok(collapse_blank_lines(&doc))
-}
-
-fn starts_at(hay: &[u8], at: usize, needle: &[u8]) -> bool {
-    if at + needle.len() > hay.len() {
-        return false;
-    }
-    &hay[at..at + needle.len()] == needle
-}
-fn find_tag_open(hay: &[u8], from: usize, tag: &[u8]) -> Option<usize> {
-    let pat: Vec<u8> = format!("<{}", std::str::from_utf8(tag).unwrap()).into_bytes();
-    (from..hay.len()).find(|&i| starts_at(hay, i, &pat))
-}
-fn find_tag_close(hay: &[u8], from: usize, tag: &[u8]) -> Option<usize> {
-    let close_pat: Vec<u8> = format!("</{}>", std::str::from_utf8(tag).unwrap()).into_bytes();
-    (from..hay.len()).find(|&i| starts_at(hay, i, &close_pat))
-}
-fn strip_inner_tags(seg: &str) -> String {
-    let bytes = seg.as_bytes();
-    let mut out = String::with_capacity(seg.len());
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] == b'<' {
-            // 跳过直到 '>'
-            while i < bytes.len() && bytes[i] != b'>' {
-                i += 1;
-            }
-            if i < bytes.len() {
-                i += 1;
-            }
-            continue;
-        }
-        // xml entities 简单还原 < > &
-        if starts_at(bytes, i, b"&lt;") {
-            out.push('<');
-            i += 4;
-            continue;
-        }
-        if starts_at(bytes, i, b"&gt;") {
-            out.push('>');
-            i += 4;
-            continue;
-        }
-        if starts_at(bytes, i, b"&amp;") {
-            out.push('&');
-            i += 5;
-            continue;
-        }
-        if starts_at(bytes, i, b"&apos;") {
-            out.push('\'');
-            i += 6;
-            continue;
-        }
-        if starts_at(bytes, i, b"&quot;") {
-            out.push('"');
-            i += 6;
-            continue;
-        }
-        out.push(bytes[i] as char);
-        i += 1;
+    let rem = bytes.len() - i;
+    if rem == 1 {
+        let n = (bytes[i] as u32) << 16;
+        out.push(CHARS[((n >> 18) & 63) as usize] as char);
+        out.push(CHARS[((n >> 12) & 63) as usize] as char);
+        out.push('='); out.push('=');
+    } else if rem == 2 {
+        let n = ((bytes[i] as u32) << 16) | ((bytes[i+1] as u32) << 8);
+        out.push(CHARS[((n >> 18) & 63) as usize] as char);
+        out.push(CHARS[((n >> 12) & 63) as usize] as char);
+        out.push(CHARS[((n >> 6) & 63) as usize] as char);
+        out.push('=');
     }
     out
 }
-fn collapse_blank_lines(s: &str) -> String {
-    let mut out: Vec<String> = Vec::new();
-    let mut prev_blank = false;
-    for line in s.lines() {
-        let blank = line.trim().is_empty();
-        if blank && prev_blank {
-            continue;
+fn base64_decode(s: &str) -> Result<Vec<u8>, String> {
+    let s = s.trim_end_matches('=');
+    let mut buf: Vec<u8> = Vec::with_capacity(s.len() * 3 / 4);
+    let mut n: u32 = 0;
+    let mut bits: u8 = 0;
+    for ch in s.bytes() {
+        let v = match ch {
+            b'A'..=b'Z' => (ch - b'A') as u32,
+            b'a'..=b'z' => (ch - b'a' + 26) as u32,
+            b'0'..=b'9' => (ch - b'0' + 52) as u32,
+            b'+' => 62,
+            b'/' => 63,
+            _ => return Err(format!("invalid base64 char: {}", ch as char)),
+        };
+        n = (n << 6) | v;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            buf.push(((n >> bits) & 0xff) as u8);
         }
-        prev_blank = blank;
-        out.push(line.to_string());
     }
-    out.join("\n").trim().to_string()
+    Ok(buf)
 }
 
-} // pub mod tauri_cmd
+
+// IPC Command wrappers — 薄包装：从 tauri::State 取出 Arc<ServerState>，
+// 调用 crate::ipc::* 纯函数。所有带 Srv 参数的函数统一返回 Result 以满足
+// Tauri 2 AsyncCommandMustReturnResult trait 约束。
+type Srv<'r> = tauri::State<'r, std::sync::Arc<crate::server::ServerState>>;
+
+// 版本 / 系统路径 / 健康检查
+#[tauri::command]
+pub async fn api_health() -> Result<serde_json::Value, String> {
+    Ok(crate::ipc::health().await)
+}
+#[tauri::command]
+pub async fn api_knowledge_health(s: Srv<'_>) -> Result<serde_json::Value, String> {
+    Ok(crate::ipc::knowledge_health(&s).await)
+}
+#[tauri::command]
+pub async fn api_get_version(refresh: Option<String>) -> Result<serde_json::Value, String> {
+    Ok(crate::ipc::get_version(refresh.as_deref().unwrap_or("")).await)
+}
+#[tauri::command]
+pub async fn api_get_system_paths() -> Result<serde_json::Value, String> {
+    Ok(crate::ipc::get_system_paths().await)
+}
+
+// 工作区（7）
+#[tauri::command]
+pub async fn api_get_workspaces(s: Srv<'_>) -> Result<serde_json::Value, String> {
+    Ok(crate::ipc::get_workspaces(&s).await)
+}
+#[tauri::command]
+pub async fn api_add_workspace(s: Srv<'_>, path: String, name: Option<String>) -> Result<serde_json::Value, String> {
+    crate::ipc::add_workspace(&s, path, name).await
+}
+#[tauri::command]
+pub async fn api_remove_workspace(s: Srv<'_>, id: String) -> Result<serde_json::Value, String> {
+    crate::ipc::remove_workspace(&s, id).await
+}
+#[tauri::command]
+pub async fn api_rename_workspace(s: Srv<'_>, id: String, name: String) -> Result<serde_json::Value, String> {
+    crate::ipc::rename_workspace(&s, id, name).await
+}
+#[tauri::command]
+pub async fn api_set_default_workspace(s: Srv<'_>, id: String) -> Result<serde_json::Value, String> {
+    crate::ipc::set_default_workspace(&s, id).await
+}
+#[tauri::command]
+pub async fn api_show_workspace(s: Srv<'_>, id: String, visible: Option<bool>) -> Result<serde_json::Value, String> {
+    crate::ipc::show_workspace(&s, id, visible).await
+}
+#[tauri::command]
+pub async fn api_set_md_only(s: Srv<'_>, id: String, md_only: Option<bool>) -> Result<serde_json::Value, String> {
+    crate::ipc::set_md_only(&s, id, md_only).await
+}
+
+// 树 / 缓存刷新
+#[tauri::command]
+pub async fn api_get_tree(s: Srv<'_>, refresh: Option<String>) -> Result<serde_json::Value, String> {
+    Ok(crate::ipc::get_tree(&s, refresh.unwrap_or_default()).await)
+}
+#[tauri::command]
+pub async fn api_refresh_cache(s: Srv<'_>) -> Result<serde_json::Value, String> {
+    crate::ipc::refresh_cache(&s).await
+}
+
+// 文件 CRUD（3）
+#[tauri::command]
+pub async fn api_list_files(s: Srv<'_>) -> Result<serde_json::Value, String> {
+    Ok(crate::ipc::list_files(&s).await)
+}
+#[tauri::command]
+pub async fn api_read_file(s: Srv<'_>, path: String) -> Result<serde_json::Value, String> {
+    crate::ipc::read_file(&s, path).await
+}
+#[tauri::command]
+pub async fn api_save_file(s: Srv<'_>, path: String, content: String) -> Result<serde_json::Value, String> {
+    crate::ipc::save_file_raw(&s, path, content).await
+}
+#[tauri::command]
+pub async fn api_delete_file(s: Srv<'_>, path: String) -> Result<serde_json::Value, String> {
+    crate::ipc::delete_file(&s, path).await
+}
+
+// 文档 API（6）
+#[tauri::command]
+pub async fn api_get_doc(s: Srv<'_>, path: String, force: Option<String>) -> Result<serde_json::Value, String> {
+    crate::ipc::get_doc(&s, path, force).await
+}
+#[tauri::command]
+pub async fn api_check_doc(s: Srv<'_>, path: String) -> Result<serde_json::Value, String> {
+    crate::ipc::check_doc(&s, path).await
+}
+#[tauri::command]
+pub async fn api_save_doc(
+    s: Srv<'_>, path: String, content: String, base_hash: Option<String>,
+) -> Result<serde_json::Value, String> {
+    crate::ipc::save_doc(&s, path, content, base_hash).await
+}
+#[tauri::command]
+pub async fn api_delete_docs(s: Srv<'_>, path: serde_json::Value) -> Result<serde_json::Value, String> {
+    crate::ipc::delete_docs(&s, path).await
+}
+#[tauri::command]
+pub async fn api_create_folder(s: Srv<'_>, parent: String, name: String) -> Result<serde_json::Value, String> {
+    crate::ipc::create_folder(&s, parent, name).await
+}
+#[tauri::command]
+pub async fn api_create_document(s: Srv<'_>, parent: String, name: String) -> Result<serde_json::Value, String> {
+    crate::ipc::create_document(&s, parent, name).await
+}
+
+// 搜索 / 图谱
+#[tauri::command]
+pub async fn api_search(s: Srv<'_>, q: String) -> Result<serde_json::Value, String> {
+    Ok(crate::ipc::search(&s, q).await)
+}
+#[tauri::command]
+pub async fn api_get_graph(s: Srv<'_>) -> Result<serde_json::Value, String> {
+    Ok(crate::ipc::get_graph(&s).await)
+}
+
+// Move / Copy / Rename
+#[tauri::command]
+pub async fn api_move_entry(s: Srv<'_>, source: String, target_folder: String) -> Result<serde_json::Value, String> {
+    crate::ipc::move_entry(&s, source, target_folder).await
+}
+#[tauri::command]
+pub async fn api_copy_entry(s: Srv<'_>, source: String, target_folder: String) -> Result<serde_json::Value, String> {
+    crate::ipc::copy_entry(&s, source, target_folder).await
+}
+#[tauri::command]
+pub async fn api_rename_entry(s: Srv<'_>, path: String, new_name: String) -> Result<serde_json::Value, String> {
+    crate::ipc::rename_entry(&s, path, new_name).await
+}
+
+// Frontmatter（3）
+#[tauri::command]
+pub async fn api_get_frontmatter(s: Srv<'_>, path: String) -> Result<serde_json::Value, String> {
+    crate::ipc::get_frontmatter(&s, path).await
+}
+#[tauri::command]
+pub async fn api_preview_frontmatter(
+    s: Srv<'_>, path: String, metadata: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    crate::ipc::preview_frontmatter(&s, path, metadata).await
+}
+#[tauri::command]
+pub async fn api_apply_frontmatter(
+    s: Srv<'_>, path: String, metadata: Option<serde_json::Value>,
+    base_hash: String, confirmed: Option<bool>,
+) -> Result<serde_json::Value, String> {
+    crate::ipc::apply_frontmatter(&s, path, metadata, base_hash, confirmed).await
+}
+
+// 系统操作（3）
+#[tauri::command]
+pub async fn api_open_folder(path: String) -> Result<serde_json::Value, String> {
+    Ok(crate::ipc::open_folder(path).await)
+}
+#[tauri::command]
+pub async fn api_open_url(url: String) -> Result<serde_json::Value, String> {
+    crate::ipc::open_url(url).await
+}
+#[tauri::command]
+pub async fn api_browse_folder() -> Result<serde_json::Value, String> {
+    Ok(crate::ipc::browse_folder().await)
+}
+
+// 授权（4）
+#[tauri::command]
+pub async fn api_license_status(s: Srv<'_>) -> Result<serde_json::Value, String> {
+    Ok(crate::ipc::license_status(&s).await)
+}
+#[tauri::command]
+pub async fn api_license_check(s: Srv<'_>) -> Result<serde_json::Value, String> {
+    Ok(crate::ipc::license_check(&s).await)
+}
+#[tauri::command]
+pub async fn api_license_activate(s: Srv<'_>, license_key: String) -> Result<serde_json::Value, String> {
+    crate::ipc::license_activate(&s, license_key).await
+}
+#[tauri::command]
+pub async fn api_license_deactivate(s: Srv<'_>) -> Result<serde_json::Value, String> {
+    Ok(crate::ipc::license_deactivate(&s).await)
+}
+
+} // pub mod tauri_cmdmd

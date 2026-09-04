@@ -1321,7 +1321,7 @@ body.resizing-sidebar {
   flex: 0 0 auto;
 }
 
-.ws-paste {
+.ws-refresh {
   height: 26px;
   padding: 0 8px;
   font-size: 12px;
@@ -1333,7 +1333,7 @@ body.resizing-sidebar {
   cursor: pointer;
 }
 
-.ws-paste:hover {
+.ws-refresh:hover {
   border-color: var(--accent);
   background: var(--hover-bg);
 }
@@ -2536,6 +2536,61 @@ html body[data-theme="image"] .markdown-body .callout .callout-title::before {
 .markdown-body .tok-operator { color: var(--syn-operator); }
 .markdown-body .tok-tag { color: var(--syn-tag); }
 .markdown-body .tok-attr { color: var(--syn-attr); }
+
+/* 问题4: highlight.js 代码块语法高亮 token 映射到现有 --syn-* CSS 变量，
+   亮/暗主题自动切换（--syn-* 已按 data-theme 定义不同色值） */
+.markdown-body .hljs {
+  color: var(--md-code-fg, var(--md-fg));
+  display: block;
+  overflow-x: auto;
+  line-height: 1.6;
+  tab-size: 4;
+}
+/* hljs 核心 token */
+.markdown-body .hljs-comment,
+.markdown-body .hljs-quote { color: var(--syn-comment); font-style: italic; }
+.markdown-body .hljs-keyword,
+.markdown-body .hljs-selector-tag,
+.markdown-body .hljs-literal,
+.markdown-body .hljs-built_in,
+.markdown-body .hljs-template-tag,
+.markdown-body .hljs-name,
+.markdown-body .hljs-type,
+.markdown-body .hljs-attr,
+.markdown-body .hljs-meta-keyword { color: var(--syn-keyword); font-weight: 500; }
+.markdown-body .hljs-string,
+.markdown-body .hljs-regexp,
+.markdown-body .hljs-addition,
+.markdown-body .hljs-template-variable,
+.markdown-body .hljs-subst { color: var(--syn-string); }
+.markdown-body .hljs-number,
+.markdown-body .hljs-symbol,
+.markdown-body .hljs-bullet,
+.markdown-body .hljs-link,
+.markdown-body .hljs-deletion,
+.markdown-body .hljs-selector-attr,
+.markdown-body .hljs-selector-pseudo { color: var(--syn-number); }
+.markdown-body .hljs-title,
+.markdown-body .hljs-title.function_,
+.markdown-body .hljs-section,
+.markdown-body .hljs-function .hljs-title { color: var(--syn-function); }
+.markdown-body .hljs-class .hljs-title,
+.markdown-body .hljs-variable,
+.markdown-body .hljs-attribute,
+.markdown-body .hljs-property { color: var(--syn-type); }
+.markdown-body .hljs-tag,
+.markdown-body .hljs-name,
+.markdown-body .hljs-selector-id,
+.markdown-body .hljs-selector-class { color: var(--syn-tag); }
+.markdown-body .hljs-operator,
+.markdown-body .hljs-meta,
+.markdown-body .hljs-meta-string,
+.markdown-body .hljs-punctuation { color: var(--syn-operator); }
+.markdown-body .hljs-doctag,
+.markdown-body .hljs-strong { font-weight: 700; }
+.markdown-body .hljs-emphasis { font-style: italic; }
+.markdown-body .hljs-link { text-decoration: underline; }
+/* fallback 自定义高亮（tok-* span）与 hljs 并存时的一致性（已经定义在 2528-2538，无需重复）*/
 
 /* editor (CodeMirror) syntax highlighting - same token palette */
 .cm-editor .tok-keyword { color: var(--syn-keyword); font-weight: 500; }
@@ -10577,4 +10632,22 @@ html body .print-body.print-body .callout.callout.callout-example.callout-exampl
 #markdownView img:hover,
 #preview img:hover {
   opacity: 0.88;
+}
+/* === HTML 内嵌 iframe 块 === */
+.markdown-body .html-inline-block {
+  margin: 16px 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+.markdown-body .html-inline-frame {
+  display: block;
+  width: 100%;
+  min-height: 320px;
+  border: none;
+  background: #fff;
+}
+.markdown-body pre.code-preview.code-preview {
+  /* 外部代码文件预览的额外 padding/family 内联已设，但给 code tag 也补上 */
 }
