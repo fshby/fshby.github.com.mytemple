@@ -172,7 +172,31 @@ fn default_true() -> bool { true }
 
 
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// 全局字符串字典：tags/terms 存 Vec<u32> token id，节省内存
+pub struct TokenDictionary {
+    forward: std::sync::RwLock<std::collections::HashMap<String, u32>>,
+    reverse: std::sync::RwLock<Vec<String>>,
+}
+impl TokenDictionary {
+    pub fn new() -> Self {
+        Self { forward: std::sync::RwLock::new(std::collections::HashMap::new()), reverse: std::sync::RwLock::new(Vec::new()) }
+    }
+    pub fn intern(&self, s: &str) -> u32 {
+        { if let Some(&id) = self.forward.read().unwrap().get(s) { return id; } }
+        let mut fwd = self.forward.write().unwrap();
+        if let Some(&id) = fwd.get(s) { return id; }
+        let mut rev = self.reverse.write().unwrap();
+        let id = rev.len() as u32;
+        rev.push(s.to_string());
+        fwd.insert(s.to_string(), id);
+        id
+    }
+    pub fn lookup_many(&self, ids: &[u32]) -> Vec<String> {
+        let rev = self.reverse.read().unwrap();
+        ids.iter().filter_map(|&id| rev.get(id as usize).cloned()).collect()
+    }
+}
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FileEntry {
 
@@ -186,15 +210,15 @@ pub struct FileEntry {
 
     pub workspace_name: String,
 
-    pub content: String,
+    pub content: Option<String>,
 
     pub content_sha256: String,
 
     pub plain: String,
 
-    pub tags: Vec<String>,
+    pub tags: Vec<u32>,
 
-    pub terms: Vec<String>,
+    pub terms: Vec<u32>,
 
     pub created: u64,
 
@@ -248,6 +272,8 @@ pub struct AppState {
 
     pub search_index: Arc<RwLock<SearchIndex>>,
 
+    pub token_dict: Arc<TokenDictionary>,
+
 }
 
 
@@ -256,44 +282,24 @@ pub struct AppState {
 
 pub struct SearchIndex {
 
-    pub entries: Vec<SearchEntry>,
+    pub entries: Vec<usize>,
 
 }
 
 
 
-#[derive(Debug, Clone)]
-
-pub struct SearchEntry {
-
-    pub path: String,
-
-    pub title: String,
-
-    pub plain: String,
-
-}
-
-
+// SearchEntry removed — SearchIndex stores Vec<usize> indices into files
 
 #[derive(Debug, Clone, Serialize)]
-
+#[serde(rename_all = "camelCase")]
 pub struct SearchResult {
-
     pub path: String,
-
     pub title: String,
-
     pub snippet: String,
-
     pub score: u32,
-
 }
 
-
-
 #[derive(Debug, Clone)]
-
 pub struct NormalizedPath {
 
     pub workspace_id: String,
@@ -337,6 +343,8 @@ impl AppState {
             tree: Arc::new(RwLock::new(None)),
 
             search_index: Arc::new(RwLock::new(SearchIndex::default())),
+
+            token_dict: Arc::new(TokenDictionary::new()),
 
         }
 
@@ -446,40 +454,31 @@ impl AppState {
 
     pub async fn refresh_cache(&self) -> anyhow::Result<()> {
 
+        // 首屏只扫描 visible 的工作区（当前最多 2 个）。
+        // 非 visible 工作区：
+        //   - openDoc/global search 命中不到时，由 read_file() / scan_workspace_if_hidden_owner()
+        //     懒扫描该工作区并把结果 extend 进 self.files + tree 重建；
+        //   - show_workspace(true) 切到可见时，refresh_cache 已自然覆盖。
         let workspaces = self.workspaces.read().await.clone();
+        let visible_ws_ids: std::collections::HashSet<String> = workspaces
+            .iter()
+            .filter(|w| w.visible)
+            .map(|w| w.id.clone())
+            .collect();
 
         let mut all_files = Vec::new();
 
-
-
         for ws in &workspaces {
-
-            let ws_files = scan_workspace(ws).await;
-
+            if !visible_ws_ids.contains(&ws.id) {
+                continue;
+            }
+            let ws_files = scan_workspace(ws, &self.token_dict).await;
             all_files.extend(ws_files);
-
         }
 
 
 
-        let search_entries: Vec<SearchEntry> = all_files
-
-            .iter()
-
-            .map(|f| SearchEntry {
-
-                path: f.path.clone(),
-
-                title: f.title.clone(),
-
-                plain: f.plain.clone(),
-
-            })
-
-            .collect();
-
-
-
+        let search_indices: Vec<usize> = (0..all_files.len()).collect();
         let tree = build_tree(&all_files, &workspaces);
 
 
@@ -496,7 +495,7 @@ impl AppState {
 
             let mut idx = self.search_index.write().await;
 
-            idx.entries = search_entries;
+            idx.entries = search_indices;
 
         }
 
@@ -802,7 +801,69 @@ impl AppState {
 
     }
 
+    /// 若 ref_path（如 lastOpenedDoc / recent doc / 搜索点击路径）归属于当前 hidden 的工作区，
+    /// 懒扫描该工作区并把结果合并进 self.files + self.tree + search_index。
+    /// 归属于 visible 工作区或无法识别时直接 Ok(())（空操作）。
+    async fn scan_hidden_workspace_owning_path(&self, ref_path: &str) -> anyhow::Result<()> {
+        // 从 ref_path 解析候选 workspace_id（复用 normalize_doc_path 的格式：ws_id:xxx 或 ws_id/xxx）
+        let decoded = ref_path.replace('\\', "/");
+        let candidate_ws_id: Option<String> = if let Some(idx) = decoded.find(':') {
+            let prefix = &decoded[..idx];
+            if !prefix.is_empty() && prefix.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-') {
+                Some(prefix.to_string())
+            } else { None }
+        } else if let Some(idx) = decoded.find('/') {
+            let prefix = &decoded[..idx];
+            if prefix.starts_with("ws_")
+                || (prefix.chars().all(|c| c.is_alphanumeric() || c == '_') && !prefix.is_empty())
+            { Some(prefix.to_string()) } else { None }
+        } else { None };
 
+        let Some(ws_id) = candidate_ws_id else { return Ok(()); };
+
+        // 查找目标 workspace（若不存在或已 visible，跳过）
+        let target = {
+            let wss = self.workspaces.read().await;
+            match wss.iter().find(|w| w.id == ws_id) {
+                Some(w) if !w.visible => w.clone(),
+                _ => return Ok(()),
+            }
+        };
+
+        // 快速互斥：如果该 hidden ws 已经出现在 files 中（另一个协程刚懒扫完），跳过
+        {
+            let f = self.files.read().await;
+            if f.iter().any(|x| x.workspace_id == target.id) { return Ok(()); }
+        }
+
+        log::info!("[scan_hidden_ws] lazy-scan hidden workspace id={} root={}", target.id, target.root);
+        let new_entries = scan_workspace(&target, &self.token_dict).await;
+        if new_entries.is_empty() { return Ok(()); }
+
+        // 合并进 self.files（仅追加当前 ws 没出现过的条目，按 path 去重）
+        {
+            let mut files = self.files.write().await;
+            let existing_paths: std::collections::HashSet<String> =
+                files.iter().map(|f| f.path.clone()).collect();
+            for e in new_entries.into_iter() {
+                if !existing_paths.contains(&e.path) { files.push(e); }
+            }
+            // 重建 search_index（保持 entries = 0..files.len()）
+            let mut idx = self.search_index.write().await;
+            idx.entries = (0..files.len()).collect();
+        }
+
+        // 重建 tree（包含所有 workspaces —— 即使 hidden 只对 search/read_file 有效，
+        //  build_tree 会过滤掉 files 里没有的 ws 节点，所以 hidden ws 不出现在可见树上，符合预期）
+        {
+            let workspaces = self.workspaces.read().await.clone();
+            let files = self.files.read().await.clone();
+            let tree = build_tree(&files, &workspaces);
+            let mut t = self.tree.write().await;
+            *t = Some(tree);
+        }
+        Ok(())
+    }
 
     pub async fn read_file(&self, path: &str) -> anyhow::Result<FileEntry> {
         let input_nfc = nfc(path);
@@ -814,7 +875,24 @@ impl AppState {
             if let Some(entry) = files.iter().find(|f| {
                 f.path == path || nfc(&f.path) == input_nfc
             }) {
-                return Ok(entry.clone());
+                if entry.content.is_some() { return Ok(entry.clone()); }
+                // content is None — fall through to disk read (lazy backfill)
+            }
+        }
+
+        // Level 1.5: refresh_cache() 仅扫描 visible 工作区，若 path 归属于某 hidden 工作区，
+        //           先懒扫描该工作区并合并进 files/tree，再回到正常路径继续匹配。
+        //           典型场景：recent 打开过的文档 → 该 ws 后来被 hidden，但前端仍有 lastOpenedDoc
+        if let Err(_e) = self.scan_hidden_workspace_owning_path(path).await {
+            // ignore: lazy 扫描失败不阻塞正常 read_file（后续 normalize 直接走磁盘读兜底）
+        }
+        // 懒合并后再做一次 cache 命中（content 仍可能 None → 继续走磁盘回读）
+        {
+            let files = self.files.read().await;
+            if let Some(entry) = files.iter().find(|f| {
+                f.path == path || nfc(&f.path) == input_nfc
+            }) {
+                if entry.content.is_some() { return Ok(entry.clone()); }
             }
         }
 
@@ -939,14 +1017,42 @@ impl AppState {
         // 前端 openDoc 拿到后在状态栏可显示（state.currentEncoding = doc.encoding），便于排查编码命中问题。
         entry.encoding = encoding_detected;
 
+        // Backfill cache: set content on the cached entry (lazy load)
+        {
+            let mut files = self.files.write().await;
+            let target_nfc = nfc(&entry.path);
+            if let Some(cache_entry) = files.iter_mut().find(|f| f.path == entry.path || nfc(&f.path) == target_nfc) {
+                cache_entry.content = Some(content.clone());
+            }
+        }
         Ok(entry)
     }
 
 
 
-    pub async fn save_file(&self, path: &str, content: &str) -> anyhow::Result<String> {
+    pub async fn save_file(&self, path: &str, content: &str, base_hash: Option<&str>) -> anyhow::Result<String> {
 
         let normalized = self.normalize_doc_path(path)?;
+
+        // Issue 2: 保存前冲突检测——如果 base_hash 提供，读磁盘文件 hash 比对，
+        // 不一致说明外部编辑器（如 Notepad）已修改该文件，拒绝保存防止覆盖丢失外部修改。
+        if let Some(bh) = base_hash {
+            if !bh.is_empty() {
+                if let Ok(disk_bytes) = std::fs::read(&normalized.absolute) {
+                    let disk_hash = format!("{:x}", sha2::Sha256::digest(&disk_bytes));
+                    if disk_hash != bh {
+                        // 磁盘文件 hash 与前端加载时的 base_hash 不一致 = 外部已修改
+                        log::warn!(
+                            "[save_file] CONFLICT | ref={} | abs={} | base_hash={} | disk_hash={}",
+                            normalized.r#ref, normalized.absolute, bh, disk_hash
+                        );
+                        return Err(anyhow::anyhow!("__CONFLICT__:{}", disk_hash));
+                    }
+                }
+                // 磁盘文件不存在时跳过冲突检测，正常走 create+write 流程
+            }
+        }
+
         if let Some(parent) = Path::new(&normalized.absolute).parent() {
 
             std::fs::create_dir_all(parent)?;
@@ -972,7 +1078,7 @@ impl AppState {
             f.path == normalized.r#ref || nfc(&f.path) == target_ref_nfc
         }) {
 
-            entry.content = content.to_string();
+            entry.content = Some(content.to_string());
 
             entry.content_sha256 = hash.clone();
 
@@ -996,6 +1102,175 @@ impl AppState {
 
         Ok(hash)
 
+    }
+
+
+
+    /// Issue 2: 轻量级文件修改检查——返回磁盘文件当前 sha256 + modified 毫秒。
+    /// 前端每 5s 轮询此端点，与 state.currentVersion（打开时的 contentSha256）比对，
+    /// 不同则 Toast「文件已被外部修改，点击重新加载」。
+    pub async fn check_file(&self, path: &str) -> anyhow::Result<(String, u64)> {
+        let input_nfc = nfc(path);
+        // 尝试 cache 命中拿到 absolute 路径（避免每次轮询都走 normalize_doc_path）
+        {
+            let files = self.files.read().await;
+            if let Some(entry) = files.iter().find(|f| {
+                f.path == path || nfc(&f.path) == input_nfc
+            }) {
+                let abs = entry.absolute.clone();
+                drop(files);
+                if let Ok(meta) = std::fs::metadata(&abs) {
+                    let modified = meta.modified().ok()
+                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|d| d.as_millis() as u64)
+                        .unwrap_or(0);
+                    let bytes = std::fs::read(&abs)?;
+                    let hash = format!("{:x}", sha2::Sha256::digest(&bytes));
+                    return Ok((hash, modified));
+                }
+            }
+        }
+        // fallback: normalize 后读磁盘
+        let normalized = self.normalize_doc_path(path)?;
+        let bytes = std::fs::read(&normalized.absolute)?;
+        let hash = format!("{:x}", sha2::Sha256::digest(&bytes));
+        let modified = std::fs::metadata(&normalized.absolute).ok()
+            .and_then(|m| m.modified().ok())
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+        Ok((hash, modified))
+    }
+
+
+
+    /// Issue 2 补充: 外部修改 Toast「重新加载」需要磁盘最新内容，不能走 read_file L1 cache（内存中仍是旧 content）。
+    /// 与 read_file 区别：跳过 L1 cache 直接命中返回，强制从磁盘重新读取 + decode；读完后若 cache 中已有对应 entry，
+    /// 就地更新 content/content_sha256/encoding/plain/modified，保证下次 read_file 正常命中。
+    pub async fn read_file_force(&self, path: &str) -> anyhow::Result<FileEntry> {
+        let input_nfc = nfc(path);
+
+        // ── Level 1 跳过: 不直接返回 cache entry ──
+        // 但仍复用 cache 中的 basename/absolute 信息做弱匹配，沿用 read_file 同款 L2 3 级兜底：
+        let input_basename = nfc_basename(&input_nfc);
+        let input_ws = {
+            let decoded = path.replace('\\', "/");
+            if let Some(idx) = decoded.find(':') {
+                let prefix = &decoded[..idx];
+                if !prefix.is_empty() && prefix.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-') {
+                    Some(prefix.to_string())
+                } else { None }
+            } else if let Some(idx) = decoded.find('/') {
+                let prefix = &decoded[..idx];
+                if prefix.starts_with("ws_") || (prefix.chars().all(|c| c.is_alphanumeric() || c == '_') && !prefix.is_empty()) {
+                    Some(prefix.to_string())
+                } else { None }
+            } else { None }
+        };
+
+        let mut fallback_ref_path: Option<String> = None;
+        {
+            let files = self.files.read().await;
+            if !input_basename.is_empty() {
+                let mut matched: Vec<String> = files.iter()
+                    .filter(|f| nfc_basename(&f.path) == input_basename)
+                    .filter(|f| input_ws.as_ref().map_or(true, |w| f.workspace_id == *w))
+                    .map(|f| f.path.clone())
+                    .collect();
+                if matched.len() == 1 {
+                    fallback_ref_path = Some(matched.swap_remove(0));
+                }
+            }
+            if fallback_ref_path.is_none() && !input_basename.is_empty() {
+                let trimmed_input = input_basename
+                    .trim_end_matches(|c: char| c.is_ascii_digit() || c == '-' || c == '_' || c == ' ')
+                    .to_string();
+                let mut candidates: Vec<String> = files.iter()
+                    .filter(|f| {
+                        let tb = nfc_basename(&f.path)
+                            .trim_end_matches(|c: char| c.is_ascii_digit() || c == '-' || c == '_' || c == ' ')
+                            .to_string();
+                        !tb.is_empty() && tb == trimmed_input
+                    })
+                    .filter(|f| input_ws.as_ref().map_or(true, |w| f.workspace_id == *w))
+                    .map(|f| f.path.clone())
+                    .collect();
+                if candidates.len() == 1 {
+                    fallback_ref_path = Some(candidates.swap_remove(0));
+                }
+            }
+            if fallback_ref_path.is_none() && !input_basename.is_empty() {
+                let mut by_basename: Vec<&FileEntry> = files.iter()
+                    .filter(|f| nfc_basename(&f.path) == input_basename)
+                    .collect();
+                if by_basename.len() == 1 {
+                    fallback_ref_path = Some(by_basename.swap_remove(0).path.clone());
+                }
+            }
+        }
+
+        let target_ref = fallback_ref_path.as_deref().unwrap_or(path);
+        let normalized = self.normalize_doc_path(target_ref)
+            .map_err(|e| {
+                let first_bytes_hex: String = path.as_bytes().iter().take(4)
+                    .map(|b| format!("{:02X}", b)).collect::<Vec<_>>().join(" ");
+                log::error!(
+                    "[read_file_force] normalize_doc_path failed | path={} | len={} | head=[{}] | err={}",
+                    path, path.len(), first_bytes_hex, e
+                );
+                e
+            })?;
+
+        let bytes = std::fs::read(&normalized.absolute).map_err(|e| {
+            log::error!(
+                "[read_file_force] fs::read IO 失败 | ref={} | abs={} | len(raw_path)={} | err={}",
+                normalized.r#ref, normalized.absolute, path.len(), e
+            );
+            anyhow::anyhow!("读取文件失败: {}", e)
+        })?;
+
+        let (content, encoding_detected) = decode_bytes_smart(&bytes);
+        let lossy_replacement_count = content.matches('\u{fffd}').count();
+        if encoding_detected == "utf-8-lossy" && lossy_replacement_count > 0 {
+            let first_bytes_hex: String = bytes.iter().take(4)
+                .map(|b| format!("{:02X}", b)).collect::<Vec<_>>().join(" ");
+            log::error!(
+                "[read_file_force] 编码兜底至 utf-8-lossy,替换字符={} | ref={} | abs={} | total_bytes={} | head=[{}]",
+                lossy_replacement_count, normalized.r#ref, normalized.absolute, bytes.len(), first_bytes_hex
+            );
+        }
+
+        let final_normalized = if let Some(cache_ref) = fallback_ref_path.as_ref() {
+            let mut merged = normalized.clone();
+            merged.r#ref = cache_ref.clone();
+            merged
+        } else {
+            normalized.clone()
+        };
+
+        let mut entry = self.build_file_entry(&final_normalized, &content).await;
+        entry.encoding = encoding_detected.clone();
+
+        // ── 刷新 cache entry（若存在）──
+        {
+            let mut files = self.files.write().await;
+            let target_ref_nfc = nfc(&final_normalized.r#ref);
+            if let Some(cache_entry) = files.iter_mut().find(|f| {
+                f.path == final_normalized.r#ref || nfc(&f.path) == target_ref_nfc
+            }) {
+                cache_entry.content = Some(content.to_string());
+                cache_entry.content_sha256 = entry.content_sha256.clone();
+                cache_entry.encoding = encoding_detected;
+                cache_entry.modified = chrono::Utc::now().timestamp_millis() as u64;
+                cache_entry.plain = if final_normalized.relative.ends_with(".md") || final_normalized.relative.ends_with(".markdown") {
+                    strip_markdown(&content)
+                } else {
+                    content.to_string()
+                };
+            }
+        }
+
+        Ok(entry)
     }
 
 
@@ -1182,11 +1457,13 @@ impl AppState {
         tokens.dedup();
 
         let index = self.search_index.read().await;
+        let files = self.files.read().await;
 
         let mut results: Vec<SearchResult> = index
             .entries
             .iter()
-            .filter_map(|entry| {
+            .filter_map(|&idx| {
+                let entry = &files[idx];
                 let title_lower = entry.title.to_lowercase();
                 let plain_lower = entry.plain.to_lowercase();
 
@@ -1399,7 +1676,7 @@ impl AppState {
 
         let hash = format!("{:x}", sha2::Sha256::digest(content.as_bytes()));
 
-        let tags = extract_tags(content);
+        let tags: Vec<u32> = extract_tags(content).iter().map(|t| self.token_dict.intern(t)).collect();
 
 
 
@@ -1433,7 +1710,7 @@ impl AppState {
 
             workspace_name,
 
-            content: content.to_string(),
+            content: Some(content.to_string()),
 
             content_sha256: hash,
 
@@ -1622,7 +1899,7 @@ impl AppState {
     /// Get frontmatter keys and values from a markdown file
     pub async fn get_frontmatter(&self, path: &str) -> anyhow::Result<serde_json::Value> {
         let doc = self.read_file(path).await?;
-        let content = &doc.content;
+        let content = doc.content.as_deref().unwrap_or("");
         let (_, after) = extract_frontmatter_block(content);
         let map = normalize_frontmatter(after);
         serde_json::to_value(map).map_err(|e| anyhow::anyhow!(e))
@@ -1631,7 +1908,7 @@ impl AppState {
     /// Get a preview of frontmatter with optional metadata applied
     pub async fn preview_frontmatter(&self, path: &str, metadata: &serde_json::Value) -> anyhow::Result<serde_json::Value> {
         let doc = self.read_file(path).await?;
-        let content = &doc.content;
+        let content = doc.content.as_deref().unwrap_or("");
         let (fm, _) = extract_frontmatter_block(content);
         let mut map = normalize_frontmatter(fm);
 
@@ -1660,7 +1937,7 @@ impl AppState {
             anyhow::bail!("Content hash mismatch, file may have been modified");
         }
 
-        let content = &doc.content;
+        let content = doc.content.as_deref().unwrap_or("");
         let (_, body) = extract_frontmatter_block(content);
         let mut lines: Vec<String> = Vec::new();
         lines.push("---".to_string());
@@ -1683,7 +1960,7 @@ impl AppState {
         lines.push("".to_string());
         let mut new_content = lines.join("\n");
         new_content.push_str(body);
-        let hash = self.save_file(path, &new_content).await?;
+        let hash = self.save_file(path, &new_content, None).await?;
         Ok(serde_json::json!({
             "ok": true,
             "path": path,
@@ -1941,11 +2218,12 @@ fn is_binary_ext(ext: &str) -> bool {
         "pdf" | "doc" | "docx" | "xls" | "xlsx" | "ppt" | "pptx" |
         "db" | "sqlite" | "sqlite3" | "mdb" | "lock" |
         "ttf" | "otf" | "woff" | "woff2" | "eot" |
-        "p12" | "pfx" | "key" | "pem" | "class" | "pyc" | "pyo" | "wasm"
+        // 问题3: 移除 "key" — CRT 串口工具按键映射文件是文本格式，应被扫描和读取
+        "p12" | "pfx" | "pem" | "class" | "pyc" | "pyo" | "wasm"
     )
 }
 
-async fn scan_workspace(ws: &Workspace) -> Vec<FileEntry> {
+async fn scan_workspace(ws: &Workspace, td: &TokenDictionary) -> Vec<FileEntry> {
 
     let root = Path::new(&ws.root);
     log::info!("[scan_workspace] scanning {} (id={}, md_only={})", ws.root, ws.id, ws.md_only);
@@ -2049,7 +2327,7 @@ async fn scan_workspace(ws: &Workspace) -> Vec<FileEntry> {
 
         let hash = format!("{:x}", sha2::Sha256::digest(content.as_bytes()));
 
-        let tags = extract_tags(&content);
+        let tags: Vec<u32> = extract_tags(&content).iter().map(|t| td.intern(t)).collect();
 
 
 
@@ -2103,7 +2381,7 @@ async fn scan_workspace(ws: &Workspace) -> Vec<FileEntry> {
 
             workspace_name: ws.name.clone(),
 
-            content,
+            content: None,
 
             content_sha256: hash,
 

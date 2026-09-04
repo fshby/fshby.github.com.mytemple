@@ -1,0 +1,12 @@
+{
+  "allowedPaths": [
+    "**/*.md"
+  ],
+  "blockedPaths": [
+    "**/node_modules/**",
+    "**/.git/**"
+  ],
+  "maxFilesPerAction": 5,
+  "rules": [],
+  "writeMode": "safe"
+}

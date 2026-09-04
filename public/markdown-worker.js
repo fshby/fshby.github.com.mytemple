@@ -1,10 +1,62 @@
 function escapeHtml(value) {
-  return String(value || "")
+  const v = String(value || "")
+    // 去掉 < 0x20 控制字符（保留 \t\n\r）+ U+FFFE/FFFF 非法码点
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, "");
+  return v
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+/**
+ * 检测 Chart.js / ECharts JSON 配置，返回可直接在 srcdoc iframe 中渲染的完整 HTML。
+ * 无法识别时返回 null。
+ */
+function detectAndBuildChartHtml(content) {
+  let jsonStr = String(content || "").trim();
+  if (!jsonStr) return null;
+  // 兼容前后有说明文本，提取最外层 JSON 对象
+  const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
+  if (jsonMatch) jsonStr = jsonMatch[0];
+  let cfg;
+  try { cfg = JSON.parse(jsonStr); } catch { return null; }
+  if (!cfg || typeof cfg !== "object") return null;
+
+  const chartjsTypes = ["pie","doughnut","bar","line","radar","polarArea","bubble","scatter"];
+  const isChartjs =
+    (typeof cfg.type === "string" && chartjsTypes.includes(cfg.type)) ||
+    (cfg.data && Array.isArray(cfg.data.labels) && Array.isArray(cfg.data.datasets));
+  const echartsKeys = ["series","xAxis","yAxis","tooltip","legend","grid","title","visualMap","dataset"];
+  const echartsHitCount = echartsKeys.filter(k => cfg[k] !== undefined).length;
+  const isECharts =
+    (cfg.series && Array.isArray(cfg.series) && cfg.series.length > 0) ||
+    (cfg.option && (cfg.option.series || cfg.option.xAxis)) ||
+    echartsHitCount >= 2;
+
+  if (isChartjs) {
+    const safeJson = JSON.stringify(cfg).replace(/<\/script/gi, "<\\/script");
+    return "<!doctype html><html lang=\"zh\"><head><meta charset=\"utf-8\"/><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"/><title>Chart.js</title>"
+      +"<script src=\"https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js\"><\/script>"
+      +"<style>html,body{margin:0;padding:12px;height:100%;box-sizing:border-box;font-family:Arial,sans-serif;background:#fff}#c{width:100%;height:calc(100vh - 24px);min-height:360px}</style>"
+      +"</head><body><canvas id=\"c\"></canvas><script>"
+      +"try{const CFG="+safeJson+";(CFG.options=CFG.options||{}).responsive=true;CFG.options.maintainAspectRatio=false;new Chart(document.getElementById('c'),CFG);}"
+      +"catch(e){document.body.innerHTML='<pre style=color:#c00;padding:12px>'+String(e&&e.message||e).replace(/[<>]/g,'').slice(0,800)+'</pre>'}"
+      +"<\/script></body></html>";
+  }
+  if (isECharts) {
+    const opt = cfg.option ? cfg.option : cfg;
+    const safeJson = JSON.stringify(opt).replace(/<\/script/gi, "<\\/script");
+    return "<!doctype html><html lang=\"zh\"><head><meta charset=\"utf-8\"/><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"/><title>ECharts</title>"
+      +"<script src=\"https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js\"><\/script>"
+      +"<style>html,body{margin:0;padding:0;height:100%;background:#fff}#c{width:100%;height:100vh;min-height:420px}</style>"
+      +"</head><body><div id=\"c\"></div><script>"
+      +"try{const ch=echarts.init(document.getElementById('c'));ch.setOption("+safeJson+");window.addEventListener('resize',function(){ch.resize()})}"
+      +"catch(e){document.body.innerHTML='<pre style=color:#c00;padding:12px>'+String(e&&e.message||e).replace(/[<>]/g,'').slice(0,800)+'</pre>'}"
+      +"<\/script></body></html>";
+  }
+  return null;
 }
 
 function plainText(value) {
@@ -82,16 +134,89 @@ function markdownTableAlignment(cell) {
   return "left";
 }
 
+// highlight.js 11.10 支持的语言白名单（common 版 + 扩展语言包 langs/）
+const HLJS_SUPPORTED = new Set([
+  // highlight.min.js common 版
+  "python","javascript","typescript","java","c","cpp","csharp","rust","go",
+  "php","ruby","bash","shell","sql","html","css","scss","less","xml","json",
+  "yaml","markdown","kotlin","swift","scala","lua","r","perl","fortran",
+  "ini","toml","makefile","tex","bat","diff","git","graphql","proto","handlebars",
+  "jsx","tsx","js","ts","py","rb","rs","cs","sh","hbs",
+  // langs/ 扩展语言包
+  "powershell","dockerfile","cmake","groovy","dart","nginx","nsis","apache",
+  "properties","haskell","elixir","clojure","vb",
+]);
+
 function normalizeCodeLanguage(value) {
   const raw = String(value || "").trim().toLowerCase();
   const aliases = {
     js: "javascript", jsx: "javascript", mjs: "javascript", cjs: "javascript",
-    ts: "typescript", tsx: "typescript", py: "python", sh: "bash", shell: "bash",
-    zsh: "bash", ps: "powershell", ps1: "powershell", yml: "yaml", md: "markdown",
-    cc: "cpp", cxx: "cpp", "c++": "cpp", cs: "csharp", "c#": "csharp", rs: "rust",
-    golang: "go", txt: "text", plain: "text", "text/plain": "text",
+    ts: "typescript", tsx: "typescript", py: "python", pyw: "python", rb: "ruby",
+    sh: "bash", shell: "bash", zsh: "bash", ps: "powershell", ps1: "powershell", psm1: "powershell",
+    yml: "yaml", md: "markdown", c: "c", h: "c", cc: "cpp", cxx: "cpp", hpp: "cpp", hh: "cpp",
+    "c++": "cpp", cs: "csharp", "c#": "csharp", rs: "rust", golang: "go", goh: "go",
+    txt: "text", plain: "text", "text/plain": "text",
+    // Windows 脚本：cmd 用 bat（hljs 只支持 bat）
+    bat: "bat", cmd: "bat", batch: "bat",
+    // java 原生支持，不用映射
+    // 脚本语言
+    vbs: "vb", vba: "vb", vb: "vb",
+    pl: "perl", pm: "perl",
+    php: "php", php3: "php", php4: "php", php5: "php", phtml: "php",
+    lua: "lua",
+    r: "r", rmd: "r",
+    scala: "scala", sc: "scala",
+    swift: "swift",
+    kt: "kotlin", kts: "kotlin",
+    dart: "dart",
+    // 配置/标记语言
+    ini: "ini", cfg: "ini", conf: "ini", properties: "properties", prop: "properties",
+    toml: "toml",
+    xml: "xml", svg: "xml", xhtml: "xml", wsdl: "xml", xslt: "xml", jsp: "xml", aspx: "xml", cshtml: "xml",
+    // MySQL / SQL → hljs 原生支持 sql
+    sql: "sql", mysql: "sql", mariadb: "sql", ddl: "sql", dml: "sql",
+    html: "html", htm: "html",
+    css: "css", scss: "scss", sass: "scss", less: "less",
+    json: "json", jsonc: "json", json5: "json",
+    // 构建/脚本
+    make: "makefile", makefile: "makefile", mk: "makefile", gmk: "makefile", gnumake: "makefile",
+    dockerfile: "dockerfile", docker: "dockerfile",
+    cmake: "cmake", cmakelists: "cmake",
+    groovy: "groovy", gradle: "groovy",
+    // 其他常见
+    nsis: "nsis", nsh: "nsis",
+    nginx: "nginx",
+    htaccess: "apache", apache: "apache",
+    gitignore: "git", git: "git", dockerignore: "dockerfile", gitattributes: "git",
+    // 更多工程语言
+    graphql: "graphql", gql: "graphql",
+    proto: "proto", protobuf: "proto",
+    handlebars: "handlebars", hbs: "handlebars",
+    tex: "tex", latex: "tex",
+    diff: "diff", patch: "diff",
+    haskell: "haskell", hs: "haskell",
+    elixir: "elixir", ex: "elixir", exs: "elixir",
+    clojure: "clojure", clj: "clojure", cljs: "clojure",
+    // 框架/扩展：Vue / React(JSX) / TSX → 近似映射
+    vue: "html", vuejs: "html", svelte: "html",
+    jsx: "javascript", react: "javascript", "react-jsx": "javascript",
+    tsx: "typescript", "react-tsx": "typescript",
+    // CSV/表格 → 纯文本展示（hljs 没有原生 csv）
+    csv: "text", tsv: "text",
+    // hljs 不支持但有近似可映射
+    solidity: "javascript",
+    terraform: "text",
+    matlab: "text",
+    "objective-c": "c",
+    m: "c", mm: "cpp",
   };
-  const normalized = aliases[raw] || raw;
+  // 自定义特殊渲染标记（非 hljs 语言，绕过白名单校验）
+  const SPECIAL = new Set(["mermaid", "excalidraw", "chart", "html-inline", "html-web", "raw-html"]);
+  let normalized = aliases[raw] || raw;
+  // hljs 实际不支持 且 非特殊渲染标记 → 用 text
+  if (!SPECIAL.has(normalized) && normalized !== "text" && !HLJS_SUPPORTED.has(normalized)) {
+    normalized = "text";
+  }
   return /^[a-z0-9_+-]{1,24}$/.test(normalized) ? normalized : "text";
 }
 
@@ -431,6 +556,28 @@ function renderMarkdown(source, options = {}) {
           html.push(`<div class="chart-block mermaid-block" data-chart="mermaid" data-source-line="${codeStartLine}"><pre class="mermaid-source">${escapeHtml(raw)}</pre><div class="mermaid-container" aria-label="Mermaid 图表"></div></div>`);
         } else if (normalizedLang === "excalidraw") {
           html.push(`<div class="chart-block excalidraw-block" data-chart="excalidraw" data-source-line="${codeStartLine}"><pre class="excalidraw-source">${escapeHtml(raw)}</pre><div class="excalidraw-container" aria-label="Excalidraw 绘图"></div></div>`);
+        } else if (normalizedLang === "chart") {
+          // Chart.js / ECharts JSON：识别后生成自包含 iframe（CDN 加载对应库）
+          // 识别失败则 fallback 为普通代码块展示 JSON
+          const chartHtml = detectAndBuildChartHtml(raw);
+          if (chartHtml) {
+            html.push(`<div class="html-inline-block"><iframe class="html-inline-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-popups" srcdoc="${escapeHtml(chartHtml)}"></iframe></div>`);
+          } else {
+            html.push(`<div class="code-block" data-language="chart"><span class="code-language">chart JSON</span><button class="code-copy" type="button">复制</button><pre><code class="language-json">${escapeHtml(raw)}</code></pre></div>`);
+          }
+        } else if (normalizedLang === "html-inline" || normalizedLang === "raw-html") {
+          // 内嵌 HTML 网页：srcdoc 模式（HTML 内容直接内嵌）
+          // allow-scripts + sandbox 隔离：脚本可运行但无法访问父 DOM
+          html.push(`<div class="html-inline-block"><iframe class="html-inline-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-popups" srcdoc="${escapeHtml(raw)}"></iframe></div>`);
+        } else if (normalizedLang === "html-web") {
+          // iframe URL 模式：加载外部网页
+          const url = String(raw || "").trim().split("\n")[0].trim();
+          const safeUrl = /^https?:\/\//i.test(url) ? url : "";
+          if (safeUrl) {
+            html.push(`<div class="html-inline-block"><iframe class="html-inline-frame" src="${escapeHtml(safeUrl)}" sandbox="allow-scripts allow-same-origin allow-forms allow-popups" loading="lazy"></iframe></div>`);
+          } else {
+            html.push(`<div class="code-block"><pre><code class="language-text">html-web 需要一个有效 URL：https://example.com</code></pre></div>`);
+          }
         } else {
           html.push(`<div class="code-block" data-language="${codeLanguage}"><span class="code-language">${escapeHtml(codeLanguage)}</span><button class="code-copy" type="button">复制</button><pre><code class="language-${codeLanguage}">${escapeHtml(raw)}</code></pre></div>`);
         }

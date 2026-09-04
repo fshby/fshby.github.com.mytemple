@@ -24,7 +24,7 @@
         <a href="#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.105.exe" download>下载 v1.8.105</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v2.0.1.exe" download>下载 v2.0.1</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -32,11 +32,11 @@
     <main id="top">
       <section class="hero section-wrap" aria-labelledby="hero-title">
         <div class="hero-copy reveal">
-          <p class="eyebrow"><span class="status-dot"></span> 本地 Markdown 工作区 <em>v1.8.105 桌面版</em></p>
+          <p class="eyebrow"><span class="status-dot"></span> 本地 Markdown 工作区 <em>v2.0.1 桌面版</em></p>
           <h1 id="hero-title">本地 Markdown 知识库与编辑器</h1>
           <p class="hero-lede">围绕本地 Markdown 文件提供阅读、编辑、目录、图谱、检索、主题与多工作区管理。</p>
           <div class="hero-actions">
-            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.105.exe" download>下载 Windows 安装包</a>
+            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v2.0.1.exe" download>下载 Windows 安装包</a>
             <a class="button button-soft" href="#docs">查看使用文档</a>
           </div>
           <p class="hero-note">Windows 桌面端 · 本地文件优先 · 内容助手为可选接入</p>
@@ -87,6 +87,9 @@
           <li><strong>阅读与修改分开处理</strong> — 阅读时强调目录与预览，编辑时强调输入稳定性与快捷键。</li>
           <li><strong>本地文件优先</strong> — Markdown、图片、索引和工作区配置围绕本地目录组织，可迁移、可备份、可离线。</li>
           <li><strong>知识图谱</strong> — 文档、标签和语义概念分层展示，图谱负责看关系，不替代文档结构。</li>
+          <li><strong>内置绘图编辑器</strong> — 轻量 Canvas 绘图（30KB 零依赖），7 种工具 + 撤销重做，保存为 Excalidraw 兼容 JSON。</li>
+          <li><strong>代码语法高亮</strong> — 40+ 语言代码块自动高亮，亮/暗主题适配，编辑工具栏按语言快速插入代码块。</li>
+          <li><strong>AI 内容助手</strong> — 可选接入 Ollama 或 DeepSeek，行内对话、润色翻译、语义检索、AI 生成图表与动画直接内嵌渲染。</li>
           <li><strong>长时间使用不刺眼</strong> — 主题、字号、字体、背景和面板密度可调；柔光护眼主题默认降低对比度。</li>
           <li><strong>检索与维护省心</strong> — 关键词检索、可选语义检索、Frontmatter 标准化、标签补全与主清单索引。</li>
           <li><strong>性能优化围绕真实场景</strong> — 目录懒加载、增量解析、Worker 渲染、图谱自适应帧率。</li>
@@ -183,13 +186,16 @@
         </div>
         <div class="download-block reveal">
           <div class="download-primary">
-            <span class="download-badge">当前稳定版 v1.8.105</span>
-            <p>本地工作区、阅读/修改双模式、图谱、主题、增量索引与可选辅助功能。</p>
-            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v1.8.105.exe" download>下载安装包</a>
+            <span class="download-badge">当前稳定版 v2.0.1</span>
+            <p>本地工作区、阅读/修改双模式、图谱、主题、增量索引、绘图编辑器、代码语法高亮与可选 AI 辅助功能。</p>
+            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v2.0.1.exe" download>下载安装包</a>
           </div>
           <div class="download-secondary">
             <h3>最近更新</h3>
             <ul>
+              <li>v2.0.1：图谱修复 + 轻量绘图 + AI增强 + 代码高亮 + 导出优化 + DeepSeek接入：① <b>图谱界面无文档节点修复</b>：FileEntry.content 懒加载后为 None，get_graph 得空字符串无 wikilink 边，前端过滤掉所有 doc 节点；修复为对 content=None 的文件调 read_file_force 触发磁盘读取并回填缓存；② <b>内置轻量 Canvas 绘图编辑器</b>：新建 draw-editor.js（30KB 零依赖 100% 离线），7 种工具（选择/矩形/圆形/菱形/箭头/直线/文字/自由画笔）+ 样式（边框/填充/线宽/字号）+ 撤销重做（最多 50 步）+ 键盘快捷键（1-8 切换工具），保存为 Excalidraw 兼容 JSON；③ <b>AI 生成 HTML 图表/动画正确显示</b>：过滤 AI 输出控制字符防 JSON 解析失败、iframe sandbox 补 allow-scripts、AI 内容包裹为 html-inline fence 块在隔离 iframe 中渲染；④ <b>DeepSeek API 接入</b>：API Key 输入隐藏 + 跨升级持久化 + 连接测试按钮 + Ollama 失败自动切换 DeepSeek + 关键词 AI 搜索降级；⑤ <b>AI 二次优化上下文增强</b>：Ctrl+I 行内 AI 上下文提取为 4 维度叠加（光标所在 fence + 上方最近 fence + 光标所在段落 + 前后短上下文），确保 AI 能看到完整原作；⑥ <b>配置丢失修复</b>：移除 deepseek_api_key 的 skip_serializing 属性 + 统一配置保存/加载路径；⑦ <b>代码语法高亮 CSS 全覆盖</b>：styles.css 补齐 30+ 种 hljs span class 映射到 CSS 变量，亮/暗主题自动切换；⑧ <b>代码块语言选择器</b>：编辑工具栏新增 40+ 语言下拉面板（常用/编程/Web/数据库/数据配置 5 组）；⑨ <b>内嵌 HTML 导出优化</b>：导出时轮询 iframe srcdoc 内容高度并写入内联 style，消除固定 min-height 裁剪和滚动条。</li>
+              <li>v1.8.107：阅读模式不弹AI菜单 + 工作区外部新增文件自动刷新 + .key文件正常显示 + 代码语法高亮四重修复：① <b>阅读栏/阅读模式选中文字不再弹AI提示框</b>：refreshAiSelectionMenu 函数开头判断 state.mode==='view' 时直接隐藏AI菜单并return，仅编辑模式保留AI选区菜单，阅读模式下选中文本可自由复制不被打断；② <b>外部保存新文件到工作区目录后文件树自动刷新</b>：新增 refreshTreeThrottled 节流函数（15s内不重复刷）调 bootstrap(true) 触发后端 refresh_cache() 全量扫描，visibilitychange 页面恢复可见 + window.focus 窗口聚焦两个回调触发刷新，startTreeRefreshInterval 60s低频定时兜底，document.hidden时跳过避免无谓IO；③ <b>.key结尾文件（CRT串口工具按键映射，文本格式）正常显示</b>：is_binary_ext 移除 'key'，.key文件被扫描进文件树+全文搜索+read_file能读内容（agent_policy deny **/*.key 保留确保AI不自动读密钥内容但用户能手动打开看）；④ <b>代码语法高亮引入highlight.js</b>：下载 highlight.min.js（11.9.0，121KB，35+常用语言）到 public/vendor/highlight/ 离线打包，styles.css 新增 .hljs-* 到 --syn-* CSS变量映射适配亮/暗主题切换，app.js 新增 highlightCodeBlocks 函数 querySelectorAll('pre code').forEach(hljs.highlightElement) + requestIdleCallback分批每批8个 + dataset.highlighted防重复 + hljs未加载静默降级，调用点5处全覆盖（Worker主路径/chunked单片/chunked多片/catch fallback/编辑模式分屏预览swapPreviewHtml）。</li>
+              <li>v1.8.106：文档切换编辑位置保留 + 外部编辑器异步编辑冲突检测 + 重新加载强制读磁盘三重修复：① <b>临时区多文档切换保留编辑位置</b>：扩展草稿机制新增 saveDraftState/restoreDraftState，按文档路径在 localStorage 持久化光标 selectionStart/End + 编辑器 scrollTop + 阅读器 scrollTop，openDoc 切换时 restoreDraft 回填文本后立即恢复光标和双滚动位置（包在 requestAnimationFrame 中等待 DOM 布局完成避免 scrollTop 被钳制为 0），关闭文档时 removeItem 清理；② <b>外部编辑器异步同时编辑同一文档不再静默覆盖</b>：后端 save_file 新增 base_hash 参数保存前 sha256 比对磁盘文件不一致拒绝保存返回 __CONFLICT__:disk_hash，前端 saveCurrentDoc 收到 conflict:true 弹窗确认覆盖或取消；新增 /api/doc-check 端点前端每 5s 轮询当前文档哈希，与打开时记录的 currentVersion 不同则 Toast 提示「重新加载/忽略」，重新加载前若有未保存编辑二次确认丢弃；③ <b>点击「重新加载」强制读磁盘绕过 cache</b>：read_file L1 cache 命中时直接返回内存旧 content，导致 check_file 检出外部修改后点重新加载仍看到旧内容；新增 read_file_force 方法跳过 cache 从磁盘重读 + decode + 写回 cache，/api/doc 新增 force=1 参数，前端两处重新加载按钮均带 forceReload=true。</li>
               <li>v1.8.105：全局搜索中文 MD「打不开/没内容」空白屏三重修复：① <b>NFC 路径全链路归一</b> + <b>cache 漏查后 basename 三级弱匹配兜底</b>（Mac HFS+ NFD / Win NTFS NFC / NAS 短名/UNC 中文路径搜索结果点不开的根因就是字符串==字节序列不同漏查）；② <b>空内容/空白屏不再静默</b>：右侧阅读栏渲染灰底虚线卡片提示「WPS/Word/江西电信导出 MD 请记事本另存为 UTF-8 覆盖原文件」，左侧编辑器设置多行空内容占位符，Worker 抛错 catch 分支顶部 prepend 红色异常 banner + Worker 创建失败首次 toast 降级提示；③ <b>BOM + GBK/UTF16/UTF32 智能编码解码兜底</b>（引入 unicode-normalization + encoding_rs），scan_workspace 和 read_file 都从 read_to_string UTF-8 改为 read bytes→BOM→GB18030/GBK/BIG5/SHIFT_JIS/EUC_KR 序列候选，识别出的非 UTF-8 编码写入 FileEntry.encoding 前端状态栏可见，lossy 分支 log::error 打 ref_path+absolute+首字节 hex+长度方便管理员反查具体文件。</li>
               <li>v1.8.104：其他电脑安装后启动失败紧急修复（双重保险）：① tauri.conf.json bundle.resources 从字符串数组改用对象映射 <code>{src:../public,target:resources/public}</code> + <code>{src:WebView2Loader.dll,target:""}</code> 强制写死安装目的地，消除 Tauri 2.x NSIS 字符串资源解包到 $INSTDIR/public 而非 $INSTDIR/resources/public 的版本差异歧义；② <code>resolve_public_root</code> 候选从 5 条扩到 10 条，返回 <code>(root, 全部候选)</code>，内置 404 友好页从此打印编号后的全部候选（不再只展示 1 条误导性 fallback 路径），杀毒/权限/映射哪一层失败一眼可辨。</li>
               <li>v1.8.103：导出 7 种格式统一接入系统原生「另存为」对话框（扩展名过滤正确），保存成功后 Toast 显示完整绝对路径（点击可复制）+「打开文件 / 在文件夹中查看」两按钮；取消对话框静默不报错；非 Tauri / 插件失败自动降级 Blob 下载并明确告知浏览器默认下载目录。导入新增「系统文件对话框」按钮，DOCX/RTF/ODT 通过 Rust 内置 ZIP/控制字剥离直接提取正文写入 Markdown，不再生成 pandoc 占位文档。</li>
@@ -287,6 +293,59 @@
               <li><kbd>Ctrl+Shift+P</kbd> 润色 · <kbd>Ctrl+Shift+X</kbd> 续写</li>
               <li><kbd>Ctrl+U</kbd> 顶部智能检索 · <kbd>Ctrl+I</kbd> 行内对话</li>
               <li>辅助快捷键需在设置中开启对应功能后生效</li>
+            </ul>
+          </article>
+          <article class="doc-section">
+            <h3>v2.0.1 更新日志 · 图谱修复 + 轻量绘图 + AI增强 + 代码高亮 + 导出优化 + DeepSeek接入</h3>
+            <ul>
+              <li>【一、图谱界面无文档节点（缺陷修复）】<b>现象</b>：打开知识图谱界面，没有任何文档节点显示。<b>根因</b>：FileEntry.content 懒加载优化后，scan_workspace 时 content 设为 None；ipc::get_graph 用 unwrap_or_default() 得到空字符串；utils::build_graph 中 WIKI_LINK_GRAPH_RE 在空字符串上找不到 wikilinks → 没有任何 link 边产生；前端 getGraphLayoutForMode 过滤条件 node.kind==="doc"→attached.has(node.id)||view.showOrphans（默认 showOrphans=false），所有 doc 节点被过滤掉。<b>修复</b>：ipc::get_graph 对 content 为 None 的文件调用 read_file_force 触发磁盘读取并回填缓存（与 ai_reindex 同款做法），确保 build_graph 能解析到 wikilinks 产生 link 边，doc 节点不再被前端过滤。</li>
+              <li>【二、内置轻量 Canvas 绘图编辑器（新功能）】<b>现状</b>：代码里 Excalidraw 支持是半成品——UI 入口有、代码块解析有、模板插入有，但渲染端只是把 JSON 原样塞进 &lt;pre&gt; 标签显示文字，没有真正的绘图画布，用户无法用鼠标拖拽画图。<b>方案</b>：新建轻量 Canvas 绘图器 draw-editor.js（30KB，零依赖，100% 离线），保存格式为 Excalidraw 兼容 JSON（可在真正的 Excalidraw 桌面端打开继续编辑）。比加载 Excalidraw 官方 UMD（1.13MB 含 Preact）更轻量、更快启动。<b>绘图功能</b>：7 种工具（选择/矩形/圆形/菱形/箭头/直线/文字/自由画笔）+ 样式（边框颜色/填充颜色/线宽 1-6px/字号 12-48）+ 操作（鼠标拖拽绘制/选中拖拽移动/Delete 键删除）+ 撤销重做（Ctrl+Z/Ctrl+Y，最多 50 步）+ 键盘快捷键（1-8 切换工具）。<b>修改点</b>：draw-editor.js 新建 + app.js import openDrawEditor + insertChartBlock excalidraw 分支从"插入空模板"改为"打开绘图编辑器" + 渲染端从 JSON 文本改为 Canvas 缩略图预览（480×320，自动 bbox 缩放居中）+ 双击打开编辑器继续编辑。</li>
+              <li>【三、AI 生成 HTML 图表/动画正确显示（缺陷修复）】<b>现象</b>：AI 生成的 HTML 饼图、动画等内嵌内容不显示。<b>根因</b>：AI 输出含控制字符导致 JSON 解析失败；前端逐字 insertTextStream 造成不稳定；iframe sandbox 缺少 allow-scripts 阻止脚本执行。<b>修复</b>：① rag.rs 新增控制字符过滤（lines 1035-1044）；② app.js insertTextStream 改为块插入；③ markdown-worker.js escapeHtml 增强；④ iframe sandbox 补 allow-scripts；⑤ AI 生成 HTML 包裹为 html-inline fence 块在隔离 iframe 中正确渲染。</li>
+              <li>【四、DeepSeek API 接入（新功能）】<b>需求</b>：用户需要使用 DeepSeek 作为 AI 后端，API Key 需要安全存储。<b>实现</b>：① API Key 输入框隐藏显示；② 配置跨软件升级持久化（修复 deepseek_api_key 的 skip_serializing 属性导致序列化时不写入 JSON 文件的 Bug）；③ 连接测试按钮验证 API Key 有效性；④ Ollama 连接失败时自动切换到 DeepSeek；⑤ 关键词 AI 搜索作为降级方案。配置保存/加载路径统一使用 rag.settings_path.clone() 避免相对路径不一致。</li>
+              <li>【五、AI 二次优化上下文增强（缺陷修复）】<b>现象</b>：用户对 AI 生成的内容进行二次优化时，AI 未在原内容上优化而是重新生成。<b>根因</b>：Ctrl+I 内联 AI 的上下文提取逻辑仅取光标前后各 300 字，导致光标在代码块下方新行时 AI 无法看到完整的原代码块。<b>修复</b>：增强 submitAiInlineDialog() 的上下文提取为 4 维度叠加：光标所在 fence（4500 字内）、光标上方最近 fence（距离&lt;1000 字且代码&lt;5000 字）、光标所在段落、前后短上下文（600+300 字），确保 AI 能看到完整原作。</li>
+              <li>【六、代码语法高亮 CSS 全覆盖（体验优化）】<b>现象</b>：代码块没有语法高亮和颜色区分。<b>根因</b>：hljs 11.x 的 token class 覆盖不完整。<b>修复</b>：styles.css 中补齐 30+ 种 span class（.hljs-keyword/.hljs-string/.hljs-comment/.hljs-number/.hljs-title/.hljs-type/.hljs-built_in/.hljs-variable/.hljs-attr/.hljs-tag/.hljs-operator/.hljs-meta 等），映射到项目已有 CSS 变量实现亮/暗主题自动切换，同时优化容器样式。</li>
+              <li>【七、代码块语言选择器（新功能）】<b>需求</b>：编辑工具栏缺少按语言插入代码块的入口。<b>实现</b>：index.html 编辑工具栏新增包含 40+ 语言的代码块下拉面板，分常用、编程语言、Web &amp; 前端、数据库 &amp; 脚本、数据 &amp; 配置 5 组；app.js 实现 insertCodeBlock() 函数处理选中文本包裹和占位文本插入逻辑；markdown-worker.js 和 app.js 同步处理语言别名映射（vue/svelte→html，jsx/react→javascript 等）。</li>
+              <li>【八、内嵌 HTML 导出优化（缺陷修复）】<b>现象</b>：导出 HTML 时，内嵌的 AI 生成动画/图表被 iframe 固定高度截断，出现滚动条。<b>根因</b>：导出的 HTML 保留 iframe 的 min-height:320px 和父容器 overflow:hidden，导致内容被裁剪。<b>修复</b>：新增 settleHtmlInlineFrames() 函数，在导出渲染阶段轮询等待所有 srcdoc iframe 加载和内部脚本执行完毕（最多 10 秒），通过 contentDocument.body.scrollHeight 读取真实内容高度写入内联 style.height；导出 CSS 去掉 overflow:hidden 和 min-height 限制。</li>
+              <li>【保持 v1.8.107 全部修复不回退】阅读模式不弹AI菜单 + 工作区外部新增文件自动刷新 + .key文件正常显示 + highlight.js 代码语法高亮全链路。</li>
+            </ul>
+          </article>
+          <article class="doc-section">
+            <h3>v1.8.107 更新日志 · 阅读模式不弹AI菜单 + 工作区外部新增文件自动刷新 + .key文件正常显示 + 代码语法高亮</h3>
+            <ul>
+              <li>【用户现象 1】在阅读栏/阅读模式中选中文字时会弹出 AI 提示框（摘要/要点/术语/润色/续写/翻译/代码补全/生成注释等按钮），遮挡阅读视线、打断复制操作。</li>
+              <li>【根因 1】refreshAiSelectionMenu 函数在 selectionchange 事件触发时，无论编辑模式还是阅读模式都会显示 AI 选择菜单；getAiSelection 中 state.mode === "view" 时选区走 reader 分支也返回有效选区，导致阅读模式下选中文本就弹 AI 菜单。</li>
+              <li>【修复 1】refreshAiSelectionMenu 函数开头判断 state.mode === "view" 时直接 els.aiSelectionMenu.classList.add("hidden") + state.ai.selection = null + return，仅编辑模式保留 AI 选区菜单。阅读模式下选中文本不再弹任何提示框，可自由复制。</li>
+              <li>【用户现象 2】在软件使用过程中，在电脑上（如记事本另存为/复制文件）保存新文件到工作区目录中时，软件内工作区目录没有显示新增文件，需要手动刷新或重启软件。</li>
+              <li>【根因 2】后端无文件系统监听（notify/watcher/inotify/fs::watch），只有 save_file 后调 refresh_cache()；前端 bootstrap(refresh=true) 才触发 /api/tree?refresh=1 → refresh_cache() 全量扫描，普通 bootstrap() 只读缓存。前端无定时刷新文件树机制，也无窗口聚焦/可见性恢复时刷新。</li>
+              <li>【修复 2】新增 refreshTreeThrottled(reason) 节流函数（15s 内不重复刷），调 bootstrap(true) 触发后端 refresh_cache() 全量扫描；_treeRefreshInFlight 防并发；document.addEventListener("visibilitychange") 页面恢复可见分支调 refreshTreeThrottled("visibilitychange")；window.addEventListener("focus") 窗口聚焦调 refreshTreeThrottled("window-focus")；startTreeRefreshInterval() 启动 60s 低频定时兜底（setInterval 60000ms），document.hidden 时跳过避免无谓 IO。覆盖用户从外部切回软件时立即看到新文件 + 长时间停留时的外部变更。</li>
+              <li>【用户现象 3】CRT 串口工具的按键映射文件（.key 结尾，文本格式）在工作区目录中不显示，无法纳入知识库管理。</li>
+              <li>【根因 3】app.rs is_binary_ext 函数将 "key" 与 p12/pfx/pem 一组视为二进制扩展名，scan_workspace 在非 md_only 模式下跳过二进制扩展名，.key 文件被排除在扫描范围外。</li>
+              <li>【修复 3】is_binary_ext 移除 "key"，让 .key 文件被正常扫描进 files cache 和 search_index（文件树显示 + 全文搜索能找到），read_file 能读取内容（用户在软件内打开能看）。agent_policy.rs 默认 denied_paths 中 **/*.key 保留不动（默认安全，AI 工具不自动读 .key 内容，但用户能在软件内手动打开看）。</li>
+              <li>【用户现象 4】Markdown 代码块（```language）在阅读栏/阅读模式/编辑模式分屏预览中全部单色显示，关键字/字符串/注释/数字/函数/类型/变量/参数等语法元素没有高亮和颜色区分，可读性差。</li>
+              <li>【根因 4】markdown-worker.js 渲染代码块时只输出 &lt;code class="language-xxx"&gt; + escapeHtml(raw)，没有任何语法高亮库处理；styles.css 虽定义了 .tok-* CSS 变量（--syn-keyword/string/comment/number/function/type/builtin/variable/operator/tag/attr）但没有 token 输出；package.json 只有 CodeMirror/Lezer（编辑器高亮），没有 highlight.js/prismjs/shiki。</li>
+              <li>【修复 4A — 引入 highlight.js】下载 highlight.min.js（11.9.0，121KB，含 35+ 常用语言：js/ts/py/rust/go/java/c/cpp/sql/bash/json/yaml/html/css/xml/markdown/diff/php/ruby/swift/kotlin/scala/lua/perl/properties/plaintext 等）到 public/vendor/highlight/，Tauri 离线应用不依赖 CDN；index.html 在 app.js 之前引入 &lt;script src="/vendor/highlight/highlight.min.js"&gt;。</li>
+              <li>【修复 4B — CSS 变量映射适配主题切换】styles.css 新增 .hljs-* 类到 --syn-* CSS 变量映射（.hljs-keyword → --syn-keyword、.hljs-string → --syn-string、.hljs-comment → --syn-comment、.hljs-number → --syn-number、.hljs-title → --syn-function、.hljs-type/.hljs-built_in → --syn-type、.hljs-variable → --syn-variable、.hljs-attr → --syn-attr、.hljs-tag → --syn-tag、.hljs-operator/.hljs-meta → --syn-operator），亮/暗主题自动切换（--syn-* 已按 data-theme 定义不同色值）。</li>
+              <li>【修复 4C — 渲染后调用 hljs.highlightElement】app.js 新增 highlightCodeBlocks(container) 函数，querySelectorAll("pre code") 遍历，window.hljs.highlightElement(el) 应用高亮，dataset.highlighted="1" 防重复高亮，requestIdleCallback 分批每批 8 个避免长文档阻塞主线程，hljs 未加载时静默降级（代码块仍可读但无颜色）。调用点 5 处全部覆盖：Worker 主路径、chunked 单片、chunked 多片、catch fallback、编辑模式分屏预览 swapPreviewHtml。</li>
+              <li>【保持 v1.8.106 全部修复不回退】文档切换编辑位置保留 + 外部编辑器异步编辑冲突检测 + 重新加载强制读磁盘。</li>
+            </ul>
+          </article>
+          <article class="doc-section">
+            <h3>v1.8.106 更新日志 · 文档切换编辑位置保留 + 外部编辑器异步编辑冲突检测 + 重新加载强制读磁盘</h3>
+            <ul>
+              <li>【用户现象 1】临时区打开 A/B/C 多个文档，从 A 切换到 B 再切回 A 时，A 的光标位置、编辑器滚动条、阅读器滚动条全部丢失被重置到顶部，编辑中上下文被打断。</li>
+              <li>【根因 1】openDoc 切换前仅 saveDraftNow 保存文本内容草稿，不保存任何「编辑位置」状态；草稿恢复 restoreDraft 也只回填 textarea.value，不恢复光标和滚动位置。localStorage 中无按文档路径维度的位置持久化。</li>
+              <li>【修复 1】扩展草稿机制新增 saveDraftState/restoreDraftState 两个函数（app.js），按文档路径为 key 在 localStorage 中持久化 <code>{ s: editor.selectionStart, e: editor.selectionEnd, et: editor.scrollTop, rt: markdownView.scrollTop, ts: Date.now() }</code>。openDoc 在 restoreDraft 回填文本后立即调用 restoreDraftState 取回位置：editor.selectionStart/End 设置光标，editor.scrollTop 恢复编辑器滚动，markdownView.scrollTop 恢复阅读器滚动。所有位置恢复包在 requestAnimationFrame 中等待 DOM 布局完成后再 set，避免 textarea 高度未撑开 scrollTop 被钳制为 0。切换前 saveDraftState 旧文档，切走前 saveDraftState 当前文档，关闭文档时 removeItem 清理。</li>
+              <li>【用户现象 2】用户在软件中打开 A 文档 → 用记事本外部编辑 A 并保存 → 软件中 A 内容未刷新显示旧版本 → 用户在软件中继续编辑并触发自动保存 → 软件的保存覆盖了磁盘上记事本刚写入的内容，记事本编辑部分丢失，且全程无任何提示。</li>
+              <li>【根因 2 三层】(a) save_file 后端无任何磁盘冲突检测，盲写覆盖；(b) 前端无外部修改检测机制，打开后不再读取磁盘；(c) 自动保存定时器到点直接写盘，不会感知磁盘已被外部改写。</li>
+              <li>【修复 2A — 后端保存前哈希冲突检测】save_file 函数新增 <code>base_hash: Option&lt;&amp;str&gt;</code> 参数。保存前若 base_hash 非空，先 <code>std::fs::read</code> 读磁盘当前字节，<code>sha2::Sha256::digest</code> 计算磁盘哈希，若 disk_hash != base_hash 则拒绝保存返回 <code>anyhow::anyhow!("__CONFLICT__:{disk_hash}")</code>。<code>log::warn!</code> 记录 ref/abs/base_hash/disk_hash 便于排查。handlers save_doc 识别 <code>__CONFLICT__:</code> 前缀返回 JSON <code>{ ok:false, conflict:true, diskSha256, message }</code>，前端可弹窗让用户选择覆盖或重新加载。</li>
+              <li>【修复 2B — 后端新增 /api/doc-check 轮询端点】app.rs 新增 <code>check_file(path) -&gt; (hash, modified_ms)</code> 函数，先在 files cache 中按 path/NFC 查找 absolute 路径，找到后 <code>std::fs::metadata</code> 读 modified 时间、<code>std::fs::read</code> 读字节算 sha256；cache 未命中再走 normalize_doc_path fallback。handlers 新增 check_doc 处理函数路由 <code>GET /api/doc-check?path=</code>，返回 <code>{ path, sha256, modified }</code>。</li>
+              <li>【修复 2C — 前端 5s 轮询 + 冲突弹窗】app.js 新增 scheduleExternalCheck 定时器，每 5s 对 state.currentPath 调用 /api/doc-check。若返回 sha256 !== state.currentVersion（打开时记录的版本）且未通知过，弹 Toast「文件已被外部编辑器修改，点击重新加载」附「重新加载/忽略」两个 action：重新加载会先检测本地 editor 是否有未保存编辑（value !== lastSavedContent），有则 customConfirm 二次确认是否丢弃未保存内容后 openDoc 重新加载，无则直接 openDoc；忽略则置 _externalChangeNotified=true 不再打扰。保存进行中（autoSave.inFlight）跳过本轮轮询避免与保存竞争。saveCurrentDoc 保存响应若 conflict:true 则 customConfirm「文件已被外部修改，保存将覆盖外部修改。是否继续？」确认则带 diskSha256 作为新 base_hash 强制覆盖保存，取消则不保存让用户自行重新加载。</li>
+              <li>【用户现象 3 — 点击「重新加载」后文档内容未更新】v1.8.106 首版发布后用户反馈：外部编辑器（记事本）修改 A 并保存 → 软件 Toast 提示「文件已被外部修改」→ 点击「重新加载」→ 编辑器内容仍是旧版本，磁盘上记事本刚写入的内容看不到。</li>
+              <li>【根因 3】openDoc 调 /api/doc → 后端 read_file 第一步 Level1 cache 命中检查 <code>files.iter().find(|f| f.path == path)</code>，命中后直接 <code>return Ok(entry.clone())</code> 返回内存中的旧 entry.content，完全不会再读磁盘。而 check_file 轮询端点是直接 <code>std::fs::read</code> 读磁盘字节算 sha256，所以能检出变化，但用户点「重新加载」时 openDoc 又命中 cache 返回旧内容 → 用户感知「点了重新加载却没刷新」。</li>
+              <li>【修复 3A — 后端 read_file_force 方法】app.rs 新增 <code>pub async fn read_file_force(&amp;self, path: &amp;str) -&gt; anyhow::Result&lt;FileEntry&gt;</code>：跳过 Level1 cache 直接返回，但保留 Level2 3 级 basename 弱匹配（NFC + 同 workspace / 去数字后缀 / 全局唯一）+ normalize_doc_path + decode_bytes_smart 全流程；读完磁盘后写回 cache entry 的 content/content_sha256/encoding/plain/modified，保证下次 read_file 正常命中新内容。</li>
+              <li>【修复 3B — /api/doc 新增 force 参数】handlers.rs DocQuery 结构体新增 <code>force: Option&lt;String&gt;</code> 字段（serde default），get_doc 中 force 为 "1" 或 "true" 时调 <code>read_file_force</code> 代替 <code>read_file</code>。普通 openDoc 不带 force 保持原 cache 行为不变，性能无影响。</li>
+              <li>【修复 3C — 前端两处重新加载按钮带 forceReload=true】app.js openDoc 新增 <code>options.forceReload</code> 参数，为 true 时 URL 追加 <code>&amp;force=1</code>。scheduleExternalCheck Toast「重新加载」action（含 hasDraft 二次确认分支）和 saveCurrentDoc 保存冲突弹窗「重新加载」按钮（取消选择分支）都改为 <code>openDoc(state.currentPath, { forceReload: true })</code>。</li>
+              <li>【保持 v1.8.105 全部修复不回退】NFC 路径全链路归一 + basename 三级弱匹配兜底；空内容/空白屏灰底虚线卡片提示；BOM + GBK/UTF16/UTF32 智能编码解码兜底；Worker 异常可见 banner；10 级 resolve_public_root 候选 + 404 友好页；7 项导出原生另存为 + Toast 路径 + 两按钮。</li>
             </ul>
           </article>
           <article class="doc-section">
