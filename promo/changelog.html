@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#88a956">
+  <meta name="description" content="MyTemple Knowledge 更新日志 — 每个版本的详细变更记录。">
+  <title>更新日志 · MyTemple Knowledge</title>
+  <link rel="icon" href="logo.ico" type="image/x-icon">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="site-shell shell-clip">
+    <header class="site-nav" data-nav>
+      <a class="brand" href="index.html" aria-label="MyTemple Knowledge 首页">
+        <span class="brand-mark" aria-hidden="true"><img src="logo.ico" alt=""></span>
+        <span class="brand-text">MyTemple <b>Knowledge</b></span>
+      </a>
+      <nav class="nav-links" aria-label="主导航">
+        <a href="index.html#features">核心能力</a>
+        <a href="index.html#screens">界面展示</a>
+        <a href="index.html#themes">主题预设</a>
+        <a href="docs.html">使用文档</a>
+        <a href="index.html#downloads">版本下载</a>
+      </nav>
+      <div class="nav-actions">
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v2.0.3.exe" download>下载 v2.0.3</a>
+      </div>
+      <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
+    </header>
+
+    <main class="page-body">
+      <section class="section-wrap changelog-page">
+        <div class="section-intro reveal">
+          <p class="eyebrow">CHANGELOG</p>
+          <h2>更新日志</h2>
+          <p class="section-desc">每个版本的详细变更记录，包含新功能、缺陷修复与体验优化。</p>
+        </div>
+
+        <div class="changelog-toc reveal">
+          <h3>版本索引</h3>
+          <ul>
+            <li><a href="#v2.0.3">v2.0.3</a> — 截图架构重构 + 防卡死保障 + 图表修复</li>
+            <li><a href="#v2.0.2">v2.0.2</a> — 截图标注 + 录屏 + OCR + 独立窗口无感触发</li>
+            <li><a href="#v2.0.1">v2.0.1</a> — 图谱修复 + 轻量绘图 + AI增强 + 代码高亮 + 导出优化 + DeepSeek接入</li>
+            <li><a href="#v1.8.107">v1.8.107</a> — 阅读模式不弹AI菜单 + 工作区外部新增文件自动刷新 + .key文件正常显示 + 代码语法高亮</li>
+            <li><a href="#v1.8.106">v1.8.106</a> — 文档切换编辑位置保留 + 外部编辑器异步编辑冲突检测 + 重新加载强制读磁盘</li>
+            <li><a href="#v1.8.105">v1.8.105</a> — 全局搜索中文 MD「打不开/没内容」空白屏·三重修复</li>
+            <li><a href="#v1.8.104">v1.8.104</a> — 安装后启动失败（前端资源缺失）紧急修复·双重保险</li>
+            <li><a href="#v1.8.103">v1.8.103</a> — 原生另存为 + 路径查看 + DOCX/RTF/ODT 正文提取</li>
+            <li><a href="#v1.8.102">v1.8.102</a> — 其他电脑安装后 HTTP 404 白屏紧急修复</li>
+            <li><a href="#v1.8.101">v1.8.101</a> — 全格式导出质量升级 & Frontmatter 不再外漏</li>
+            <li><a href="#v1.8.100">v1.8.100</a> — 启动红屏 SyntaxError 紧急修复</li>
+            <li><a href="#v1.8.99">v1.8.99</a> — 阅读栏/阅读模式公式/图表全面修复</li>
+            <li><a href="#v1.8.98">v1.8.98</a> — PDF 导出大升级</li>
+            <li><a href="#v1.8.97">v1.8.97</a> — 编辑器字体优化 + 字号快捷键修复</li>
+            <li><a href="#v1.8.96">v1.8.96</a> — 代码文件保存最终修复 + 工作区视图</li>
+            <li><a href="#v1.8.95">v1.8.95</a> — 工作区视图重写 + 基础保存修复</li>
+            <li><a href="#v1.8.94">v1.8.94</a> — 工作区与编辑器增强</li>
+            <li><a href="#v1.8.93">v1.8.93</a> — 界面与体验升级 + 性能优化</li>
+          </ul>
+        </div>
+
+        <article class="doc-section reveal" id="v2.0.3">
+          <h3>v2.0.3 · 截图架构重构 + 防卡死保障 + 图表修复</h3>
+          <ul>
+            <li><b>截图架构重构（最稳定方案）</b>：去掉 fullscreen 模式，改用无边框窗口+手动设置尺寸覆盖屏幕，避免透明+全屏组合在集显上的驱动兼容性问题（Intel 集显尤其严重）。</li>
+            <li><b>窗口预创建 + 毫秒级响应</b>：应用启动后 500ms 后台预创建截图/录屏窗口并预加载页面，用户按 Alt+A/Alt+M 时只做"截图 + show 窗口"，毫秒级响应，对标微信体验。</li>
+            <li><b>纯 HTTP 通信架构</b>：截图窗口与后端通信完全走 HTTP fetch，不依赖 Tauri IPC，避开 External URL 页面 IPC 桥不注入、IPC 消息大小限制等问题，通信最稳定可靠。</li>
+            <li><b>九重防卡死保障</b>：① Alt+A/Alt+M 切换关闭（再按一次立即退出）② 前端 ESC 关闭 ③ 前端三重关闭保险（HTTP+IPC+window.close）④ 后端四重关闭保险（取消置顶+最小化+隐藏+移出屏幕）⑤ visibilitychange 立即检测 ⑥ 心跳监控强制关闭（前端每2秒心跳，后端每5秒检测，15秒无心跳则强制关闭）⑦ 原子锁 30 秒超时自动释放 ⑧ 5 分钟超时自动关闭 ⑨ 窗口移出屏幕终极兜底。</li>
+            <li><b>临时文件传递方案</b>：xcap 截图写入临时 PNG 文件，通过版本号轮询通知前端，HTTP GET 获取二进制字节 → Blob URL 加载，避免大 base64 字符串通过 IPC 导致消息丢失。</li>
+            <li><b>图表显示修复</b>：Mermaid SVG 渲染后移除固定 width/height 属性，完全由 CSS 控制缩放，集显上更可靠；容器顶部对齐确保图表不被裁；高度超出时显示滚动提示。</li>
+            <li><b>首页精简优化</b>：核心能力从 10 条竖排长列表改为 5x2 图标卡片网格布局，更简洁整洁，hover 有上浮动效。</li>
+            <li><b>文档导入状态修复</b>：导入按钮"导入中..."状态在打开/关闭弹窗、渲染文件列表时三处重置，避免状态残留导致用户以为"一直在导入中"。</li>
+            <li><b>RTF 导入修复</b>：新增完整 RTF 解析器，处理控制字/参数、跳过 fonttbl/colortbl/pict 等非文本 destination、支持 \uNNNN Unicode 字符、\'XX 十六进制字节、转义字符、表格单元格。</li>
+            <li><b>DOCX/ODT 导入改进</b>：检测 Heading1-6 标题样式生成 Markdown 标题，检测表格结构用 | 分隔单元格，ODT 修复只从 text:span 提取文本的缺陷。</li>
+            <li><b>导出保存性能修复</b>：saveBlobWithDialog 从 btoa 逐字节拼接改为 FileReader.readAsDataURL 方案，避免大文件时性能崩溃。</li>
+          </ul>
+        </article>
+
+        <article class="doc-section reveal" id="v2.0.2">
+          <h3>v2.0.2 · 截图标注 + 录屏 + OCR + 独立窗口无感触发</h3>
+          <ul>
+            <li><b>独立截图窗口</b>：Alt+A 触发截图时不再调起主程序界面，创建独立透明全屏窗口，系统任意位置无感触发。窗口无边框、透明、置顶、全屏、跳过任务栏，前端加载完成后才显示避免白屏闪烁。</li>
+            <li><b>截图标注编辑器</b>：对标微信截图，支持矩形框、箭头、画笔、文字、马赛克、序号标签 6 种标注工具，6 色调色板（红/黄/绿/蓝/白/黑）+ 3 档线宽（2/4/8px）+ 撤销重做（Ctrl+Z / Ctrl+Y）+ 确认/取消。</li>
+            <li><b>OCR 文字识别</b>：截图后点击 OCR 按钮调用 Windows 内置 OCR API，支持中文/英文自动识别，弹窗显示识别结果可复制。</li>
+            <li><b>独立录屏窗口</b>：Alt+M 同样独立透明窗口，背景帧 + 区域选择 + 原生 xcap DXGI 帧捕获 + WebM 保存。选区遮罩与截图一致（红色虚线选区 + 像素 tooltip + 开始/取消工具栏 + 录屏提示条）。</li>
+            <li><b>遮罩不消失致命缺陷修复</b>：窗口销毁从 hide 改为 destroy；前端先清空 document.body 再调 IPC；三层降级保障（DOM 清空 → window.destroy() → window.close()）。</li>
+            <li><b>前端 Alt+A/Alt+M 改为 IPC 触发</b>：调用 api_trigger_screenshot / api_trigger_record IPC 命令（和全局快捷键走同一路径），不再走 HTTP 调起主窗口。HTTP 降级路径也不再调起主窗口。</li>
+            <li><b>快捷键面板全面更新</b>：设置面板快捷键栏分为全局快捷键、编辑器快捷键、AI 快捷键三个分区。修复多处快捷键显示与实际不一致问题（Ctrl+E→Alt+E、Ctrl+W→Alt+W、Ctrl+Shift+F 描述等）。欢迎页快捷键更新为实际生效的 8 个核心快捷键。</li>
+          </ul>
+        </article>
+
+        <article class="doc-section reveal" id="v2.0.1">
+          <h3>v2.0.1 · 图谱修复 + 轻量绘图 + AI增强 + 代码高亮 + 导出优化 + DeepSeek接入</h3>
+          <ul>
+            <li><b>图谱界面无文档节点修复</b>：FileEntry.content 懒加载后为 None，get_graph 得空字符串无 wikilink 边，前端过滤掉所有 doc 节点；修复为对 content=None 的文件调 read_file_force 触发磁盘读取并回填缓存。</li>
+            <li><b>内置轻量 Canvas 绘图编辑器</b>：新建 draw-editor.js（30KB 零依赖 100% 离线），7 种工具（选择/矩形/圆形/菱形/箭头/直线/文字/自由画笔）+ 样式（边框/填充/线宽/字号）+ 撤销重做（最多 50 步）+ 键盘快捷键（1-8 切换工具），保存为 Excalidraw 兼容 JSON。</li>
+            <li><b>AI 生成 HTML 图表/动画正确显示</b>：过滤 AI 输出控制字符防 JSON 解析失败、iframe sandbox 补 allow-scripts、AI 内容包裹为 html-inline fence 块在隔离 iframe 中渲染。</li>
+            <li><b>DeepSeek API 接入</b>：API Key 输入隐藏 + 跨升级持久化 + 连接测试按钮 + Ollama 失败自动切换 DeepSeek + 关键词 AI 搜索降级。</li>
+            <li><b>AI 二次优化上下文增强</b>：Ctrl+I 行内 AI 上下文提取为 4 维度叠加（光标所在 fence + 上方最近 fence + 光标所在段落 + 前后短上下文），确保 AI 能看到完整原作。</li>
+            <li><b>配置丢失修复</b>：移除 deepseek_api_key 的 skip_serializing 属性 + 统一配置保存/加载路径。</li>
+            <li><b>代码语法高亮 CSS 全覆盖</b>：styles.css 补齐 30+ 种 hljs span class 映射到 CSS 变量，亮/暗主题自动切换。</li>
+            <li><b>代码块语言选择器</b>：编辑工具栏新增 40+ 语言下拉面板（常用/编程/Web/数据库/数据配置 5 组）。</li>
+            <li><b>内嵌 HTML 导出优化</b>：导出时轮询 iframe srcdoc 内容高度并写入内联 style，消除固定 min-height 裁剪和滚动条。</li>
+          </ul>
+        </article>
+
+        <article class="doc-section reveal" id="v1.8.107">
+          <h3>v1.8.107 · 阅读模式不弹AI菜单 + 工作区外部新增文件自动刷新 + .key文件正常显示 + 代码语法高亮</h3>
+          <ul>
+            <li><b>阅读栏/阅读模式选中文字不再弹AI提示框</b>：refreshAiSelectionMenu 函数开头判断 state.mode==='view' 时直接隐藏AI菜单并 return，仅编辑模式保留 AI 选区菜单，阅读模式下选中文本可自由复制不被打断。</li>
+            <li><b>外部保存新文件到工作区目录后文件树自动刷新</b>：新增 refreshTreeThrottled 节流函数（15s 内不重复刷）调 bootstrap(true) 触发后端 refresh_cache() 全量扫描，visibilitychange 页面恢复可见 + window.focus 窗口聚焦两个回调触发刷新，startTreeRefreshInterval 60s 低频定时兜底，document.hidden 时跳过避免无谓 IO。</li>
+            <li><b>.key结尾文件正常显示</b>：is_binary_ext 移除 'key'，.key 文件被扫描进文件树 + 全文搜索 + read_file 能读内容（agent_policy deny **/*.key 保留确保 AI 不自动读密钥内容但用户能手动打开看）。</li>
+            <li><b>代码语法高亮引入 highlight.js</b>：下载 highlight.min.js（11.9.0，121KB，35+ 常用语言）到 public/vendor/highlight/ 离线打包，styles.css 新增 .hljs-* 到 --syn-* CSS 变量映射适配亮/暗主题切换，app.js 新增 highlightCodeBlocks 函数 + requestIdleCallback 分批每批 8 个 + dataset.highlighted 防重复 + hljs 未加载静默降级，调用点 5 处全覆盖。</li>
+          </ul>
+        </article>
+
+        <article class="doc-section reveal" id="v1.8.106">
+          <h3>v1.8.106 · 文档切换编辑位置保留 + 外部编辑器异步编辑冲突检测 + 重新加载强制读磁盘</h3>
+          <ul>
+            <li><b>临时区多文档切换保留编辑位置</b>：扩展草稿机制新增 saveDraftState/restoreDraftState，按文档路径在 localStorage 持久化光标 selectionStart/End + 编辑器 scrollTop + 阅读器 scrollTop，openDoc 切换时 restoreDraft 回填文本后立即恢复光标和双滚动位置（包在 requestAnimationFrame 中等待 DOM 布局完成避免 scrollTop 被钳制为 0），关闭文档时 removeItem 清理。</li>
+            <li><b>外部编辑器异步同时编辑同一文档不再静默覆盖</b>：后端 save_file 新增 base_hash 参数保存前 sha256 比对磁盘文件不一致拒绝保存返回 __CONFLICT__:disk_hash，前端 saveCurrentDoc 收到 conflict:true 弹窗确认覆盖或取消；新增 /api/doc-check 端点前端每 5s 轮询当前文档哈希，与打开时记录的 currentVersion 不同则 Toast 提示「重新加载/忽略」，重新加载前若有未保存编辑二次确认丢弃。</li>
+            <li><b>点击「重新加载」强制读磁盘绕过 cache</b>：read_file L1 cache 命中时直接返回内存旧 content，导致 check_file 检出外部修改后点重新加载仍看到旧内容；新增 read_file_force 方法跳过 cache 从磁盘重读 + decode + 写回 cache，/api/doc 新增 force=1 参数，前端两处重新加载按钮均带 forceReload=true。</li>
+          </ul>
+        </article>
+
+        <article class="doc-section reveal" id="v1.8.105">
+          <h3>v1.8.105 · 全局搜索中文 MD「打不开/没内容」空白屏·三重修复</h3>
+          <ul>
+            <li><b>NFC 路径全链路归一</b>：Mac HFS+ NFD / Win NTFS NFC / NAS 短名/UNC 中文路径搜索结果点不开的根因是字符串 == 字节序列不同漏查；引入 unicode-normalization crate，全链路 ref_path NFC 归一。</li>
+            <li><b>basename 三级弱匹配兜底</b>：主路径 cache==/NFC 都 miss 后，按 basename NFC 精确相等+同 workspace 唯一、去尾缀再唯一、全局 workspace 内 basename 全局唯一三级匹配。</li>
+            <li><b>空内容/空白屏不再静默</b>：右侧阅读栏渲染灰底虚线卡片提示「WPS/Word/江西电信导出 MD 请记事本另存为 UTF-8 覆盖原文件」，左侧编辑器设置多行空内容占位符，Worker 抛错 catch 分支顶部 prepend 红色异常 banner。</li>
+            <li><b>BOM + GBK/UTF16/UTF32 智能编码解码兜底</b>：引入 encoding_rs，scan_workspace 和 read_file 都从 read_to_string UTF-8 改为 read bytes → BOM → GB18030/GBK/BIG5/SHIFT_JIS/EUC_KR 序列候选，识别出的非 UTF-8 编码写入 FileEntry.encoding 前端状态栏可见。</li>
+          </ul>
+        </article>
+
+        <article class="doc-section reveal" id="v1.8.104">
+          <h3>v1.8.104 · 安装后启动失败（前端资源缺失）紧急修复·双重保险</h3>
+          <ul>
+            <li><b>打包侧强制目标映射</b>：tauri.conf.json 的 bundle.resources 从字符串数组改为 Tauri 2.x 对象映射，强制写死安装目的地 <code>{src:../public,target:resources/public}</code> + <code>{src:WebView2Loader.dll,target:""}</code>，消除 NSIS 字符串资源解包路径歧义。</li>
+            <li><b>运行时 10 级候选 + 404 页完整枚举</b>：resolve_public_root 从返回 PathBuf 升级为返回 (PathBuf, Vec&lt;PathBuf&gt;)，候选从 5 条扩充到 10 条，内置 404 友好页打印编号后的全部候选。</li>
+            <li><b>端口占用自动回退</b>：bind_first_available 按 7321..=7420 顺序扫描返回第一个空闲端口，轮询 axum / splash 加载 / 首页导航 / 30s 超时提示全部使用真实端口。</li>
+            <li><b>前端资源缺失内置中文错误页</b>：如果 10 级候选都找不到 public/index.html，Rust 端直接返回内置最小 HTML 错误页（深色主题 + 当前尝试路径列表 + 3 步解决操作提示）。</li>
+          </ul>
+        </article>
+
+        <article class="doc-section reveal" id="v1.8.103">
+          <h3>v1.8.103 · 原生另存为 + 路径查看 + DOCX/RTF/ODT 正文提取</h3>
+          <ul>
+            <li><b>7 项导出统一接入系统原生「另存为」</b>：新增 Rust Tauri 命令（save file dialog + 真写磁盘 + 返回绝对路径 + 打开文件 / 在文件夹中查看），保存成功后 Toast 显示完整绝对路径 + 两按钮；取消对话框静默不报错；非 Tauri / 插件失败自动降级 Blob 下载。</li>
+            <li><b>导入 DOCX/RTF/ODT 正文自动提取</b>：Rust 新增 3 个正文提取 helper（ZIP + 控制字剥离 + strip_inner_tags），不再生成 pandoc 占位文档。</li>
+            <li><b>导入弹窗原生系统按钮</b>：importModal 按钮区新增「系统文件对话框」（Tauri 环境下自动显示），accept 与 Rust 过滤器同步 11 类文件。</li>
+            <li><b>全链路兼容与健壮</b>：所有 invoke 双重兼容 window.__TAURI__.core.invoke 与 window.__TAURI__.invoke，base64 编解码统一。</li>
+          </ul>
+        </article>
+
+        <article class="doc-section reveal" id="v1.8.102">
+          <h3>v1.8.102 · 其他电脑安装后 HTTP 404 白屏紧急修复</h3>
+          <ul>
+            <li><b>致命根因</b>：tauri.conf.json bundle.resources 原本只有 WebView2Loader.dll，前端 public/ 目录完全没有进入 NSIS 安装包，用户电脑安装后 axum 的 resolve_public_root 用编译期 CARGO_MANIFEST_DIR/../public 指向开发机目录（其他电脑不存在），请求全部返回 HTTP ERROR 404。</li>
+            <li><b>打包侧修复</b>：bundle.resources 追加 "../public"，NSIS 安装器会把 public 整个目录解包到安装目录/resources/public/。</li>
+            <li><b>运行时 5 级候选 + index.html 真校验</b>：优先级环境变量 > exe_dir/resources/public > exe_dir/public > CARGO_MANIFEST_DIR/../public > ./public，候选目录必须同时"是目录 + 含 index.html 文件"才会被选中。</li>
+            <li><b>端口占用自动回退</b>：bind_first_available 按 7321..=7420 顺序扫描返回第一个空闲端口。</li>
+            <li><b>前端资源缺失内置中文错误页 & 30s 超时中文引导</b>：Rust 端直接返回内置最小 HTML 错误页。</li>
+          </ul>
+        </article>
+
+        <article class="doc-section reveal" id="v1.8.101">
+          <h3>v1.8.101 · 全格式导出质量升级 & Frontmatter 不再外漏</h3>
+          <ul>
+            <li><b>Frontmatter YAML 不再出现在任何导出文件</b>：菜单 7 项导出在写入前统一使用 stripFrontmatter() 或 Rust split_frontmatter().body 剥离 frontmatter 块；原 MD 文件写入磁盘时仍 100% 保留 frontmatter。</li>
+            <li><b>HTML 导出：从 HTTP 400 升级为高品质离线文档</b>：前端 buildExportableHtml() 离屏 900px 容器渲染 → KaTeX DOM + Mermaid SVG → 本地图片全部转 data URI → 内联 PRINT_STYLES + KATEX_PRINT_CSS → 文末品牌推荐卡片 → Blob 下载。生成文件离线双击也能显示公式/Mermaid/中文/图片。</li>
+            <li><b>Word DOCX 导出：从 HTTP 400 升级为 Word/WPS 可直接打开的兼容格式</b>：使用 HTML 导出的全链路内联结果 + 写入 UTF-8 BOM + application/msword MIME → 文件名后缀 .doc。</li>
+            <li><b>TXT 导出：语法糖剥离 + 中文编码防乱码</b>：Rust strip_markdown_for_txt() 删除 fenced 包裹行 / ATX 前缀 / Setext 下划线 / 引用块前缀 / 加粗 / 斜体 / 删除线 / 代码 / 图片 → alt / 链接 → text / HTML 注释；前端兜底写入 UTF-8 BOM 防中文乱码。</li>
+            <li><b>保存成功率统一修复</b>：所有 Blob 下载改用 triggerBlobDownload：&lt;a&gt; 入 DOM 后 setTimeout 50ms 再触发 click，3000ms 后 remove 节点 + revokeObjectURL。</li>
+          </ul>
+        </article>
+
+        <article class="doc-section reveal" id="v1.8.100">
+          <h3>v1.8.100 · 启动红屏 SyntaxError 紧急修复</h3>
+          <ul>
+            <li><b>致命语法错误修复</b>：app.js 第 1872 行 KATEX_PRINT_CSS 中 IE10 老 Hack <code>box-sizing:content-box \10</code> 在模板字符串内被 WebView2/Chromium 解析为八进制转义序列，严格模式直接抛 Uncaught SyntaxError，app.js 文件级解析失败 → 启动红屏。删除无用 IE10 hack 后模板字符串语法合法，红屏立消。</li>
+            <li><b>保持 v1.8.99 三项阅读栏/阅读模式修复完整</b>：Worker 三分支补齐 renderMathInPreview + renderChartsInPreview、markdown-worker.js 侧 mermaid/excalidraw chart-block 容器结构生成、renderMarkdown 与 Worker 双处「跨行 $$...$$ 占位符保护 + 还原」三条核心修复继续生效。</li>
+            <li><b>缓存强失效</b>：MARKDOWN_WORKER_URL query 升级、MARKDOWN_RENDER_VERSION 升级，编辑预览/阅读栏/阅读模式三路缓存全部强制重算。</li>
+          </ul>
+        </article>
+
+        <article class="doc-section reveal" id="v1.8.99">
+          <h3>v1.8.99 · 阅读栏/阅读模式公式/图表全面修复</h3>
+          <ul>
+            <li><b>阅读栏/阅读模式渲染调用补齐</b>：renderReaderContent 主路径、catch 回退路径、renderReaderContentChunked 单 slice 分支三处全部在写入 markdownView.innerHTML 后立即调用 renderMathInPreview + renderChartsInPreview，解决常见文档下公式、Mermaid、Excalidraw 永远不渲染的主因。</li>
+            <li><b>Worker 端 Mermaid / Excalidraw 占位生成补齐</b>：markdown-worker.js 渲染主路径 fenced 代码块闭合分支与主线程 renderMarkdown 严格对齐：mermaid 输出 .chart-block.mermaid-block + pre.mermaid-source + div.mermaid-container(空占位)；excalidraw 输出 .chart-block.excalidraw-block + pre.excalidraw-source + div.excalidraw-container(空占位)。</li>
+            <li><b>跨行块级公式 $$...$$ 修复</b>：markdown-worker.js 与 app.js:renderMarkdown 都新增「先保护后还原」占位符机制：按 fence 分段 → 非 fence 段用占位符把整段 $$...$$ 替换为一行 token → HTML 生成完成后还原为 &lt;span class="math-block" data-math="..."&gt;；彻底解决旧逐行切割跨行公式的问题。</li>
+            <li><b>缓存与脚本版本强制失效</b>：MARKDOWN_RENDER_VERSION 和 MARKDOWN_WORKER_URL query 升级，保证 cachedRenderMarkdown LRU + Worker 脚本 + 前端静态资源浏览器缓存全部强制走新解析。</li>
+          </ul>
+        </article>
+
+        <article class="doc-section reveal" id="v1.8.98">
+          <h3>v1.8.98 · PDF 导出大升级</h3>
+          <ul>
+            <li><b>图表导出</b>：Mermaid 代码块在打印前异步调用 mermaid.render 生成 SVG → 逐节点 getComputedStyle 把 fill/stroke/stroke-width/opacity 写入 inline style → XMLSerializer 转 data:image/svg+xml → 独立 &lt;img&gt; 替代；脱离外部 CSS 后 PDF 内仍能完整显示。Excalidraw 块无运行时则降级为等宽源码显示。</li>
+            <li><b>公式导出</b>：.math-block 与 .math-inline 在打印前使用 katex.render() 真实渲染 DOM；同时 PRINT_STYLES 内联注入约 90 条 KaTeX 关键布局类，about:blank iframe 无需再请求 CDN CSS；\frac、\sqrt、上下标、矩阵、\sum 均正确输出。</li>
+            <li><b>品牌推荐语</b>：文末默认追加独立品牌推荐卡片（流式文档流、page-break-inside:avoid，非 fixed/watermark，绝不会遮挡正文）：紫蓝渐变圆形徽章 M + 标题 + slogan + 官网下载超链接；多页 PDF 仅末页显示。</li>
+            <li><b>图片内联</b>：容器内相对路径 &lt;img&gt; 再次 fetch → blob → readAsDataURL 内联，PDF 离线打开图片仍完整显示；打印样式 @page size:A4;margin:18mm 14mm；图表块与品牌卡片用 page-break-inside:avoid 防跨页切裂。</li>
+          </ul>
+        </article>
+
+        <article class="doc-section reveal" id="v1.8.97">
+          <h3>v1.8.97 · 编辑器字体优化 + 字号快捷键修复</h3>
+          <ul>
+            <li><b>Ctrl+/- 编辑器字号快捷键最终修复</b>：事件监听同时注册在编辑器宿主和 document 全局两重，编辑区焦点、工具栏焦点、目录焦点三种上下文都能稳定放大/缩小字号；Ctrl+0 立即重置。</li>
+            <li><b>重启保留用户习惯字号</b>：loadSettings → applySettings 末尾主动 applyEditorFontSizeToDom，把 localStorage 的 docContentFontSize 同步到 #editor 及 CodeMirror 多节点。</li>
+            <li><b>编辑模式字体全面优化</b>：等宽字体栈 Cascadia Mono / Cascadia Code / JetBrains Mono / Fira Code → 中文 Sarasa Mono SC / Source Han Mono SC / PingFang SC / Microsoft YaHei UI → Consolas 兜底；font-feature-settings liga/calt/cv11/ss01 开启等宽连字与数字替代；行距与留白优化。</li>
+            <li><b>兼容保障</b>：字号调整会对 .cm-editor/.cm-scroller/.cm-content/.cm-line/.cm-gutters/selection/cursor/activeLine 层以及 #cursor-overlay 全部显式 setProperty(important)，并调用 requestMeasure 强制 CodeMirror 重绘避免滚动条错位。</li>
+          </ul>
+        </article>
+
+        <article class="doc-section reveal" id="v1.8.96">
+          <h3>v1.8.96 · 代码文件保存最终修复 + 工作区视图</h3>
+          <ul>
+            <li><b>UI 拒绝文案彻底清除</b>：打开代码/文本文件时 saveBtn.disabled=false、清除旧 title、强制替换为「保存 (Ctrl+S)」、移除 readonly/disabled/unsupported class。</li>
+            <li><b>底部 lastSaveText 正确显示</b>：非 Markdown 不再出现「不可保存」。openDoc 末尾按编辑器与原内容一致性判断：有草稿且不同→未保存+scheduleAutoSave，其余→保存。</li>
+            <li><b>保存链路再确认</b>：非 md 文档打开即自动 setMode('edit') → runAutoSave gate 通过 → saveCurrentDoc → /api/save（后端 save_file 已对任意文本后缀放行 v1.8.94）。</li>
+            <li><b>工作区视图</b>：折叠态整个工作区扁平 Top10 按 modified 倒序 + 当前打开文档兜底可见；展开态 renderTree 递归完整目录树（文件夹独立展开/收起 + 每层文件按 modified 倒序）。</li>
+          </ul>
+        </article>
+
+        <article class="doc-section reveal" id="v1.8.95">
+          <h3>v1.8.95 · 工作区视图重写 + 基础保存修复</h3>
+          <ul>
+            <li><b>基础保存修复</b>：代码后缀打开默认进入编辑态，避免 runAutoSave 被 view 模式短路。</li>
+            <li><b>工作区折叠态</b>：收起时整个工作区全部文件按 modified 倒序取前 10 个 + 保证当前打开文档可见；尾部「共 X 项，展开查看全部」。</li>
+            <li><b>工作区展开态</b>：渲染真正目录树结构；所有文件夹独立展开/收起；每层文件按 modified 倒序；尾部「收起」按钮返回折叠视图。</li>
+          </ul>
+        </article>
+
+        <article class="doc-section reveal" id="v1.8.94">
+          <h3>v1.8.94 · 工作区与编辑器增强</h3>
+          <ul>
+            <li><b>非 MD 文件显示</b>：工作区目录 mdOnly=false 时显示 bat/vbs/js/py/ini/txt/sh/code 等文本/代码文件（二进制黑名单+10MB 上限）。</li>
+            <li><b>展开全部修复</b>：工作区目录「展开全部」时无数量限制显示全部文件，收起时保持简洁。</li>
+            <li><b>代码文件支持</b>：代码后缀可正常打开编辑保存；非 MD 预览使用等宽字体+换行样式。</li>
+            <li><b>文件排序</b>：工作区目录文件按修改时间倒序排列（最新在前）。</li>
+            <li><b>字体快捷键</b>：Ctrl+= 增大编辑器字体，Ctrl+- 减小，Ctrl+0 重置（10~32px，localStorage 持久化）。</li>
+          </ul>
+        </article>
+
+        <article class="doc-section reveal" id="v1.8.93">
+          <h3>v1.8.93 · 界面与体验升级 + 性能优化</h3>
+          <ul>
+            <li><b>界面与体验升级</b>：工作区添加对话框 UI 修复（z-index+遮罩层级）；搜索支持多关键词 AND + 精确短语 + 评分排序；快捷键调整（Ctrl+W → Alt+W / 新增 Alt+E / Alt+O）；自升级真实 fetch 远程版本语义化比较；窗口启动默认最大化。</li>
+            <li><b>功能无损性能优化</b>：状态栏 DOM 引用缓存（_statusFieldCache），每秒避免 4+ 次 querySelectorAll；页面隐藏时暂停系统时间 setInterval；合并编辑器 3 个 scroll 监听器为 1 个 passive；5 个 resize 监听器统一 100ms 去抖。</li>
+            <li><b>沉浸+轻量模式整合</b>：一个按钮（⚡ 沉浸）同时实现沉浸写作与轻量编辑——进入时终止 Markdown Worker、禁用语法高亮 CSS、隐藏预览/大纲面板，退出时自动重建 Worker 并刷新预览。</li>
+            <li><b>文档安全加固</b>：渲染序号竞态防护（readerRenderSeq）、Worker 失败后 5 秒冷却可重建、openDoc 被覆盖时回滚清理、切换文档前同步保存草稿、保存接口返回 contentSha256 支持乐观锁。</li>
+            <li><b>内存/GPU 优化</b>：contentStore LRU 缓存（最多 50 热文档）、知识文档上限 300、轻度 trim 250MB/激进 320MB；图谱模拟间隔拉长 30%、shadowBlur 降级、backdrop-filter blur 缩小。</li>
+          </ul>
+        </article>
+
+        <p class="back-home"><a href="index.html" class="button button-soft">← 返回首页</a></p>
+      </section>
+    </main>
+
+    <footer class="site-footer section-wrap">
+      <div class="footer-brand">
+        <span class="brand-mark" aria-hidden="true"><img src="logo.ico" alt=""></span>
+        <div>
+          <strong>MyTemple Knowledge</strong>
+          <p>本地 Markdown 知识库与编辑器，重点服务长期维护、低干扰阅读与顺手编辑。</p>
+        </div>
+      </div>
+      <div class="footer-links">
+        <a href="index.html#features">核心能力</a>
+        <a href="index.html#themes">主题预设</a>
+        <a href="docs.html">使用文档</a>
+        <a href="index.html#downloads">版本下载</a>
+      </div>
+      <small>© <span data-year></span> MyTemple Knowledge</small>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

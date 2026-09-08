@@ -464,11 +464,14 @@ textarea {
 .screen-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   margin-top: 34px;
+  align-items: stretch;
 }
 
 .screen-card {
   padding: 18px;
   border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
 }
 
 .screen-head {
@@ -476,6 +479,7 @@ textarea {
   grid-template-columns: auto 1fr;
   gap: 14px;
   align-items: start;
+  min-height: 96px;
 }
 
 .screen-head h3 {
@@ -483,18 +487,26 @@ textarea {
   font-size: 1.2rem;
 }
 
+.screen-head p {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 .screen-preview {
-  margin-top: 14px;
+  margin-top: auto;
   overflow: hidden;
   border: 1px solid rgba(126, 150, 85, 0.12);
   border-radius: var(--radius);
   background: linear-gradient(180deg, rgba(251, 252, 246, 0.98), rgba(240, 244, 233, 0.96));
+  aspect-ratio: 16 / 10;
 }
 
 .screen-preview img {
   display: block;
   width: 100%;
-  height: auto;
+  height: 100%;
   object-fit: cover;
   border-radius: var(--radius);
   transition: transform 0.3s ease;
@@ -533,6 +545,7 @@ textarea {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 18px;
   margin-top: 28px;
+  align-items: stretch;
 }
 
 .assist-card {
@@ -543,11 +556,17 @@ textarea {
   box-shadow: var(--shadow-soft);
   opacity: 0.88;
   transition: opacity 0.2s ease, box-shadow 0.2s ease;
+  display: flex;
+  flex-direction: column;
 }
 
 .assist-card:hover {
   opacity: 1;
   box-shadow: var(--shadow);
+}
+
+.assist-card .screen-head {
+  min-height: 84px;
 }
 
 .assist-card .screen-head h4 {
@@ -560,6 +579,15 @@ textarea {
   color: var(--text-2);
   font-size: 0.88rem;
   line-height: 1.7;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.assist-card .screen-preview {
+  margin-top: auto;
+  aspect-ratio: 16 / 10;
 }
 
 .assist-tag {
@@ -1224,6 +1252,70 @@ textarea {
 }
 
 /* ── 精简版列表/段落布局（替代部分卡片） ── */
+/* 核心能力卡片网格 */
+.feature-cards {
+  margin-top: 28px;
+}
+
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 16px;
+}
+
+.feature-card {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 20px 16px;
+  text-align: center;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.feature-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--green);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+}
+
+.feature-icon {
+  font-size: 28px;
+  margin-bottom: 10px;
+  line-height: 1;
+}
+
+.feature-card h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0 0 6px;
+}
+
+.feature-card p {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0;
+  line-height: 1.5;
+}
+
+@media (max-width: 1024px) {
+  .feature-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .feature-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .feature-card {
+    padding: 16px 12px;
+  }
+  .feature-icon {
+    font-size: 24px;
+  }
+}
+
 .feature-list {
   margin-top: 24px;
 }
@@ -1357,5 +1449,115 @@ textarea {
     padding-bottom: 18px;
     border-right: none;
     border-bottom: 1px solid var(--line);
+  }
+}
+
+/* ─── Link Cards (docs/changelog/privacy) ─── */
+.link-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 22px;
+  margin-top: 28px;
+}
+.link-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 28px 24px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 251, 0.72);
+  box-shadow: var(--shadow-soft);
+  text-decoration: none;
+  color: var(--ink);
+  transition: box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+}
+.link-card:hover {
+  box-shadow: var(--shadow);
+  transform: translateY(-2px);
+  border-color: rgba(126, 150, 85, 0.4);
+}
+.link-card-icon {
+  font-size: 2rem;
+  margin-bottom: 14px;
+}
+.link-card h3 {
+  margin: 0 0 8px;
+  font-size: 1.2rem;
+}
+.link-card p {
+  margin: 0 0 16px;
+  color: var(--text-2);
+  font-size: 0.92rem;
+  line-height: 1.7;
+  flex-grow: 1;
+}
+.link-card-go {
+  color: var(--green);
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+/* ─── Changelog/Docs page ─── */
+.changelog-page,
+.docs-page {
+  max-width: 880px;
+  margin: 0 auto;
+}
+.section-desc {
+  color: var(--text-2);
+  font-size: 1rem;
+  line-height: 1.8;
+  margin: 8px 0 0;
+}
+.changelog-toc,
+.docs-toc {
+  margin: 28px 0;
+  padding: 20px 24px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 251, 0.5);
+}
+.changelog-toc h3,
+.docs-toc h3 {
+  margin: 0 0 12px;
+  font-size: 1rem;
+}
+.changelog-toc ul,
+.docs-toc ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  columns: 2;
+  column-gap: 24px;
+}
+.changelog-toc li,
+.docs-toc li {
+  margin-bottom: 6px;
+  break-inside: avoid;
+}
+.changelog-toc a,
+.docs-toc a {
+  color: var(--text-2);
+  text-decoration: none;
+  font-size: 0.88rem;
+  line-height: 1.6;
+}
+.changelog-toc a:hover,
+.docs-toc a:hover {
+  color: var(--green);
+}
+.back-home {
+  text-align: center;
+  margin: 40px 0 20px;
+}
+
+@media (max-width: 768px) {
+  .link-cards {
+    grid-template-columns: 1fr;
+  }
+  .changelog-toc ul,
+  .docs-toc ul {
+    columns: 1;
   }
 }
