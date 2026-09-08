@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>录屏</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: transparent; overflow: hidden; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", Roboto, sans-serif; }
+
+  .capture-overlay { position: fixed; inset: 0; z-index: 1; background: transparent; user-select: none; }
+  .capture-canvas { position: absolute; inset: 0; z-index: 1; cursor: crosshair; }
+  .capture-hint {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    color: rgba(255,255,255,0.85); font-size: 16px;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.6);
+    pointer-events: none; z-index: 3;
+  }
+  .capture-tooltip {
+    position: absolute; z-index: 3;
+    background: rgba(0,0,0,0.75); color: #fff;
+    font-size: 12px; padding: 2px 6px; border-radius: 3px;
+    pointer-events: none;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .capture-toolbar {
+    position: absolute; display: flex; gap: 2px;
+    background: rgba(22,28,39,0.96);
+    border: 1px solid rgba(100,116,139,0.35);
+    border-radius: 8px; padding: 4px 6px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    z-index: 4; backdrop-filter: blur(10px);
+  }
+  .capture-btn {
+    background: transparent; border: none; color: #cbd5e1;
+    padding: 5px 10px; font-size: 13px; border-radius: 4px;
+    cursor: pointer; font-family: inherit; transition: background 0.12s;
+  }
+  .capture-btn:hover { background: rgba(100,116,139,0.25); color: #f1f5f9; }
+  .capture-btn-confirm { color: #f87171; font-weight: 600; }
+  .capture-btn-confirm:hover { background: rgba(248,113,113,0.18); color: #f87171; }
+  .capture-btn-cancel { color: #94a3b8; }
+
+  /* 录屏提示条 */
+  .recording-hint {
+    position: fixed; top: 12px; left: 50%;
+    transform: translateX(-50%);
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(0,0,0,0.8);
+    border: 1px solid rgba(239,68,68,0.4);
+    border-radius: 20px;
+    padding: 6px 16px;
+    color: #f1f5f9; font-size: 14px; z-index: 10;
+    backdrop-filter: blur(8px);
+  }
+  .recording-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #ef4444;
+    animation: pulse 1.2s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  .recording-time { font-family: ui-monospace, monospace; margin-left: 4px; }
+  .recording-stop-btn {
+    background: rgba(239,68,68,0.2);
+    border: 1px solid rgba(239,68,68,0.4);
+    color: #fca5a5; padding: 2px 10px;
+    border-radius: 4px; cursor: pointer;
+    font-size: 12px; margin-left: 8px;
+  }
+  .recording-stop-btn:hover { background: rgba(239,68,68,0.3); }
+
+  .loading-tip {
+    position: fixed; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    color: #fff; font-size: 18px;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.8);
+    z-index: 10;
+  }
+</style>
+</head>
+<body>
+<div id="loadingTip" class="loading-tip">正在准备录屏…</div>
+
+<script type="module">
+let overlay = null, canvas = null, ctx = null;
+let region = null;
+let dpr = window.devicePixelRatio || 1;
+let recording = false;
+let recorder = null;
+let chunks = [];
+let outCanvas = null, outCtx = null;
+let frameImg = null;
+let timerInterval = null;
+let elapsed = 0;
+let bgImg = null;
+
+function getInvoke() {
+  if (window.__TAURI__?.core?.invoke) return window.__TAURI__.core.invoke;
+  if (window.__TAURI__?.invoke) return window.__TAURI__.invoke;
+  return null;
+}
+function invoke(cmd, args) {
+  const fn = getInvoke();
+  if (!fn) return Promise.reject(new Error('Tauri invoke 不可用'));
+  return fn(cmd, args);
+}
+
+// HTTP POST 简化版
+function httpPost(url, body) {
+  return fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  }).then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)));
+}
+
+function closeRecorderWindow() {
+  document.body.innerHTML = '';
+  httpPost('/api/screenshot/close').catch(() => {
+    try { window.close(); } catch(_) {}
+  });
+}
+
+// 录屏窗口启动：纯 HTTP 加载背景帧
+function init() {
+  // 监听原生录屏帧（如果 IPC 可用）
+  if (window.__TAURI__?.event) {
+    window.__TAURI__.event.listen('native-record-frame', (e) => {
+      if (!recording) return;
+      const dataUrl = e?.payload?.dataUrl;
+      if (!dataUrl) return;
+      frameImg.onload = () => {
+        if (!recording || !outCtx) return;
+        const sx = Math.round(region.x * dpr);
+        const sy = Math.round(region.y * dpr);
+        const sw = Math.max(1, Math.round(region.w * dpr));
+        const sh = Math.max(1, Math.round(region.h * dpr));
+        outCtx.drawImage(frameImg, sx, sy, sw, sh, 0, 0, outCanvas.width, outCanvas.height);
+      };
+      frameImg.src = dataUrl;
+    });
+  }
+
+  // 通过 HTTP 加载背景帧
+  loadBackgroundFrame();
+}
+
+async function loadBackgroundFrame() {
+  try {
+    const res = await fetch('/api/screenshot/bg', { cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    bgImg = new Image();
+    bgImg.onload = () => {
+      document.getElementById('loadingTip').style.display = 'none';
+      startRegionSelection();
+      // 通知后端显示窗口
+      httpPost('/api/screenshot/ready').catch(() => {});
+    };
+    bgImg.onerror = () => {
+      document.getElementById('loadingTip').style.display = 'none';
+      startRegionSelection();
+      httpPost('/api/screenshot/ready').catch(() => {});
+    };
+    bgImg.src = url;
+  } catch (err) {
+    document.getElementById('loadingTip').style.display = 'none';
+    startRegionSelection();
+    httpPost('/api/screenshot/ready').catch(() => {});
+  }
+}
+
+function startRegionSelection() {
+  overlay = document.createElement('div');
+  overlay.className = 'capture-overlay';
+  overlay.innerHTML = `
+    <canvas class="capture-canvas"></canvas>
+    <div class="capture-hint">拖拽框选录屏区域 · ESC 取消</div>
+    <div class="capture-tooltip" style="display:none"></div>
+  `;
+  document.body.appendChild(overlay);
+
+  canvas = overlay.querySelector('.capture-canvas');
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  ctx = canvas.getContext('2d');
+
+  const hint = overlay.querySelector('.capture-hint');
+  const tooltip = overlay.querySelector('.capture-tooltip');
+
+  let startX = 0, startY = 0, curX = 0, curY = 0, dragging = false;
+
+  const rect = () => {
+    const x = Math.min(startX, curX), y = Math.min(startY, curY);
+    const w = Math.abs(curX - startX), h = Math.abs(curY - startY);
+    return { x, y, w, h };
+  };
+
+  const draw = () => {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // 绘制背景图（如果有）
+    if (bgImg && bgImg.complete && bgImg.naturalWidth > 0) {
+      const scaleX = canvas.width / (bgImg.naturalWidth / dpr);
+      const scaleH = canvas.height / (bgImg.naturalHeight / dpr);
+      ctx.drawImage(bgImg, 0, 0, bgImg.naturalWidth, bgImg.naturalHeight, 0, 0, canvas.width, canvas.height);
+    }
+    if (!dragging && curX === 0) return;
+    const r = rect();
+    // 半透明遮罩
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(r.x, r.y, r.w, r.h);
+    // 重绘选区内背景
+    if (bgImg && bgImg.complete && bgImg.naturalWidth > 0) {
+      const sx = Math.round(r.x * dpr);
+      const sy = Math.round(r.y * dpr);
+      const sw = Math.max(1, Math.round(r.w * dpr));
+      const sh = Math.max(1, Math.round(r.h * dpr));
+      ctx.drawImage(bgImg, sx, sy, sw, sh, r.x, r.y, r.w, r.h);
+    }
+    // 选区边框
+    ctx.strokeStyle = '#ef4444';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 4]);
+    ctx.strokeRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
+    ctx.setLineDash([]);
+    tooltip.style.display = 'block';
+    tooltip.textContent = `${Math.round(r.w)} × ${Math.round(r.h)} px`;
+    tooltip.style.left = Math.max(8, r.x) + 'px';
+    tooltip.style.top = Math.max(8, r.y - 28) + 'px';
+  };
+
+  const onDown = (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    region = null;
+    const oldTb = overlay.querySelector('.capture-toolbar');
+    if (oldTb) oldTb.remove();
+    hint.style.display = 'block';
+    hint.textContent = '拖拽框选录屏区域 · ESC 取消';
+    startX = curX = e.clientX;
+    startY = curY = e.clientY;
+    dragging = true;
+    draw();
+  };
+  const onMove = (e) => {
+    curX = e.clientX; curY = e.clientY;
+    if (dragging) draw();
+  };
+  const onUp = (e) => {
+    if (!dragging) return;
+    dragging = false;
+    const r = rect();
+    if (r.w < 4 || r.h < 4) { draw(); return; }
+    region = { x: r.x, y: r.y, w: r.w, h: r.h };
+    draw();
+    hint.style.display = 'none';
+    document.removeEventListener('mousedown', onDown);
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    showRecordToolbar();
+  };
+  const onKey = (e) => {
+    if (e.key === 'Escape') { cleanupAndClose(); }
+  };
+
+  document.addEventListener('mousedown', onDown);
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+  document.addEventListener('keydown', onKey, true);
+}
+
+function showRecordToolbar() {
+  const tb = document.createElement('div');
+  tb.className = 'capture-toolbar';
+  tb.style.display = 'flex';
+  tb.innerHTML = `
+    <button type="button" class="capture-btn capture-btn-confirm">● 开始录屏</button>
+    <button type="button" class="capture-btn capture-btn-cancel">取消</button>
+  `;
+  overlay.appendChild(tb);
+
+  const btnW = tb.offsetWidth || 200;
+  const btnH = tb.offsetHeight || 36;
+  let left = region.x + region.w - btnW;
+  let top = region.y + region.h + 6;
+  if (top + btnH > window.innerHeight) top = region.y - btnH - 6;
+  if (left < 4) left = 4;
+  if (left + btnW > window.innerWidth) left = window.innerWidth - btnW - 4;
+  tb.style.left = left + 'px';
+  tb.style.top = top + 'px';
+
+  tb.querySelector('.capture-btn-confirm').addEventListener('click', (e) => {
+    e.stopPropagation();
+    tb.remove();
+    startRecording();
+  });
+  tb.querySelector('.capture-btn-cancel').addEventListener('click', (e) => {
+    e.stopPropagation();
+    cleanupAndClose();
+  });
+
+  document.addEventListener('keydown', function esc(e) {
+    if (e.key === 'Escape') {
+      document.removeEventListener('keydown', esc, true);
+      cleanupAndClose();
+    } else if (e.key === 'Enter') {
+      document.removeEventListener('keydown', esc, true);
+      tb.remove();
+      startRecording();
+    }
+  }, true);
+}
+
+async function startRecording() {
+  // 移除选区遮罩，保留透明背景
+  if (overlay) {
+    overlay.parentNode.removeChild(overlay);
+    overlay = null; canvas = null; ctx = null;
+  }
+
+  // 初始化输出 canvas
+  const sw = Math.max(1, Math.round(region.w * dpr));
+  const sh = Math.max(1, Math.round(region.h * dpr));
+  outCanvas = document.createElement('canvas');
+  outCanvas.width = Math.min(3840, sw);
+  outCanvas.height = Math.min(2160, sh);
+  outCtx = outCanvas.getContext('2d');
+  frameImg = new Image();
+  frameImg.crossOrigin = 'anonymous';
+
+  // 画一帧黑底占位
+  outCtx.fillStyle = '#000';
+  outCtx.fillRect(0, 0, outCanvas.width, outCanvas.height);
+
+  // 通知 Rust 开始原生录屏
+  try {
+    await invoke('api_start_native_record');
+  } catch (e) {
+    // 降级：使用 getDisplayMedia
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+      const track = stream.getVideoTracks()[0];
+      if (!track) { cleanupAndClose(); return; }
+      const video = document.createElement('video');
+      video.srcObject = stream;
+      video.muted = true;
+      await video.play();
+      // 用 getDisplayMedia 的帧
+      const destStream = outCanvas.captureStream(30);
+      const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp8')
+        ? 'video/webm;codecs=vp8' : 'video/webm';
+      recorder = new MediaRecorder(destStream, { mimeType, videoBitsPerSecond: 4_000_000 });
+      chunks = [];
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+      recorder.start(100);
+      recording = true;
+      // 渲染循环
+      const renderLoop = () => {
+        if (!recording) return;
+        const vw = video.videoWidth, vh = video.videoHeight;
+        const sx = region.x * (vw / window.innerWidth);
+        const sy = region.y * (vh / window.innerHeight);
+        const sw2 = Math.round(region.w * (vw / window.innerWidth));
+        const sh2 = Math.round(region.h * (vh / window.innerHeight));
+        outCtx.drawImage(video, sx, sy, sw2, sh2, 0, 0, outCanvas.width, outCanvas.height);
+        requestAnimationFrame(renderLoop);
+      };
+      renderLoop();
+      showRecordingHint();
+      return;
+    } catch (err) {
+      cleanupAndClose();
+      return;
+    }
+  }
+
+  // 原生录屏模式：使用 canvas.captureStream + MediaRecorder
+  const destStream = outCanvas.captureStream(30);
+  const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp8')
+    ? 'video/webm;codecs=vp8'
+    : (MediaRecorder.isTypeSupported('video/webm') ? 'video/webm' : '');
+  if (!mimeType) { cleanupAndClose(); return; }
+
+  recorder = new MediaRecorder(destStream, { mimeType, videoBitsPerSecond: 4_000_000 });
+  chunks = [];
+  recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+  recorder.start(100);
+  recording = true;
+  showRecordingHint();
+}
+
+function showRecordingHint() {
+  const hint = document.createElement('div');
+  hint.className = 'recording-hint';
+  hint.id = 'recordingHint';
+  hint.innerHTML = `
+    <span class="recording-dot"></span>
+    录屏中
+    <span class="recording-time">00:00</span>
+    <button type="button" class="recording-stop-btn">停止</button>
+  `;
+  document.body.appendChild(hint);
+
+  elapsed = 0;
+  timerInterval = setInterval(() => {
+    elapsed++;
+    const m = String(Math.floor(elapsed / 60)).padStart(2, '0');
+    const s = String(elapsed % 60).padStart(2, '0');
+    const t = hint.querySelector('.recording-time');
+    if (t) t.textContent = `${m}:${s}`;
+  }, 1000);
+
+  hint.querySelector('.recording-stop-btn').addEventListener('click', () => stopRecording(false));
+
+  document.addEventListener('keydown', function esc(e) {
+    if (e.key === 'Escape') {
+      e.preventDefault(); e.stopPropagation();
+      document.removeEventListener('keydown', esc, true);
+      stopRecording(false);
+    }
+  }, true);
+}
+
+async function stopRecording(cancel) {
+  if (!recording) return;
+  recording = false;
+
+  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+  const hint = document.getElementById('recordingHint');
+  if (hint) hint.remove();
+
+  // 通知 Rust 停止原生录屏
+  try { await invoke('api_stop_native_record'); } catch (_) {}
+
+  if (recorder && recorder.state !== 'inactive') {
+    recorder.stop();
+  }
+
+  // 等待最后一帧
+  await new Promise(res => setTimeout(res, 200));
+
+  if (cancel || chunks.length === 0) {
+    cleanupAndClose();
+    return;
+  }
+
+  // 先清空 DOM
+  document.body.innerHTML = '';
+
+  const mimeType = recorder?.mimeType || 'video/webm';
+  const blob = new Blob(chunks, { type: mimeType });
+  const reader = new FileReader();
+  reader.onload = () => {
+    const base64 = reader.result.split(',')[1];
+    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    invoke('recorder_result', {
+      imageBase64: base64,
+      action: 'save',
+      filename: `recording_${ts}.webm`
+    }).then(() => {
+      // Rust 已销毁窗口
+    }).catch(() => {
+      try { window.close(); } catch(_) {}
+    });
+  };
+  reader.readAsDataURL(blob);
+}
+
+function cleanupAndClose() {
+  recording = false;
+  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+  if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
+  overlay = null; canvas = null; ctx = null;
+  outCanvas = null; outCtx = null;
+  document.body.innerHTML = '';
+  closeRecorderWindow();
+}
+
+// 启动
+init();
+</script>
+</body>
+</html>

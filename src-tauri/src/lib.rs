@@ -8,11 +8,13 @@ pub mod app;
 pub mod converter;
 pub mod doc_views;
 pub mod frontmatter;
-pub mod graph;
+
+mod global_capture;
 pub mod handlers;
 pub mod ipc;
 pub mod license;
 pub mod rag;
+pub mod security;
 pub mod server;
 pub mod utils;
 
@@ -30,6 +32,7 @@ use std::os::windows::process::CommandExt;
 // 这些能力都在 tauri::AppHandle 上，而 axum 的 ServerState 不含 AppHandle。
 // 用 OnceLock 在 Tauri setup 时注入一次，此后全进程可安全获取。
 pub static APP_HANDLE: OnceLock<tauri::AppHandle> = OnceLock::new();
+pub static SERVER_PORT: OnceLock<u16> = OnceLock::new();
 
 // ── Tauri 应用入口 ────────────────────────────────────────
 /// 启动 Tauri 应用（Phase 5 纯原生模式）：
@@ -95,6 +98,15 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        // ── 全局快捷键：Alt+A 区域截图 / Alt+M 区域录屏（软件启动即生效，后台也能响应） ──
+        // 关键：NOT in Builder.with_shortcuts()！Builder.build() 内部注册失败会直接 panic（HotKey already registered），
+        // 导致软件完全无法启动。改为 plugin 只初始化 manager（零注册），setup 中用 on_shortcut() 逐个尝试，
+        // 失败只打日志 + 降级，永远不 crash。
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|_, _, _| {}) // placeholder，setup 中再注册真实 handler
+                .build(),
+        )
         .invoke_handler(tauri::generate_handler![
             // ── 导入/导出 原生对话框（旧 5 条） ──
             tauri_cmd::cmd_export_save_as,
@@ -149,11 +161,74 @@ pub fn run() {
             tauri_cmd::api_license_check,
             tauri_cmd::api_license_activate,
             tauri_cmd::api_license_deactivate,
+            // ── 原生录屏（xcap DXGI，零弹窗） ──
+            tauri_cmd::api_start_native_record,
+            tauri_cmd::api_stop_native_record,
+            // ── 原生截图（xcap GDI，零弹窗）：JS keydown 兜底 ──
+            tauri_cmd::api_trigger_screenshot,
+            tauri_cmd::api_trigger_record,
+            // ── 截图窗口 IPC（独立无边框透明全屏窗口） ──
+            tauri_cmd::screenshot_window_ready,
+            tauri_cmd::screenshot_get_file,
+            tauri_cmd::screenshot_result,
+            tauri_cmd::screenshot_ocr,
+            tauri_cmd::screenshot_window_close,
+            // ── 录屏窗口 IPC（独立无边框透明全屏窗口） ──
+            tauri_cmd::recorder_window_ready,
+            tauri_cmd::recorder_result,
+            tauri_cmd::recorder_window_close,
+            // ── 安全防护 ──
+            tauri_cmd::api_security_check,
+            tauri_cmd::api_security_init,
         ])
         .setup(move |app| -> Result<(), Box<dyn std::error::Error>> {
             // 注入全局 AppHandle 单例：HTTP handler（axum）需要弹原生对话框
             // （save-as / 打开文件 / 定位文件夹），必须通过此句柄调用 dialog plugin。
             let _ = APP_HANDLE.set(app.handle().clone());
+
+            // ── 安全防护初始化 ──
+            {
+                let integrity = crate::security::verify_binary_integrity();
+                let debugger = crate::security::check_debugger();
+                if !integrity {
+                    log::error!("[startup] 二进制完整性校验失败！软件可能被篡改");
+                }
+                if debugger {
+                    log::warn!("[startup] 检测到调试器/逆向工具附加");
+                }
+            }
+
+            // ── 全局快捷键注册（逐个 try，失败只降级不 panic） ──
+            // 不在 Builder.with_shortcuts() 阶段注册，因为 manager.register() 失败会导致
+            // PluginInitialization("HotKey already registered") 直接 crash。
+            {
+                use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
+                let gs = app.global_shortcut();
+                // Alt+A → 截图
+                // 直接在 Rust 端触发截图（不依赖前端 win.eval，窗口后台/最小化时也能工作）
+                let alt_a_ok = match gs.on_shortcut::<&str, _>("alt+a", |app, _sc, event| {
+                    if event.state != ShortcutState::Pressed { return; }
+                    let app_clone = app.clone();
+                    tauri::async_runtime::spawn_blocking(move || {
+                        crate::global_capture::trigger_screenshot(app_clone);
+                    });
+                }) {
+                    Ok(_) => { log::info!("[global-shortcut] Alt+A 注册成功"); true }
+                    Err(e) => { log::warn!("[global-shortcut] Alt+A 注册失败: {} → 降级 JS 快捷键", e); false }
+                };
+                // Alt+M → 录屏（独立窗口，不调起主窗口）
+                let alt_m_ok = match gs.on_shortcut::<&str, _>("alt+m", |app, _sc, event| {
+                    if event.state != ShortcutState::Pressed { return; }
+                    let app_clone = app.clone();
+                    tauri::async_runtime::spawn_blocking(move || {
+                        crate::global_capture::trigger_record(app_clone);
+                    });
+                }) {
+                    Ok(_) => { log::info!("[global-shortcut] Alt+M 注册成功"); true }
+                    Err(e) => { log::warn!("[global-shortcut] Alt+M 注册失败: {} → 降级 JS 快捷键", e); false }
+                };
+                let _ = app.emit("global-shortcut-status", serde_json::json!({"altA": alt_a_ok, "altM": alt_m_ok}));
+            }
 
             // 注册 IPC 共享状态：与 axum 共用同一 AppState+RAG，避免双缓存
             // (注意：共享 Arc 已通过 builder.manage 在 setup 前注册，此处仅保持可观测性)
@@ -203,6 +278,7 @@ pub fn run() {
                 match server::run(requested_port, state_for_server, rag_for_server).await {
                     Ok(bound) => {
                         let _ = server_port_tx.send(bound.port);
+                        let _ = crate::SERVER_PORT.set(bound.port);
                         // server::run 已经内部 tokio::spawn 了 axum.serve 循环，
                         // 这里 await 一个"永不结束的 sleep"让本 task 不退出
                         loop {
@@ -291,6 +367,15 @@ pub fn run() {
                     _ => log::warn!("[boot] splash_ready 超时，直接显示窗口"),
                 }
                 let _ = window_clone.show();
+
+                // 预创建截图/录屏窗口（隐藏），用户首次按快捷键时毫秒级响应
+                // 对标微信：软件启动时截图窗口就已就绪，按快捷键只做 show
+                let preload_app = window_clone.app_handle().clone();
+                let preload_port = real_port;
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                    crate::global_capture::precreate_windows(&preload_app, preload_port);
+                });
 
                 // Helper: 通过 JS 更新 splash 进度条 & 文本
                 let update_progress = |pct: u32, text: &str| -> String {
@@ -703,7 +788,19 @@ pub async fn cmd_export_save_as(
     let picked = rx.await.map_err(|_| "Dialog canceled (channel closed)".to_string())?;
     let Some(path) = picked else { return Ok(None); };
     let bytes = base64_decode(&data_base64).map_err(|e| format!("base64 decode failed: {}", e))?;
-    std::fs::write(&path, bytes).map_err(|e| format!("write failed: {}", e))?;
+    // 原子写入：先写 .tmp 再 rename，避免写一半进程被杀留下坏文件
+    let tmp_path = format!("{}.tmp", path);
+    if let Some(parent) = std::path::Path::new(&path).parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    std::fs::write(&tmp_path, &bytes).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp_path);
+        format!("write failed: {}", e)
+    })?;
+    std::fs::rename(&tmp_path, &path).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp_path);
+        format!("rename failed: {}", e)
+    })?;
     Ok(Some(path))
 }
 
@@ -741,7 +838,554 @@ pub async fn cmd_import_read_file(path: String) -> Result<serde_json::Value, Str
     let b64 = base64_encode(&buf);
     let name = std::path::Path::new(&path).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
     let ext = std::path::Path::new(&path).extension().map(|e| e.to_string_lossy().to_string()).unwrap_or_default();
-    Ok(serde_json::json!({ "ok": true, "name": name, "ext": ext, "size": size, "base64": b64 }))
+    let ext_lower = ext.to_lowercase();
+
+    // 根据扩展名决定返回 text 还是 converted_markdown，对齐前端 addImportFiles 的期望：
+    //   - 文本类（md/txt/html/json/csv）→ text 字段
+    //   - docx/doc/odt/rtf → converted_markdown 字段（提取正文文本）
+    //   - 其他（pdf/pptx/xlsx/epub 等二进制）→ 仅 base64，前端走 /api/import
+    let text_ext = ["md", "markdown", "txt", "html", "htm", "json", "csv"];
+    let converted_ext = ["docx", "doc", "odt", "rtf"];
+
+    let mut result = serde_json::json!({ "ok": true, "name": name, "ext": ext, "size": size, "base64": b64 });
+
+    if text_ext.contains(&ext_lower.as_str()) {
+        // 文本类：尝试 UTF-8 解码，失败则尝试 GBK 兜底（Windows 中文 txt 常见）
+        let text = match String::from_utf8(buf.clone()) {
+            Ok(s) => s,
+            Err(_) => {
+                // GBK 解码兜底（encoding_rs::decode 返回 (Cow<str>, &Encoding, bool)，不返回 Result）
+                let (cow, _enc, _had_malformed) = encoding_rs::GBK.decode(&buf);
+                cow.into_owned()
+            }
+        };
+        result.as_object_mut().unwrap().insert("text".to_string(), serde_json::Value::String(text));
+    } else if converted_ext.contains(&ext_lower.as_str()) {
+        // docx/doc/odt/rtf：提取正文文本
+        let extracted = if ext_lower == "rtf" {
+            extract_text_from_rtf(&buf)
+        } else {
+            extract_text_from_office(&buf, &ext_lower)
+        };
+        if let Some(md) = extracted {
+            result.as_object_mut().unwrap().insert("converted_markdown".to_string(), serde_json::Value::String(md));
+        }
+    }
+
+    Ok(result)
+}
+
+/// 从 docx/doc/odt 的 zip 包中提取正文文本，转为简单的 Markdown 字符串。
+pub fn extract_text_from_office(bytes: &[u8], ext: &str) -> Option<String> {
+    use std::io::{Cursor, Read};
+    log::info!("[extract_office] 开始提取，ext={}, bytes_len={}", ext, bytes.len());
+    let cursor = Cursor::new(bytes);
+    let mut zip = match zip::ZipArchive::new(cursor) {
+        Ok(z) => z,
+        Err(e) => {
+            log::warn!("[extract_office] zip 打开失败: {}", e);
+            return None;
+        }
+    };
+
+    // 选择要读取的内部文件
+    let inner_path = match ext {
+        "docx" | "doc" => "word/document.xml",
+        "odt" => "content.xml",
+        _ => return None,
+    };
+    log::info!("[extract_office] 读取内部文件: {}", inner_path);
+
+    let mut entry = match zip.by_name(inner_path) {
+        Ok(e) => e,
+        Err(e) => {
+            log::warn!("[extract_office] 内部文件 {} 不存在: {}", inner_path, e);
+            return None;
+        }
+    };
+
+    let mut xml = String::new();
+    if entry.read_to_string(&mut xml).is_err() {
+        // 尝试 UTF-8 lossy
+        let mut buf = Vec::new();
+        if entry.read_to_end(&mut buf).is_err() { return None; }
+        xml = String::from_utf8_lossy(&buf).into_owned();
+    }
+
+    // 提取正文：docx 用 <w:t>，odt 用 <text:p>
+    // 段落分隔：docx </w:p> 或 odt </text:p> 后加换行
+    let mut md = String::new();
+    if ext == "docx" || ext == "doc" {
+        // 先按段落分割
+        let paragraphs: Vec<&str> = xml.split("</w:p>").collect();
+        let mut in_table = false;
+        let mut cell_count_in_row = 0;
+        for para in paragraphs {
+            // 检测表格上下文
+            if para.contains("<w:tbl") || para.contains("<w:tblPr") {
+                in_table = true;
+            }
+
+            // 提取所有 <w:t>...</w:t> 内容
+            let mut para_text = String::new();
+            let mut rest = para;
+            while let Some(start) = rest.find("<w:t") {
+                if let Some(gt) = rest[start..].find('>') {
+                    let tag_end = start + gt + 1;
+                    if let Some(end) = rest[tag_end..].find("</w:t>") {
+                        let text = &rest[tag_end..tag_end + end];
+                        if !text.contains('<') {
+                            para_text.push_str(text);
+                        }
+                        rest = &rest[tag_end + end + 6..];
+                    } else { break; }
+                } else { break; }
+            }
+
+            // 检测标题样式：<w:pStyle w:val="Heading1"/> 等
+            let heading_level = extract_heading_level(para);
+            let is_table_cell = para.contains("</w:tc>");
+            let is_table_row_end = para.contains("</w:tr>");
+
+            if !para_text.trim().is_empty() {
+                if let Some(level) = heading_level {
+                    let prefix = "#".repeat(level);
+                    md.push_str(&format!("{} {}\n", prefix, para_text.trim()));
+                } else if in_table {
+                    // 表格内：单元格内容用 | 分隔
+                    md.push_str(para_text.trim());
+                    if is_table_cell {
+                        md.push_str(" | ");
+                        cell_count_in_row += 1;
+                    }
+                    if is_table_row_end {
+                        // 行结束：添加表头分隔行（第一行后）
+                        md.push('\n');
+                        if cell_count_in_row > 0 {
+                            // 在第一行后插入 Markdown 表格分隔
+                            let sep = " --- |".repeat(cell_count_in_row);
+                            // 只在第一次行结束时添加分隔
+                            if !md.contains("--- |") {
+                                md.push_str(&sep);
+                                md.push('\n');
+                            }
+                        }
+                        cell_count_in_row = 0;
+                    }
+                } else {
+                    md.push_str(&para_text);
+                    md.push('\n');
+                }
+            } else if is_table_row_end && in_table {
+                md.push('\n');
+                cell_count_in_row = 0;
+            }
+
+            if para.contains("</w:tbl>") {
+                in_table = false;
+                if !md.ends_with('\n') {
+                    md.push('\n');
+                }
+            }
+        }
+    } else if ext == "odt" {
+        // ODT: 先提取 <text:p>...</text:p> 中的文本
+        // 文本可能在 <text:span> 内也可能直接在 <text:p> 下
+        let paragraphs: Vec<&str> = xml.split("</text:p>").collect();
+        for para in paragraphs {
+            let mut para_text = String::new();
+
+            // 方法1：提取 <text:span>...</text:span> 内的文本
+            let mut rest = para;
+            while let Some(start) = rest.find("<text:span") {
+                if let Some(gt) = rest[start..].find('>') {
+                    let tag_end = start + gt + 1;
+                    if let Some(end) = rest[tag_end..].find("</text:span>") {
+                        let text = &rest[tag_end..tag_end + end];
+                        // 提取纯文本（可能内嵌 <text:tab/> 等）
+                        let clean = strip_xml_tags(text);
+                        if !clean.is_empty() {
+                            para_text.push_str(&clean);
+                        }
+                        rest = &rest[tag_end + end + 12..];
+                    } else { break; }
+                } else { break; }
+            }
+
+            // 方法2：如果 span 内没提取到，尝试直接提取 <text:p> 标签后的文本
+            if para_text.trim().is_empty() {
+                // 找到 <text:p ...> 标签结束后，提取所有非标签文本
+                if let Some(p_start) = para.find("<text:p") {
+                    if let Some(gt) = para[p_start..].find('>') {
+                        let content_start = p_start + gt + 1;
+                        let content = &para[content_start..];
+                        let clean = strip_xml_tags(content);
+                        if !clean.trim().is_empty() {
+                            para_text = clean;
+                        }
+                    }
+                }
+            }
+
+            // 检测标题样式：<text:h text:outline-level="1">
+            let heading_level = if para.contains("<text:h") {
+                extract_odt_heading_level(para)
+            } else {
+                None
+            };
+
+            if !para_text.trim().is_empty() {
+                if let Some(level) = heading_level {
+                    let prefix = "#".repeat(level);
+                    md.push_str(&format!("{} {}\n", prefix, para_text.trim()));
+                } else {
+                    md.push_str(&para_text);
+                    md.push('\n');
+                }
+            }
+        }
+    }
+
+    if md.trim().is_empty() {
+        log::warn!("[extract_office] 提取的文本为空，xml_len={}", xml.len());
+        None
+    } else {
+        log::info!("[extract_office] 提取成功，md_len={}", md.len());
+        Some(md.trim_end().to_string())
+    }
+}
+
+/// 从 DOCX 段落 XML 中检测标题级别（1-6），返回 None 表示非标题
+fn extract_heading_level(para_xml: &str) -> Option<usize> {
+    // 查找 <w:pStyle w:val="Heading1"/> 或 w:val="Heading 1" 等模式
+    if let Some(ps_start) = para_xml.find("<w:pStyle") {
+        if let Some(val_start) = para_xml[ps_start..].find("w:val=\"") {
+            let vstart = ps_start + val_start + 6;
+            if let Some(end) = para_xml[vstart..].find('"') {
+                let style = &para_xml[vstart..vstart + end];
+                let lower = style.to_lowercase();
+                // 匹配 "Heading1" / "Heading 1" / "heading1" 等
+                if let Some(hpos) = lower.find("heading") {
+                    let num_str = &style[hpos + 7..].trim_start_matches(' ');
+                    if let Ok(level) = num_str.parse::<usize>() {
+                        if level >= 1 && level <= 6 {
+                            return Some(level);
+                        }
+                    }
+                }
+                // 也匹配 "Title" → 1 级标题
+                if lower == "title" {
+                    return Some(1);
+                }
+            }
+        }
+    }
+    None
+}
+
+/// 从 ODT 段落 XML 中检测标题级别
+fn extract_odt_heading_level(para_xml: &str) -> Option<usize> {
+    // ODT 使用 <text:h text:outline-level="1">
+    if para_xml.contains("<text:h") {
+        if let Some(ol_start) = para_xml.find("text:outline-level=\"") {
+            let vstart = ol_start + 20;
+            if let Some(end) = para_xml[vstart..].find('"') {
+                let num_str = &para_xml[vstart..vstart + end];
+                if let Ok(level) = num_str.parse::<usize>() {
+                    if level >= 1 && level <= 6 {
+                        return Some(level);
+                    }
+                }
+            }
+        }
+        // 默认 1 级标题
+        return Some(1);
+    }
+    None
+}
+
+/// 去除 XML 标签，保留纯文本
+fn strip_xml_tags(s: &str) -> String {
+    let mut result = String::new();
+    let mut in_tag = false;
+    for c in s.chars() {
+        if c == '<' {
+            in_tag = true;
+        } else if c == '>' {
+            in_tag = false;
+        } else if !in_tag {
+            result.push(c);
+        }
+    }
+    result
+}
+
+/// 从 RTF（Rich Text Format）文件中提取纯文本，转为简单 Markdown。
+/// RTF 不是 ZIP 包，而是带控制字的文本格式，需要逐字符解析。
+pub fn extract_text_from_rtf(bytes: &[u8]) -> Option<String> {
+    // RTF 是 ASCII 兼容的，但可能含高位字节（非 Unicode 直接编码）
+    // 优先尝试 UTF-8，失败则用 Latin-1（RTF 的 \uNNNN 才是真正的 Unicode 字符）
+    let rtf = match std::str::from_utf8(bytes) {
+        Ok(s) => s.to_string(),
+        Err(_) => bytes.iter().map(|&b| b as char).collect(),
+    };
+
+    if !rtf.starts_with("{\\rtf") {
+        log::warn!("[extract_rtf] 不是有效的 RTF 文件（缺少 {{\\rtf 头）");
+        return None;
+    }
+
+    let chars: Vec<char> = rtf.chars().collect();
+    let mut i = 0usize;
+    let n = chars.len();
+    let mut text = String::new();
+    let mut skip_destination = 0i32; // >0 表示在跳过的 destination 组深度
+    let mut group_depth = 0i32;
+
+    while i < n {
+        let c = chars[i];
+
+        match c {
+            '{' => {
+                group_depth += 1;
+                i += 1;
+                // 检查紧跟的是否是 destination 控制字（如 \fonttbl, \stylesheet, \colortbl, \pict, \object 等）
+                // 这些 destination 的内容应该跳过
+                if i < n && chars[i] == '\\' {
+                    // 处理 \*\xxx —— RTF 可选 destination（如 \*\shppict, \*\datastore）
+                    // 不认识的 \* 目标一律跳过整个组
+                    if i + 1 < n && chars[i + 1] == '*' {
+                        skip_destination = group_depth;
+                        i += 2; // 跳过 \*
+                        // 消费可选的空格
+                        if i < n && chars[i] == ' ' { i += 1; }
+                        // 也消费控制字（如 shppict）
+                        let (_, consumed) = read_rtf_control_word(&chars, i);
+                        i += consumed;
+                        continue;
+                    }
+                    let (control, consumed) = read_rtf_control_word(&chars, i + 1);
+                    if is_skip_destination(&control) {
+                        skip_destination = group_depth;
+                    }
+                    i += 1 + consumed; // 跳过 \ 和控制字
+                    continue;
+                }
+            }
+            '}' => {
+                if skip_destination > 0 && group_depth <= skip_destination {
+                    skip_destination = 0;
+                }
+                group_depth -= 1;
+                if group_depth < 0 { group_depth = 0; }
+                i += 1;
+            }
+            '\\' => {
+                i += 1;
+                if i >= n { break; }
+
+                // 转义字符 \\ \{ \}
+                let nc = chars[i];
+                if nc == '\\' || nc == '{' || nc == '}' {
+                    if skip_destination == 0 {
+                        text.push(nc);
+                    }
+                    i += 1;
+                    continue;
+                }
+
+                // 十六进制字节 \'XX
+                if nc == '\'' {
+                    if i + 2 < n {
+                        let hex: String = chars[i + 1..i + 3].iter().collect();
+                        if let Ok(byte_val) = u8::from_str_radix(&hex, 16) {
+                            if skip_destination == 0 {
+                                // 将单字节按 Windows-1252 解码
+                                let ch = byte_val as char;
+                                text.push(ch);
+                            }
+                        }
+                        i += 3;
+                        continue;
+                    }
+                    i += 1;
+                    continue;
+                }
+
+                // 控制字：字母序列 + 可选数字参数
+                let (control, param, consumed) = read_rtf_control_word_with_param(&chars, i);
+                i += consumed;
+
+                if skip_destination > 0 {
+                    continue;
+                }
+
+                match control.as_str() {
+                    "par" | "line" => {
+                        text.push('\n');
+                    }
+                    "tab" => {
+                        text.push('\t');
+                    }
+                    "page" | "pagebb" => {
+                        text.push_str("\n\n---\n\n");
+                    }
+                    "u" => {
+                        // \uNNNN? — Unicode 字符，NNNN 是有符号十进制
+                        if let Some(code) = param {
+                            let unichar = char::from_u32((code & 0xFFFF) as u32);
+                            if let Some(ch) = unichar {
+                                text.push(ch);
+                            }
+                            // 跳过紧跟的 1 个字符（RTF 规范中的 ANSI fallback 字符）
+                            if i < n && chars[i] != '\\' && chars[i] != '{' && chars[i] != '}' {
+                                i += 1;
+                            }
+                        }
+                    }
+                    "emdash" => text.push_str("—"),
+                    "endash" => text.push_str("–"),
+                    "lquote" | "ldblquote" => text.push('‘'),
+                    "rquote" | "rdblquote" => text.push('’'),
+                    "bullet" => text.push('•'),
+                    "nbsp" => text.push('\u{00A0}'),
+                    "plain" | "pard" | "intbl" | "ltrpar" | "rtlpar" => {
+                        // 格式控制，不影响文本
+                    }
+                    "b" | "i" | "ul" | "strike" | "caps" | "scaps" | "sub" | "super" | "nosupersub" => {
+                        // 字符格式控制，忽略（参数 0 表示关闭）
+                    }
+                    "fs" | "f" | "cf" | "cb" | "chcbpat" => {
+                        // 字体大小/颜色，忽略
+                    }
+                    "ql" | "qc" | "qr" | "qj" | "li" | "ri" | "fi" | "sa" | "sb" | "sl" => {
+                        // 段落格式，忽略
+                    }
+                    "cell" => {
+                        // 表格单元格分隔
+                        text.push('\t');
+                    }
+                    "row" => {
+                        // 表格行结束
+                        if !text.ends_with('\n') {
+                            text.push('\n');
+                        }
+                    }
+                    "trowd" | "rowt" | "nestcell" | "nestrow" => {
+                        // 嵌套表格控制
+                    }
+                    "rtf" => {
+                        // \rtf 主控制字，已识别开头
+                    }
+                    "ansi" | "mac" | "pc" | "pca" => {
+                        // 字符集声明
+                    }
+                    "deff" | "stshfdbch" | "stshfloch" | "stshfhid" | "stshfltr" => {
+                        // 默认字体
+                    }
+                    _ => {
+                        // 其他未知控制字，忽略
+                        // 如果控制字后面有参数但没被 consumed 处理，参数已被 read_rtf_control_word_with_param 提取
+                    }
+                }
+            }
+            _ => {
+                // 普通字符
+                if skip_destination == 0 {
+                    // 控制字后的空格是分隔符，跳过
+                    if c == ' ' && i > 0 && chars[i - 1] == '\\' {
+                        // 这是控制字后的分隔空格，跳过
+                        // 但前面已经通过 consumed 处理了，这里不该到达
+                    }
+                    text.push(c);
+                }
+                i += 1;
+            }
+        }
+    }
+
+    // 清理多余空行
+    let mut result = String::new();
+    let mut prev_blank = false;
+    for line in text.lines() {
+        let blank = line.trim().is_empty();
+        if blank && prev_blank {
+            continue;
+        }
+        prev_blank = blank;
+        result.push_str(line);
+        result.push('\n');
+    }
+
+    let trimmed = result.trim().to_string();
+    if trimmed.is_empty() {
+        log::warn!("[extract_rtf] 提取的文本为空");
+        None
+    } else {
+        log::info!("[extract_rtf] 提取成功，text_len={}", trimmed.len());
+        Some(trimmed)
+    }
+}
+
+/// 读取 RTF 控制字（字母序列），返回 (控制字, consumed_chars)
+/// 从 chars[start] 开始读取连续的字母 a-zA-Z
+fn read_rtf_control_word(chars: &[char], start: usize) -> (String, usize) {
+    let mut i = start;
+    let mut word = String::new();
+    while i < chars.len() && chars[i].is_ascii_alphabetic() {
+        word.push(chars[i]);
+        i += 1;
+    }
+    // 消费一个可选的空格分隔符
+    if i < chars.len() && chars[i] == ' ' {
+        i += 1;
+    }
+    (word, i - start)
+}
+
+/// 读取 RTF 控制字 + 可选数字参数，返回 (控制字, Option<参数>, consumed_chars)
+fn read_rtf_control_word_with_param(chars: &[char], start: usize) -> (String, Option<i32>, usize) {
+    let mut i = start;
+    let mut word = String::new();
+    while i < chars.len() && chars[i].is_ascii_alphabetic() {
+        word.push(chars[i]);
+        i += 1;
+    }
+
+    // 读取可选的数字参数（可带负号）
+    let mut param = None;
+    let param_start = i;
+    if i < chars.len() && (chars[i] == '-' || chars[i].is_ascii_digit()) {
+        if chars[i] == '-' {
+            i += 1;
+        }
+        let num_start = i;
+        while i < chars.len() && chars[i].is_ascii_digit() {
+            i += 1;
+        }
+        if i > num_start || (param_start < chars.len() && chars[param_start] == '-' && i > param_start + 1) {
+            let num_str: String = chars[param_start..i].iter().collect();
+            param = num_str.parse::<i32>().ok();
+        }
+    }
+
+    // 消费一个可选的空格分隔符
+    if i < chars.len() && chars[i] == ' ' {
+        i += 1;
+    }
+
+    (word, param, i - start)
+}
+
+/// 判断 RTF destination 是否需要跳过（不提取文本）
+fn is_skip_destination(control: &str) -> bool {
+    matches!(
+        control,
+        "fonttbl" | "stylesheet" | "colortbl" | "pict" | "object" | "header"
+        | "footer" | "info" | "fldinst" | "rsidtbl" | "filetbl" | "listtable"
+        | "listoverridetable" | "pgptbl" | "redist" | "themedata" | "datastore"
+        | " latentstyles" | "lsdlockedexcepts"
+    )
 }
 
 fn open_path_in_system(p: &str) -> Result<(), String> {
@@ -1000,4 +1644,187 @@ pub async fn api_license_deactivate(s: Srv<'_>) -> Result<serde_json::Value, Str
     Ok(crate::ipc::license_deactivate(&s).await)
 }
 
-} // pub mod tauri_cmdmd
+// ── 原生录屏（xcap DXGI Desktop Duplication，零弹窗） ──
+#[tauri::command]
+pub async fn api_start_native_record(app_handle: tauri::AppHandle) -> Result<(), String> {
+    crate::global_capture::start_native_record(app_handle)
+}
+#[tauri::command]
+pub async fn api_stop_native_record() -> Result<(), String> {
+    crate::global_capture::stop_native_record()
+}
+// ── 原生截图（xcap GDI，零弹窗）：前端 JS keydown 兜底触发 ──
+// 当 global-shortcut 注册失败（Alt+A 被占用）时，前端在软件前台按 Alt+A 仍可调用此命令抓屏。
+#[tauri::command]
+pub async fn api_trigger_screenshot(app_handle: tauri::AppHandle) -> Result<(), String> {
+    // trigger_screenshot 内含 xcap 同步抓屏，必须在 blocking 线程中运行
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::global_capture::trigger_screenshot(app_handle);
+    });
+    Ok(())
+}
+
+/// JS keydown 兜底触发录屏（global-shortcut 注册失败时使用）
+#[tauri::command]
+pub async fn api_trigger_record(app_handle: tauri::AppHandle) -> Result<(), String> {
+    crate::global_capture::trigger_record(app_handle);
+    Ok(())
+}
+
+// ── 截图窗口 IPC 命令（独立无边框透明全屏窗口） ──
+
+/// 截图窗口前端加载完成，通知 Rust 发送截图数据并显示窗口
+#[tauri::command]
+pub async fn screenshot_window_ready(app_handle: tauri::AppHandle) -> Result<(), String> {
+    crate::global_capture::on_screenshot_window_ready(&app_handle);
+    Ok(())
+}
+
+/// 前端主动拉取截图文件内容（避免通过 IPC 事件传递大 base64）
+#[tauri::command]
+pub async fn screenshot_get_file(file_path: String) -> Result<serde_json::Value, String> {
+    use base64::Engine;
+    let bytes = std::fs::read(&file_path)
+        .map_err(|e| format!("读取文件失败: {}", e))?;
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+    Ok(serde_json::json!({
+        "dataUrl": format!("data:image/png;base64,{}", b64),
+        "size": bytes.len(),
+    }))
+}
+
+/// 截图窗口返回结果（标注后的图片）
+#[tauri::command]
+pub async fn screenshot_result(
+    app_handle: tauri::AppHandle,
+    image_base64: String,
+    action: String,
+) -> Result<(), String> {
+    // 无论处理成功与否，都必须销毁截图窗口，否则遮罩会卡住屏幕
+    let result = crate::global_capture::handle_screenshot_result(&app_handle, image_base64, action);
+    crate::global_capture::close_screenshot_window(&app_handle);
+    result
+}
+
+/// 截图窗口请求 OCR 识别
+#[tauri::command]
+pub async fn screenshot_ocr(image_base64: String) -> Result<serde_json::Value, String> {
+    use base64::Engine;
+
+    let bytes = base64::engine::general_purpose::STANDARD.decode(&image_base64)
+        .map_err(|e| format!("base64 解码失败: {}", e))?;
+
+    let temp_path = std::env::temp_dir().join(format!("mt_ocr_{}.png", std::process::id()));
+    std::fs::write(&temp_path, &bytes).map_err(|e| format!("写入临时文件失败: {}", e))?;
+
+    let ps_script = format!(
+        r#"
+$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.Runtime.WindowsRuntime
+$asTaskGeneric = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object {{
+    $_.Name -eq 'AsTask' -and
+    $_.GetParameters().Count -eq 1 -and
+    $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1'
+}})[0]
+function Await($Op, $ResultType) {{
+    $method = $asTaskGeneric.MakeGenericMethod($ResultType)
+    $task = $method.Invoke($null, @($Op))
+    $task.Wait(30000) | Out-Null
+    $task.Result
+}}
+try {{
+    $stream = [System.IO.File]::OpenRead('{}')
+    $winStream = $stream.AsRandomAccessStream()
+    $decoder = Await ([Windows.Graphics.Imaging.BitmapDecoder, Windows.Graphics.Imaging, ContentType=WindowsRuntime]::CreateAsync($winStream)) ([Windows.Graphics.Imaging.BitmapDecoder])
+    $engine = [Windows.Media.Ocr.OcrEngine, Windows.Media.Ocr, ContentType=WindowsRuntime]::TryCreateFromUserProfileLanguages()
+    if (-not $engine) {{ $engine = [Windows.Media.Ocr.OcrEngine, Windows.Media.Ocr, ContentType=WindowsRuntime]::TryCreateFromLanguage('zh-Hans-CN') }}
+    if (-not $engine) {{ $engine = [Windows.Media.Ocr.OcrEngine, Windows.Media.Ocr, ContentType=WindowsRuntime]::TryCreateFromLanguage('en-US') }}
+    if (-not $engine) {{ Write-Error 'OCR engine unavailable'; exit 1 }}
+    $result = Await ($engine.RecognizeAsync($decoder)) ([Windows.Media.Ocr.OcrResult])
+    $stream.Dispose()
+    [Console]::Out.Write($result.Text)
+}} catch {{
+    Write-Error $_.Exception.Message
+    exit 1
+}}
+"#,
+        temp_path.display()
+    );
+
+    let output = std::process::Command::new("powershell")
+        .args(["-NoProfile", "-NonInteractive", "-Command", &ps_script])
+        .output()
+        .map_err(|e| format!("启动 PowerShell 失败: {}", e))?;
+
+    let _ = std::fs::remove_file(&temp_path);
+
+    if output.status.success() {
+        let text = String::from_utf8_lossy(&output.stdout).to_string();
+        Ok(serde_json::json!({ "text": text }))
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        log::warn!("[OCR] PowerShell 失败: {}", stderr);
+        Err("OCR 识别失败，请确认已安装 OCR 语言包".to_string())
+    }
+}
+
+/// 关闭截图窗口
+#[tauri::command]
+pub async fn screenshot_window_close(app_handle: tauri::AppHandle) -> Result<(), String> {
+    crate::global_capture::close_screenshot_window(&app_handle);
+    Ok(())
+}
+
+// ── 录屏窗口 IPC 命令 ──
+
+/// 录屏窗口前端加载完成，通知 Rust 显示窗口
+#[tauri::command]
+pub async fn recorder_window_ready(app_handle: tauri::AppHandle) -> Result<(), String> {
+    crate::global_capture::on_recorder_window_ready(&app_handle);
+    Ok(())
+}
+
+/// 录屏窗口返回结果（WebM 视频）
+#[tauri::command]
+pub async fn recorder_result(
+    app_handle: tauri::AppHandle,
+    image_base64: String,
+    action: String,
+    filename: String,
+) -> Result<(), String> {
+    // 无论处理成功与否，都必须销毁录屏窗口
+    let result = crate::global_capture::handle_recorder_result(&app_handle, image_base64, action, filename);
+    crate::global_capture::close_recorder_window(&app_handle);
+    result
+}
+
+/// 关闭录屏窗口
+#[tauri::command]
+pub async fn recorder_window_close(app_handle: tauri::AppHandle) -> Result<(), String> {
+    crate::global_capture::close_recorder_window(&app_handle);
+    Ok(())
+}
+
+// ── 安全防护 IPC 命令 ──
+
+/// 启动时安全初始化
+#[tauri::command]
+pub async fn api_security_init() -> Result<serde_json::Value, String> {
+    let integrity = crate::security::verify_binary_integrity();
+    let debugger = crate::security::check_debugger();
+    Ok(serde_json::json!({
+        "integrityOk": integrity,
+        "debuggerDetected": debugger,
+        "secure": integrity && !debugger,
+    }))
+}
+
+/// 运行时安全检查（前端周期调用）
+#[tauri::command]
+pub async fn api_security_check(s: Srv<'_>) -> Result<serde_json::Value, String> {
+    let data_root = s.app.data_root.clone();
+    let status = crate::security::runtime_security_check(&data_root);
+    Ok(serde_json::to_value(&status).map_err(|e| e.to_string())?)
+}
+
+} // pub mod tauri_cmd

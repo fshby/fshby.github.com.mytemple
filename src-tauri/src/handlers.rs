@@ -5,7 +5,7 @@
 // Unimplemented endpoints are handled by the sidecar proxy in server.rs.
 
 use axum::{
-    extract::{Path, Query, State},
+    extract::{DefaultBodyLimit, Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{delete, get, post},
@@ -17,10 +17,50 @@ use std::sync::Arc;
 use std::os::windows::process::CommandExt;
 use crate::server::ServerState;
 
-// ── 重导出：ipc.rs 的 get_version 需要调用 handlers 内部的 fetch_remote_version
+// ── 重导出：ipc.rs 的 get_version 需要调用 handlers 内部的 fetch_remote_version_pub()
 pub async fn fetch_remote_version_pub() -> Result<serde_json::Value, String> {
     fetch_remote_version().await
 }
+
+// ── AI 格式强约束常量：MyTemple 支持渲染的图表/思维导图/图标格式 ──
+// 所有 AI 调用的 system prompt 都会注入此段，确保 AI 输出格式与前端渲染能力对齐。
+// 禁止 PlantUML、draw.io XML、Graphviz DOT、ASCII 假装图 等前端无法渲染的格式。
+const AI_DIAGRAM_FORMAT_RULE: &str = r#"
+【图表/思维导图/图标格式强约束 — 必须 100% 遵守】
+当用户请求生成图表、思维导图、流程图、架构图、时序图、甘特图、类图、状态图、关系图、旅程图、Git 图、图标、插画、数据可视化或任何图形内容时，你必须使用以下格式之一（按优先级排序）：
+
+1. Mermaid（首选）：使用 ```mermaid fenced code block 包裹，语法必须是 Mermaid 官方规范。支持的类型：
+   - 思维导图 → mindmap
+   - 流程图/架构图 → flowchart TD / LR
+   - 时序图 → sequenceDiagram
+   - 甘特图 → gantt
+   - 类图 → classDiagram
+   - 状态图 → stateDiagram-v2
+   - 实体关系图 → erDiagram
+   - 用户旅程 → journey
+   - Git 分支 → gitGraph
+   - 饼图 → pie
+   - 时间线 → timeline
+
+2. HTML 内嵌图表（当需要交互式/动画/复杂数据可视化时）：
+   使用 ```html-inline fenced code block，内部写完整 HTML，可引入 Chart.js / ECharts / SVG / Canvas。
+   禁止使用外部图片 URL（可能无法加载）。SVG 图标直接写 <svg>...</svg> 标签。
+
+3. Excalidraw 绘图（手绘风格）：
+   使用 ```excalidraw fenced code block，内部是 Excalidraw 兼容的 JSON 格式对象。
+
+【绝对禁止】
+- 禁止输出 PlantUML（@startuml…@enduml）— 前端无法渲染
+- 禁止输出 draw.io / diagrams.net 原始 XML — 前端无法渲染
+- 禁止输出 Graphviz DOT 语法 — 前端无法渲染
+- 禁止用 ASCII 字符（+、-、|、┌、┐、└、┘ 等）假装画思维导图/图表
+- 禁止输出需要外部服务渲染的 Markdown 扩展语法
+
+【输出要求】
+- 只输出 fence block 内的内容，不要额外解释文字
+- Mermaid 关键字必须小写（flowchart 不是 FlowChart）
+- 输出前自检：我用的格式是否在上列 1/2/3 中？是则继续，否则立即替换
+"#;
 
 // ── 通用响应封装 ──────────────────────────────────────────
 
@@ -111,16 +151,16 @@ pub fn build_native_router(state: Arc<ServerState>) -> Router {
         .route("/api/ai/query", post(ai_query))
         .route("/api/ai/transform", post(ai_transform))
         // 资源管理
-        .route("/api/asset", post(upload_asset))
+        .route("/api/asset", post(upload_asset).layer(DefaultBodyLimit::max(50 * 1024 * 1024)))
         .route("/api/asset/delete", post(delete_asset))
         // 资源文件服务
         .route("/source/*path", get(serve_source))
         .route("/ws-asset/:ws_id/*relative", get(serve_ws_asset))
         // Import/Export
-        .route("/api/import", post(import_document))
+        .route("/api/import", post(import_document).layer(DefaultBodyLimit::max(50 * 1024 * 1024)))
         .route("/api/export", post(export_document))
         // 原生对话框导出（External URL 模式下替代 Tauri IPC）
-        .route("/api/export/save-as", post(export_save_as_http))
+        .route("/api/export/save-as", post(export_save_as_http).layer(DefaultBodyLimit::max(200 * 1024 * 1024)))
         .route("/api/export/open-file", post(export_open_file_http))
         .route("/api/export/reveal-folder", post(export_reveal_in_folder_http))
         // 语义标签
@@ -132,8 +172,8 @@ pub fn build_native_router(state: Arc<ServerState>) -> Router {
         .route("/api/agent/policy/create", post(create_agent_policy))
         // 更新检查
         .route("/api/update/check", post(check_update))
-        // 视频上传
-        .route("/api/upload-video", post(upload_video))
+        // 视频上传（base64 编码后体积膨胀 ~33%，100MB 原始视频 ≈ 133MB payload）
+        .route("/api/upload-video", post(upload_video).layer(DefaultBodyLimit::max(200 * 1024 * 1024)))
         // 工作区粘贴
         .route("/api/workspaces/paste", post(paste_workspace))
         // 目录浏览
@@ -147,6 +187,22 @@ pub fn build_native_router(state: Arc<ServerState>) -> Router {
         .route("/api/license/check", get(license_check))
         .route("/api/license/activate", post(license_activate))
         .route("/api/license/deactivate", post(license_deactivate))
+        // 截图触发（HTTP 模式下替代 Tauri IPC，前端通过 fetch 调用）
+        .route("/api/screenshot/trigger", post(screenshot_trigger))
+        // 截图背景图：GET 返回 PNG 二进制（最可靠方案，不依赖 IPC）
+        .route("/api/screenshot/bg", get(screenshot_bg_http))
+        // 截图版本号：前端轮询检测是否有新截图
+        .route("/api/screenshot/version", get(screenshot_version_http))
+        // 截图心跳：前端每 2 秒发送，后端检测卡死
+        .route("/api/screenshot/heartbeat", post(screenshot_heartbeat_http))
+        // 截图窗口就绪信号（HTTP：前端图片加载完成后通知后端 show 窗口）
+        .route("/api/screenshot/ready", post(screenshot_ready_http))
+        // 截图窗口关闭信号
+        .route("/api/screenshot/close", post(screenshot_close_http))
+        // 截图 OCR 文字识别（调用 Windows.Media.Ocr）
+        .route("/api/screenshot/ocr", post(screenshot_ocr).layer(DefaultBodyLimit::max(10 * 1024 * 1024)))
+        // 安全防护
+        .route("/api/security/check", get(security_check))
         .with_state(state)
 }
 
@@ -1107,11 +1163,14 @@ async fn ai_query(
         .collect::<Vec<_>>()
         .join("\n\n---\n\n");
 
-    let system_prompt = "你是一个知识库助手。根据以下检索到的文档片段回答用户问题。\
-        如果文档片段中没有相关信息，请如实说明。回答时引用来源编号。";
+    let system_prompt = format!(
+        "你是一个知识库助手。根据以下检索到的文档片段回答用户问题。\
+        如果文档片段中没有相关信息，请如实说明。回答时引用来源编号。{}",
+        AI_DIAGRAM_FORMAT_RULE
+    );
     let user_prompt = format!("检索到的文档片段：\n\n{}\n\n用户问题：{}", context, req.question);
 
-    let answer = match rag.chat(system_prompt, &user_prompt).await {
+    let answer = match rag.chat(&system_prompt, &user_prompt).await {
         Ok(text) => text,
         Err(e) => {
             // AI 调用失败时返回 sources 作为降级
@@ -1157,7 +1216,7 @@ async fn ai_transform(
 
     // inline-chat：纯 AI 对话模式（Ctrl+I 入口），不做向量检索
     if mode == "inline-chat" {
-        let system_prompt = "你是一个写作助手。请根据用户的要求，在当前文档光标位置生成或补充内容。直接输出要插入的内容，不要添加额外解释、标题或前后缀。";
+        let system_prompt = format!("你是一个写作助手。请根据用户的要求，在当前文档光标位置生成或补充内容。直接输出要插入的内容，不要添加额外解释、标题或前后缀。{}", AI_DIAGRAM_FORMAT_RULE);
         let mut user_prompt = String::new();
         if let Some(ref ctx) = req.context {
             if !ctx.is_empty() {
@@ -1171,27 +1230,61 @@ async fn ai_transform(
         };
     }
 
-    // 翻译模式：根据 direction 构建明确 prompt，支持中英互译 + 自定义语种
+    // 翻译模式：根据 direction 构建强约束 prompt
     if mode == "translate" {
         let direction = req.direction.clone().unwrap_or_default();
-        let mut system_prompt = String::new();
         let user_instruction = req.instruction.clone().unwrap_or_default();
-        if direction == "zh2en" || direction.is_empty() {
-            system_prompt = "你是专业翻译。请将中文文本翻译成英文，保持原意、格式和语气，直接输出译文。".to_string();
-        } else if direction == "en2zh" {
-            system_prompt = "你是专业翻译。请将英文文本翻译成中文，保持原意、格式和语气，直接输出译文。".to_string();
-        } else {
-            // 自定义目标语种
-            system_prompt = format!(
-                "你是专业翻译。请将以下文本翻译成「{}」，保持原意、格式和语气，直接输出译文。",
-                direction
-            );
-        }
+
+        // 自动检测源语言（简易 CJK / Latin 比率判断）
+        let source_text = &req.text;
+        let cjk_count = source_text.chars().filter(|c| {
+            let cp = *c as u32;
+            (0x4e00..=0x9fff).contains(&cp) || (0x3400..=0x4dbf).contains(&cp) || (0x3040..=0x30ff).contains(&cp) || (0xac00..=0xd7af).contains(&cp)
+        }).count();
+        let latin_count = source_text.chars().filter(|c| c.is_ascii_alphabetic()).count();
+        let total_chars = source_text.chars().count().max(1);
+        let source_is_cjk = cjk_count as f64 / total_chars as f64 > 0.15;
+
+        let (source_label, target_label) = match direction.as_str() {
+            "zh2en" => ("中文", "English (英语)"),
+            "en2zh" => ("English (英语)", "中文"),
+            "zh2ja" => ("中文", "日本語 (日语)"),
+            "ja2zh" => ("日本語 (日语)", "中文"),
+            "en2ja" => ("English (英语)", "日本語 (日语)"),
+            "ja2en" => ("日本語 (日语)", "English (英语)"),
+            other if !other.is_empty() => {
+                // 自定义目标语种：源语言用检测结果
+                let src = if source_is_cjk { "中文" } else { "English (英语)" };
+                (src, other)
+            }
+            _ => ("中文", "English (英语)"), // direction 为空默认中译英
+        };
+
+        // 强约束 system prompt：三重强制 + 禁止 + 格式保留
+        let system_prompt = format!(
+            r#"你是严谨的专业翻译引擎。请完成以下翻译任务。
+
+【核心指令 — 必须 100% 遵守】
+1. 将「{}」文本翻译成「{}」。
+2. 译文的每一个字符、每一个词、每一句话、每一个段落 — 全部必须是「{}」，绝对禁止输出「{}」，绝对禁止混合两种语言。
+3. 输出只能是译文，不要任何解释、注释、括号说明、原文对照、致谢、问候语或 Markdown 代码块标记。
+
+【保留要求】
+- 保留原文的 Markdown 格式（标题、列表、代码块、表格、链接、图片语法等）。
+- 保留原文中的专有名词、代码、命令、URL、版本号等不必翻译的内容原样输出。
+- 译文语言必须自然流畅，符合目标语言的母语表达习惯。
+
+【自检提示】
+输出完成前请自问：我的输出里有没有一个字不是「{}」？如果有，立即替换成正确译文。"#,
+            source_label, target_label, target_label, source_label, target_label
+        );
+
         let mut user_prompt = String::new();
         if !user_instruction.is_empty() {
-            user_prompt.push_str(&format!("用户额外要求：{}\n\n", user_instruction));
+            user_prompt.push_str(&format!("用户额外翻译要求（请融入译文但不得影响目标语言一致性）：{}\n\n", user_instruction));
         }
-        user_prompt.push_str(&format!("待翻译文本：\n{}", req.text));
+        user_prompt.push_str(&format!("【源语言：{}】\n【目标语言：{}】\n\n请翻译以下文本：\n{}", source_label, target_label, req.text));
+
         return match rag.chat(&system_prompt, &user_prompt).await {
             Ok(content) => raw_json(serde_json::json!({
                 "ok": true, "content": content, "mode": mode,
@@ -1216,12 +1309,12 @@ async fn ai_transform(
 
     // 润色模式：更自然的 prompt
     let system_prompt: String = match mode {
-        "polish" => "你是专业文字润色助手。请在保持原意不变的前提下，让文本更通顺、更专业，直接输出润色后的结果。".to_string(),
-        "continue" => "你是写作助手。请根据给定的内容，续写合理的后续，直接输出续写部分。".to_string(),
-        "rewrite" => "你是专业写作助手。请根据用户的要求重写文本，直接输出改写后的结果。".to_string(),
-        "code" => "你是代码助手。请根据上下文生成合适的代码，直接输出代码。".to_string(),
-        "comment" => "你是代码助手。请为代码添加清晰的注释，直接输出添加注释后的代码或注释内容。".to_string(),
-        _ => format!("你是一个文本处理助手。用户要求执行「{}」操作。请根据要求处理文本，直接输出结果，不要添加额外解释。", mode_labels),
+        "polish" => format!("你是专业文字润色助手。请在保持原意不变的前提下，让文本更通顺、更专业，直接输出润色后的结果。{}", AI_DIAGRAM_FORMAT_RULE),
+        "continue" => format!("你是写作助手。请根据给定的内容，续写合理的后续，直接输出续写部分。{}", AI_DIAGRAM_FORMAT_RULE),
+        "rewrite" => format!("你是专业写作助手。请根据用户的要求重写文本，直接输出改写后的结果。{}", AI_DIAGRAM_FORMAT_RULE),
+        "code" => format!("你是代码助手。请根据上下文生成合适的代码，直接输出代码。{}", AI_DIAGRAM_FORMAT_RULE),
+        "comment" => format!("你是代码助手。请为代码添加清晰的注释，直接输出添加注释后的代码或注释内容。{}", AI_DIAGRAM_FORMAT_RULE),
+        _ => format!("你是一个文本处理助手。用户要求执行「{}」操作。请根据要求处理文本，直接输出结果，不要添加额外解释。{}", mode_labels, AI_DIAGRAM_FORMAT_RULE),
     };
 
     let instruction = req.instruction.unwrap_or_default();
@@ -1492,14 +1585,19 @@ async fn delete_asset(
                 std::fs::remove_file(&candidate).ok();
                 return raw_json(serde_json::json!({ "ok": true }));
             }
-            // Fuzzy: filename may contain a timestamp prefix
+            // Fuzzy: filename may contain a timestamp prefix — 递归搜索 source/ 下所有子目录（含 recorde/）
             let source_dir = std::path::PathBuf::from(&ws.root).join("source");
             if let Ok(entries) = std::fs::read_dir(&source_dir) {
-                for entry in entries.flatten() {
-                    if entry.path().is_file() {
-                        if let Some(name) = entry.file_name().to_str() {
+                let mut stack: Vec<std::path::PathBuf> = entries.flatten().map(|e| e.path()).collect();
+                while let Some(entry_path) = stack.pop() {
+                    if entry_path.is_dir() {
+                        if let Ok(sub) = std::fs::read_dir(&entry_path) {
+                            stack.extend(sub.flatten().map(|e| e.path()));
+                        }
+                    } else if entry_path.is_file() {
+                        if let Some(name) = entry_path.file_name().and_then(|n| n.to_str()) {
                             if name.contains(rest) {
-                                std::fs::remove_file(entry.path()).ok();
+                                std::fs::remove_file(&entry_path).ok();
                                 return raw_json(serde_json::json!({ "ok": true }));
                             }
                         }
@@ -1737,15 +1835,29 @@ async fn import_document(
         // Try base64 decode
         match base64::engine::general_purpose::STANDARD.decode(b64) {
             Ok(bytes) => {
-                // Check if it's valid UTF-8 text; if not, try to treat as-is for md/txt
-                match String::from_utf8(bytes) {
+                // Check if it's valid UTF-8 text; if not, try Office document extraction
+                match String::from_utf8(bytes.clone()) {
                     Ok(s) => s,
                     Err(_e) => {
-                        // Binary file (.docx/.pdf/etc) — read raw bytes, report unsupported
-                        return json_err(
-                            StatusCode::BAD_REQUEST,
-                            format!("不支持导入二进制格式：{}（请先转换为 Markdown/纯文本）", file_name),
-                        );
+                        // Binary file — try .docx/.doc/.odt zip text extraction
+                        let ext = file_name.rsplit('.').next().unwrap_or("").to_lowercase();
+                        log::info!("[import] 二进制文件 {} (ext={})，尝试提取文本", file_name, ext);
+                        // RTF 不是 ZIP 格式，需要专门的提取函数
+                        let extracted = if ext == "rtf" {
+                            crate::tauri_cmd::extract_text_from_rtf(&bytes)
+                        } else {
+                            crate::tauri_cmd::extract_text_from_office(&bytes, &ext)
+                        };
+                        if let Some(md) = extracted {
+                            log::info!("[import] 提取成功，文本长度={}", md.len());
+                            md
+                        } else {
+                            log::warn!("[import] 文本提取失败，返回不支持错误");
+                            return json_err(
+                                StatusCode::BAD_REQUEST,
+                                format!("不支持导入二进制格式：{}（请先转换为 Markdown/纯文本）", file_name),
+                            );
+                        }
                     }
                 }
             }
@@ -2256,17 +2368,19 @@ async fn upload_video(
         .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
         .collect::<String>().to_lowercase();
 
+    let final_ext = if safe_ext.is_empty() { "mp4".to_string() } else { safe_ext.clone() };
     let unique_name = format!("{}_{}.{}",
         safe_stem,
         chrono::Utc::now().timestamp_millis(),
-        if safe_ext.is_empty() { "mp4".to_string() } else { safe_ext }
+        final_ext
     );
 
-    // Resolve directory: workspace/source if workspaceId valid, else global assets/videos
+    // Resolve directory: workspace/source/recorde（用户要求视频集中在 source/recorde 子目录）
+    // 若无 workspace 则 fallback 到全局 assets/videos
     let (video_dir, url_path) = if let Some(root) = ws_root {
-        let dir = root.join("source");
+        let dir = root.join("source").join("recorde");
         std::fs::create_dir_all(&dir).ok();
-        (dir, format!("source/{}", unique_name))
+        (dir, format!("source/recorde/{}", unique_name))
     } else {
         let dir = state.app.data_root.join("assets").join("videos");
         std::fs::create_dir_all(&dir).ok();
@@ -2277,15 +2391,60 @@ async fn upload_video(
 
     match std::fs::write(&video_path, &decoded) {
         Ok(()) => {
+            // 可选 ffmpeg 压缩：检测系统 PATH 是否有 ffmpeg，有就自动压缩
+            let mut final_size = decoded.len();
+            if which_ffmpeg().is_some() {
+                let compressed_path = video_path.with_file_name(format!(
+                    "{}_compressed.{}",
+                    safe_stem,
+                    final_ext
+                ));
+                let output = std::process::Command::new("ffmpeg")
+                    .args([
+                        "-y",
+                        "-i", video_path.to_str().unwrap_or(""),
+                        "-c:v", "libx264",
+                        "-crf", "24",
+                        "-preset", "medium",
+                        "-c:a", "aac",
+                        "-b:a", "128k",
+                        "-movflags", "+faststart",
+                        compressed_path.to_str().unwrap_or(""),
+                    ])
+                    .output();
+                if let Ok(out) = output {
+                    if out.status.success() && compressed_path.exists() {
+                        let compressed_size = std::fs::metadata(&compressed_path).map(|m| m.len()).unwrap_or(0) as usize;
+                        if compressed_size > 0 && compressed_size < decoded.len() {
+                            let _ = std::fs::rename(&compressed_path, &video_path);
+                            final_size = compressed_size;
+                        } else {
+                            let _ = std::fs::remove_file(&compressed_path);
+                        }
+                    } else {
+                        let _ = std::fs::remove_file(&compressed_path);
+                    }
+                }
+            }
             raw_json(serde_json::json!({
                 "ok": true,
                 "url": url_path,
                 "filename": unique_name,
-                "size": decoded.len(),
+                "size": final_size,
+                "compressed": final_size < decoded.len(),
             }))
         }
         Err(e) => json_err(StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to save video: {}", e)),
     }
+}
+
+fn which_ffmpeg() -> Option<String> {
+    for name in ["ffmpeg", "ffmpeg.exe"] {
+        if std::process::Command::new(name).arg("-version").output().is_ok() {
+            return Some(name.to_string());
+        }
+    }
+    None
 }
 
 // ── 工作区粘贴 ──────────────────────────────────────────
@@ -2850,4 +3009,157 @@ async fn export_reveal_in_folder_http(
         Ok(()) => json_ok(serde_json::json!({ "ok": true })),
         Err(e) => json_err(StatusCode::INTERNAL_SERVER_ERROR, e),
     }
+}
+
+/// POST /api/screenshot/trigger
+/// HTTP 模式下触发原生截图（xcap GDI，零弹窗），返回 { dataUrl, width, height }。
+/// 前端通过 fetch 调用此端点，替代 Tauri IPC 的 api_trigger_screenshot 命令。
+async fn screenshot_trigger() -> impl IntoResponse {
+    let app_handle = match crate::APP_HANDLE.get() {
+        Some(h) => h,
+        None => return json_err(StatusCode::INTERNAL_SERVER_ERROR, "AppHandle 未初始化"),
+    };
+
+    // 截图是阻塞操作（minimize + sleep 180ms + xcap capture），用 spawn_blocking 避免阻塞 axum runtime
+    let app_clone = app_handle.clone();
+    match tokio::task::spawn_blocking(move || {
+        crate::global_capture::capture_screenshot_data(&app_clone)
+    }).await {
+        Ok(Ok(data)) => json_ok(data),
+        Ok(Err(e)) => json_err(StatusCode::INTERNAL_SERVER_ERROR, e),
+        Err(e) => json_err(StatusCode::INTERNAL_SERVER_ERROR, format!("截图任务失败: {}", e)),
+    }
+}
+
+/// POST /api/screenshot/ready
+/// HTTP 降级方案：截图窗口前端加载完成时通知后端（当 Tauri IPC 未注入外部 URL 页面时使用）
+async fn screenshot_ready_http() -> impl IntoResponse {
+    let app_handle = match crate::APP_HANDLE.get() {
+        Some(h) => h.clone(),
+        None => return json_err(StatusCode::INTERNAL_SERVER_ERROR, "AppHandle 未初始化"),
+    };
+    // 调用与 IPC 相同的 ready 处理
+    crate::global_capture::on_screenshot_window_ready(&app_handle);
+    raw_json(serde_json::json!({ "ok": true }))
+}
+
+/// POST /api/screenshot/close
+/// 截图窗口关闭信号
+async fn screenshot_close_http() -> impl IntoResponse {
+    let app_handle = match crate::APP_HANDLE.get() {
+        Some(h) => h.clone(),
+        None => return json_err(StatusCode::INTERNAL_SERVER_ERROR, "AppHandle 未初始化"),
+    };
+    crate::global_capture::close_screenshot_window(&app_handle);
+    raw_json(serde_json::json!({ "ok": true }))
+}
+
+/// GET /api/screenshot/bg
+/// 直接返回截图 PNG 二进制（Content-Type: image/png）
+/// 前端用 fetch → blob → URL.createObjectURL 加载，不依赖任何 IPC
+async fn screenshot_bg_http() -> impl IntoResponse {
+    match crate::global_capture::get_pending_screenshot_bytes() {
+        Some(bytes) => {
+            use axum::body::Body;
+            use axum::http::header;
+            let mut headers = axum::http::HeaderMap::new();
+            headers.insert(header::CONTENT_TYPE, "image/png".parse().unwrap());
+            headers.insert(header::CACHE_CONTROL, "no-store".parse().unwrap());
+            (axum::http::StatusCode::OK, headers, Body::from(bytes)).into_response()
+        }
+        None => json_err(StatusCode::NOT_FOUND, "截图数据不存在"),
+    }
+}
+
+/// GET /api/screenshot/version
+/// 返回当前截图版本号，前端轮询检测是否有新截图（窗口复用模式）
+async fn screenshot_version_http() -> impl IntoResponse {
+    let version = crate::global_capture::get_screenshot_version();
+    raw_json(serde_json::json!({ "version": version }))
+}
+
+/// POST /api/screenshot/heartbeat
+/// 前端心跳：窗口可见时每 2 秒发送一次，后端监控线程检测是否卡死
+async fn screenshot_heartbeat_http() -> impl IntoResponse {
+    crate::global_capture::heartbeat_screenshot();
+    raw_json(serde_json::json!({ "ok": true }))
+}
+
+/// POST /api/screenshot/ocr
+/// 接收 base64 PNG 图片，调用 Windows.Media.Ocr 识别文字。
+#[derive(Deserialize)]
+struct OcrRequest {
+    image: String,
+}
+
+async fn screenshot_ocr(Json(req): Json<OcrRequest>) -> impl IntoResponse {
+    use base64::Engine;
+
+    let bytes = match base64::engine::general_purpose::STANDARD.decode(&req.image) {
+        Ok(b) => b,
+        Err(e) => return json_err(StatusCode::BAD_REQUEST, format!("base64 解码失败: {}", e)),
+    };
+
+    let temp_path = std::env::temp_dir().join(format!("mt_ocr_{}.png", uuid::Uuid::new_v4()));
+    if let Err(e) = std::fs::write(&temp_path, &bytes) {
+        return json_err(StatusCode::INTERNAL_SERVER_ERROR, format!("写入临时文件失败: {}", e));
+    }
+
+    let ps_script = r#"
+$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.Runtime.WindowsRuntime
+$asTaskGeneric = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object {
+    $_.Name -eq 'AsTask' -and
+    $_.GetParameters().Count -eq 1 -and
+    $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1'
+})[0]
+function Await($Op, $ResultType) {
+    $method = $asTaskGeneric.MakeGenericMethod($ResultType)
+    $task = $method.Invoke($null, @($Op))
+    $task.Wait(30000) | Out-Null
+    $task.Result
+}
+try {
+    $stream = [System.IO.File]::OpenRead('__IMAGE_PATH__')
+    $winStream = $stream.AsRandomAccessStream()
+    $decoder = Await ([Windows.Graphics.Imaging.BitmapDecoder, Windows.Graphics.Imaging, ContentType=WindowsRuntime]::CreateAsync($winStream)) ([Windows.Graphics.Imaging.BitmapDecoder])
+    $engine = [Windows.Media.Ocr.OcrEngine, Windows.Media.Ocr, ContentType=WindowsRuntime]::TryCreateFromUserProfileLanguages()
+    if (-not $engine) { $engine = [Windows.Media.Ocr.OcrEngine, Windows.Media.Ocr, ContentType=WindowsRuntime]::TryCreateFromLanguage('zh-Hans-CN') }
+    if (-not $engine) { $engine = [Windows.Media.Ocr.OcrEngine, Windows.Media.Ocr, ContentType=WindowsRuntime]::TryCreateFromLanguage('en-US') }
+    if (-not $engine) { Write-Error 'OCR engine unavailable'; exit 1 }
+    $result = Await ($engine.RecognizeAsync($decoder)) ([Windows.Media.Ocr.OcrResult])
+    $stream.Dispose()
+    [Console]::Out.Write($result.Text)
+} catch {
+    Write-Error $_.Exception.Message
+    exit 1
+}
+"#
+    .replace("__IMAGE_PATH__", &temp_path.display().to_string());
+
+    let output = std::process::Command::new("powershell")
+        .args(["-NoProfile", "-NonInteractive", "-Command", &ps_script])
+        .output();
+
+    let _ = std::fs::remove_file(&temp_path);
+
+    match output {
+        Ok(out) if out.status.success() => {
+            let text = String::from_utf8_lossy(&out.stdout).to_string();
+            json_ok(serde_json::json!({ "text": text }))
+        }
+        Ok(out) => {
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            log::warn!("[OCR] PowerShell 失败: stderr={} stdout={}", stderr, stdout);
+            json_err(StatusCode::INTERNAL_SERVER_ERROR, format!("OCR 识别失败，请确认已安装 OCR 语言包"))
+        }
+        Err(e) => json_err(StatusCode::INTERNAL_SERVER_ERROR, format!("启动 PowerShell 失败: {}", e)),
+    }
+}
+
+/// 安全检查端点
+async fn security_check(State(s): State<std::sync::Arc<crate::server::ServerState>>) -> impl IntoResponse {
+    let status = crate::security::runtime_security_check(&s.app.data_root);
+    json_ok(status)
 }

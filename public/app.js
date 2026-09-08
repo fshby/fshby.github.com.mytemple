@@ -5,6 +5,15 @@ import { extractOutline, addCnEnSpaces } from "./modules/editor-utils.js";
 import { stripFrontmatter, escapeRegex, splitIntoLogicalBlocks, estimateBlockLines, splitMarkdownIntoSlides, normalizeAssetUrlsToRelative } from "./modules/export-utils.js";
 import { highlightCode } from "./modules/preview-utils.js";
 import { openDrawEditor } from "./modules/draw-editor.js";
+import { createScreenshotEditor } from "./modules/screenshot-editor.js";
+
+// ── 全局错误处理器：捕获模块顶层抛出的未处理异常，输出到 console 便于诊断 ──
+window.addEventListener("error", (e) => {
+  console.error("[全局错误]", e.message, " @ ", e.filename + ":" + e.lineno + ":" + e.colno);
+});
+window.addEventListener("unhandledrejection", (e) => {
+  console.error("[未捕获Promise]", e.reason?.message || e.reason);
+});
 
 /*
  * 文档处理原则：企业级编辑器标准，对文档异常零容忍。
@@ -214,7 +223,89 @@ const state = {
     inflight: false,
   },
   showSpellcheck: JSON.parse(localStorage.getItem('mt_showSpellcheck') ?? 'true'),
+  // 屏幕捕获快捷键开关（默认开启，localStorage 持久化，跨升级保留）
+  enableCaptureShortcut: localStorage.getItem('mt_enableCaptureShortcut') !== 'false',
+  enableRecordShortcut:  localStorage.getItem('mt_enableRecordShortcut')  !== 'false',
+  // 录屏/截图过程中全局 flag，阻断应用内其他 ESC 快捷键
+  captureActive: false,
 };
+
+// ── 原生录屏（xcap DXGI，零弹窗）状态 ──
+let _nativeRec = null; // { active, canvas, ctx, img, recorder, chunks, region, dpr, rafId }
+
+/** 原生录屏：初始化 offscreen Canvas + MediaRecorder */
+function _startNativeRecord(region, dpr) {
+  if (_nativeRec?.active) return;
+
+  // 目标输出尺寸（CSS 坐标 × DPR = 物理像素）
+  const sw = Math.max(1, Math.round(region.w * dpr));
+  const sh = Math.max(1, Math.round(region.h * dpr));
+
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.min(3840, sw);
+  canvas.height = Math.min(2160, sh);
+  const ctx = canvas.getContext("2d");
+  const img = new Image();
+  img.crossOrigin = "anonymous";
+
+  const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp8")
+    ? "video/webm;codecs=vp8"
+    : (MediaRecorder.isTypeSupported("video/webm") ? "video/webm" : "");
+  if (!mimeType) { showToast("MediaRecorder 无可支持编码"); return false; }
+
+  const destStream = canvas.captureStream(30);
+  const recorder = new MediaRecorder(destStream, { mimeType, videoBitsPerSecond: 4_000_000 });
+  const chunks = [];
+  recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+
+  recorder.start(100);
+
+  _nativeRec = {
+    active: true,
+    canvas, ctx, img, recorder, chunks,
+    region, dpr,
+    srcW: sw, srcH: sh, // 输出尺寸
+    srcX: Math.round(region.x * dpr),
+    srcY: Math.round(region.y * dpr),
+  };
+
+  // 画一帧黑底占位
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  showToast(`原生录屏已启动 ${region.w}×${region.h}，按 ESC 停止`);
+  return true;
+}
+
+/** 原生录屏：停止 + 保存文件 */
+async function _stopNativeRecord(cancel) {
+  const rec = _nativeRec;
+  _nativeRec = null;
+  if (!rec) return;
+
+  try {
+    // 通知 Rust 停止原生录屏
+    if (window.__TAURI__?.core?.invoke) {
+      try { await window.__TAURI__.core.invoke("api_stop_native_record"); } catch (_) {}
+    }
+  } catch (_) {}
+
+  if (rec.recorder.state !== 'inactive') rec.recorder.stop();
+  await new Promise(r => setTimeout(r, 200)); // 等最后的 dataavailable
+
+  // 清理
+  rec.canvas.remove();
+
+  if (cancel || rec.chunks.length === 0) {
+    showToast("录屏已取消");
+    return;
+  }
+
+  const mimeType = rec.recorder.mimeType;
+  const blob = new Blob(rec.chunks, { type: mimeType });
+  const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  await saveBlobWithDialog(blob, `recording_${ts}.webm`);
+}
 
 const els = {
   appShell: document.querySelector(".app-shell"),
@@ -353,6 +444,19 @@ const els = {
   mdColorQuote: document.querySelector("#mdColorQuote"),
   mdColorTable: document.querySelector("#mdColorTable"),
   mdColorTag: document.querySelector("#mdColorTag"),
+  hlColorKeyword: document.querySelector("#hlColorKeyword"),
+  hlColorString: document.querySelector("#hlColorString"),
+  hlColorComment: document.querySelector("#hlColorComment"),
+  hlColorNumber: document.querySelector("#hlColorNumber"),
+  hlColorTitle: document.querySelector("#hlColorTitle"),
+  hlColorType: document.querySelector("#hlColorType"),
+  hlColorBuiltin: document.querySelector("#hlColorBuiltin"),
+  hlColorVariable: document.querySelector("#hlColorVariable"),
+  hlColorAttr: document.querySelector("#hlColorAttr"),
+  hlColorTag: document.querySelector("#hlColorTag"),
+  hlColorOperator: document.querySelector("#hlColorOperator"),
+  hlColorMeta: document.querySelector("#hlColorMeta"),
+  resetCodeHighlightBtn: document.querySelector("#resetCodeHighlightBtn"),
   defaultWorkspaceChoices: document.querySelector("#defaultWorkspaceChoices"),
   screenshotSaveChoices: document.querySelector("#screenshotSaveChoices"),
   pdfShowDate: document.querySelector("#pdfShowDate"),
@@ -435,6 +539,8 @@ const els = {
   aiTransformSource: document.querySelector("#aiTransformSource"),
   aiTransformResult: document.querySelector("#aiTransformResult"),
   aiTransformInstruction: document.querySelector("#aiTransformInstruction"),
+  aiTransformTargetLang: document.querySelector("#aiTransformTargetLang"),
+  aiTransformTargetLangWrap: document.querySelector("#aiTransformTargetLangWrap"),
   aiTransformDocName: document.querySelector("#aiTransformDocName"),
   aiTransformCloseBtn: document.querySelector("#aiTransformCloseBtn"),
   aiTransformCancelBtn: document.querySelector("#aiTransformCancelBtn"),
@@ -780,6 +886,7 @@ function applyPaperTexture() {
  *     - actions:   [{label, onClick, primary, dismissAfter?:true|ms, disabled?}]，最多建议 2~3 个
  *                  onClick 返回 true 则不自动关闭；dismissAfter=true 点击后即关闭。
  */
+window.showToast = showToast;
 function showToast(arg) {
   clearTimeout(state.toastTimer);
   state.toastTimer = null;
@@ -1143,6 +1250,26 @@ function applySettings(settings = loadSettings()) {
     if (/^#[0-9a-f]{6}$/i.test(String(value || ""))) document.documentElement.style.setProperty(variable, value);
     else document.documentElement.style.removeProperty(variable);
   });
+  // 代码语法高亮颜色（hljs / code tokens 共用 --syn-* 变量）
+  const codeHighlightVars = {
+    keyword: "--syn-keyword",
+    string: "--syn-string",
+    comment: "--syn-comment",
+    number: "--syn-number",
+    title: "--syn-title",
+    type: "--syn-type",
+    builtin: "--syn-builtin",
+    variable: "--syn-variable",
+    attr: "--syn-attr",
+    tag: "--syn-tag",
+    operator: "--syn-operator",
+    meta: "--syn-meta",
+  };
+  Object.entries(codeHighlightVars).forEach(([key, variable]) => {
+    const value = settings.codeHighlightColors?.[key];
+    if (/^#[0-9a-f]{6}$/i.test(String(value || ""))) document.documentElement.style.setProperty(variable, value);
+    else document.documentElement.style.removeProperty(variable);
+  });
   if (settings.bg) document.documentElement.style.setProperty("--custom-bg", `url("${settings.bg}")`);
   else document.documentElement.style.removeProperty("--custom-bg");
   els.globalFontSize.value = settings.fontSize;
@@ -1160,6 +1287,28 @@ function applySettings(settings = loadSettings()) {
   };
   Object.entries(colorInputs).forEach(([key, input]) => {
     if (input) input.value = settings.markdownColors?.[key] || getComputedStyle(document.documentElement).getPropertyValue(markdownColorVars[key]).trim() || input.value;
+  });
+  // 代码语法颜色输入框回填
+  const hlColorInputs = {
+    keyword: els.hlColorKeyword,
+    string: els.hlColorString,
+    comment: els.hlColorComment,
+    number: els.hlColorNumber,
+    title: els.hlColorTitle,
+    type: els.hlColorType,
+    builtin: els.hlColorBuiltin,
+    variable: els.hlColorVariable,
+    attr: els.hlColorAttr,
+    tag: els.hlColorTag,
+    operator: els.hlColorOperator,
+    meta: els.hlColorMeta,
+  };
+  Object.entries(hlColorInputs).forEach(([key, input]) => {
+    if (input) {
+      const saved = settings.codeHighlightColors?.[key];
+      const computed = getComputedStyle(document.documentElement).getPropertyValue(codeHighlightVars[key]).trim();
+      input.value = saved || computed || input.value;
+    }
   });
   [...els.themeChoices.querySelectorAll("[data-theme]")].forEach((button) => {
     button.classList.toggle("active", button.dataset.theme === settings.theme);
@@ -1873,7 +2022,18 @@ async function materializePrintArtifacts(container) {
           const id = `print-mermaid-${Date.now()}-${i}-${seq}`;
           try {
             const { svg } = await mermaid.render(id, rawDef);
-            if (seq === _mermaidRenderSeq) containerDiv.innerHTML = svg;
+            if (seq === _mermaidRenderSeq) {
+              containerDiv.innerHTML = svg;
+              // 修复 SVG 缩放：移除固定 width/height，让 CSS 控制
+              const svgEl = containerDiv.querySelector("svg");
+              if (svgEl) {
+                svgEl.removeAttribute("width");
+                svgEl.removeAttribute("height");
+                svgEl.style.width = "100%";
+                svgEl.style.height = "auto";
+                svgEl.style.display = "block";
+              }
+            }
           } catch (err) {
             // 渲染失败：保留源码（等宽 pre 显示），不阻断整个 PDF 导出
             console.warn("PDF Mermaid 图表渲染降级为源码显示", err);
@@ -3917,7 +4077,8 @@ function renderMarkdown(source, options = {}) {
           } else {
             html.push(`<div class="code-block" data-language="chart"><span class="code-language">chart JSON</span><button class="code-copy" type="button">\u590d\u5236</button><pre><code class="language-json">${escapeHtml(raw)}</code></pre></div>`);
           }
-        } else if (normalizedLang === "html-inline" || normalizedLang === "raw-html") {
+        } else if (normalizedLang === "html-inline" || normalizedLang === "raw-html" || (normalizedLang === "html" && /^\s*<!doctype\s+html|<html[\s>]|<!DOCTYPE\s+HTML/i.test(raw))) {
+          // html fence 若包含完整 HTML 文档结构（DOCTYPE / <html>），当作 iframe 内嵌渲染；普通 html 片段仍走高亮
           html.push(`<div class="html-inline-block"><iframe class="html-inline-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-popups" srcdoc="${escapeHtml(raw)}"></iframe></div>`);
         } else if (normalizedLang === "html-web") {
           const url = String(raw || "").trim().split("\n")[0].trim();
@@ -6404,11 +6565,32 @@ async function runAiTransform(mode, { preserveInstruction = false } = {}) {
   }
   let titleLabel = AI_TRANSFORM_LABELS[mode] || "结果";
   let directionForTranslate = null;
+  // 翻译模式：显示目标语种下拉框，自动选中方向
   if (mode === "translate") {
     directionForTranslate = detectLanguageDirection(selection?.text || "");
-    titleLabel = directionForTranslate === "zh2en" ? "中译英" : "英译中";
+    // 自动初始化：zh2en → "英语"，en2zh → "中文"（用户可自由修改为任意语种）
+    if (els.aiTransformTargetLang && !els.aiTransformTargetLang.value) {
+      els.aiTransformTargetLang.value = directionForTranslate === "zh2en" ? "英语" : "中文";
+    }
+    // 标题根据输入框内容动态生成
+    const selectedTarget = (els.aiTransformTargetLang?.value || "").trim() || (directionForTranslate === "zh2en" ? "英语" : "中文");
+    titleLabel = directionForTranslate === "zh2en" && selectedTarget === "英语" ? "中译英"
+               : directionForTranslate === "en2zh" && selectedTarget === "中文" ? "英译中"
+               : `译为${selectedTarget}`;
   }
+  // 控制目标语种下拉框的显隐（仅翻译模式显示）
+  if (els.aiTransformTargetLangWrap) els.aiTransformTargetLangWrap.classList.toggle("hidden", mode !== "translate");
   els.aiTransformTitle.textContent = `生成${titleLabel}`;
+  // 翻译模式：目标语种输入框输入时实时更新标题
+  if (mode === "translate" && els.aiTransformTargetLang) {
+    els.aiTransformTargetLang.oninput = () => {
+      const v = els.aiTransformTargetLang.value.trim();
+      if (!v) return;
+      els.aiTransformTitle.textContent = `生成译为${v}`;
+    };
+  } else if (els.aiTransformTargetLang) {
+    els.aiTransformTargetLang.oninput = null;
+  }
   // 显示 instruction 输入框（润色/翻译/续写/改写/注释/代码补全都需要）
   const instrWrap = document.querySelector("#aiTransformInstructionWrap");
   if (instrWrap) {
@@ -6472,9 +6654,10 @@ async function runAiTransform(mode, { preserveInstruction = false } = {}) {
   try {
     const payload = { text: sourceText, mode };
     if (instruction) payload.instruction = instruction;
-    // 翻译模式：传递方向，支持中英互译（direction 为 "zh2en"/"en2zh"）或自定义语种
-    if (mode === "translate" && directionForTranslate) {
-      payload.direction = directionForTranslate;
+    // 翻译模式：direction 直接使用用户在输入框输入的目标语种
+    if (mode === "translate") {
+      const chosen = (els.aiTransformTargetLang?.value || "").trim();
+      payload.direction = chosen || directionForTranslate || "英语";
     }
     // 代码补全/生成注释模式：无选区时，传入光标附近上下文作为生成依据。
     if ((mode === "code" || mode === "comment") && !sourceText && state.mode === "edit") {
@@ -7185,6 +7368,54 @@ async function renderChartsInPreview(container) {
           const { svg } = await mermaid.render(id, rawDef);
           if (seq === _mermaidRenderSeq) {
             containerDiv.innerHTML = svg;
+            // 添加点击放大提示
+            if (!block.querySelector(".chart-zoom-hint")) {
+              const hint = document.createElement("div");
+              hint.className = "chart-zoom-hint";
+              hint.textContent = "点击图表可放大查看";
+              block.appendChild(hint);
+            }
+            // SVG 渲染后修复：确保 SVG 正确缩放，集显上可能尺寸不对
+            const svgEl = containerDiv.querySelector("svg");
+            if (svgEl) {
+              svgEl.style.cursor = "zoom-in";
+              // 强制移除 SVG 上的固定 width/height 属性，让 CSS 控制缩放
+              // （集显上 SVG 的 getBBox 可能返回不正确的值，导致图表溢出）
+              svgEl.removeAttribute("width");
+              svgEl.removeAttribute("height");
+              svgEl.style.width = "100%";
+              svgEl.style.height = "auto";
+              svgEl.style.display = "block";
+
+              // 检测是否需要滚动提示
+              requestAnimationFrame(() => {
+                const svgHeight = svgEl.getBoundingClientRect().height;
+                const containerHeight = containerDiv.clientHeight;
+                if (svgHeight > containerHeight + 5) {
+                  // SVG 比容器高，添加底部滚动提示
+                  if (!block.querySelector(".chart-scroll-hint")) {
+                    const scrollHint = document.createElement("div");
+                    scrollHint.className = "chart-scroll-hint";
+                    scrollHint.textContent = "↓ 滚动查看完整图表 / 点击放大";
+                    block.appendChild(scrollHint);
+                  }
+                }
+              });
+
+              // 添加点击放大：SVG → data URL → 图片预览
+              svgEl.addEventListener("click", (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                try {
+                  svgEl.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+                  const raw = new XMLSerializer().serializeToString(svgEl);
+                  const dataUrl = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(raw);
+                  openImagePreview(dataUrl, "Mermaid 图表");
+                } catch (err) {
+                  console.warn("SVG 转 data URL 失败", err);
+                }
+              });
+            }
           }
         } catch (err) {
           if (seq === _mermaidRenderSeq) {
@@ -7214,8 +7445,20 @@ async function renderChartsInPreview(container) {
         const data = JSON.parse(rawText);
         // 先渲染一个 Canvas 缩略图，让用户看到实际绘图
         const canvasId = "exc-" + Math.random().toString(36).slice(2, 10);
-        containerDiv.innerHTML = `<div class="excalidraw-preview" style="cursor:pointer;text-align:center;padding:8px;"><canvas id="${canvasId}" width="480" height="320" style="max-width:100%;border:1px dashed #d1d5db;border-radius:6px;background:#fff;"></canvas><p class="excalidraw-hint" style="margin:6px 0 0;color:#6b7280;font-size:12px;">Excalidraw 绘图 · 双击打开编辑器</p></div>`;
+        containerDiv.innerHTML = `<div class="excalidraw-preview" style="cursor:pointer;text-align:center;padding:8px;"><canvas id="${canvasId}" width="480" height="320" style="max-width:100%;border:1px dashed #d1d5db;border-radius:6px;background:#fff;"></canvas><p class="excalidraw-hint" style="margin:6px 0 0;color:#6b7280;font-size:12px;">Excalidraw 绘图 · 单击放大 · 双击编辑</p></div>`;
         renderExcalidrawThumb(data, canvasId);
+        // 单击 → 放大预览
+        const excCanvas = containerDiv.querySelector(`#${canvasId}`);
+        if (excCanvas) {
+          excCanvas.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            try {
+              const dataUrl = excCanvas.toDataURL("image/png");
+              openImagePreview(dataUrl, "Excalidraw 绘图");
+            } catch (_) {}
+          });
+        }
         // 双击 → 打开绘图编辑器，保存后更新代码块
         containerDiv.querySelector(".excalidraw-preview")?.addEventListener("dblclick", async (e) => {
           e.stopPropagation();
@@ -7229,6 +7472,46 @@ async function renderChartsInPreview(container) {
       }
     });
   }
+
+  // html-inline iframe 图表：添加全屏放大按钮
+  const htmlInlineBlocks = container.querySelectorAll(".html-inline-block");
+  htmlInlineBlocks.forEach((block) => {
+    if (block.querySelector(".html-inline-fullscreen-btn")) return;
+    const iframe = block.querySelector("iframe.html-inline-frame");
+    if (!iframe) return;
+    const btn = document.createElement("button");
+    btn.className = "html-inline-fullscreen-btn";
+    btn.textContent = "放大";
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const overlay = document.createElement("div");
+      overlay.className = "html-inline-fullscreen-overlay";
+      const closeBtn = document.createElement("button");
+      closeBtn.className = "html-inline-fullscreen-close";
+      closeBtn.textContent = "×";
+      closeBtn.addEventListener("click", () => overlay.remove());
+      overlay.addEventListener("click", (ev) => {
+        if (ev.target === overlay) overlay.remove();
+      });
+      const fullIframe = document.createElement("iframe");
+      fullIframe.srcdoc = iframe.srcdoc || iframe.getAttribute("srcdoc") || "";
+      fullIframe.sandbox = iframe.sandbox.value;
+      overlay.appendChild(fullIframe);
+      overlay.appendChild(closeBtn);
+      document.body.appendChild(overlay);
+      document.body.style.overflow = "hidden";
+      const escHandler = (ev) => {
+        if (ev.key === "Escape") {
+          overlay.remove();
+          document.body.style.overflow = "";
+          document.removeEventListener("keydown", escHandler);
+        }
+      };
+      document.addEventListener("keydown", escHandler);
+    });
+    block.appendChild(btn);
+  });
 }
 
 // ── Excalidraw JSON → Canvas 缩略图渲染 ────────────────────
@@ -10887,16 +11170,8 @@ async function handleVideoUpload(file) {
     };
     if (targetWorkspaceId) payload.workspaceId = targetWorkspaceId;
 
-    const response = await fetch("/api/upload-video", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    if (!response.ok) {
-      const detail = await response.json().catch(() => ({}));
-      throw new Error(detail.error || `上传失败 (${response.status})`);
-    }
-    const result = await response.json();
+    // 使用统一 api 封装（支持 HTTP + Tauri IPC 双通道，避免裸 fetch 在 IPC 模式下 "Failed to fetch"）
+    const result = await api.post("/api/upload-video", payload);
     if (!result.ok) {
       throw new Error(result.error || "上传失败");
     }
@@ -10906,7 +11181,8 @@ async function handleVideoUpload(file) {
     if (!state.previewVisible) setPreviewVisible(true, { automatic: true });
     schedulePreviewUpdate({ immediate: true });
     const sizeStr = result.size ? formatFileSizeLocal(result.size) : formatFileSizeLocal(file.size);
-    showToast(`视频已插入（${sizeStr}）`);
+    const compressHint = result.compressed ? "，已自动压缩" : "";
+    showToast(`视频已插入（${sizeStr}${compressHint}）`);
   } catch (e) {
     showToast(`视频上传失败：${e.message}`);
   }
@@ -10918,6 +11194,570 @@ function formatFileSizeLocal(bytes) {
   const i = Math.floor(Math.log(bytes) / Math.log(1024));
   return `${(bytes / Math.pow(1024, i)).toFixed(i > 1 ? 2 : 1)} ${units[i]}`;
 }
+
+// ── 屏幕区域捕获（Alt+A 截图 / Alt+M 录屏） ─────────────────────────
+
+/**
+ * 弹出全屏遮罩让用户拖拽框选矩形区域。
+ * @param {string} [fullscreenDataUrl] 可选：Rust 原生捕获的全屏截图 dataURL，
+ *   用作遮罩层底图让用户看到真实屏幕；不传则用半透明黑色遮罩。
+ * @returns {Promise<{x:number,y:number,w:number,h:number}|null>} CSS 像素坐标；ESC 取消返回 null
+ */
+function captureRegion(fullscreenDataUrl) {
+  return new Promise(async (resolve) => {
+    // 加载全屏背景图
+    let bgImg = null;
+    if (fullscreenDataUrl) {
+      bgImg = new Image();
+      try {
+        await new Promise((res, rej) => {
+          const t = setTimeout(() => rej(new Error("bg 10s timeout")), 10000);
+          bgImg.onload = () => { clearTimeout(t); res(); };
+          bgImg.onerror = (e) => { clearTimeout(t); rej(e); };
+          bgImg.src = fullscreenDataUrl;
+        });
+      } catch (e) {
+        console.error("[captureRegion] 加载背景失败:", e);
+        fullscreenDataUrl = null;
+        bgImg = null;
+      }
+    }
+
+    const overlay = document.createElement("div");
+    overlay.className = "capture-overlay" + (fullscreenDataUrl ? " has-bg" : "");
+    overlay.innerHTML = `
+      ${fullscreenDataUrl ? `<img class="capture-fullscreen-bg" src="${fullscreenDataUrl}" alt="" />` : ""}
+      <canvas class="capture-canvas"></canvas>
+      <div class="capture-hint">拖拽框选区域 · ESC 取消</div>
+      <div class="capture-tooltip" style="display:none"></div>
+    `;
+    document.body.appendChild(overlay);
+
+    const canvas = overlay.querySelector(".capture-canvas");
+    const tooltip = overlay.querySelector(".capture-tooltip");
+    const hint = overlay.querySelector(".capture-hint");
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    const ctx = canvas.getContext("2d");
+
+    let startX = 0, startY = 0, curX = 0, curY = 0, dragging = false;
+    let selectedRect = null;
+
+    const rect = () => {
+      const x = Math.min(startX, curX), y = Math.min(startY, curY);
+      const w = Math.abs(curX - startX), h = Math.abs(curY - startY);
+      return { x, y, w, h };
+    };
+
+    const draw = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (!dragging && curX === 0) return;
+      const r = rect();
+      ctx.fillStyle = "rgba(0,0,0,0.55)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.clearRect(r.x, r.y, r.w, r.h);
+      ctx.strokeStyle = "#22d3ee";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 4]);
+      ctx.strokeRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
+      ctx.setLineDash([]);
+      tooltip.style.display = "block";
+      tooltip.textContent = `${Math.round(r.w)} × ${Math.round(r.h)} px`;
+      tooltip.style.left = Math.max(8, r.x) + "px";
+      tooltip.style.top = Math.max(8, r.y - 28) + "px";
+    };
+
+    const removeOverlay = () => {
+      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+    };
+
+    const removeSelectionListeners = () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.removeEventListener("keydown", onSelectionKey, true);
+    };
+
+    const onDown = (e) => {
+      if (e.target.closest(".annotation-toolbar") || e.target.closest(".anno-text-input") ||
+          e.target.closest(".capture-btn")) return;
+      e.preventDefault();
+      selectedRect = null;
+      // 移除可能存在的标注工具栏
+      const oldTb = overlay.querySelector(".annotation-toolbar");
+      if (oldTb) oldTb.remove();
+      const oldAnno = overlay.querySelector(".annotation-canvas");
+      if (oldAnno) oldAnno.remove();
+      hint.style.display = "block";
+      hint.textContent = "拖拽框选区域 · ESC 取消";
+      startX = curX = e.clientX;
+      startY = curY = e.clientY;
+      dragging = true;
+      draw();
+    };
+    const onMove = (e) => {
+      curX = e.clientX; curY = e.clientY;
+      if (dragging) draw();
+    };
+    const onUp = (e) => {
+      if (!dragging) return;
+      dragging = false;
+      const r = rect();
+      if (r.w < 4 || r.h < 4) { draw(); return; }
+      selectedRect = { x: r.x, y: r.y, w: r.w, h: r.h };
+      draw();
+      hint.style.display = "none";
+
+      // 移除选区事件，启动标注编辑器
+      removeSelectionListeners();
+
+      if (fullscreenDataUrl && bgImg) {
+        // 有背景图 → 启动标注编辑器（对标微信截图）
+        const dpr = window.devicePixelRatio || 1;
+        createScreenshotEditor(overlay, bgImg, selectedRect, dpr, {
+          onConfirm: (action, annotationCanvas) => {
+            removeOverlay();
+            resolve({ ...selectedRect, action: action || "copy", annotationCanvas });
+          },
+          onCancel: () => {
+            removeOverlay();
+            resolve(null);
+          },
+          onOcr: async (base64) => {
+            try {
+              const resp = await fetch("/api/screenshot/ocr", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ image: base64 }),
+              });
+              const data = await resp.json();
+              const text = data.text || (data.data && data.data.text) || "";
+              showOcrResult(text);
+            } catch (err) {
+              showToast("OCR 失败：" + (err.message || String(err)));
+            }
+          }
+        });
+      } else {
+        // 无背景图 → 简单工具栏
+        showSimpleToolbar();
+      }
+    };
+    const onSelectionKey = (e) => {
+      if (e.key === "Escape") { removeSelectionListeners(); removeOverlay(); resolve(null); }
+    };
+
+    function showSimpleToolbar() {
+      const tb = document.createElement("div");
+      tb.className = "capture-toolbar";
+      tb.style.display = "flex";
+      tb.innerHTML = `
+        <button type="button" class="capture-btn capture-btn-copy">📋 复制</button>
+        <button type="button" class="capture-btn capture-btn-save">💾 保存</button>
+        <button type="button" class="capture-btn capture-btn-cancel">✕</button>
+      `;
+      overlay.appendChild(tb);
+      const btnW = 200, btnH = 36;
+      let left = selectedRect.x + selectedRect.w - btnW;
+      let top = selectedRect.y + selectedRect.h + 6;
+      if (top + btnH > window.innerHeight) top = selectedRect.y - btnH - 6;
+      if (left < 4) left = 4;
+      if (left + btnW > window.innerWidth) left = window.innerWidth - btnW - 4;
+      tb.style.left = left + "px";
+      tb.style.top = top + "px";
+      tb.querySelector(".capture-btn-copy").addEventListener("click", (e) => { e.stopPropagation(); removeOverlay(); resolve({ ...selectedRect, action: "copy" }); });
+      tb.querySelector(".capture-btn-save").addEventListener("click", (e) => { e.stopPropagation(); removeOverlay(); resolve({ ...selectedRect, action: "save" }); });
+      tb.querySelector(".capture-btn-cancel").addEventListener("click", (e) => { e.stopPropagation(); removeOverlay(); resolve(null); });
+      // 重新绑定 ESC
+      document.addEventListener("keydown", function esc(e) {
+        if (e.key === "Escape") { document.removeEventListener("keydown", esc, true); removeOverlay(); resolve(null); }
+        else if (e.key === "Enter") { document.removeEventListener("keydown", esc, true); removeOverlay(); resolve({ ...selectedRect, action: "copy" }); }
+      }, true);
+    }
+
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    document.addEventListener("keydown", onSelectionKey, true);
+  });
+}
+
+/** 显示 OCR 识别结果弹窗 */
+function showOcrResult(text) {
+  const modal = document.createElement("div");
+  modal.className = "ocr-result-modal";
+  modal.innerHTML = `
+    <div class="ocr-result-box">
+      <div class="ocr-result-header">
+        <span>文字识别结果</span>
+        <button type="button" class="ocr-result-close">✕</button>
+      </div>
+      <textarea class="ocr-result-text" readonly></textarea>
+      <div class="ocr-result-actions">
+        <button type="button" class="ocr-result-copy">复制文字</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  const ta = modal.querySelector(".ocr-result-text");
+  ta.value = text || "（未识别到文字）";
+  modal.querySelector(".ocr-result-close").addEventListener("click", () => modal.remove());
+  modal.querySelector(".ocr-result-copy").addEventListener("click", () => {
+    navigator.clipboard.writeText(ta.value).then(() => showToast("已复制到剪贴板"));
+  });
+  modal.addEventListener("click", (e) => { if (e.target === modal) modal.remove(); });
+}
+
+/** 用 Tauri dialog 保存 Blob，降级用 <a download> */
+async function saveBlobWithDialog(blob, defaultName) {
+  const ext = defaultName.split(".").pop() || "bin";
+  // blob 原始大小超过 150MB 时，base64 后超 200MB，直接降级浏览器下载
+  if (blob.size > 150 * 1024 * 1024) {
+    console.warn("[saveBlobWithDialog] 文件过大（" + Math.round(blob.size / 1024 / 1024) + "MB），降级浏览器下载");
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = defaultName;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    showToast("文件较大，已用浏览器下载保存");
+    return true;
+  }
+  // 优先用原生 dialog（HTTP 模式也走 Rust handler）
+  try {
+    // 用 FileReader 生成 base64（避免 btoa 对大文件逐字节拼接导致性能崩溃）
+    const b64 = await new Promise((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onload = () => resolve(String(fr.result).replace(/^data:[^;]*;base64,/, ""));
+      fr.onerror = () => reject(fr.error || new Error("FileReader failed"));
+      fr.readAsDataURL(blob);
+    });
+    const res = await fetch("/api/export/save-as", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        defaultName: defaultName,
+        extensions: [ext],
+        dataBase64: b64,
+      }),
+    });
+    if (res.ok) {
+      const json = await res.json();
+      // json.ok=true, json.data.path=绝对路径
+      if (json.data && json.data.path) { showToast("已保存到 " + json.data.path); return true; }
+    }
+  } catch (_) {}
+  // 降级：浏览器 <a download>
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = defaultName;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  showToast("已下载（浏览器保存对话框）");
+  return true;
+}
+
+/**
+ * 区域截图。
+ * @param {string} [fullscreenDataUrl] 可选：Rust 原生捕获的全屏 PNG dataURL（零弹窗，推荐）
+ */
+async function startRegionScreenshot(fullscreenDataUrl) {
+  if (state.captureActive) { showToast("正在处理上一次操作，请先完成或按 ESC 取消"); return; }
+  state.captureActive = true;
+  try {
+    // 路径 1：Rust 全局快捷键触发，已经有全屏图 → 零弹窗
+    if (fullscreenDataUrl) {
+      const region = await captureRegion(fullscreenDataUrl);
+      if (!region) { showToast("已取消"); return; }
+
+      // Rust 返回物理像素 PNG，CSS 坐标 → 物理像素
+      const dpr = window.devicePixelRatio || 1;
+      const scale = dpr;
+      const sx = Math.round(region.x * scale);
+      const sy = Math.round(region.y * scale);
+      const sw = Math.max(1, Math.round(region.w * scale));
+      const sh = Math.max(1, Math.round(region.h * scale));
+
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      await new Promise((res, rej) => {
+        const t = setTimeout(() => rej(new Error("timeout 10s")), 10000);
+        img.onload = () => { clearTimeout(t); res(); };
+        img.onerror = (e) => { clearTimeout(t); rej(e); };
+        img.src = fullscreenDataUrl;
+      });
+
+      const canvas = document.createElement("canvas");
+      canvas.width = sw; canvas.height = sh;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+      // 叠加标注画布（从 CSS 坐标缩放到物理像素）
+      if (region.annotationCanvas) {
+        ctx.drawImage(region.annotationCanvas, region.x, region.y, region.w, region.h, 0, 0, sw, sh);
+      }
+
+      const action = region.action || "copy";
+      await new Promise((res) => canvas.toBlob(async (blob) => {
+        if (!blob) { showToast("截图生成失败"); res(); return; }
+        await handleScreenshotBlob(blob, action);
+        res();
+      }, "image/png"));
+      return;
+    }
+
+    // 路径 2：JS keydown 直接触发 → getDisplayMedia（会弹窗让用户选屏幕/窗口）
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+      showToast("当前环境不支持屏幕捕获，请升级 WebView2");
+      return;
+    }
+    showToast("请选择要截取的屏幕或窗口…");
+    const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+    const track = stream.getVideoTracks()[0];
+    if (!track) { showToast("未捕获到屏幕画面"); stream.getTracks().forEach(t => t.stop()); return; }
+
+    const region = await captureRegion(null);
+    if (!region) { stream.getTracks().forEach(t => t.stop()); showToast("已取消"); return; }
+
+    const video = document.createElement("video");
+    video.srcObject = stream;
+    video.width = track.getSettings().width;
+    video.height = track.getSettings().height;
+    video.muted = true;
+    await video.play();
+
+    const vw = video.videoWidth, vh = video.videoHeight;
+    const sx = region.x * (vw / window.innerWidth);
+    const sy = region.y * (vh / window.innerHeight);
+    const sw = region.w * (vw / window.innerWidth);
+    const sh = region.h * (vh / window.innerHeight);
+
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(sw); canvas.height = Math.round(sh);
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+
+    stream.getTracks().forEach(t => t.stop());
+    video.remove();
+
+    const action = region.action || "save";
+    await new Promise((res) => canvas.toBlob(async (blob) => {
+      if (!blob) { showToast("截图生成失败"); res(); return; }
+      await handleScreenshotBlob(blob, action);
+      res();
+    }, "image/png"));
+  } catch (e) {
+    showToast("截图失败：" + (e?.message || String(e)));
+  } finally {
+    state.captureActive = false;
+  }
+}
+
+/**
+ * 处理截图 Blob：根据 action 决定复制到剪贴板 / 保存到文件 / 两者
+ * @param {Blob} blob PNG blob
+ * @param {"copy"|"save"|"both"} action copy=复制到剪贴板, save=保存到文件, both=两者
+ */
+async function handleScreenshotBlob(blob, action) {
+  const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  const name = `screenshot_${ts}.png`;
+  let copied = false;
+  let saved = false;
+
+  // 复制到剪贴板（对标微信截图）
+  if (action === "copy" || action === "both") {
+    try {
+      if (navigator.clipboard && window.ClipboardItem) {
+        await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+        copied = true;
+      } else {
+        // 降级：用 <a download> 触发下载
+        console.warn("[screenshot] 浏览器不支持 ClipboardItem，降级保存");
+      }
+    } catch (e) {
+      console.error("[screenshot] 复制到剪贴板失败:", e);
+    }
+  }
+
+  // 保存到文件
+  if (action === "save" || action === "both" || !copied) {
+    try {
+      await saveBlobWithDialog(blob, name);
+      saved = true;
+    } catch (e) {
+      showToast("保存失败：" + (e?.message || String(e)));
+    }
+  }
+
+  // 提示
+  if (copied && saved) { showToast("已复制到剪贴板，可粘贴使用；已保存到文件"); }
+  else if (copied) { showToast("已复制到剪贴板，可粘贴使用"); }
+  else if (saved) { showToast("已保存到文件"); }
+}
+
+/**
+ * 区域录屏（支持原生零弹窗和 getDisplayMedia 两种模式）
+ * @param {boolean} [useNative] true=Rust xcap DXGI 零弹窗（Tauri 推荐），false=getDisplayMedia 弹窗（HTTP 降级）
+ */
+async function startRegionRecording(useNative) {
+  if (state.captureActive) { showToast("正在处理上一次操作，请先完成或按 ESC 取消"); return; }
+  state.captureActive = true;
+  try {
+    if (!window.MediaRecorder) {
+      showToast("当前环境不支持录屏（缺少 MediaRecorder API）");
+      return;
+    }
+
+    // ── 路径 1：原生录屏（零弹窗，Tauri 环境 xcap DXGI） ──
+    if (useNative && window.__TAURI__?.core?.invoke) {
+      // 先弹出遮罩让用户选区域（全屏遮罩背景 = 当前屏幕；等 Rust 开始录屏后再弹真实帧）
+      // 用一个纯色遮罩 + 区域选择；实际帧从 native-record-frame 事件来
+      const dpr = window.devicePixelRatio || 1;
+      const region = await captureRegion();
+      if (!region) { showToast("已取消"); state.captureActive = false; return; }
+
+      // 通知 Rust 开始原生录屏（DXGI Desktop Duplication）
+      try {
+        await window.__TAURI__.core.invoke("api_start_native_record");
+      } catch (e) {
+        showToast("原生录屏启动失败，降级弹窗模式：" + (e?.message || String(e)));
+        state.captureActive = false;
+        // 降级走 getDisplayMedia
+        await startRegionRecording(false);
+        return;
+      }
+
+      // 初始化 offscreen Canvas + MediaRecorder
+      if (!_startNativeRecord(region, dpr)) {
+        await window.__TAURI__.core.invoke("api_stop_native_record").catch(()=>{});
+        state.captureActive = false; return;
+      }
+
+      // 录屏提示条
+      const hint = document.createElement("div");
+      hint.className = "capture-recording-hint";
+      hint.innerHTML = '<span class="capture-recording-dot"></span> 录屏中… 按 ESC 停止 <span class="capture-recording-time" style="margin-left:12px">00:00</span>';
+      document.body.appendChild(hint);
+      let elapsed = 0;
+      const timer = setInterval(() => {
+        elapsed++;
+        const m = String(Math.floor(elapsed / 60)).padStart(2, "0");
+        const s = String(elapsed % 60).padStart(2, "0");
+        const t = hint.querySelector(".capture-recording-time");
+        if (t) t.textContent = `${m}:${s}`;
+      }, 1000);
+
+      let stopped = false;
+      const stop = async (cancel = false) => {
+        if (stopped) return; stopped = true;
+        clearInterval(timer);
+        hint.remove();
+        state.captureActive = false;
+        document.removeEventListener("keydown", onEsc, true);
+        await _stopNativeRecord(cancel);
+      };
+
+      const onEsc = (e) => {
+        if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); stop(false); }
+      };
+      document.addEventListener("keydown", onEsc, true);
+      return;
+    }
+
+    // ── 路径 2：getDisplayMedia 弹窗模式（HTTP 降级） ──
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+      showToast("当前环境不支持屏幕捕获，请升级 WebView2");
+      state.captureActive = false; return;
+    }
+    showToast("请选择要录制的屏幕或窗口…");
+    const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+    const track = stream.getVideoTracks()[0];
+    if (!track) { showToast("未捕获到屏幕画面"); stream.getTracks().forEach(t => t.stop()); state.captureActive = false; return; }
+
+    const region = await captureRegion();
+    if (!region) { stream.getTracks().forEach(t => t.stop()); showToast("已取消"); state.captureActive = false; return; }
+
+    const video = document.createElement("video");
+    video.srcObject = stream;
+    video.width = track.getSettings().width;
+    video.height = track.getSettings().height;
+    video.muted = true;
+    video.playbackRate = 1;
+    await video.play();
+
+    const vw = video.videoWidth, vh = video.videoHeight;
+    const sx = region.x * (vw / window.innerWidth);
+    const sy = region.y * (vh / window.innerHeight);
+    const sw = Math.round(region.w * (vw / window.innerWidth));
+    const sh = Math.round(region.h * (vh / window.innerHeight));
+
+    const outCanvas = document.createElement("canvas");
+    outCanvas.width = Math.min(3840, Math.max(1, sw));
+    outCanvas.height = Math.min(2160, Math.max(1, sh));
+    const outCtx = outCanvas.getContext("2d");
+
+    let rafId = 0, recording = true, recorder, chunks = [];
+    const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp8")
+      ? "video/webm;codecs=vp8"
+      : (MediaRecorder.isTypeSupported("video/webm") ? "video/webm" : "");
+    if (!mimeType) { showToast("MediaRecorder 无可支持编码"); stream.getTracks().forEach(t => t.stop()); state.captureActive = false; return; }
+
+    const destStream = outCanvas.captureStream(30);
+    recorder = new MediaRecorder(destStream, { mimeType, videoBitsPerSecond: 4_000_000 });
+    recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+
+    const hint = document.createElement("div");
+    hint.className = "capture-recording-hint";
+    hint.innerHTML = '<span class="capture-recording-dot"></span> 录屏中… 按 ESC 停止 <span class="capture-recording-time" style="margin-left:12px">00:00</span>';
+    document.body.appendChild(hint);
+    let elapsed = 0;
+    const timer = setInterval(() => {
+      elapsed++;
+      const m = String(Math.floor(elapsed / 60)).padStart(2, "0");
+      const s = String(elapsed % 60).padStart(2, "0");
+      const t = hint.querySelector(".capture-recording-time");
+      if (t) t.textContent = `${m}:${s}`;
+    }, 1000);
+
+    recorder.start(100);
+
+    const tick = () => {
+      if (!recording) return;
+      outCtx.clearRect(0, 0, outCanvas.width, outCanvas.height);
+      outCtx.drawImage(video, sx, sy, sw, sh, 0, 0, outCanvas.width, outCanvas.height);
+      rafId = requestAnimationFrame(tick);
+    };
+    tick();
+
+    let stopped = false;
+    const stop = async (cancel = false) => {
+      if (stopped) return; stopped = true;
+      recording = false;
+      clearInterval(timer);
+      cancelAnimationFrame(rafId);
+      recorder.stop();
+      hint.remove();
+      stream.getTracks().forEach(t => t.stop());
+      video.remove();
+      document.removeEventListener("keydown", onEsc, true);
+      await new Promise(r => setTimeout(r, 150));
+      if (cancel || chunks.length === 0) { showToast("录屏已取消"); state.captureActive = false; return; }
+      const blob = new Blob(chunks, { type: mimeType });
+      const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+      await saveBlobWithDialog(blob, `recording_${ts}.webm`);
+      state.captureActive = false;
+    };
+
+    const onEsc = (e) => {
+      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); stop(false); }
+    };
+    document.addEventListener("keydown", onEsc, true);
+
+    showToast("录屏开始：" + region.w + "×" + region.h + " px，按 ESC 停止");
+  } catch (e) {
+    showToast("录屏失败：" + (e?.message || String(e)));
+    state.captureActive = false;
+  }
+}
+
 
 if (els.insertVideoBtn) {
   els.insertVideoBtn.addEventListener("click", () => {
@@ -11112,13 +11952,130 @@ function keyboardDelete(event) {
   els.deleteModal.classList.remove("hidden");
 }
 
+// ── Tauri 全局事件监听（仅监听录屏帧，截图已由独立窗口处理） ──
+// 截图/录屏均由独立窗口处理，不再通过事件调起主窗口
+if (window.__TAURI__?.event) {
+  try {
+    // 原生录屏帧：Rust xcap DXGI 推送的 PNG dataURL（仅主窗口降级模式需要）
+    window.__TAURI__.event.listen("native-record-frame", (e) => {
+      const rec = _nativeRec;
+      if (!rec?.active) return;
+      const dataUrl = e?.payload?.dataUrl;
+      if (!dataUrl) return;
+      // 更新 img.src 触发解码 → drawImage 裁剪到选区
+      rec.img.onload = () => {
+        if (!_nativeRec?.active) return;
+        const r = _nativeRec;
+        r.ctx.drawImage(r.img,
+          r.srcX, r.srcY, r.srcW, r.srcH, // 物理像素裁剪
+          0, 0, r.canvas.width, r.canvas.height
+        );
+      };
+      rec.img.src = dataUrl;
+    });
+
+    // 截图/录屏错误通知
+    window.__TAURI__.event.listen("screenshot-error", (e) => {
+      const msg = e?.payload?.error || "截图失败";
+      showToast({ title: "截图失败", message: msg, kind: "error", duration: 4000 });
+      state.captureActive = false;
+    });
+
+  } catch (_) { /* 降级处理 */ }
+}
+
+/// 通过 HTTP 端点触发原生截图（不依赖 Tauri IPC，HTTP 模式下可用）
+/// 调用 POST /api/screenshot/trigger，后端最小化窗口 → xcap 抓屏 → 恢复窗口 → 返回 dataUrl
+async function triggerScreenshotViaHttp() {
+  if (state.captureActive) { showToast("正在处理上一次操作，请先完成或按 ESC 取消"); return; }
+  state.captureActive = true;
+  try {
+    const resp = await fetch("/api/screenshot/trigger", { method: "POST" });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${resp.status}`);
+    }
+    const data = await resp.json();
+    // 支持新的 filePath 方案和旧的 dataUrl 方案
+    const filePath = data.filePath || (data.data && data.data.filePath);
+    const dataUrl = data.dataUrl || (data.data && data.data.dataUrl);
+    if (filePath) {
+      // 通过 Tauri convertFileSrc 将本地路径转为 WebView 可访问的 URL
+      let fileUrl = filePath;
+      try {
+        if (window.__TAURI__?.core?.convertFileSrc) {
+          fileUrl = window.__TAURI__.core.convertFileSrc(filePath);
+        }
+      } catch(_) {}
+      state.captureActive = false;
+      await startRegionScreenshot(fileUrl);
+    } else if (dataUrl) {
+      state.captureActive = false;
+      await startRegionScreenshot(dataUrl);
+    } else {
+      throw new Error("截图返回数据为空");
+    }
+  } catch (e) {
+    showToast("截图失败：" + (e?.message || String(e)));
+    state.captureActive = false;
+  }
+}
+// 暴露给 Rust global-shortcut 通过 window.eval 调用
+try {
+  window.__triggerScreenshotViaHttp = triggerScreenshotViaHttp;
+  window.__triggerRecordShortcut = function() {
+    if (state.captureActive) return;
+    if (!state.enableRecordShortcut) { showToast("录屏快捷键已关闭，请在设置中开启"); return; }
+    startRegionRecording(false); // getDisplayMedia 模式
+  };
+  console.log("[screenshot] __triggerScreenshotViaHttp 已挂载:", typeof window.__triggerScreenshotViaHttp);
+} catch (e) {
+  console.error("[screenshot] 挂载 __triggerScreenshotViaHttp 失败:", e.message);
+}
+
 // 全局键盘快捷键
 document.addEventListener("keydown", (event) => {
+  // 录屏/截图进行中：只响应 ESC 停止，阻断其他所有快捷键
+  if (state.captureActive) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      // captureRegion / MediaRecorder / nativeRecord 自己会监听 ESC 并清理
+    }
+    return;
+  }
   const target = event.target;
   const editableTarget = target && typeof target.closest === "function"
     && (target.closest(".cm-editor") || target.closest("input, textarea, select, [contenteditable='true']"));
   const inFormField = target && typeof target.closest === "function"
     && target.closest("input, textarea, select, [contenteditable='true']");
+
+  // ── 屏幕捕获：Alt+A 区域截图 / Alt+M 区域录屏 ──
+  // Tauri 环境下通过 IPC 触发独立截图窗口（不调起主窗口）
+  // 非 Tauri 环境下走 HTTP 降级（在主窗口内 overlay）
+  if (event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && event.key.toLowerCase() === "a" && state.enableCaptureShortcut) {
+    event.preventDefault(); event.stopPropagation();
+    if (window.__TAURI__?.core?.invoke) {
+      window.__TAURI__.core.invoke("api_trigger_screenshot").catch((e) => {
+        console.warn("[screenshot] IPC 触发失败，降级 HTTP:", e);
+        triggerScreenshotViaHttp();
+      });
+    } else {
+      triggerScreenshotViaHttp();
+    }
+    return;
+  }
+  if (event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && event.key.toLowerCase() === "m" && state.enableRecordShortcut) {
+    event.preventDefault(); event.stopPropagation();
+    // Tauri 环境下通过 IPC 触发独立录屏窗口（不调起主窗口）
+    if (window.__TAURI__?.core?.invoke) {
+      window.__TAURI__.core.invoke("api_trigger_record").catch(()=>{});
+    } else {
+      startRegionRecording(false);
+    }
+    return;
+  }
+  // ── 现有快捷键保持不变 ──
   if (event.key === "F2" && !inFormField && !event.defaultPrevented) {
     event.preventDefault();
     renameCurrentDoc();
@@ -11514,6 +12471,11 @@ let importFiles = [];
 function openImportModal(format) {
   importFiles = [];
   renderImportFileList();
+  // 重置按钮状态（防止上次导入中状态残留）
+  if (els.confirmImportBtn) {
+    els.confirmImportBtn.disabled = true;
+    els.confirmImportBtn.textContent = "导入";
+  }
   // 仅在 Tauri 2.x 环境显示「系统文件对话框」按钮，纯浏览器下 hidden
   if (els.sysPickImportBtn) {
     const hasTauri = !!(window.__TAURI__ && (window.__TAURI__.core?.invoke || window.__TAURI__.invoke));
@@ -11525,6 +12487,11 @@ function openImportModal(format) {
 function closeImportModal() {
   importFiles = [];
   renderImportFileList();
+  // 恢复按钮状态
+  if (els.confirmImportBtn) {
+    els.confirmImportBtn.disabled = true;
+    els.confirmImportBtn.textContent = "导入";
+  }
   els.importModal?.classList.add("hidden");
 }
 
@@ -11560,7 +12527,13 @@ function renderImportFileList() {
     `;
     els.importFileList.appendChild(item);
   });
-  els.confirmImportBtn.disabled = importFiles.length === 0;
+  if (els.confirmImportBtn) {
+    els.confirmImportBtn.disabled = importFiles.length === 0;
+    // 每次渲染列表都确保按钮文字是"导入"（防止"导入中..."状态残留）
+    if (importFiles.length > 0) {
+      els.confirmImportBtn.textContent = "导入";
+    }
+  }
 }
 
 /**
@@ -12175,9 +13148,13 @@ els.searchResults.addEventListener("click", (event) => {
 });
 els.markdownView.addEventListener("click", (event) => {
   const img = event.target.closest("img");
-  if (img && !img.closest(".code-block")) {
+  if (img && !img.closest(".code-block") && !img.closest(".chart-block")) {
     event.preventDefault();
     openImagePreview(img.src, img.alt || "");
+    return;
+  }
+  // 图表块内的 SVG/Canvas 点击放大由 renderChartsInPreview 内部处理
+  if (event.target.closest(".chart-block svg") || event.target.closest(".chart-block canvas")) {
     return;
   }
   const taskInput = event.target.closest("input[data-task-line]");
@@ -12221,9 +13198,13 @@ els.markdownView.addEventListener("copy", (event) => {
 });
 els.preview.addEventListener("click", async (event) => {
   const img = event.target.closest("img");
-  if (img && !img.closest(".code-block")) {
+  if (img && !img.closest(".code-block") && !img.closest(".chart-block")) {
     event.preventDefault();
     openImagePreview(img.src, img.alt || "");
+    return;
+  }
+  // 图表块内的 SVG/Canvas 点击放大由 renderChartsInPreview 内部处理
+  if (event.target.closest(".chart-block svg") || event.target.closest(".chart-block canvas")) {
     return;
   }
   // 需求8：编辑模式预览栏中，http/https/mailto/tel 链接不内部打开，
@@ -12285,9 +13266,13 @@ els.preview.addEventListener("click", async (event) => {
 // 需求8：阅读模式（阅读栏）markdownView 中链接同样处理：外部链接走系统默认浏览器
 els.markdownView.addEventListener("click", async (event) => {
   const img = event.target.closest("img");
-  if (img && !img.closest(".code-block")) {
+  if (img && !img.closest(".code-block") && !img.closest(".chart-block")) {
     event.preventDefault();
     openImagePreview(img.src, img.alt || "");
+    return;
+  }
+  // 图表块内的 SVG/Canvas 点击放大由 renderChartsInPreview 内部处理
+  if (event.target.closest(".chart-block svg") || event.target.closest(".chart-block canvas")) {
     return;
   }
   const wikiLink = event.target.closest("[data-doc-link]");
@@ -13428,6 +14413,26 @@ if (showSpellcheckToggle) {
   });
 }
 
+// ── 屏幕捕获快捷键开关 ──
+const enableCaptureShortcutToggle = document.querySelector("#enableCaptureShortcutToggle");
+if (enableCaptureShortcutToggle) {
+  enableCaptureShortcutToggle.checked = !!state.enableCaptureShortcut;
+  enableCaptureShortcutToggle.addEventListener("change", () => {
+    state.enableCaptureShortcut = enableCaptureShortcutToggle.checked;
+    localStorage.setItem('mt_enableCaptureShortcut', state.enableCaptureShortcut);
+    showToast(state.enableCaptureShortcut ? "Alt+A 区域截图快捷键已开启" : "Alt+A 区域截图快捷键已关闭");
+  });
+}
+const enableRecordShortcutToggle = document.querySelector("#enableRecordShortcutToggle");
+if (enableRecordShortcutToggle) {
+  enableRecordShortcutToggle.checked = !!state.enableRecordShortcut;
+  enableRecordShortcutToggle.addEventListener("change", () => {
+    state.enableRecordShortcut = enableRecordShortcutToggle.checked;
+    localStorage.setItem('mt_enableRecordShortcut', state.enableRecordShortcut);
+    showToast(state.enableRecordShortcut ? "Alt+M 区域录屏快捷键已开启" : "Alt+M 区域录屏快捷键已关闭");
+  });
+}
+
 // 关于内容已内联到设置「关于」面板，切换至该 Tab 时由 settings-nav-item 处理器自动加载。
 els.checkUpdateBtn?.addEventListener("click", async () => {
   showToast("正在检查更新...");
@@ -13805,6 +14810,38 @@ markdownColorInputs.forEach(([key, input]) => {
     localStorage.setItem("markdownColors", JSON.stringify(settings.markdownColors));
     applySettings(settings);
   });
+});
+// 代码语法高亮颜色调整
+const codeHighlightColorInputs = [
+  ["keyword", els.hlColorKeyword],
+  ["string", els.hlColorString],
+  ["comment", els.hlColorComment],
+  ["number", els.hlColorNumber],
+  ["title", els.hlColorTitle],
+  ["type", els.hlColorType],
+  ["builtin", els.hlColorBuiltin],
+  ["variable", els.hlColorVariable],
+  ["attr", els.hlColorAttr],
+  ["tag", els.hlColorTag],
+  ["operator", els.hlColorOperator],
+  ["meta", els.hlColorMeta],
+];
+codeHighlightColorInputs.forEach(([key, input]) => {
+  input?.addEventListener("input", () => {
+    const settings = loadSettings();
+    settings.codeHighlightColors = { ...(settings.codeHighlightColors || {}), [key]: input.value };
+    localStorage.setItem("codeHighlightColors", JSON.stringify(settings.codeHighlightColors));
+    applySettings(settings);
+  });
+});
+els.resetCodeHighlightBtn?.addEventListener("click", () => {
+  localStorage.removeItem("codeHighlightColors");
+  // 清空 HTML style 上的 --syn-* 覆盖，让主题的默认值生效
+  codeHighlightColorInputs.forEach(([key, input]) => {
+    document.documentElement.style.removeProperty("--syn-" + key);
+  });
+  const settings = loadSettings();
+  applySettings(settings);
 });
 els.aiPptBtn?.addEventListener("click", () => exportCurrentDocToPpt());
 els.normalizeMdBtn.addEventListener("click", openNormalizeMdModal);
@@ -14603,12 +15640,25 @@ function startPeriodicLicenseCheck() {
     try {
       const result = await checkLicenseStatus();
       if (!result.activated && state.licenseValidatedAt > 0) {
-        // 授权在使用期间失效（如过期、被解绑等），触发授权弹窗
         state.licenseValidatedAt = 0;
         showLicenseGate(result.error || "授权已失效，请重新授权");
       }
     } catch (_) {
-      // 静默忽略检查错误，不打扰用户
+    }
+    // 同时进行安全检查
+    if (window.__TAURI__?.core?.invoke) {
+      try {
+        const sec = await window.__TAURI__.core.invoke("api_security_check");
+        if (sec && !sec.secure) {
+          if (sec.debuggerDetected) {
+            console.warn("[security] 检测到调试器/逆向工具");
+          }
+          if (sec.binaryTampered) {
+            console.error("[security] 二进制可能被篡改");
+          }
+        }
+      } catch (_) {
+      }
     }
   }, INTERVAL_MS);
 }

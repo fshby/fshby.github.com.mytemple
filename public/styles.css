@@ -52,12 +52,14 @@
   --syn-comment: #9a8f82;
   --syn-number: #b08850;
   --syn-function: #a07850;
+  --syn-title: #a07850;
   --syn-type: #7a6856;
   --syn-builtin: #6b5a44;
   --syn-variable: #3d3830;
   --syn-operator: #5a5048;
   --syn-tag: #7a5c3e;
   --syn-attr: #8a7a68;
+  --syn-meta: #9a8f82;
   /* callout 主题色：默认暖色调中性主题 */
   --callout-note: #4f8cf7;
   --callout-info: #3b82f6;
@@ -118,12 +120,14 @@ body[data-theme="dark"] {
   --syn-comment: #7a8a78;
   --syn-number: #a8b89a;
   --syn-function: #c9b87a;
+  --syn-title: #c9b87a;
   --syn-type: #7ab89a;
   --syn-builtin: #89b0c0;
   --syn-variable: #b0b8a8;
   --syn-operator: #b5b0a5;
   --syn-tag: #89a5c0;
   --syn-attr: #a8b5a5;
+  --syn-meta: #7a8a78;
   /* callout 主题色：深色护眼板岩色 */
   --callout-note: #60a5fa;
   --callout-info: #3b82f6;
@@ -196,12 +200,14 @@ body[data-theme="glow"] {
   --syn-comment: #8a9580;
   --syn-number: #b08850;
   --syn-function: #5c7a2c;
+  --syn-title: #5c7a2c;
   --syn-type: #7a6856;
   --syn-builtin: #6b5a44;
   --syn-variable: #2d3729;
   --syn-operator: #4a5644;
   --syn-tag: #6e8d3b;
   --syn-attr: #8a9580;
+  --syn-meta: #8a9580;
   /* callout 主题色：护眼米黄/米色背景下的自然配色 */
   --callout-note: #3b82f6;
   --callout-info: #2563eb;
@@ -2573,7 +2579,7 @@ html body[data-theme="image"] .markdown-body .callout .callout-title::before {
 .markdown-body .hljs-title,
 .markdown-body .hljs-title.function_,
 .markdown-body .hljs-section,
-.markdown-body .hljs-function .hljs-title { color: var(--syn-function); }
+.markdown-body .hljs-function .hljs-title { color: var(--syn-title); }
 .markdown-body .hljs-class .hljs-title,
 .markdown-body .hljs-variable,
 .markdown-body .hljs-attribute,
@@ -2583,9 +2589,9 @@ html body[data-theme="image"] .markdown-body .callout .callout-title::before {
 .markdown-body .hljs-selector-id,
 .markdown-body .hljs-selector-class { color: var(--syn-tag); }
 .markdown-body .hljs-operator,
-.markdown-body .hljs-meta,
-.markdown-body .hljs-meta-string,
 .markdown-body .hljs-punctuation { color: var(--syn-operator); }
+.markdown-body .hljs-meta,
+.markdown-body .hljs-meta-string { color: var(--syn-meta); }
 .markdown-body .hljs-doctag,
 .markdown-body .hljs-strong { font-weight: 700; }
 .markdown-body .hljs-emphasis { font-style: italic; }
@@ -2604,8 +2610,8 @@ html body[data-theme="image"] .markdown-body .callout .callout-title::before {
 .cm-editor .tok-operator { color: var(--syn-operator); }
 .cm-editor .tok-tag { color: var(--syn-tag); }
 .cm-editor .tok-attr { color: var(--syn-attr); }
-.cm-editor .tok-definition { color: var(--syn-function); }
-.cm-editor .tok-meta { color: var(--syn-comment); }
+.cm-editor .tok-meta { color: var(--syn-meta); }
+.cm-editor .tok-definition { color: var(--syn-title); }
 
 /* editor content area themed */
 .cm-editor {
@@ -7900,6 +7906,7 @@ body[data-theme="image"] .editor-splitter::before {
   border-radius: 8px;
   overflow: hidden;
   background: var(--surface-1);
+  position: relative;
 }
 .chart-block .mermaid-source,
 .chart-block .excalidraw-source {
@@ -7910,13 +7917,31 @@ body[data-theme="image"] .editor-splitter::before {
   padding: 16px;
   min-height: 80px;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   background: var(--surface-2);
+  overflow: auto;
+  max-height: 70vh;
 }
 .chart-block .mermaid-container svg {
+  width: 100%;
   max-width: 100%;
   height: auto;
+  cursor: zoom-in;
+  display: block;
+}
+.chart-block .excalidraw-preview canvas {
+  cursor: zoom-in;
+}
+.chart-block .chart-zoom-hint {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  font-size: 11px;
+  color: var(--muted);
+  opacity: 0.7;
+  pointer-events: none;
+  z-index: 1;
 }
 .chart-block .chart-placeholder {
   color: var(--muted);
@@ -7952,6 +7977,15 @@ body[data-theme="image"] .editor-splitter::before {
   margin-top: 8px;
   font-size: 12px;
   color: var(--muted);
+}
+/* 图表底部滚动提示 */
+.chart-block .chart-scroll-hint {
+  text-align: center;
+  font-size: 11px;
+  color: var(--muted);
+  padding: 4px 0 8px;
+  background: var(--surface-2);
+  opacity: 0.6;
 }
 
 /* Color picker button (inline swatch + label) */
@@ -10640,6 +10674,29 @@ html body .print-body.print-body .callout.callout.callout-example.callout-exampl
   border-radius: 8px;
   overflow: hidden;
   background: var(--surface-2);
+  position: relative;
+}
+.markdown-body .html-inline-block:hover .html-inline-fullscreen-btn {
+  opacity: 1;
+}
+.markdown-body .html-inline-fullscreen-btn {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  z-index: 10;
+  opacity: 0;
+  transition: opacity 0.2s;
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--text);
+}
+.markdown-body .html-inline-fullscreen-btn:hover {
+  background: var(--accent, #3b82f6);
+  color: #fff;
 }
 .markdown-body .html-inline-frame {
   display: block;
@@ -10648,6 +10705,397 @@ html body .print-body.print-body .callout.callout.callout-example.callout-exampl
   border: none;
   background: #fff;
 }
+.markdown-body .html-inline-fullscreen-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.markdown-body .html-inline-fullscreen-overlay iframe {
+  width: 95vw;
+  height: 95vh;
+  border: none;
+  background: #fff;
+  border-radius: 8px;
+}
+.markdown-body .html-inline-fullscreen-close {
+  position: fixed;
+  top: 16px;
+  right: 24px;
+  z-index: 10000;
+  font-size: 28px;
+  color: #fff;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+}
 .markdown-body pre.code-preview.code-preview {
   /* 外部代码文件预览的额外 padding/family 内联已设，但给 code tag 也补上 */
+}
+
+/* ── 屏幕区域捕获遮罩 ── */
+.capture-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  background: rgba(0, 0, 0, 0.55);
+  cursor: crosshair;
+  user-select: none;
+}
+/* ── 截图工具栏（对标微信） ── */
+.capture-overlay .capture-toolbar {
+  position: absolute;
+  display: flex;
+  gap: 2px;
+  background: rgba(30, 41, 59, 0.95);
+  border: 1px solid rgba(34, 211, 238, 0.4);
+  border-radius: 6px;
+  padding: 4px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  z-index: 4;
+  backdrop-filter: blur(8px);
+}
+.capture-overlay .capture-btn {
+  background: transparent;
+  border: none;
+  color: #e2e8f0;
+  padding: 6px 12px;
+  font-size: 13px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.capture-overlay .capture-btn:hover { background: rgba(34, 211, 238, 0.2); color: #22d3ee; }
+.capture-overlay .capture-btn:active { background: rgba(34, 211, 238, 0.35); }
+.capture-overlay .capture-btn-copy { color: #4ade80; }
+.capture-overlay .capture-btn-copy:hover { background: rgba(74, 222, 128, 0.18); color: #4ade80; }
+.capture-overlay .capture-btn-save { color: #60a5fa; }
+.capture-overlay .capture-btn-save:hover { background: rgba(96, 165, 250, 0.18); color: #60a5fa; }
+.capture-overlay .capture-btn-cancel { color: #f87171; }
+.capture-overlay .capture-btn-cancel:hover { background: rgba(248, 113, 113, 0.18); color: #f87171; }
+.capture-overlay .capture-canvas {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.capture-overlay .capture-hint {
+  position: absolute;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #fff;
+  background: rgba(0, 0, 0, 0.75);
+  padding: 8px 20px;
+  border-radius: 20px;
+  font-size: 13px;
+  pointer-events: none;
+  font-family: inherit;
+}
+.capture-overlay .capture-tooltip {
+  position: absolute;
+  color: #fff;
+  background: rgba(34, 211, 238, 0.9);
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* ── 截图遮罩：Rust 原生抓的全屏背景图，必须覆盖整个窗口再叠半透明遮罩 ── */
+.capture-overlay .capture-fullscreen-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;    /* xcap 抓的是物理像素，可能比 window 大，cover 保证填充满 */
+  object-position: top left;
+  pointer-events: none;
+  display: block;
+  z-index: 0;
+}
+.capture-overlay .capture-canvas {
+  z-index: 1;          /* canvas 画选区挖空，覆盖在背景图之上 */
+}
+.capture-overlay .capture-hint {
+  z-index: 3;          /* 前景文字高于 canvas */
+}
+.capture-overlay .capture-tooltip {
+  z-index: 3;
+}
+/* 当有全屏背景图时，overlay 自身不需要半透明背景（否则双叠加全黑） */
+.capture-overlay.has-bg {
+  background: transparent;
+}
+
+.capture-recording-hint {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #ef4444;
+  color: #fff;
+  padding: 10px 22px;
+  border-radius: 24px;
+  font-size: 14px;
+  font-weight: 500;
+  z-index: 2147483647;
+  box-shadow: 0 4px 16px rgba(239, 68, 68, 0.4);
+  animation: capture-pulse 1.5s ease-in-out infinite;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.capture-recording-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #fff;
+  animation: capture-dot-pulse 1.5s ease-in-out infinite;
+}
+@keyframes capture-pulse {
+  0%, 100% { box-shadow: 0 4px 16px rgba(239, 68, 68, 0.4); }
+  50% { box-shadow: 0 4px 24px rgba(239, 68, 68, 0.7); }
+}
+@keyframes capture-dot-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.7); }
+}
+.capture-shortcut-settings .setting-row {
+  margin: 8px 0;
+}
+.capture-shortcut-settings code {
+  background: rgba(127, 127, 127, 0.15);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* ── 截图标注编辑器 ── */
+.capture-overlay .annotation-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+}
+.capture-overlay .annotation-toolbar {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: rgba(22, 28, 39, 0.96);
+  border: 1px solid rgba(100, 116, 139, 0.35);
+  border-radius: 8px;
+  padding: 4px 6px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  z-index: 4;
+  backdrop-filter: blur(10px);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+.capture-overlay .anno-tools,
+.capture-overlay .anno-colors,
+.capture-overlay .anno-widths {
+  display: flex;
+  gap: 1px;
+}
+.capture-overlay .anno-divider {
+  width: 1px;
+  height: 22px;
+  background: rgba(100, 116, 139, 0.3);
+  margin: 0 3px;
+}
+.capture-overlay .anno-tool,
+.capture-overlay .anno-action {
+  background: transparent;
+  border: none;
+  color: #cbd5e1;
+  padding: 5px 8px;
+  font-size: 15px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.12s, color 0.12s;
+  min-width: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.capture-overlay .anno-tool:hover,
+.capture-overlay .anno-action:hover {
+  background: rgba(100, 116, 139, 0.25);
+  color: #f1f5f9;
+}
+.capture-overlay .anno-tool.active {
+  background: rgba(34, 211, 238, 0.25);
+  color: #22d3ee;
+}
+.capture-overlay .anno-action:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.capture-overlay .anno-action:disabled:hover {
+  background: transparent;
+  color: #cbd5e1;
+}
+.capture-overlay .anno-confirm {
+  color: #4ade80;
+  font-weight: 600;
+}
+.capture-overlay .anno-confirm:hover {
+  background: rgba(74, 222, 128, 0.18);
+  color: #4ade80;
+}
+.capture-overlay .anno-cancel {
+  color: #f87171;
+}
+.capture-overlay .anno-cancel:hover {
+  background: rgba(248, 113, 113, 0.18);
+  color: #f87171;
+}
+.capture-overlay .anno-ocr {
+  color: #a78bfa;
+  font-size: 12px;
+  font-weight: 600;
+}
+.capture-overlay .anno-ocr:hover {
+  background: rgba(167, 139, 250, 0.18);
+  color: #a78bfa;
+}
+.capture-overlay .anno-color {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.12s, border-color 0.12s;
+}
+.capture-overlay .anno-color:hover {
+  transform: scale(1.15);
+}
+.capture-overlay .anno-color.active {
+  border-color: #fff;
+  transform: scale(1.15);
+}
+.capture-overlay .anno-width {
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: transparent;
+  color: #cbd5e1;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.capture-overlay .anno-width:hover {
+  background: rgba(100, 116, 139, 0.25);
+}
+.capture-overlay .anno-width.active {
+  background: rgba(34, 211, 238, 0.25);
+}
+.capture-overlay .anno-text-input {
+  position: absolute;
+  z-index: 5;
+  border-radius: 2px;
+  outline: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* ── OCR 结果弹窗 ── */
+.ocr-result-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ocr-result-box {
+  background: #1e293b;
+  border: 1px solid rgba(100, 116, 139, 0.3);
+  border-radius: 10px;
+  width: 480px;
+  max-width: 90vw;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+.ocr-result-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(100, 116, 139, 0.2);
+  color: #e2e8f0;
+  font-size: 14px;
+  font-weight: 600;
+}
+.ocr-result-close {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+.ocr-result-close:hover {
+  background: rgba(100, 116, 139, 0.2);
+  color: #f1f5f9;
+}
+.ocr-result-text {
+  flex: 1;
+  margin: 12px 16px;
+  background: #0f172a;
+  border: 1px solid rgba(100, 116, 139, 0.2);
+  border-radius: 6px;
+  color: #e2e8f0;
+  padding: 12px;
+  font-size: 14px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  resize: none;
+  outline: none;
+  min-height: 120px;
+  max-height: 50vh;
+  line-height: 1.6;
+}
+.ocr-result-text:focus {
+  border-color: rgba(34, 211, 238, 0.4);
+}
+.ocr-result-actions {
+  padding: 8px 16px 12px;
+  display: flex;
+  justify-content: flex-end;
+}
+.ocr-result-copy {
+  background: rgba(34, 211, 238, 0.15);
+  border: 1px solid rgba(34, 211, 238, 0.3);
+  color: #22d3ee;
+  padding: 6px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+.ocr-result-copy:hover {
+  background: rgba(34, 211, 238, 0.25);
 }

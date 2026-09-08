@@ -20,11 +20,12 @@
         <a href="#features">核心能力</a>
         <a href="#screens">界面展示</a>
         <a href="#themes">主题预设</a>
-        <a href="#docs">使用文档</a>
+        <a href="docs.html">使用文档</a>
+        <a href="changelog.html">更新日志</a>
         <a href="#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v2.0.1.exe" download>下载 v2.0.1</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v2.0.3.exe" download>下载 v2.0.3</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -32,12 +33,12 @@
     <main id="top">
       <section class="hero section-wrap" aria-labelledby="hero-title">
         <div class="hero-copy reveal">
-          <p class="eyebrow"><span class="status-dot"></span> 本地 Markdown 工作区 <em>v2.0.1 桌面版</em></p>
+          <p class="eyebrow"><span class="status-dot"></span> 本地 Markdown 工作区 <em>v2.0.3 桌面版</em></p>
           <h1 id="hero-title">本地 Markdown 知识库与编辑器</h1>
           <p class="hero-lede">围绕本地 Markdown 文件提供阅读、编辑、目录、图谱、检索、主题与多工作区管理。</p>
           <div class="hero-actions">
-            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v2.0.1.exe" download>下载 Windows 安装包</a>
-            <a class="button button-soft" href="#docs">查看使用文档</a>
+            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v2.0.3.exe" download>下载 Windows 安装包</a>
+            <a class="button button-soft" href="docs.html">查看使用文档</a>
           </div>
           <p class="hero-note">Windows 桌面端 · 本地文件优先 · 内容助手为可选接入</p>
           <div class="hero-metrics" aria-label="产品特性概览">
@@ -79,28 +80,69 @@
       <section class="section-wrap section-intro reveal" id="features">
         <p class="eyebrow">CORE CAPABILITIES</p>
         <h2>核心能力</h2>
-        <p>不改变 Markdown 文件本身，围绕目录、图谱、检索、主题、性能与日常维护体验补强。</p>
+        <p>不改变 Markdown 文件本身，围绕阅读、编辑、图谱、检索与日常维护补强。</p>
       </section>
 
-      <section class="section-wrap feature-list reveal">
-        <ol class="feature-rows">
-          <li><strong>阅读与修改分开处理</strong> — 阅读时强调目录与预览，编辑时强调输入稳定性与快捷键。</li>
-          <li><strong>本地文件优先</strong> — Markdown、图片、索引和工作区配置围绕本地目录组织，可迁移、可备份、可离线。</li>
-          <li><strong>知识图谱</strong> — 文档、标签和语义概念分层展示，图谱负责看关系，不替代文档结构。</li>
-          <li><strong>内置绘图编辑器</strong> — 轻量 Canvas 绘图（30KB 零依赖），7 种工具 + 撤销重做，保存为 Excalidraw 兼容 JSON。</li>
-          <li><strong>代码语法高亮</strong> — 40+ 语言代码块自动高亮，亮/暗主题适配，编辑工具栏按语言快速插入代码块。</li>
-          <li><strong>AI 内容助手</strong> — 可选接入 Ollama 或 DeepSeek，行内对话、润色翻译、语义检索、AI 生成图表与动画直接内嵌渲染。</li>
-          <li><strong>长时间使用不刺眼</strong> — 主题、字号、字体、背景和面板密度可调；柔光护眼主题默认降低对比度。</li>
-          <li><strong>检索与维护省心</strong> — 关键词检索、可选语义检索、Frontmatter 标准化、标签补全与主清单索引。</li>
-          <li><strong>性能优化围绕真实场景</strong> — 目录懒加载、增量解析、Worker 渲染、图谱自适应帧率。</li>
-        </ol>
+      <section class="section-wrap feature-cards reveal">
+        <div class="feature-grid">
+          <div class="feature-card">
+            <div class="feature-icon">📖</div>
+            <h3>阅读编辑分离</h3>
+            <p>阅读强调目录预览，编辑强调输入稳定与快捷键。</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">🗂️</div>
+            <h3>本地文件优先</h3>
+            <p>围绕本地目录组织，可迁移、可备份、可离线。</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">🕸️</div>
+            <h3>知识图谱</h3>
+            <p>文档、标签与语义概念分层展示关系。</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">✏️</div>
+            <h3>内置绘图</h3>
+            <p>轻量 Canvas 绘图，Excalidraw 兼容。</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">💻</div>
+            <h3>代码高亮</h3>
+            <p>40+ 语言代码块高亮，亮暗主题适配。</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">🤖</div>
+            <h3>AI 内容助手</h3>
+            <p>可选接入 Ollama / DeepSeek，润色翻译与图表生成。</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">📷</div>
+            <h3>截图与录屏</h3>
+            <p>Alt+A 区域截图标注，Alt+M 区域录屏，无感触发。</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">🌿</div>
+            <h3>护眼主题</h3>
+            <p>柔光护眼主题默认降低对比度，长时间使用不刺眼。</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">🔍</div>
+            <h3>检索与维护</h3>
+            <p>关键词检索、语义检索、Frontmatter 标准化。</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">⚡</div>
+            <h3>性能优化</h3>
+            <p>目录懒加载、增量解析、Worker 渲染、自适应帧率。</p>
+          </div>
+        </div>
       </section>
 
       <section class="section-wrap screens" id="screens">
         <div class="section-intro reveal">
           <p class="eyebrow">PRODUCT SURFACE</p>
           <h2>界面预览</h2>
-          <p>围绕阅读、编辑、检索与图谱四种核心场景。</p>
+          <p>围绕阅读、编辑、图谱、工作区与 AI 内容生成六大核心场景。</p>
         </div>
         <div class="screen-grid">
           <article class="screen-card reveal">
@@ -108,8 +150,8 @@
             <div class="screen-preview"><img src="source/阅读模式.webp" alt="阅读模式截图" loading="lazy"></div>
           </article>
           <article class="screen-card reveal reveal-delay-1">
-            <div class="screen-head"><span>02</span><div><h3>编辑模式</h3><p>格式工具栏、实时预览与快捷键面板围绕输入稳定性展开，支持沉浸模式</p></div></div>
-            <div class="screen-preview"><img src="source/编辑模式.webp" alt="编辑模式截图" loading="lazy"></div>
+            <div class="screen-head"><span>02</span><div><h3>智能编辑</h3><p>格式工具栏、实时预览与快捷键面板围绕输入稳定性展开，代码补全与行内对话栏围绕光标位置精准定位</p></div></div>
+            <div class="screen-preview"><img src="source/智能编辑.webp" alt="智能编辑截图" loading="lazy"></div>
           </article>
           <article class="screen-card reveal">
             <div class="screen-head"><span>03</span><div><h3>知识图谱</h3><p>文档、标签与语义概念分层展示，轻柔关系线替代高亮噪音，重点节点一目了然</p></div></div>
@@ -124,24 +166,24 @@
             <div class="screen-preview"><img src="source/知识脉络健康.webp" alt="知识脉络截图" loading="lazy"></div>
           </article>
           <article class="screen-card reveal reveal-delay-1">
-            <div class="screen-head"><span>06</span><div><h3>智能编辑</h3><p>编辑器内关键字行浏览目录、代码补全与行内对话栏围绕光标位置精准定位</p></div></div>
-            <div class="screen-preview"><img src="source/智能编辑.webp" alt="智能编辑截图" loading="lazy"></div>
+            <div class="screen-head"><span>06</span><div><h3>AI 文档转图表</h3><p>AI 生成 Mermaid 图表、Excalidraw 绘图，直接在文档中实时渲染显示</p></div></div>
+            <div class="screen-preview"><img src="source/AI文档转图表实时显示.webp" alt="AI文档转图表截图" loading="lazy"></div>
           </article>
         </div>
 
         <div class="assist-intro reveal">
           <p class="eyebrow">OPTIONAL ASSIST</p>
           <h3>可选辅助功能</h3>
-          <p>内容助手为可选接入，默认关闭。开启后可在编辑过程中提供对话、润色翻译与语义检索等辅助能力。</p>
+          <p>内容助手为可选接入，默认关闭。开启后可在编辑过程中提供对话、润色翻译、多语种翻译、语义检索与 AI 生成内容等辅助能力。</p>
         </div>
         <div class="assist-grid">
           <article class="assist-card reveal">
-            <div class="screen-head"><span class="assist-tag">可选</span><div><h4>行内对话</h4><p>光标位置直接对话，结果插入文档，支持历史记录</p></div></div>
-            <div class="screen-preview assist-preview"><img src="source/AI对话.webp" alt="行内对话截图" loading="lazy"></div>
+            <div class="screen-head"><span class="assist-tag">可选</span><div><h4>多语种灵活翻译</h4><p>选中文本一键翻译为多种语言，保留 Markdown 结构，翻译结果直接插入文档</p></div></div>
+            <div class="screen-preview assist-preview"><img src="source/AI多语种灵活翻译.webp" alt="多语种翻译截图" loading="lazy"></div>
           </article>
           <article class="assist-card reveal reveal-delay-1">
-            <div class="screen-head"><span class="assist-tag">可选</span><div><h4>润色与翻译</h4><p>选中文本一键润色、续写或翻译，保留 Markdown 结构</p></div></div>
-            <div class="screen-preview assist-preview"><img src="source/AI润色与翻译.webp" alt="润色与翻译截图" loading="lazy"></div>
+            <div class="screen-head"><span class="assist-tag">可选</span><div><h4>AI 生成 HTML 动画</h4><p>AI 生成 HTML/CSS/JS 动画代码，直接在文档中实时渲染显示交互效果</p></div></div>
+            <div class="screen-preview assist-preview"><img src="source/AI生成html动画实时显示.webp" alt="AI生成动画截图" loading="lazy"></div>
           </article>
           <article class="assist-card reveal reveal-delay-2">
             <div class="screen-head"><span class="assist-tag">可选</span><div><h4>语义检索</h4><p>自然语言检索知识库内容，快速定位相关文档段落</p></div></div>
@@ -166,17 +208,31 @@
         </div>
       </section>
 
-      <section class="section-wrap docs" id="docs">
+      <section class="section-wrap docs-links" id="docs">
         <div class="section-intro reveal">
           <p class="eyebrow">DOCUMENTS & GUIDES</p>
-          <h2>使用文档</h2>
+          <h2>文档与更新</h2>
         </div>
-        <ul class="doc-list reveal">
-          <li><a href="#builtin-docs"><strong>01 · 安装与启动</strong> — 环境要求、运行方式与桌面版说明。</a></li>
-          <li><a href="privacy.html"><strong>02 · 隐私声明</strong> — 本地文件、索引、授权与第三方模型服务的数据边界。</a></li>
-          <li><a href="#builtin-docs"><strong>03 · 知识库规范</strong> — 文档编写、图谱标记、Frontmatter 与长期维护方式。</a></li>
-          <li><a href="#builtin-docs"><strong>04 · 内容助手说明</strong> — 仅在需要时连接本地或云端模型。</a></li>
-        </ul>
+        <div class="link-cards reveal">
+          <a class="link-card" href="docs.html">
+            <div class="link-card-icon">📘</div>
+            <h3>使用文档</h3>
+            <p>安装启动、文档编写规范、图谱标记、主题外观、快捷键速查。</p>
+            <span class="link-card-go">查看文档 →</span>
+          </a>
+          <a class="link-card" href="changelog.html">
+            <div class="link-card-icon">📝</div>
+            <h3>更新日志</h3>
+            <p>每个版本的详细变更记录，包含新功能、缺陷修复与体验优化。</p>
+            <span class="link-card-go">查看日志 →</span>
+          </a>
+          <a class="link-card" href="privacy.html">
+            <div class="link-card-icon">🔒</div>
+            <h3>隐私声明</h3>
+            <p>本地文件、索引、授权与第三方模型服务的数据边界。</p>
+            <span class="link-card-go">查看声明 →</span>
+          </a>
+        </div>
       </section>
 
       <section class="section-wrap downloads" id="downloads">
@@ -186,9 +242,9 @@
         </div>
         <div class="download-block reveal">
           <div class="download-primary">
-            <span class="download-badge">当前稳定版 v2.0.1</span>
-            <p>本地工作区、阅读/修改双模式、图谱、主题、增量索引、绘图编辑器、代码语法高亮与可选 AI 辅助功能。</p>
-            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v2.0.1.exe" download>下载安装包</a>
+            <span class="download-badge">当前稳定版 v2.0.3</span>
+            <p>独立窗口截图标注、录屏、OCR 文字识别、知识图谱、主题、增量索引、绘图编辑器、代码语法高亮与可选 AI 辅助功能。</p>
+            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v2.0.3.exe" download>下载安装包</a>
           </div>
           <div class="download-secondary">
             <h3>最近更新</h3>
@@ -217,8 +273,8 @@
             </ul>
             <p class="download-links">
               <a href="privacy.html">隐私声明</a> ·
-              <a href="#builtin-docs">安装说明</a> ·
-              <a href="#builtin-docs">更新日志</a>
+              <a href="docs.html">使用文档</a> ·
+              <a href="changelog.html">完整更新日志</a>
             </p>
           </div>
         </div>
@@ -504,7 +560,8 @@
       <div class="footer-links">
         <a href="#features">核心能力</a>
         <a href="#themes">主题预设</a>
-        <a href="#docs">使用文档</a>
+        <a href="docs.html">使用文档</a>
+        <a href="changelog.html">更新日志</a>
         <a href="#downloads">版本下载</a>
       </div>
       <small>© <span data-year></span> MyTemple Knowledge</small>
