@@ -26,7 +26,8 @@
     ],
     "resources": {
       "WebView2Loader.dll": "",
-      "../public": "resources/public"
+      "../public": "resources/public",
+      "../version.json": "resources/version.json"
     },
     "externalBin": [],
     "copyright": "",
