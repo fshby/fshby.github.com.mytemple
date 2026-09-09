@@ -13825,7 +13825,7 @@ els.goToLicenseBtn?.addEventListener("click", () => {
 // 授权管理 —— localStorage 持久化 + 首屏本地缓存优先 + 后台联网确认
 const LICENSE_CACHE_KEY = "license_cache_v1";
 const LICENSE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 分钟有效（同后台定时检查周期）
-const LICENSE_NET_TIMEOUT_MS = 1500;           // 联网校验 1.5s 超时，避免网络波动拖慢启动
+const LICENSE_NET_TIMEOUT_MS = 3000;           // 联网校验 3s 超时（后端已预热缓存，正常 <100ms；留足余量防慢机器/首次冷启动）
 
 function applyLicenseResultUI(result) {
   if (!result) return;
@@ -13893,9 +13893,10 @@ async function checkLicenseStatus(opts) {
     }
     return { activated: false, _cacheMiss: true };
   }
-  // 2) 正常路径：/api/license/check 拉取，带 1.5s 超时避免网络波动拖慢启动
+  // 2) 正常路径：/api/license/check 拉取，带 3s 超时避免网络波动拖慢启动
   //    注意：api.get 的底层可能走 Tauri IPC（无 AbortSignal），因此这里 Promise.race 超时只是
   //    *逻辑层面* 的早返回，底层 HTTP/IPC 请求仍可能继续执行并更新缓存（不影响启动时间）。
+  //    后端 license::prewarm_caches() 在启动时已预热硬件指纹缓存，正常响应 <100ms。
   try {
     let timer = null;
     const timeoutP = new Promise((_, rej) => {
@@ -14154,8 +14155,16 @@ els.aiReindexBtn?.addEventListener("click", async () => {
   els.aiReindexBtn.disabled = true;
   try {
     const result = await api.post("/api/ai/reindex", {});
-    setAiStatus(result.status);
-    showToast("已开始后台重建索引");
+    if (result.ok === false && result.error) {
+      showToast(result.error);
+    } else {
+      setAiStatus(result.status);
+      const skipped = result.skipped || 0;
+      const total = result.totalFiles || 0;
+      const parts = [`索引重建完成：${result.chunkCount} 分块，${result.documentCount} 文档`];
+      if (skipped > 0) parts.push(`${skipped}/${total} 文件跳过`);
+      showToast(parts.join("，"));
+    }
   } catch (error) { showToast(error.message || "无法重建索引"); }
   finally { els.aiReindexBtn.disabled = false; }
 });

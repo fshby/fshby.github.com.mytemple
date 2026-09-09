@@ -1,13 +1,19 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "MyTemple Knowledge 默认能力：允许主窗口加载本地 axum 服务并调用 shell + dialog 插件",
-  "windows": ["main"],
+  "description": "MyTemple Knowledge 默认能力：允许主窗口加载本地 axum 服务并调用 shell + dialog + global-shortcut 插件",
+  "windows": ["main", "screenshot", "recorder"],
+  "remote": {
+    "urls": ["http://127.0.0.1", "http://127.0.0.1:*", "http://localhost", "http://localhost:*"]
+  },
   "permissions": [
     "core:default",
     "core:webview:default",
     "core:window:default",
+    "core:event:default",
+    "core:image:default",
     "shell:allow-open",
-    "dialog:default"
+    "dialog:default",
+    "global-shortcut:default"
   ]
 }

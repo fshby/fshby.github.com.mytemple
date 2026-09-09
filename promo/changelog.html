@@ -24,7 +24,7 @@
         <a href="index.html#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v2.0.3.exe" download>下载 v2.0.3</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v2.1.1.exe" download>下载 v2.1.1</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -40,6 +40,13 @@
         <div class="changelog-toc reveal">
           <h3>版本索引</h3>
           <ul>
+            <li><a href="#v2.1.1">v2.1.1</a> — 截图选区边界约束（选区框越界难以选中）</li>
+            <li><a href="#v2.1.0">v2.1.0</a> — 录屏功能稳定性加固（多次录制失败 + 桌面选择器 + 状态清理）</li>
+            <li><a href="#v2.0.9">v2.0.9</a> — 知识库智能管理故障排查与稳定性增强</li>
+            <li><a href="#v2.0.8">v2.0.8</a> — AI 忠实性强约束 + 反幻觉机制</li>
+            <li><a href="#v2.0.7">v2.0.7</a> — 启动授权弹窗修复（WMI 缓存预热 + 超时放宽）</li>
+            <li><a href="#v2.0.6">v2.0.6</a> — 截图/录屏健壮性加固（黑窗 + 遮罩挡鼠标 + 录屏选择器）</li>
+            <li><a href="#v2.0.5">v2.0.5</a> — 截图核心缺陷彻底修复（多次截图失败 + 保存后卡死）</li>
             <li><a href="#v2.0.3">v2.0.3</a> — 截图架构重构 + 防卡死保障 + 图表修复</li>
             <li><a href="#v2.0.2">v2.0.2</a> — 截图标注 + 录屏 + OCR + 独立窗口无感触发</li>
             <li><a href="#v2.0.1">v2.0.1</a> — 图谱修复 + 轻量绘图 + AI增强 + 代码高亮 + 导出优化 + DeepSeek接入</li>
@@ -60,6 +67,95 @@
             <li><a href="#v1.8.93">v1.8.93</a> — 界面与体验升级 + 性能优化</li>
           </ul>
         </div>
+
+        <article class="doc-section reveal" id="v2.1.1">
+          <h3>v2.1.1 · 截图选区边界约束（选区框越界难以选中）</h3>
+          <ul>
+            <li><b>缺陷修复（screenshot.html）</b>：自定义截图区域过大靠近屏幕边界时选区框出现在边界外难以选中。</li>
+            <li><b>根因</b>：<code>startRegionSelection</code> 的 <code>onDown</code> 直接 <code>startX = curX = e.clientX</code>、<code>onMove</code> 直接 <code>curX = e.clientX</code>，鼠标坐标未经任何边界约束。当用户拖拽到屏幕边缘/外时，选区框坐标超出视口范围（负值或超过 <code>innerWidth/innerHeight</code>），选区框部分或全部跑到屏幕外，用户难以选中框边缘进行操作。</li>
+            <li><b>修复</b>：
+              <ul>
+                <li><code>onDown</code>：<code>startX/curX</code> 用 <code>Math.max(0, Math.min(e.clientX, window.innerWidth))</code> 约束；<code>startY/curY</code> 同理。</li>
+                <li><code>onMove</code>：<code>curX/curY</code> 用同样的 clamp 约束，确保拖拽过程中选区框始终在视口内。</li>
+                <li><code>onUp</code>：最终 <code>region</code> 对象也 clamp（<code>x</code> 不超过 <code>innerWidth-w</code>，<code>y</code> 不超过 <code>innerHeight-h</code>）作为防御性保底。</li>
+                <li>工具提示（tooltip）位置也 clamp 到视口内（<code>left</code> 不超过 <code>innerWidth-120</code>，<code>top</code> 不超过 <code>innerHeight-30</code>）。</li>
+              </ul>
+            </li>
+            <li><b>健壮性增强</b>：三层边界约束（<code>onDown</code> + <code>onMove</code> + <code>onUp</code>），任一层失效也有下一层保底。工具提示不会跑到屏幕外不可见。</li>
+            <li><b>不影响其他功能</b>：仅修改 <code>screenshot.html</code> 的 <code>startRegionSelection</code> 函数内 <code>onDown/onMove/onUp</code> 和 <code>draw</code> 的 tooltip 位置逻辑。录屏功能、AI 功能、知识库管理不受影响。无遮罩干扰（截图窗口已有 <code>always_on_top</code> + 透明 + 全屏覆盖，选区框在 canvas 内绘制不会遮挡鼠标）。</li>
+          </ul>
+        </article>
+
+        <article class="doc-section reveal" id="v2.1.0">
+          <h3>v2.1.0 · 录屏功能稳定性加固（多次录制失败 + 桌面选择器 + 状态清理）</h3>
+          <ul>
+            <li><b>第二次及后续录制失败修复（global_capture.rs + recorder.html）</b>：根因为 <code>show_recorder_window</code> 复用已有录屏窗口时仅 <code>set_always_on_top + unminimize + show</code>，不 reload 页面。前端 <code>recording/recorder/chunks/region</code> 等变量残留上次录屏状态，DOM 已被 <code>document.body.innerHTML=''</code> 清空，<code>init()</code> 不再执行 → 用户看到空白窗口无法操作；或 <code>api_start_native_record</code> 因前端状态错乱失败 → 降级到 <code>getDisplayMedia</code> 弹出桌面/窗口选择器。修复：复用窗口时 <code>eval window.location.href='recorder.html?_t=时间戳'</code> 重新加载页面，确保 <code>init()</code> 重新执行、所有 JS 变量重置。</li>
+            <li><b>录屏默认录桌面不弹选择器修复</b>：根因同上。<code>RecordState</code> 残留为 <code>Some</code> 导致 <code>start_native_record</code> 返回「录屏已在进行中」→ 前端降级到 <code>getDisplayMedia</code> 弹出选择器。修复后窗口 reload 确保前端状态干净，<code>api_start_native_record</code> 成功走 xcap DXGI 桌面捕获（无选择器）。<code>close_recorder_window</code> 已有的 <code>stop_native_record</code> 兜底 + 新增页面 reload 双重保险确保 <code>RecordState</code> 不残留。</li>
+            <li><b>stop_native_record 健壮性增强（global_capture.rs）</b>：原代码 <code>state.recorder.stop()</code> 可能阻塞或 panic，如果 panic 会卡住 Mutex 锁导致后续所有录屏操作死锁。修复：用 <code>std::panic::catch_unwind(AssertUnwindSafe)</code> 包裹 <code>recorder.stop()</code>，即使 panic 也确保 <code>guard.take()</code> 已移除 RecordState，锁正常释放。</li>
+            <li><b>handle_recorder_result 保存后清理 + 健壮性</b>：保存成功后执行 <code>stop_native_record + release_record_lock + 清理 pending_record_bg 临时文件 + emit recorder-saved 事件</code>（含 path/filename/size）。保存失败也释放锁和状态防止卡住。新增空内容校验：<code>bytes.is_empty()</code> 时跳过保存返回错误。</li>
+            <li><b>close_recorder_window 页面重置</b>：关闭窗口后 <code>eval</code> 导航到 <code>about:blank</code>，下次 <code>show_recorder_window</code> 复用时 reload 到 <code>recorder.html</code> 获得干净状态。</li>
+            <li><b>前端状态完整重置（recorder.html）</b>：<code>cleanupAndClose</code> 完整重置 <code>recording/timerInterval/recorder(MediaRecorder.stop)/chunks/overlay/canvas/ctx/outCanvas/outCtx/frameImg/bgImg/region/elapsed</code> 全部变量。<code>stopRecording</code> 保存 recorder/chunks 到临时变量 <code>savedRecorder/savedChunks</code>，保存完成后 <code>recorder=null/chunks=[]</code> 清理引用；<code>FileReader.onerror</code> 也走 <code>cleanupAndClose</code> 防止卡住。等待最后一帧从 200ms 增加到 300ms 确保数据完整性。</li>
+            <li><b>不影响其他功能</b>：仅修改 <code>show_recorder_window/close_recorder_window/stop_native_record/handle_recorder_result</code> 后端函数和 <code>recorder.html</code> 前端 <code>cleanupAndClose/stopRecording</code> 函数。截图功能、AI 功能、知识库管理不受影响。无遮罩干扰（已有 <code>always_on_top(false) + minimize + hide + 移出屏幕</code> 多重保险）。</li>
+          </ul>
+        </article>
+
+        <article class="doc-section reveal" id="v2.0.9">
+          <h3>v2.0.9 · 知识库智能管理故障排查与稳定性增强</h3>
+          <ul>
+            <li><b>ai_reindex 内存浪费修复（handlers.rs）</b>：原代码在更新 state.chunks 时执行 <code>*chunks_ref = all_chunks.clone()</code>，万级 chunk 场景下 clone 全量拷贝几十 MB 堆数据后再丢弃原 vec，造成无谓内存峰值。修复：改为 <code>std::mem::take(&mut all_chunks)</code> 零拷贝转移所有权。</li>
+            <li><b>ai_reindex 静默吞错修复（handlers.rs）</b>：原代码 <code>read_file_force</code> 失败时 <code>Err(_) => continue</code>，既不记日志也不计数，用户无法知道哪些文件被跳过。修复：改为 <code>Err(e) => log::warn</code> 记录失败文件路径和错误 + <code>skipped += 1</code>；同时新增内容为空检查，空文件也跳过并计数。响应新增 <code>skipped</code> 和 <code>totalFiles</code> 字段，前端 Toast 显示「X/Y 文件跳过」。</li>
+            <li><b>ai_reindex 进度反馈修复（handlers.rs）</b>：原代码 progress 字段在全量重建过程中从未更新（status() 返回的 progress 始终为 0,0），前端无法获知进度。修复：重建开始时设 (0, total_files)，逐文件递增 done，每 10 文件 log::info 输出进度，完成后设 (total, total)。</li>
+            <li><b>DeepSeek/Ollama 错误响应切片 panic 修复（rag.rs）</b>：原代码 <code>&text[..text.len().min(500)]</code> 在错误响应包含多字节 UTF-8 字符时，500 字节位置可能落在字符中间导致 panic（与之前中文切片 bug 同类）。修复：chat_with_deepseek 和 chat_with_ollama 均改为 <code>text.chars().take(500).collect::&lt;String&gt;()</code>，按字符边界安全截断。</li>
+            <li><b>lexical_search 性能优化（rag.rs）</b>：原代码在 O(chunks × unique_tokens) 双重循环中，每个 token 对每个 chunk 反复调用 <code>chunk.title.to_lowercase()</code> / heading / text，导致同一 chunk 被重复 lowercase 多次。修复：预计算 <code>title_lower</code> / <code>heading_lower</code> / <code>text_lower</code> 一次，循环内直接 contains 查找，降低 String 分配次数从 O(chunks × tokens) 到 O(chunks)。</li>
+            <li><b>并发安全（handlers.rs）</b>：ai_reindex 入口新增 progress 检查：若 <code>total > 0 && done < total</code>，直接返回 <code>{ ok: false, error: '索引重建正在进行中' }</code>，防止用户快速点击或前端重试导致并发重建。</li>
+            <li><b>前端改进（app.js）</b>：aiReindexBtn 点击处理器增强：检测 <code>result.ok === false</code> 显示并发拒绝提示；正常路径 Toast 显示分块数、文档数、跳过数。</li>
+            <li><b>不影响其他功能</b>：仅修改 ai_reindex / lexical_search / chat_with_deepseek / chat_with_ollama 和前端 aiReindexBtn 处理器，不改变 API 路由结构、请求格式、响应基本结构（仅新增可选字段）。其他功能（截图/录屏/授权/AI 文本加工）不受影响。</li>
+          </ul>
+        </article>
+
+        <article class="doc-section reveal" id="v2.0.8">
+          <h3>v2.0.8 · AI 忠实性强约束 + 反幻觉机制</h3>
+          <ul>
+            <li><b>选中文本加工忠实性约束（新增 AI_FAITHFULNESS_RULE）</b>：适用模式 polish/rewrite/summary/keypoints/terms/comment。五重约束：① 严格基于原文：禁止编造/臆测/补充原文中不存在的事实、数据、引用、人名、日期、结论；禁止引入训练数据中的「常识」填补原文未提及的内容；信息不足时标注「【注意】原文中缺少XXX信息，已跳过」。② 不得篡改核心语义：可调整措辞与语序，但不得改变事实判断/观点立场/因果关系/数量关系（原文「可能」不得改「必然」，「A导致B」不得改「B导致A」）。③ 不得删减关键信息：可精简冗余表述，但不得删除关键事实/数据/条件/前提/限定词。④ 反幻觉自检：输出前逐句自问「这句话的信息是否直接来自原文？」若否则删除或替换为忠实转述。⑤ 用户自定义要求即硬边界。</li>
+            <li><b>翻译模式忠实性强化</b>：新增 4 条忠实性约束（译文不得擅自增加原文没有的信息；不得删减原文关键信息——每段每句每个术语必须有对应译文；不得篡改原文条件/因果/程度/时态等限定关系；逐句对照自检——原文几句译文几句）。自检提示从「有没有非目标语言字」扩展为「① 有没有非目标语言字 ② 有没有增删原文信息」。</li>
+            <li><b>用户自定义要求硬边界化</b>：所有模式的用户 instruction 从「用户额外要求：...」升级为「【用户自定义要求 — 硬边界，必须严格执行，不得偏离】」。inline-chat 新增「用户指令即硬边界」system prompt：用户设定的风格/字数/格式/视角/禁用词必须严格执行，不得以「更好」为由偏离；用户请求与文档上下文矛盾时以用户请求为准。</li>
+            <li><b>RAG 知识库反幻觉强化</b>：新增 4 条反幻觉强约束：只能基于检索到的文档片段回答，不得引入训练数据外部信息；无相关信息时必须如实说明「检索到的文档中未包含相关内容」，不得编造；不得将碎片信息拼接臆测为完整结论；回答引用来源编号 [n] 可溯源验证。</li>
+            <li><b>不影响其他功能</b>：仅修改 AI system/user prompt 构造逻辑，不改变 API 路由/请求格式/响应结构/前端 UI。</li>
+          </ul>
+        </article>
+
+        <article class="doc-section reveal" id="v2.0.7">
+          <h3>v2.0.7 · 启动授权弹窗修复（WMI 缓存预热 + 超时放宽）</h3>
+          <ul>
+            <li><b>启动未授权弹窗几秒后自动消失（缺陷修复）</b>：软件每次启动后弹出「未授权」窗口，等待几秒后自动消失。根因：首次调用 <code>/api/license/check</code> 时，后端 <code>verify_license</code> 需通过 PowerShell 查询 WMI 获取硬件标识（Win32_Processor.ProcessorId、Win32_DiskDrive.SerialNumber、Win32_BaseBoard.SerialNumber、Win32_ComputerSystemProduct.UUID）和操作系统安装时间（Win32_OperatingSystem.InstallDate），单次查询耗时 2~5 秒。这些值虽有进程内缓存，但进程启动时缓存为空。前端 <code>LICENSE_NET_TIMEOUT_MS=1500ms</code> 超时导致 <code>Promise.race</code> 先返回 timeout，误判为未授权并弹出窗口；随后后台请求完成、缓存就绪，下一次 1.5s 轮询命中缓存才清除弹窗。</li>
+            <li><b>后端预热缓存</b>：<code>license.rs</code> 新增 <code>pub fn prewarm_caches()</code>，调用 <code>get_machine_code()</code>（触发 WMI 查询，写入 HARDWARE_CACHE + MACHINE_CODE_CACHE）和 <code>get_system_reference_time()</code>（触发 OS 安装时间查询，写入 SYSTEM_REF_TIME_CACHE）。<code>lib.rs::run()</code> 在 <code>env_logger::init()</code> 之后立即 <code>std::thread::spawn</code> 专用 OS 线程调用 <code>prewarm_caches()</code>，不阻塞启动流程。前端发起授权检查时缓存已就绪，<code>verify_license</code> 走缓存路径微秒级返回。</li>
+            <li><b>前端超时放宽</b>：<code>LICENSE_NET_TIMEOUT_MS</code> 从 1500ms 调整为 3000ms，为慢机器/首次冷启动留足余量（正常响应 <100ms，3s 仅为极端兜底）。</li>
+            <li><b>不影响其他功能</b>：<code>prewarm_caches</code> 仅在后台线程执行，不阻塞启动流程；超时放宽只影响授权检查，不改变其他 API 行为。</li>
+          </ul>
+        </article>
+
+        <article class="doc-section reveal" id="v2.0.6">
+          <h3>v2.0.6 · 截图/录屏健壮性加固（黑窗 + 遮罩挡鼠标 + 录屏选择器）</h3>
+          <ul>
+            <li><b>截图勾选✓弹黑色命令窗口（缺陷修复）</b>：截图区域勾选✓确认后屏幕闪现黑色 PowerShell/CMD 控制台窗口。根因：<code>copy_image_to_clipboard</code> 与 OCR 识别使用 <code>std::process::Command::new("powershell")</code> 启动子进程，未设置 <code>CREATE_NO_WINDOW</code> 标志，Windows 默认为控制台程序分配可见窗口。修复：两处 PowerShell 调用统一补 <code>.creation_flags(0x08000000)</code>（CREATE_NO_WINDOW），子进程不再弹黑窗。</li>
+            <li><b>录屏后遮罩残留挡住鼠标（缺陷修复）</b>：录屏结束/取消后录屏遮罩窗口仍覆盖屏幕，鼠标无法点击桌面与其他软件。根因：recorder.html 的 <code>closeRecorderWindow()</code> 调用 <code>/api/screenshot/close</code>，该端点执行 <code>close_screenshot_window</code> 只关闭截图窗口；录屏窗口（label=recorder）保持 <code>always_on_top</code> 可见，导致鼠标被遮挡。修复：新增独立 HTTP 端点 <code>POST /api/recorder/close</code>，执行 <code>close_recorder_window</code> 真正关闭录屏窗口（取消置顶→最小化→隐藏→移出屏幕）；recorder.html 改用 <code>/api/recorder/close</code> + IPC <code>recorder_window_close</code> 双重关闭。</li>
+            <li><b>录屏默认不录系统桌面弹选择器（缺陷修复）</b>：录屏时不默认录制系统桌面，而是弹出 getDisplayMedia 桌面/窗口选择器让用户选择。根因：取消/异常退出录屏时 <code>cleanupAndClose()</code> 未调用 <code>api_stop_native_record</code>，<code>RecordState</code> 残留为 Some；下一次 <code>start_native_record</code> 返回"录屏已在进行中"错误，前端降级到 <code>navigator.mediaDevices.getDisplayMedia</code> 弹出选择器。修复：<code>close_recorder_window</code> 兜底调用 <code>stop_native_record</code> 释放 RecordState；<code>cleanupAndClose</code> 显式调用 <code>api_stop_native_record</code>；确保任何关闭路径都释放原生录屏状态，下次直接走 xcap DXGI 桌面捕获（无选择器）。</li>
+            <li><b>健壮性增强</b>：新增 <code>POST /api/recorder/result</code> HTTP 降级端点（先关窗口再 spawn_blocking 后台保存），IPC 失败时录屏文件不丢失；recorder.html 停止录屏结果保存走 IPC <code>recorder_result</code>，失败降级 HTTP <code>/api/recorder/result</code>；<code>close_recorder_window</code> 统一兜底停止原生录屏 + 释放锁 + 多重保险隐藏窗口。</li>
+          </ul>
+        </article>
+
+        <article class="doc-section reveal" id="v2.0.5">
+          <h3>v2.0.5 · 截图核心缺陷彻底修复（多次截图失败 + 保存后卡死）</h3>
+          <ul>
+            <li><b>多次截图失败根因修复</b>：resetScreenshotUI() 中 <code>const overlay = document.getElementById('screenshotOverlay')</code> 声明了局部常量，遮蔽了全局 <code>let overlay</code>。随后 <code>overlay = null</code> 尝试给 const 赋值，在 ES Module 严格模式下抛出 TypeError，导致 loadAndShow 中断、isActive 卡在 true、轮询永久停止。修复：局部变量重命名为 oldOverlay/oldOcrModal，不再遮蔽全局。</li>
+            <li><b>保存后卡死根因修复</b>：screenshot_result IPC 处理函数同步调用 handle_screenshot_result，其中 PowerShell 剪贴板操作阻塞 async runtime 1-3 秒。修复：改用 tauri::async_runtime::spawn_blocking 在独立线程执行保存/剪贴板操作，IPC 立即返回。</li>
+            <li><b>新增 HTTP 降级端点</b>：新增 POST /api/screenshot/result，接收 {image, action} JSON，先关窗口再 spawn_blocking 保存。前端 confirmEdit 中 IPC 失败时自动降级走 HTTP，截图不丢失。</li>
+            <li><b>移除 window.close() 调用</b>：该调用会销毁 WebView 页面上下文，导致窗口复用时页面空白。移除后窗口由后端 hide() 控制，复用更稳定。</li>
+            <li><b>全局变量完整重置</b>：confirmEdit 中重置 overlay/canvas/ctx/annoCanvas/annoCtx/toolbar/tooltip/hint/annotations/redoStack/isDrawing/brushPath/startPos/curPos/textInputEl/mosaicCanvas 全部全局变量。resetScreenshotUI 中释放上一次截图的 blob URL，防止内存泄漏。</li>
+            <li><b>错误恢复机制</b>：loadAndShow 的 catch 和 img.onerror 分支中重置 isActive=false，确保错误后轮询不中断，下一次截图仍可正常触发。</li>
+            <li><b>剪贴板临时文件唯一化</b>：copy_image_to_clipboard 临时文件从 mt_clip_{pid}.png 改为 mt_clip_{uuid}.png，避免并发截图时文件冲突。</li>
+          </ul>
+        </article>
 
         <article class="doc-section reveal" id="v2.0.3">
           <h3>v2.0.3 · 截图架构重构 + 防卡死保障 + 图表修复</h3>

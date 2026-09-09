@@ -1,6 +1,6 @@
 [package]
 name = "mytemple-server"
-version = "2.0.1"
+version = "2.1.1"
 edition = "2021"
 description = "MyTemple Knowledge - Rust 原生后端 (Phase 5 纯原生架构)"
 
@@ -82,6 +82,11 @@ encoding_rs = "0.8"
 
 # 向量 mmap 只读映射（避免大向量表全量堆拷贝）
 memmap2 = "0.9"
+tauri-plugin-global-shortcut = "2.3.2"
+xcap = "0.9.8"
+
+# PNG 编码（屏幕截图输出）— 关 default-features 只开 png，省体积
+image = { version = "0.25", default-features = false, features = ["png"] }
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

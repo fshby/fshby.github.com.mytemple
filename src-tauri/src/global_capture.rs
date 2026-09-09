@@ -306,10 +306,12 @@ pub fn precreate_windows(app: &AppHandle, port: u16) {
                 .skip_taskbar(true)
                 .visible(false)
                 .inner_size(mon_w, mon_h)
-                .position(0.0, 0.0)
+                // 预创建时放在屏幕外（避免启动时闪烁/残留，集显上透明窗口初始化可能有渲染残留）
+                // show 的时候再移回 (0,0)
+                .position(-10000.0, -10000.0)
                 .build()
             {
-                Ok(_) => log::info!("[screenshot-window] 截图窗口预创建成功 (无边框+手动覆盖，更稳定)"),
+                Ok(_) => log::info!("[screenshot-window] 截图窗口预创建成功 (屏幕外预创建，无边框+手动覆盖，更稳定)"),
                 Err(e) => log::warn!("[screenshot-window] 截图窗口预创建失败: {}", e),
             }
         }
@@ -332,10 +334,10 @@ pub fn precreate_windows(app: &AppHandle, port: u16) {
                 .skip_taskbar(true)
                 .visible(false)
                 .inner_size(mon_w, mon_h)
-                .position(0.0, 0.0)
+                .position(-10000.0, -10000.0)
                 .build()
             {
-                Ok(_) => log::info!("[recorder-window] 录屏窗口预创建成功 (无边框+手动覆盖，更稳定)"),
+                Ok(_) => log::info!("[recorder-window] 录屏窗口预创建成功 (屏幕外预创建，无边框+手动覆盖，更稳定)"),
                 Err(e) => log::warn!("[recorder-window] 录屏窗口预创建失败: {}", e),
             }
         }
@@ -485,6 +487,15 @@ fn show_screenshot_window(app: &AppHandle) {
 /// 截图窗口已就绪（前端图片已加载完成），显示窗口
 pub fn on_screenshot_window_ready(app: &AppHandle) {
     use tauri::Manager as _;
+    // 安全检查：只有当有待处理的截图数据时才显示窗口（防止窗口误显示挡住屏幕）
+    let has_pending = match pending_screenshot().lock() {
+        Ok(guard) => guard.is_some(),
+        Err(_) => false,
+    };
+    if !has_pending {
+        log::warn!("[screenshot] ready 信号但无待处理截图数据，不显示窗口");
+        return;
+    }
     if let Some(win) = app.get_webview_window("screenshot") {
         let _ = win.show();
         let _ = win.set_focus();
@@ -587,7 +598,8 @@ fn copy_image_to_clipboard(png_bytes: &[u8]) -> Result<(), String> {
 
     // 使用 PowerShell 设置剪贴板图片（Windows 原生方式）
     // 写入临时文件然后用 Set-Clipboard
-    let temp_path = std::env::temp_dir().join(format!("mt_clip_{}.png", std::process::id()));
+    // 使用 UUID 避免并发截图时临时文件冲突
+    let temp_path = std::env::temp_dir().join(format!("mt_clip_{}.png", uuid::Uuid::new_v4()));
     std::fs::write(&temp_path, png_bytes).map_err(|e| format!("写入临时文件失败: {}", e))?;
 
     let ps_script = format!(
@@ -595,9 +607,17 @@ fn copy_image_to_clipboard(png_bytes: &[u8]) -> Result<(), String> {
         temp_path.display()
     );
 
-    let output = std::process::Command::new("powershell")
-        .args(["-NoProfile", "-NonInteractive", "-Command", &ps_script])
-        .output()
+    // CREATE_NO_WINDOW (0x08000000)：防止弹出黑色 PowerShell 控制台窗口
+    // 关键：不加此 flag 时，每次复制到剪贴板都会闪现一个黑色 CMD 窗口
+    #[cfg(target_os = "windows")]
+    use std::os::windows::process::CommandExt;
+    let mut cmd = std::process::Command::new("powershell");
+    cmd.args(["-NoProfile", "-NonInteractive", "-Command", &ps_script]);
+    #[cfg(target_os = "windows")]
+    {
+        cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    }
+    let output = cmd.output()
         .map_err(|e| format!("启动 PowerShell 失败: {}", e))?;
 
     let _ = std::fs::remove_file(&temp_path);
@@ -720,6 +740,14 @@ fn show_recorder_window(app: &AppHandle) {
             let _ = win.set_size(tauri::PhysicalSize::new(size.width, size.height));
             let _ = win.set_position(tauri::PhysicalPosition::new(0, 0));
         }
+        // 关键修复：复用窗口时必须重新加载页面，重置前端 JS 状态。
+        // 不 reload 会导致：上次录屏的 recording=true/recorder/chunks/region 等变量残留，
+        // init() 不再执行，DOM 已被清空 → 用户看到空白窗口无法操作；
+        // 或 api_start_native_record 因前端状态错乱失败 → 降级 getDisplayMedia 弹桌面选择器。
+        let port = crate::SERVER_PORT.get().copied().unwrap_or(7321);
+        let reload_url = format!("http://127.0.0.1:{}/recorder.html?_t={}", port, std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0));
+        let _ = win.eval(&format!("window.location.href='{}';", reload_url));
         let _ = win.show();
         let _ = win.set_focus();
         return;
@@ -727,6 +755,13 @@ fn show_recorder_window(app: &AppHandle) {
 
     // 首次创建窗口
     let port = crate::SERVER_PORT.get().copied().unwrap_or(7321);
+    let (mon_w, mon_h) = match app.primary_monitor() {
+        Ok(Some(mon)) => {
+            let size = mon.size();
+            (size.width as f64, size.height as f64)
+        }
+        _ => (1920.0, 1080.0),
+    };
     let url = format!("http://127.0.0.1:{}/recorder.html", port);
     let url_parsed = match url::Url::parse(&url) {
         Ok(u) => u,
@@ -751,10 +786,11 @@ fn show_recorder_window(app: &AppHandle) {
         .decorations(false)
         .transparent(true)
         .always_on_top(true)
-        .fullscreen(true)
         .resizable(false)
         .skip_taskbar(true)
-        .visible(false) // 先隐藏，等前端就绪再显示
+        .visible(false)
+        .inner_size(mon_w, mon_h)
+        .position(-10000.0, -10000.0)
         .build();
 
     match result {
@@ -835,9 +871,14 @@ pub fn on_recorder_window_ready(app: &AppHandle) {
     }
 }
 
-/// 关闭录屏窗口（销毁而非隐藏）
+/// 关闭录屏窗口（隐藏而非销毁，复用窗口提升后续录屏响应速度）
 pub fn close_recorder_window(app: &AppHandle) {
     use tauri::Manager as _;
+    // 先停止原生录屏（防御性清理 RecordState）：
+    // 关键修复：若用户取消/异常退出时未调用 stop_native_record，RecordState 会残留为 Some，
+    // 导致下一次 start_native_record 返回 "录屏已在进行中" → 前端降级到 getDisplayMedia 弹出桌面选择器。
+    // 这里作为兜底，确保任何关闭路径都释放原生录屏状态。
+    let _ = stop_native_record();
     release_record_lock();
     // 清理临时文件
     if let Ok(mut guard) = pending_record_bg().lock() {
@@ -845,21 +886,29 @@ pub fn close_recorder_window(app: &AppHandle) {
             let _ = std::fs::remove_file(&bg.file_path);
         }
     }
-    // 多重保险确保窗口消失
+    // 多重保险确保窗口消失：取消置顶 → 最小化 → 隐藏 → 移出屏幕
     if let Some(win) = app.get_webview_window("recorder") {
         let _ = win.set_always_on_top(false);
         let _ = win.minimize();
         let _ = win.hide();
         let _ = win.set_position(tauri::PhysicalPosition::new(-10000, -10000));
-        log::info!("[recorder-window] 录屏窗口已关闭（多重保险）");
+        // 重置前端页面状态：导航到空白页，下次复用时 show_recorder_window 会 reload 到 recorder.html
+        let _ = win.eval("window.location.href='about:blank';");
+        log::info!("[recorder-window] 录屏窗口已关闭（多重保险，已清理原生录屏状态，已重置前端页面）");
     }
 }
 
-/// 处理录屏结果（保存 WebM 文件）
+/// 处理录屏结果（保存 WebM 文件，保存成功后清理临时资源）
 pub fn handle_recorder_result(app: &AppHandle, image_base64: String, _action: String, filename: String) -> Result<(), String> {
     use base64::Engine;
     let bytes = base64::engine::general_purpose::STANDARD.decode(&image_base64)
         .map_err(|e| format!("base64 解码失败: {}", e))?;
+
+    // 校验录制内容非空（避免保存空文件）
+    if bytes.is_empty() {
+        log::warn!("[recorder] 录屏内容为空，跳过保存");
+        return Err("录屏内容为空".to_string());
+    }
 
     // 保存到视频目录
     let save_dir = std::env::var("USERPROFILE")
@@ -873,8 +922,31 @@ pub fn handle_recorder_result(app: &AppHandle, image_base64: String, _action: St
     };
     let path = save_dir.join(&fname);
     match std::fs::write(&path, &bytes) {
-        Ok(_) => { log::info!("[recorder] 已保存到: {}", path.display()); }
-        Err(e) => { log::warn!("[recorder] 保存失败: {}", e); }
+        Ok(_) => {
+            log::info!("[recorder] 已保存到: {}", path.display());
+            // 保存成功后清理临时资源：停止原生录屏 + 释放锁 + 清理背景帧临时文件
+            let _ = stop_native_record();
+            release_record_lock();
+            if let Ok(mut guard) = pending_record_bg().lock() {
+                if let Some(bg) = guard.take() {
+                    let _ = std::fs::remove_file(&bg.file_path);
+                    log::info!("[recorder] 已清理背景帧临时文件: {}", bg.file_path);
+                }
+            }
+            // 通知主窗口录屏已保存成功
+            let _ = app.emit("recorder-saved", serde_json::json!({
+                "path": path.to_string_lossy(),
+                "filename": fname,
+                "size": bytes.len(),
+            }));
+        }
+        Err(e) => {
+            log::warn!("[recorder] 保存失败: {}", e);
+            // 保存失败也要释放锁和状态，防止卡住
+            let _ = stop_native_record();
+            release_record_lock();
+            return Err(format!("录屏保存失败: {}", e));
+        }
     }
 
     // 窗口销毁由 recorder_result IPC 命令统一处理
@@ -926,12 +998,21 @@ pub fn start_native_record(app: AppHandle) -> Result<(), String> {
 }
 
 /// 停止原生录屏
+/// 健壮性增强：即使 recorder.stop() 阻塞或出错，也确保 RecordState 被释放，
+/// 防止下次 start_native_record 报"录屏已在进行中"导致降级到 getDisplayMedia。
 pub fn stop_native_record() -> Result<(), String> {
     let mut guard = record_state().lock().map_err(|e| e.to_string())?;
     if let Some(state) = guard.take() {
-        let _ = state.recorder.stop();
+        // stop 可能阻塞或出错，用 catch_unwind 防止 panic 卡住锁
+        let stop_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            state.recorder.stop()
+        }));
+        match stop_result {
+            Ok(Ok(())) => log::info!("[global-capture] 原生录屏已停止"),
+            Ok(Err(e)) => log::warn!("[global-capture] 录屏停止返回错误（状态已释放，不影响下次启动）: {}", e),
+            Err(_) => log::warn!("[global-capture] 录屏停止 panic（状态已释放，不影响下次启动）"),
+        }
         drop(state.frame_rx); // 让 recv 循环退出
-        log::info!("[global-capture] 原生录屏已停止");
     }
     Ok(())
 }

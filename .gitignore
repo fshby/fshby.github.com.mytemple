@@ -10,6 +10,11 @@ packaging/build_temp/
 packaging/payload.zip
 promo/downloads/*.exe
 
+# Tauri 构建产物
+src-tauri/target/
+src-tauri/gen/
+src-tauri/resources/
+
 # 运行时数据（由应用运行时生成，不应入库）
 workspaces.json
 source/ws_*/
