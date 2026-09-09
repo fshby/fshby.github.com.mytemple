@@ -25,7 +25,7 @@
         <a href="#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v2.0.3.exe" download>下载 v2.0.3</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v2.1.1.exe" download>下载 v2.1.1</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -33,11 +33,11 @@
     <main id="top">
       <section class="hero section-wrap" aria-labelledby="hero-title">
         <div class="hero-copy reveal">
-          <p class="eyebrow"><span class="status-dot"></span> 本地 Markdown 工作区 <em>v2.0.3 桌面版</em></p>
+          <p class="eyebrow"><span class="status-dot"></span> 本地 Markdown 工作区 <em>v2.1.1 桌面版</em></p>
           <h1 id="hero-title">本地 Markdown 知识库与编辑器</h1>
           <p class="hero-lede">围绕本地 Markdown 文件提供阅读、编辑、目录、图谱、检索、主题与多工作区管理。</p>
           <div class="hero-actions">
-            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v2.0.3.exe" download>下载 Windows 安装包</a>
+            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v2.1.1.exe" download>下载 Windows 安装包</a>
             <a class="button button-soft" href="docs.html">查看使用文档</a>
           </div>
           <p class="hero-note">Windows 桌面端 · 本地文件优先 · 内容助手为可选接入</p>
@@ -242,311 +242,28 @@
         </div>
         <div class="download-block reveal">
           <div class="download-primary">
-            <span class="download-badge">当前稳定版 v2.0.3</span>
+            <span class="download-badge">当前稳定版 v2.1.1</span>
             <p>独立窗口截图标注、录屏、OCR 文字识别、知识图谱、主题、增量索引、绘图编辑器、代码语法高亮与可选 AI 辅助功能。</p>
-            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v2.0.3.exe" download>下载安装包</a>
+            <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v2.1.1.exe" download>下载安装包</a>
           </div>
           <div class="download-secondary">
             <h3>最近更新</h3>
-            <ul>
-              <li>v2.0.1：图谱修复 + 轻量绘图 + AI增强 + 代码高亮 + 导出优化 + DeepSeek接入：① <b>图谱界面无文档节点修复</b>：FileEntry.content 懒加载后为 None，get_graph 得空字符串无 wikilink 边，前端过滤掉所有 doc 节点；修复为对 content=None 的文件调 read_file_force 触发磁盘读取并回填缓存；② <b>内置轻量 Canvas 绘图编辑器</b>：新建 draw-editor.js（30KB 零依赖 100% 离线），7 种工具（选择/矩形/圆形/菱形/箭头/直线/文字/自由画笔）+ 样式（边框/填充/线宽/字号）+ 撤销重做（最多 50 步）+ 键盘快捷键（1-8 切换工具），保存为 Excalidraw 兼容 JSON；③ <b>AI 生成 HTML 图表/动画正确显示</b>：过滤 AI 输出控制字符防 JSON 解析失败、iframe sandbox 补 allow-scripts、AI 内容包裹为 html-inline fence 块在隔离 iframe 中渲染；④ <b>DeepSeek API 接入</b>：API Key 输入隐藏 + 跨升级持久化 + 连接测试按钮 + Ollama 失败自动切换 DeepSeek + 关键词 AI 搜索降级；⑤ <b>AI 二次优化上下文增强</b>：Ctrl+I 行内 AI 上下文提取为 4 维度叠加（光标所在 fence + 上方最近 fence + 光标所在段落 + 前后短上下文），确保 AI 能看到完整原作；⑥ <b>配置丢失修复</b>：移除 deepseek_api_key 的 skip_serializing 属性 + 统一配置保存/加载路径；⑦ <b>代码语法高亮 CSS 全覆盖</b>：styles.css 补齐 30+ 种 hljs span class 映射到 CSS 变量，亮/暗主题自动切换；⑧ <b>代码块语言选择器</b>：编辑工具栏新增 40+ 语言下拉面板（常用/编程/Web/数据库/数据配置 5 组）；⑨ <b>内嵌 HTML 导出优化</b>：导出时轮询 iframe srcdoc 内容高度并写入内联 style，消除固定 min-height 裁剪和滚动条。</li>
-              <li>v1.8.107：阅读模式不弹AI菜单 + 工作区外部新增文件自动刷新 + .key文件正常显示 + 代码语法高亮四重修复：① <b>阅读栏/阅读模式选中文字不再弹AI提示框</b>：refreshAiSelectionMenu 函数开头判断 state.mode==='view' 时直接隐藏AI菜单并return，仅编辑模式保留AI选区菜单，阅读模式下选中文本可自由复制不被打断；② <b>外部保存新文件到工作区目录后文件树自动刷新</b>：新增 refreshTreeThrottled 节流函数（15s内不重复刷）调 bootstrap(true) 触发后端 refresh_cache() 全量扫描，visibilitychange 页面恢复可见 + window.focus 窗口聚焦两个回调触发刷新，startTreeRefreshInterval 60s低频定时兜底，document.hidden时跳过避免无谓IO；③ <b>.key结尾文件（CRT串口工具按键映射，文本格式）正常显示</b>：is_binary_ext 移除 'key'，.key文件被扫描进文件树+全文搜索+read_file能读内容（agent_policy deny **/*.key 保留确保AI不自动读密钥内容但用户能手动打开看）；④ <b>代码语法高亮引入highlight.js</b>：下载 highlight.min.js（11.9.0，121KB，35+常用语言）到 public/vendor/highlight/ 离线打包，styles.css 新增 .hljs-* 到 --syn-* CSS变量映射适配亮/暗主题切换，app.js 新增 highlightCodeBlocks 函数 querySelectorAll('pre code').forEach(hljs.highlightElement) + requestIdleCallback分批每批8个 + dataset.highlighted防重复 + hljs未加载静默降级，调用点5处全覆盖（Worker主路径/chunked单片/chunked多片/catch fallback/编辑模式分屏预览swapPreviewHtml）。</li>
-              <li>v1.8.106：文档切换编辑位置保留 + 外部编辑器异步编辑冲突检测 + 重新加载强制读磁盘三重修复：① <b>临时区多文档切换保留编辑位置</b>：扩展草稿机制新增 saveDraftState/restoreDraftState，按文档路径在 localStorage 持久化光标 selectionStart/End + 编辑器 scrollTop + 阅读器 scrollTop，openDoc 切换时 restoreDraft 回填文本后立即恢复光标和双滚动位置（包在 requestAnimationFrame 中等待 DOM 布局完成避免 scrollTop 被钳制为 0），关闭文档时 removeItem 清理；② <b>外部编辑器异步同时编辑同一文档不再静默覆盖</b>：后端 save_file 新增 base_hash 参数保存前 sha256 比对磁盘文件不一致拒绝保存返回 __CONFLICT__:disk_hash，前端 saveCurrentDoc 收到 conflict:true 弹窗确认覆盖或取消；新增 /api/doc-check 端点前端每 5s 轮询当前文档哈希，与打开时记录的 currentVersion 不同则 Toast 提示「重新加载/忽略」，重新加载前若有未保存编辑二次确认丢弃；③ <b>点击「重新加载」强制读磁盘绕过 cache</b>：read_file L1 cache 命中时直接返回内存旧 content，导致 check_file 检出外部修改后点重新加载仍看到旧内容；新增 read_file_force 方法跳过 cache 从磁盘重读 + decode + 写回 cache，/api/doc 新增 force=1 参数，前端两处重新加载按钮均带 forceReload=true。</li>
-              <li>v1.8.105：全局搜索中文 MD「打不开/没内容」空白屏三重修复：① <b>NFC 路径全链路归一</b> + <b>cache 漏查后 basename 三级弱匹配兜底</b>（Mac HFS+ NFD / Win NTFS NFC / NAS 短名/UNC 中文路径搜索结果点不开的根因就是字符串==字节序列不同漏查）；② <b>空内容/空白屏不再静默</b>：右侧阅读栏渲染灰底虚线卡片提示「WPS/Word/江西电信导出 MD 请记事本另存为 UTF-8 覆盖原文件」，左侧编辑器设置多行空内容占位符，Worker 抛错 catch 分支顶部 prepend 红色异常 banner + Worker 创建失败首次 toast 降级提示；③ <b>BOM + GBK/UTF16/UTF32 智能编码解码兜底</b>（引入 unicode-normalization + encoding_rs），scan_workspace 和 read_file 都从 read_to_string UTF-8 改为 read bytes→BOM→GB18030/GBK/BIG5/SHIFT_JIS/EUC_KR 序列候选，识别出的非 UTF-8 编码写入 FileEntry.encoding 前端状态栏可见，lossy 分支 log::error 打 ref_path+absolute+首字节 hex+长度方便管理员反查具体文件。</li>
-              <li>v1.8.104：其他电脑安装后启动失败紧急修复（双重保险）：① tauri.conf.json bundle.resources 从字符串数组改用对象映射 <code>{src:../public,target:resources/public}</code> + <code>{src:WebView2Loader.dll,target:""}</code> 强制写死安装目的地，消除 Tauri 2.x NSIS 字符串资源解包到 $INSTDIR/public 而非 $INSTDIR/resources/public 的版本差异歧义；② <code>resolve_public_root</code> 候选从 5 条扩到 10 条，返回 <code>(root, 全部候选)</code>，内置 404 友好页从此打印编号后的全部候选（不再只展示 1 条误导性 fallback 路径），杀毒/权限/映射哪一层失败一眼可辨。</li>
-              <li>v1.8.103：导出 7 种格式统一接入系统原生「另存为」对话框（扩展名过滤正确），保存成功后 Toast 显示完整绝对路径（点击可复制）+「打开文件 / 在文件夹中查看」两按钮；取消对话框静默不报错；非 Tauri / 插件失败自动降级 Blob 下载并明确告知浏览器默认下载目录。导入新增「系统文件对话框」按钮，DOCX/RTF/ODT 通过 Rust 内置 ZIP/控制字剥离直接提取正文写入 Markdown，不再生成 pandoc 占位文档。</li>
-              <li>v1.8.102：其他电脑安装后 404 白屏紧急修复：安装包原 bundle.resources 仅含 WebView2Loader.dll 未含 public/，新安装机启动后 axum 找不到前端文件 → Edge/内置窗口 HTTP ERROR 404。本次把 public/ 整个打进 resources、resolve_public_root 5 级候选 + index.html 校验、7321..7420 端口回退扫描、Rust 内置中文友好错误页不再只显示 Edge 刷新按钮。</li>
-              <li>v1.8.101：导出全格式质量+保存修复；7 项导出(HTML/DOCX/PPT/PDF/TXT/MD/公众号)均不包含 frontmatter YAML 块；HTML/DOCX 改为前端本地高品质离线文件(公式/Mermaid/图片全内联)；TXT 新增语法糖剥离 + UTF-8 BOM 防中文乱码；下载 click 偶发丢事件已补 50ms 调度；失败有前端兜底。</li>
-              <li>v1.8.100：启动红屏 SyntaxError 紧急修复：KATEX_PRINT_CSS 模板字符串内 IE hack <code>\10</code> 被 WebView2 解析为八进制转义直接抛错、app.js 解析失败；删除无用 IE10 hack + 保持上版跨行公式/Mermaid/Excalidraw 修复 + MARKDOWN_RENDER_VERSION/WORKER URL 强制缓存失效。</li>
-              <li>v1.8.99：阅读栏/阅读模式公式图表显示修复：数学公式（含跨行 $$...$$ 块级）、Mermaid 图表、Excalidraw 绘图在阅读栏(右侧预览)和阅读模式(双列只读)都正确渲染；修复 Worker 漏调用、占位结构缺失、块级公式跨行切割 3 根因。</li>
-              <li>v1.8.98：PDF导出功能大升级：数学公式(KaTeX真实渲染)与Mermaid图表导出PDF后正确显示、文末默认附官网下载链接+推荐语品牌卡片(非fixed不遮挡正文)、本地图片与SVG图表转DataURL内联离线也完整显示、渲染失败自动降级源码仍可导出。</li>
-              <li>v1.8.96：代码文件保存最终修复：打开代码文档即进入编辑态、保存按钮清除「非Markdown不支持保存」提示、状态栏改为「保存/已保存 HH:MM」；同时保留折叠态Top10 + 展开态目录树。</li>
-              <li>v1.8.95：工作区视图重写 + 基础保存修复：折叠态Top10按modified倒序、展开态完整目录树(文件夹独立展开/收起)；代码后缀打开默认进入编辑态。</li>
-              <li>v1.8.94：工作区与编辑器增强：支持显示非MD文件(bat/vbs/代码等)、展开全部文档不再限制数量、文件按修改时间排序、Ctrl+/-调整字体、代码文件可打开保存。</li>
-              <li>v1.8.93：界面与体验升级：工作区添加对话框UI修复、搜索支持多关键词AND+精确短语+评分排序、快捷键调整(Ctrl+W→Alt+W/新增Alt+E/Alt+O)、自升级真实fetch远程版本比较、窗口启动默认最大化。</li>
-              <li>v1.8.72：功能无损性能优化：状态栏 DOM 引用缓存、页面隐藏暂停定时器、编辑器 scroll 监听器合并、resize 去抖。</li>
-              <li>v1.8.71：沉浸+轻量模式整合：一个按钮同时实现沉浸写作与轻量编辑（禁用语法高亮/终止 Worker/释放内存）。</li>
-              <li>v1.8.69-70：内存/GPU 优化：contentStore LRU、图谱模拟间隔拉长、shadowBlur 降级、backdrop-blur 缩小。</li>
-              <li>v1.8.68：文档安全加固：竞态防护序号、Worker 重建冷却、openDoc 失败回滚、草稿自动保存、数据完整性校验。</li>
-              <li>v1.8.63：修复高亮提示块（callout）颜色和样式区分，支持 15 种类型主题色。</li>
-              <li>版本号变化触发自动清理 WebView2 缓存。</li>
+            <ul class="update-list">
+              <li><span class="ver">v2.1.1</span> 截图选区边界约束 — 修复选区框靠近屏幕边界时越界难以选中的缺陷，三层坐标 clamp 确保选区框始终在视口内。</li>
+              <li><span class="ver">v2.1.0</span> 录屏功能稳定性加固 — 修复多次录制失败、默认不录桌面弹选择器、stop panic 卡锁等问题，复用窗口时 reload 重置前端状态。</li>
+              <li><span class="ver">v2.0.9</span> 知识库智能管理增强 — ai_reindex 内存零拷贝优化、静默吞错修复、进度反馈、切片 panic 修复、检索性能优化、并发安全。</li>
+              <li><span class="ver">v2.0.8</span> AI 忠实性强约束 + 反幻觉 — 选中文本加工五重约束（基于原文/不篡改/不删减/反幻觉自检/用户指令硬边界），翻译忠实性强化，RAG 反幻觉。</li>
+              <li><span class="ver">v2.0.7</span> 启动授权弹窗修复 — WMI 硬件指纹缓存预热，前端超时放宽至 3s，消除每次启动误弹「未授权」窗口。</li>
             </ul>
             <p class="download-links">
               <a href="privacy.html">隐私声明</a> ·
               <a href="docs.html">使用文档</a> ·
-              <a href="changelog.html">完整更新日志</a>
+              <a href="changelog.html">完整更新日志 →</a>
             </p>
           </div>
         </div>
       </section>
 
-      <section class="section-wrap builtin-docs" id="builtin-docs">
-        <div class="section-intro reveal">
-          <p class="eyebrow">BUILT-IN DOCS</p>
-          <h2>使用文档</h2>
-        </div>
-        <div class="docs-content reveal">
-          <article class="doc-section">
-            <h3>安装与启动</h3>
-            <ol>
-              <li>下载 Windows 安装包（.exe），双击运行。</li>
-              <li>选择安装目录，完成安装后桌面会出现快捷方式。</li>
-              <li>首次启动需选择工作目录（本地 Markdown 文件夹），之后自动记忆。</li>
-              <li>支持多工作路径，在设置中可添加、切换或移除。</li>
-            </ol>
-          </article>
-          <article class="doc-section">
-            <h3>文档编写规范</h3>
-            <ul>
-              <li>支持标准 Markdown 语法，包括标题、列表、表格、代码块、引用等。</li>
-              <li>Frontmatter 支持(title、date、tags 等元信息字段)。</li>
-              <li>文档间链接使用 <code>[文本](相对路径.md)</code> 格式，图谱会自动识别关联。</li>
-              <li>支持数学公式（LaTeX 语法）、Mermaid 图表、Excalidraw 绘图。</li>
-              <li>高亮标注块：<code>:::tip</code> / <code>:::warning</code> / <code>:::note</code> 等。</li>
-            </ul>
-          </article>
-          <article class="doc-section">
-            <h3>图谱标记与维护</h3>
-            <ul>
-              <li>文档之间的链接关系自动生成知识神经图谱。</li>
-              <li>最新文档自动居中，有链接的文档互相引力更强。</li>
-              <li>拖拽节点松开后按引力规则缓慢复原。</li>
-              <li>图谱运动参数可在设置中调节，不查看时不占用 GPU。</li>
-            </ul>
-          </article>
-          <article class="doc-section">
-            <h3>主题与外观</h3>
-            <ul>
-              <li>内置深色、明亮、护眼、柔光四种核心主题。</li>
-              <li>柔光主题：暖琥珀金强调色，低饱和度，适合长时间写作。</li>
-              <li>图片主题：上传背景图并自动取色，支持文字明暗切换。</li>
-              <li>字体、字号、窗口缩放均可自定义，重启后自动恢复。</li>
-            </ul>
-          </article>
-          <article class="doc-section">
-            <h3>可选辅助功能</h3>
-            <ul>
-              <li>默认关闭，在设置中按需开启，不干扰核心编辑与阅读体验。</li>
-              <li>支持本地或云端模型接入，模型配置在设置中填写。</li>
-              <li>提供选中翻译、润色续写、代码补全与生成注释等辅助能力。</li>
-              <li>问答侧栏助手回复可一键润色、续写或插入到当前文档。</li>
-              <li>所有辅助功能均可独立开关，按需使用。</li>
-            </ul>
-          </article>
-          <article class="doc-section">
-            <h3>快捷键参考</h3>
-            <ul>
-              <li><kbd>Ctrl+B</kbd> 加粗 · <kbd>Ctrl+I</kbd> 斜体 · <kbd>Ctrl+K</kbd> 链接</li>
-              <li><kbd>Ctrl+1/2/3</kbd> 一/二/三级标题 · <kbd>Ctrl+S</kbd> 保存</li>
-              <li><kbd>Ctrl+F</kbd> 关键字检索 · <kbd>Ctrl+Shift+F</kbd> 沉浸编辑 · <kbd>Esc</kbd> 退出沉浸</li>
-              <li><kbd>Tab</kbd> 缩进 · <kbd>Ctrl+Shift+7/8</kbd> 有序/无序列表</li>
-            </ul>
-          </article>
-          <article class="doc-section">
-            <h3>可选辅助快捷键</h3>
-            <ul>
-              <li><kbd>Ctrl+Shift+A</kbd> 代码补全 · <kbd>Ctrl+Shift+/</kbd> 生成注释</li>
-              <li><kbd>Ctrl+Shift+P</kbd> 润色 · <kbd>Ctrl+Shift+X</kbd> 续写</li>
-              <li><kbd>Ctrl+U</kbd> 顶部智能检索 · <kbd>Ctrl+I</kbd> 行内对话</li>
-              <li>辅助快捷键需在设置中开启对应功能后生效</li>
-            </ul>
-          </article>
-          <article class="doc-section">
-            <h3>v2.0.1 更新日志 · 图谱修复 + 轻量绘图 + AI增强 + 代码高亮 + 导出优化 + DeepSeek接入</h3>
-            <ul>
-              <li>【一、图谱界面无文档节点（缺陷修复）】<b>现象</b>：打开知识图谱界面，没有任何文档节点显示。<b>根因</b>：FileEntry.content 懒加载优化后，scan_workspace 时 content 设为 None；ipc::get_graph 用 unwrap_or_default() 得到空字符串；utils::build_graph 中 WIKI_LINK_GRAPH_RE 在空字符串上找不到 wikilinks → 没有任何 link 边产生；前端 getGraphLayoutForMode 过滤条件 node.kind==="doc"→attached.has(node.id)||view.showOrphans（默认 showOrphans=false），所有 doc 节点被过滤掉。<b>修复</b>：ipc::get_graph 对 content 为 None 的文件调用 read_file_force 触发磁盘读取并回填缓存（与 ai_reindex 同款做法），确保 build_graph 能解析到 wikilinks 产生 link 边，doc 节点不再被前端过滤。</li>
-              <li>【二、内置轻量 Canvas 绘图编辑器（新功能）】<b>现状</b>：代码里 Excalidraw 支持是半成品——UI 入口有、代码块解析有、模板插入有，但渲染端只是把 JSON 原样塞进 &lt;pre&gt; 标签显示文字，没有真正的绘图画布，用户无法用鼠标拖拽画图。<b>方案</b>：新建轻量 Canvas 绘图器 draw-editor.js（30KB，零依赖，100% 离线），保存格式为 Excalidraw 兼容 JSON（可在真正的 Excalidraw 桌面端打开继续编辑）。比加载 Excalidraw 官方 UMD（1.13MB 含 Preact）更轻量、更快启动。<b>绘图功能</b>：7 种工具（选择/矩形/圆形/菱形/箭头/直线/文字/自由画笔）+ 样式（边框颜色/填充颜色/线宽 1-6px/字号 12-48）+ 操作（鼠标拖拽绘制/选中拖拽移动/Delete 键删除）+ 撤销重做（Ctrl+Z/Ctrl+Y，最多 50 步）+ 键盘快捷键（1-8 切换工具）。<b>修改点</b>：draw-editor.js 新建 + app.js import openDrawEditor + insertChartBlock excalidraw 分支从"插入空模板"改为"打开绘图编辑器" + 渲染端从 JSON 文本改为 Canvas 缩略图预览（480×320，自动 bbox 缩放居中）+ 双击打开编辑器继续编辑。</li>
-              <li>【三、AI 生成 HTML 图表/动画正确显示（缺陷修复）】<b>现象</b>：AI 生成的 HTML 饼图、动画等内嵌内容不显示。<b>根因</b>：AI 输出含控制字符导致 JSON 解析失败；前端逐字 insertTextStream 造成不稳定；iframe sandbox 缺少 allow-scripts 阻止脚本执行。<b>修复</b>：① rag.rs 新增控制字符过滤（lines 1035-1044）；② app.js insertTextStream 改为块插入；③ markdown-worker.js escapeHtml 增强；④ iframe sandbox 补 allow-scripts；⑤ AI 生成 HTML 包裹为 html-inline fence 块在隔离 iframe 中正确渲染。</li>
-              <li>【四、DeepSeek API 接入（新功能）】<b>需求</b>：用户需要使用 DeepSeek 作为 AI 后端，API Key 需要安全存储。<b>实现</b>：① API Key 输入框隐藏显示；② 配置跨软件升级持久化（修复 deepseek_api_key 的 skip_serializing 属性导致序列化时不写入 JSON 文件的 Bug）；③ 连接测试按钮验证 API Key 有效性；④ Ollama 连接失败时自动切换到 DeepSeek；⑤ 关键词 AI 搜索作为降级方案。配置保存/加载路径统一使用 rag.settings_path.clone() 避免相对路径不一致。</li>
-              <li>【五、AI 二次优化上下文增强（缺陷修复）】<b>现象</b>：用户对 AI 生成的内容进行二次优化时，AI 未在原内容上优化而是重新生成。<b>根因</b>：Ctrl+I 内联 AI 的上下文提取逻辑仅取光标前后各 300 字，导致光标在代码块下方新行时 AI 无法看到完整的原代码块。<b>修复</b>：增强 submitAiInlineDialog() 的上下文提取为 4 维度叠加：光标所在 fence（4500 字内）、光标上方最近 fence（距离&lt;1000 字且代码&lt;5000 字）、光标所在段落、前后短上下文（600+300 字），确保 AI 能看到完整原作。</li>
-              <li>【六、代码语法高亮 CSS 全覆盖（体验优化）】<b>现象</b>：代码块没有语法高亮和颜色区分。<b>根因</b>：hljs 11.x 的 token class 覆盖不完整。<b>修复</b>：styles.css 中补齐 30+ 种 span class（.hljs-keyword/.hljs-string/.hljs-comment/.hljs-number/.hljs-title/.hljs-type/.hljs-built_in/.hljs-variable/.hljs-attr/.hljs-tag/.hljs-operator/.hljs-meta 等），映射到项目已有 CSS 变量实现亮/暗主题自动切换，同时优化容器样式。</li>
-              <li>【七、代码块语言选择器（新功能）】<b>需求</b>：编辑工具栏缺少按语言插入代码块的入口。<b>实现</b>：index.html 编辑工具栏新增包含 40+ 语言的代码块下拉面板，分常用、编程语言、Web &amp; 前端、数据库 &amp; 脚本、数据 &amp; 配置 5 组；app.js 实现 insertCodeBlock() 函数处理选中文本包裹和占位文本插入逻辑；markdown-worker.js 和 app.js 同步处理语言别名映射（vue/svelte→html，jsx/react→javascript 等）。</li>
-              <li>【八、内嵌 HTML 导出优化（缺陷修复）】<b>现象</b>：导出 HTML 时，内嵌的 AI 生成动画/图表被 iframe 固定高度截断，出现滚动条。<b>根因</b>：导出的 HTML 保留 iframe 的 min-height:320px 和父容器 overflow:hidden，导致内容被裁剪。<b>修复</b>：新增 settleHtmlInlineFrames() 函数，在导出渲染阶段轮询等待所有 srcdoc iframe 加载和内部脚本执行完毕（最多 10 秒），通过 contentDocument.body.scrollHeight 读取真实内容高度写入内联 style.height；导出 CSS 去掉 overflow:hidden 和 min-height 限制。</li>
-              <li>【保持 v1.8.107 全部修复不回退】阅读模式不弹AI菜单 + 工作区外部新增文件自动刷新 + .key文件正常显示 + highlight.js 代码语法高亮全链路。</li>
-            </ul>
-          </article>
-          <article class="doc-section">
-            <h3>v1.8.107 更新日志 · 阅读模式不弹AI菜单 + 工作区外部新增文件自动刷新 + .key文件正常显示 + 代码语法高亮</h3>
-            <ul>
-              <li>【用户现象 1】在阅读栏/阅读模式中选中文字时会弹出 AI 提示框（摘要/要点/术语/润色/续写/翻译/代码补全/生成注释等按钮），遮挡阅读视线、打断复制操作。</li>
-              <li>【根因 1】refreshAiSelectionMenu 函数在 selectionchange 事件触发时，无论编辑模式还是阅读模式都会显示 AI 选择菜单；getAiSelection 中 state.mode === "view" 时选区走 reader 分支也返回有效选区，导致阅读模式下选中文本就弹 AI 菜单。</li>
-              <li>【修复 1】refreshAiSelectionMenu 函数开头判断 state.mode === "view" 时直接 els.aiSelectionMenu.classList.add("hidden") + state.ai.selection = null + return，仅编辑模式保留 AI 选区菜单。阅读模式下选中文本不再弹任何提示框，可自由复制。</li>
-              <li>【用户现象 2】在软件使用过程中，在电脑上（如记事本另存为/复制文件）保存新文件到工作区目录中时，软件内工作区目录没有显示新增文件，需要手动刷新或重启软件。</li>
-              <li>【根因 2】后端无文件系统监听（notify/watcher/inotify/fs::watch），只有 save_file 后调 refresh_cache()；前端 bootstrap(refresh=true) 才触发 /api/tree?refresh=1 → refresh_cache() 全量扫描，普通 bootstrap() 只读缓存。前端无定时刷新文件树机制，也无窗口聚焦/可见性恢复时刷新。</li>
-              <li>【修复 2】新增 refreshTreeThrottled(reason) 节流函数（15s 内不重复刷），调 bootstrap(true) 触发后端 refresh_cache() 全量扫描；_treeRefreshInFlight 防并发；document.addEventListener("visibilitychange") 页面恢复可见分支调 refreshTreeThrottled("visibilitychange")；window.addEventListener("focus") 窗口聚焦调 refreshTreeThrottled("window-focus")；startTreeRefreshInterval() 启动 60s 低频定时兜底（setInterval 60000ms），document.hidden 时跳过避免无谓 IO。覆盖用户从外部切回软件时立即看到新文件 + 长时间停留时的外部变更。</li>
-              <li>【用户现象 3】CRT 串口工具的按键映射文件（.key 结尾，文本格式）在工作区目录中不显示，无法纳入知识库管理。</li>
-              <li>【根因 3】app.rs is_binary_ext 函数将 "key" 与 p12/pfx/pem 一组视为二进制扩展名，scan_workspace 在非 md_only 模式下跳过二进制扩展名，.key 文件被排除在扫描范围外。</li>
-              <li>【修复 3】is_binary_ext 移除 "key"，让 .key 文件被正常扫描进 files cache 和 search_index（文件树显示 + 全文搜索能找到），read_file 能读取内容（用户在软件内打开能看）。agent_policy.rs 默认 denied_paths 中 **/*.key 保留不动（默认安全，AI 工具不自动读 .key 内容，但用户能在软件内手动打开看）。</li>
-              <li>【用户现象 4】Markdown 代码块（```language）在阅读栏/阅读模式/编辑模式分屏预览中全部单色显示，关键字/字符串/注释/数字/函数/类型/变量/参数等语法元素没有高亮和颜色区分，可读性差。</li>
-              <li>【根因 4】markdown-worker.js 渲染代码块时只输出 &lt;code class="language-xxx"&gt; + escapeHtml(raw)，没有任何语法高亮库处理；styles.css 虽定义了 .tok-* CSS 变量（--syn-keyword/string/comment/number/function/type/builtin/variable/operator/tag/attr）但没有 token 输出；package.json 只有 CodeMirror/Lezer（编辑器高亮），没有 highlight.js/prismjs/shiki。</li>
-              <li>【修复 4A — 引入 highlight.js】下载 highlight.min.js（11.9.0，121KB，含 35+ 常用语言：js/ts/py/rust/go/java/c/cpp/sql/bash/json/yaml/html/css/xml/markdown/diff/php/ruby/swift/kotlin/scala/lua/perl/properties/plaintext 等）到 public/vendor/highlight/，Tauri 离线应用不依赖 CDN；index.html 在 app.js 之前引入 &lt;script src="/vendor/highlight/highlight.min.js"&gt;。</li>
-              <li>【修复 4B — CSS 变量映射适配主题切换】styles.css 新增 .hljs-* 类到 --syn-* CSS 变量映射（.hljs-keyword → --syn-keyword、.hljs-string → --syn-string、.hljs-comment → --syn-comment、.hljs-number → --syn-number、.hljs-title → --syn-function、.hljs-type/.hljs-built_in → --syn-type、.hljs-variable → --syn-variable、.hljs-attr → --syn-attr、.hljs-tag → --syn-tag、.hljs-operator/.hljs-meta → --syn-operator），亮/暗主题自动切换（--syn-* 已按 data-theme 定义不同色值）。</li>
-              <li>【修复 4C — 渲染后调用 hljs.highlightElement】app.js 新增 highlightCodeBlocks(container) 函数，querySelectorAll("pre code") 遍历，window.hljs.highlightElement(el) 应用高亮，dataset.highlighted="1" 防重复高亮，requestIdleCallback 分批每批 8 个避免长文档阻塞主线程，hljs 未加载时静默降级（代码块仍可读但无颜色）。调用点 5 处全部覆盖：Worker 主路径、chunked 单片、chunked 多片、catch fallback、编辑模式分屏预览 swapPreviewHtml。</li>
-              <li>【保持 v1.8.106 全部修复不回退】文档切换编辑位置保留 + 外部编辑器异步编辑冲突检测 + 重新加载强制读磁盘。</li>
-            </ul>
-          </article>
-          <article class="doc-section">
-            <h3>v1.8.106 更新日志 · 文档切换编辑位置保留 + 外部编辑器异步编辑冲突检测 + 重新加载强制读磁盘</h3>
-            <ul>
-              <li>【用户现象 1】临时区打开 A/B/C 多个文档，从 A 切换到 B 再切回 A 时，A 的光标位置、编辑器滚动条、阅读器滚动条全部丢失被重置到顶部，编辑中上下文被打断。</li>
-              <li>【根因 1】openDoc 切换前仅 saveDraftNow 保存文本内容草稿，不保存任何「编辑位置」状态；草稿恢复 restoreDraft 也只回填 textarea.value，不恢复光标和滚动位置。localStorage 中无按文档路径维度的位置持久化。</li>
-              <li>【修复 1】扩展草稿机制新增 saveDraftState/restoreDraftState 两个函数（app.js），按文档路径为 key 在 localStorage 中持久化 <code>{ s: editor.selectionStart, e: editor.selectionEnd, et: editor.scrollTop, rt: markdownView.scrollTop, ts: Date.now() }</code>。openDoc 在 restoreDraft 回填文本后立即调用 restoreDraftState 取回位置：editor.selectionStart/End 设置光标，editor.scrollTop 恢复编辑器滚动，markdownView.scrollTop 恢复阅读器滚动。所有位置恢复包在 requestAnimationFrame 中等待 DOM 布局完成后再 set，避免 textarea 高度未撑开 scrollTop 被钳制为 0。切换前 saveDraftState 旧文档，切走前 saveDraftState 当前文档，关闭文档时 removeItem 清理。</li>
-              <li>【用户现象 2】用户在软件中打开 A 文档 → 用记事本外部编辑 A 并保存 → 软件中 A 内容未刷新显示旧版本 → 用户在软件中继续编辑并触发自动保存 → 软件的保存覆盖了磁盘上记事本刚写入的内容，记事本编辑部分丢失，且全程无任何提示。</li>
-              <li>【根因 2 三层】(a) save_file 后端无任何磁盘冲突检测，盲写覆盖；(b) 前端无外部修改检测机制，打开后不再读取磁盘；(c) 自动保存定时器到点直接写盘，不会感知磁盘已被外部改写。</li>
-              <li>【修复 2A — 后端保存前哈希冲突检测】save_file 函数新增 <code>base_hash: Option&lt;&amp;str&gt;</code> 参数。保存前若 base_hash 非空，先 <code>std::fs::read</code> 读磁盘当前字节，<code>sha2::Sha256::digest</code> 计算磁盘哈希，若 disk_hash != base_hash 则拒绝保存返回 <code>anyhow::anyhow!("__CONFLICT__:{disk_hash}")</code>。<code>log::warn!</code> 记录 ref/abs/base_hash/disk_hash 便于排查。handlers save_doc 识别 <code>__CONFLICT__:</code> 前缀返回 JSON <code>{ ok:false, conflict:true, diskSha256, message }</code>，前端可弹窗让用户选择覆盖或重新加载。</li>
-              <li>【修复 2B — 后端新增 /api/doc-check 轮询端点】app.rs 新增 <code>check_file(path) -&gt; (hash, modified_ms)</code> 函数，先在 files cache 中按 path/NFC 查找 absolute 路径，找到后 <code>std::fs::metadata</code> 读 modified 时间、<code>std::fs::read</code> 读字节算 sha256；cache 未命中再走 normalize_doc_path fallback。handlers 新增 check_doc 处理函数路由 <code>GET /api/doc-check?path=</code>，返回 <code>{ path, sha256, modified }</code>。</li>
-              <li>【修复 2C — 前端 5s 轮询 + 冲突弹窗】app.js 新增 scheduleExternalCheck 定时器，每 5s 对 state.currentPath 调用 /api/doc-check。若返回 sha256 !== state.currentVersion（打开时记录的版本）且未通知过，弹 Toast「文件已被外部编辑器修改，点击重新加载」附「重新加载/忽略」两个 action：重新加载会先检测本地 editor 是否有未保存编辑（value !== lastSavedContent），有则 customConfirm 二次确认是否丢弃未保存内容后 openDoc 重新加载，无则直接 openDoc；忽略则置 _externalChangeNotified=true 不再打扰。保存进行中（autoSave.inFlight）跳过本轮轮询避免与保存竞争。saveCurrentDoc 保存响应若 conflict:true 则 customConfirm「文件已被外部修改，保存将覆盖外部修改。是否继续？」确认则带 diskSha256 作为新 base_hash 强制覆盖保存，取消则不保存让用户自行重新加载。</li>
-              <li>【用户现象 3 — 点击「重新加载」后文档内容未更新】v1.8.106 首版发布后用户反馈：外部编辑器（记事本）修改 A 并保存 → 软件 Toast 提示「文件已被外部修改」→ 点击「重新加载」→ 编辑器内容仍是旧版本，磁盘上记事本刚写入的内容看不到。</li>
-              <li>【根因 3】openDoc 调 /api/doc → 后端 read_file 第一步 Level1 cache 命中检查 <code>files.iter().find(|f| f.path == path)</code>，命中后直接 <code>return Ok(entry.clone())</code> 返回内存中的旧 entry.content，完全不会再读磁盘。而 check_file 轮询端点是直接 <code>std::fs::read</code> 读磁盘字节算 sha256，所以能检出变化，但用户点「重新加载」时 openDoc 又命中 cache 返回旧内容 → 用户感知「点了重新加载却没刷新」。</li>
-              <li>【修复 3A — 后端 read_file_force 方法】app.rs 新增 <code>pub async fn read_file_force(&amp;self, path: &amp;str) -&gt; anyhow::Result&lt;FileEntry&gt;</code>：跳过 Level1 cache 直接返回，但保留 Level2 3 级 basename 弱匹配（NFC + 同 workspace / 去数字后缀 / 全局唯一）+ normalize_doc_path + decode_bytes_smart 全流程；读完磁盘后写回 cache entry 的 content/content_sha256/encoding/plain/modified，保证下次 read_file 正常命中新内容。</li>
-              <li>【修复 3B — /api/doc 新增 force 参数】handlers.rs DocQuery 结构体新增 <code>force: Option&lt;String&gt;</code> 字段（serde default），get_doc 中 force 为 "1" 或 "true" 时调 <code>read_file_force</code> 代替 <code>read_file</code>。普通 openDoc 不带 force 保持原 cache 行为不变，性能无影响。</li>
-              <li>【修复 3C — 前端两处重新加载按钮带 forceReload=true】app.js openDoc 新增 <code>options.forceReload</code> 参数，为 true 时 URL 追加 <code>&amp;force=1</code>。scheduleExternalCheck Toast「重新加载」action（含 hasDraft 二次确认分支）和 saveCurrentDoc 保存冲突弹窗「重新加载」按钮（取消选择分支）都改为 <code>openDoc(state.currentPath, { forceReload: true })</code>。</li>
-              <li>【保持 v1.8.105 全部修复不回退】NFC 路径全链路归一 + basename 三级弱匹配兜底；空内容/空白屏灰底虚线卡片提示；BOM + GBK/UTF16/UTF32 智能编码解码兜底；Worker 异常可见 banner；10 级 resolve_public_root 候选 + 404 友好页；7 项导出原生另存为 + Toast 路径 + 两按钮。</li>
-            </ul>
-          </article>
-          <article class="doc-section">
-            <h3>v1.8.105 更新日志 · 全局搜索中文 MD「打不开/没内容」空白屏·三重修复</h3>
-            <ul>
-              <li>【用户现象】v1.8.104 反馈：在顶部全局搜索（Ctrl+U）输入「江西电信」搜到 <code>江西电信MR622-MK.md</code> → 点击条目 → 左编辑栏/右阅读栏全白，底部 Toast 偶尔不报错误，但内容打不开。</li>
-              <li>【根因 A — NFC/NFD 路径比较漏查】<code>scan_workspace()</code> 入库 ref_path 用 <code>format!("{ws.id}/{rel}")</code>；前端点击后 <code>openDoc(item.path)</code> 传回后端 <code>read_file(path)</code> 第一步 <code>files.iter().find(|f| f.path == path)</code> 做 Rust 字符串严格 <code>==</code>。Mac HFS+ / Samba NAS 返回中文路径为 NFD（Unicode 分解式）；Win NTFS/大多数应用生成为 NFC（合成式）。视觉上完全相同的「江西电信」四个字，NFC/NFD 字节序列不同 → <code>==</code> 返回 false → cache 命中失败，fallback 到磁盘重新读取时若 <code>canonicalize</code> 再引入 UNC/短名前缀差异进一步错位 → 直接 404 或空白。<b>修复</b>：引入 <code>unicode-normalization</code> crate，新增顶部 <code>nfc()</code> / <code>nfc_basename()</code> 辅助；scan_workspace ref_path 入库前先 nfc；read_file 输入端先 nfc；save_file cache 更新比较也先 nfc，全链路 ref_path 字节序列同源。</li>
-              <li>【根因 A 附加 — 三级弱匹配兜底】主路径 cache==/NFC 都 miss 后，新增三级 basename 弱匹配 (a) basename NFC 精确相等+同 workspace 唯一 (b) 去掉尾部数字/分隔符后缀（MR622-MK vs MR622-MK-副本）再唯一 (c) 全局 workspace 内 basename 全局唯一。命中则强制把返回 FileEntry.path 对齐到 cache 同源 ref_path，保证 save_file/refresh_cache 后续继续命中同一 entry，不直接 404。</li>
-              <li>【根因 B — 空内容空白屏无 UI 提示】<code>content==""</code> 通过 <code>typeof doc.content!=="string"</code> → <code>els.markdownView.innerHTML=""</code> → 左编辑器无 placeholder → 全白无任何视觉反馈。<b>修复</b>：openDoc 刚过数据完整性校验插入 <code>isEmptyContent=doc.content.trim()===""</code> 判断，右侧阅读栏灰底虚线卡片展示「📄 本文档暂无内容 + WPS/Word/江西电信 MD 记事本另存为 UTF-8 + 改名 ASCII 短名+从 NAS 拷到本地盘」两步急救方案；识别出的非 UTF-8 编码（<code>doc.encoding</code>）红字展示，含 U+FFFD 替换字符时额外提示。左侧编辑器同步写多行空内容占位符；命中 isEmptyContent 时显式跳过 renderReaderContent 防止把 tip 清空。</li>
-              <li>【根因 B 附加 — Worker 异常可见】<code>renderReaderContent</code> Worker catch 分支在 markdownView 顶部 prepend 红色警告 banner「Markdown 渲染服务出现异常，已切换到本地渲染模式」+ error.message；<code>requestMarkdownRender</code> ensureMarkdownWorker 返回 null 时首次 toast 一次「Markdown 渲染服务降级，已切换到主线程渲染」（限频一次不再打扰），两处都不再只 console.error 静默。</li>
-              <li>【根因 C — GBK/UTF16/UTF8-BOM/UTF32 智能编码解码兜底】江西电信 WPS 导出 md 默认中文 Win 区域设置=GBK/GB18030；记事本另存产生 UTF-16 LE BOM / UTF-8 BOM；scan_workspace & read_file 此前都 <code>std::fs::read_to_string</code> 严格 UTF-8 → FromUtf8Error → continue/404。<b>修复</b>：引入 <code>encoding_rs</code> crate；顶部新增 <code>decode_utf32()</code>（encoding_rs 未单独导出 UTF_32_LE/BE 静态，自编每 4B u32→char）+ <code>decode_bytes_smart()</code> 优先级链 = UTF-8 strict → BOM(UTF-8 / UTF-16 LE / UTF-16 BE / UTF-32 LE / UTF-32 BE) → encoding_rs 候选序列 GB18030→GBK→BIG5→SHIFT_JIS→EUC_KR→WINDOWS_1252（启发：no-error 或 替换率<0.1% 接受）→ 终极 UTF-8 lossy 兜底。scan_workspace & read_file 都改为先 <code>fs::read</code> 取 bytes 再 decode。</li>
-              <li>【编码标签 + 日志反查】read_file 把 <code>encoding_detected</code> 写入返回 FileEntry.encoding → 前端 <code>state.currentEncoding = doc.encoding</code> 底部状态栏直接显示；若走到 utf-8-lossy 且替换字符>0，<code>log::error!</code> 记录 ref_path + absolute + total_bytes + 首字节 4B hex（管理员日志一眼可定位「江西电信」极端未命中编码的具体文件）。normalize_doc_path 失败 / fs::read IO 失败同样带 abs path + head hex 打 error。</li>
-              <li>【保持 v1.8.104 全部大升级不回退】bundle.resources 对象映射（强制 $INSTDIR/resources/public）；resolve_public_root 10 条候选 + 编号展示 404 页；7 项导出原生另存为+两按钮+Toast 路径；DOCX/RTF/ODT Rust 正文提取。</li>
-            </ul>
-          </article>
-          <article class="doc-section">
-            <h3>v1.8.104 更新日志 · 安装后启动失败（前端资源缺失）紧急修复·双重保险</h3>
-            <ul>
-              <li>【根因锁定】v1.8.103 发布后同事电脑安装后红屏「启动失败：前端资源缺失」。从用户截图与构建产物 <code>target/release/_up_/public/index.html</code> 存在 24 个文件验证：<b>① tauri 2.x NSIS 字符串资源写法 <code>"../public"</code> 解包到 <code>$INSTDIR/public/</code>（候选 4）而不是 <code>$INSTDIR/resources/public/</code>（候选 2）。</b> 旧内置 404 页用 <code>format!("{}", public_root.display())</code> 只展示 fallback 首条（候选 2），完全掩盖其他 9 条候选，误导为"安装时没打 resources/public"。② 杀毒软件/企业杀软删除 resources/public 的真实缺失，旧页也无法和第①种情况区分。</li>
-              <li>【修复 A：打包侧强制目标映射】tauri.conf.json 的 <code>bundle.resources</code> 从字符串数组 <code>["WebView2Loader.dll","../public"]</code> 改为 Tauri 2.x <b>对象映射</b>：<code>{ "src": "WebView2Loader.dll", "target": "" }</code> + <code>{ "src": "../public", "target": "resources/public" }</code>。官方安装位置强制为 <code>$INSTDIR/resources/public/index.html</code>，与 Rust 候选 2 <code>exe_dir/resources/public</code> 严格一致，不再受 bundler 版本默认推断影响。</li>
-              <li>【修复 B：运行时 10 级候选 + 404 页完整枚举】<code>resolve_public_root()</code> 从返回 <code>PathBuf</code> 升级为返回 <code>(PathBuf, Vec&lt;PathBuf&gt;)</code>，候选从 5 条扩充到 10 条：<code>① MYTEMPLE_PUBLIC_ROOT ② exe_dir/resources/public ③ exe_dir/resources/resources/public（套娃兜底）④ exe_dir/public（绿色便携/字符串资源解包）⑤ exe_dir/_up_/public（Tauri 中间态）⑥ CARGO_MANIFEST_DIR/../public（开发）⑦ CARGO_MANIFEST_DIR/public ⑧ %APPDATA%/MyTemple Knowledge/public ⑨ ./public ⑩ ./resources/public</code>。</li>
-              <li>【404 友好页彻底重写】不再仅展示 <code>public_root.display()</code> 一条误导路径。改为编号显示「已尝试的静态资源目录（共 N 条）」全部候选，4 步急救方案顺序说明：卸载杀毒重装 v1.8.105+ / 手动拷贝 resources/public / 设 MYTEMPLE_PUBLIC_ROOT / 截图反馈。就算再报错，管理员只要看截图里哪 1/2/3/4 条候选命中/没命中，就能立刻判断是资源映射错位、杀软误删、还是便携版布局。</li>
-              <li>【日志强可见】<code>[FATAL] 未找到可用的前端 public 目录</code> 日志现在逐行打印 10 条候选，排障不用再问用户"你手动打开安装目录看一下"。</li>
-              <li>【保持 v1.8.103 全部大升级不回退】7 项导出原生另存为 + Toast 绝对路径复制 + 打开/定位按钮；导入「系统文件对话框」按钮 + DOCX/RTF/ODT Rust 正文提取不写占位文档；前端双 <code>invoke</code> 兼容；base64 engine 统一；showToast 对象签名 + actions。</li>
-            </ul>
-          </article>
-          <article class="doc-section">
-            <h3>v1.8.103 更新日志 · 原生另存为 + 路径查看 + DOCX/RTF/ODT 正文提取</h3>
-            <ul>
-              <li>【一、7 项导出统一接入系统原生「另存为」】新增 Rust 6 条 Tauri 命令：<code>cmd_export_save_as</code>（save file dialog + 真写磁盘 + 返回绝对路径）/ <code>cmd_open_exported_file</code>（系统默认程序打开）/ <code>cmd_reveal_exported_file_in_folder</code>（explorer /select, macOS open -R, Linux xdg-open 父目录）/ <code>cmd_import_pick_files</code>（open file dialog 多选 + 扩展名过滤）/ <code>cmd_import_read_file</code>（按本地绝对路径读，返回 <code>{ext, text, bytes_base64, converted_markdown}</code>）。引入 <code>tauri-plugin-dialog / tauri-plugin-opener / zip</code> 三条 2.x 依赖；命令模块独立 <code>pub mod tauri_cmd</code> 隔离，规避 crate 根级 <code>#[tauri::command]</code> 宏名空间冲突（E0255×18）。</li>
-              <li>【前端统一 tauriSaveAs + 降级链】新增 <code>tauriSaveAs({blob,defaultName,extensions})</code>：Blob → FileReader dataURL → base64 → invoke <code>cmd_export_save_as</code>；非 Tauri / 异常返回 null 作降级；用户在 Tauri 中取消对话框返回 null → 不再触发二次 Blob 下载。<code>exportCurrentDoc</code>（HTML/DOCX/MD/TXT）统一：先 tauriSaveAs → 有路径 <code>showSavedAsToast</code>（显示绝对路径 + 两按钮：打开文件 / 在文件夹查看，路径块点击可复制）；无路径 + 非 Tauri 走 <code>triggerBlobDownload</code> + Toast 明示「浏览器默认下载目录」；Tauri 且取消 = 静默。</li>
-              <li>【PDF / PPT 兼容老流程】PDF 仍保留 iframe print 对话框另存为 PDF（用户熟悉的流程），但在调 print 前先后台 <code>tauriSaveAs</code> 同内容 HTML 到用户自选路径，Toast 合并显示 HTML 保存路径 + 打印对话框提示 + 查看按钮；纯浏览器再额外 triggerBlobDownload。PPT（幻灯片 HTML）走同样的统一流水线。</li>
-              <li>【Toast 交互升级】<code>showToast</code> 字符串旧签名 100% 兼容；新增对象签名 <code>{title, message, path, kind, duration, canClose, actions:[{label,onClick,primary,dismissAfter}]}</code>；等宽路径块点击复制到剪贴板；关闭按钮；dismissAfter 点击后立即关闭。<code>showSavedAsToast</code> 内置两按钮：打开文件 / 在文件夹中查看，分别 invoke Rust 两条命令。</li>
-              <li>【二、导入 DOCX/RTF/ODT 正文自动提取，再无占位文档】Rust 新增 3 个正文提取 helper：<code>extract_docx_markdown</code> ZIP + <code>&lt;w:p&gt;/&lt;w:t&gt;</code> 逐段换行 + 表格/标题简化；<code>extract_rtf_markdown</code> 深度 + 控制字剥离 + <code>\'xx</code> 跳过；<code>extract_odt_markdown</code> ZIP content.xml <code>text:p/text:h</code> + strip_inner_tags 实体还原 + 空行压缩。</li>
-              <li>【导入弹窗原生系统按钮】<code>importModal</code> 按钮区新增「系统文件对话框」（Tauri 环境下自动显示）；accept 与 Rust 过滤器同步（11 类：md/markdown/txt/html/htm/json/csv/docx/doc/rtf/odt）。<code>addImportFiles</code> 三形态统一：File 对象 / 绝对路径 string[] / 合成对象。系统对话框 string 项逐一 invoke <code>cmd_import_read_file</code>；docx/rtf/odt 如果 <code>converted_markdown</code> 非空 → 打 <code>preconverted</code> 标记；<code>confirmImport</code> 检测到 preconverted → 直接走 <code>create-doc + save</code>（新建同名 .md 文档写真实正文），完全绕过旧 /api/import 的占位分支。其他二进制占位文案也同步提示「请改用系统文件对话框可直接正文提取」。</li>
-              <li>【三、全链路兼容与健壮】所有 invoke 双重兼容 <code>window.__TAURI__.core.invoke</code>（Tauri 2.x @tauri-apps/api v2）与 <code>window.__TAURI__.invoke</code>（直接注入）。base64 编解码统一 <code>engine::general_purpose::STANDARD</code> + 空白替换。<code>FilePath</code>（tauri-plugin-fs 2.5.1）使用 <code>fp.into_path().ok()</code>，<code>add_filter</code> 第二参统一 <code>&amp;[&amp;str]</code>。完整保持 v1.8.102 的前端资源打包 / 5 级公共根候选 / 端口扫描 7321..7420 / Rust 内置中文 404 页。</li>
-            </ul>
-          </article>
-          <article class="doc-section">
-            <h3>v1.8.102 更新日志 · 其他电脑安装后 HTTP 404 白屏紧急修复</h3>
-            <ul>
-              <li>【致命根因：前端静态文件完全没被打进安装包】<code>tauri.conf.json bundle.resources</code> 原本只有 <code>[WebView2Loader.dll]</code>，前端 <code>public/</code> 目录（<code>index.html / app.js / styles.css / splash.html / boot.webp / modules/*.js / graph-worker.js / markdown-worker.js / 图标图片</code> 等 40+ 个文件/子目录）<b>完全没有进入 NSIS 安装包</b>。用户电脑安装完后安装目录只有 exe + WebView2Loader.dll 两个文件；axum 的 <code>resolve_public_root()</code> 用编译期 <code>CARGO_MANIFEST_DIR/../public</code> 指向开发机的 <code>D:\game\mytemple\public</code>（其他电脑不存在），兜底 <code>./public</code> 也不存在 → 请求 <code>http://127.0.0.1:7321/</code>、<code>/splash.html</code>、<code>/app.js</code>、<code>/styles.css</code> 全部返回 <b>HTTP ERROR 404</b>，正好对应您截图 Edge 浏览器「找不到此 127.0.0.1 页」。</li>
-              <li>【打包侧修复】<code>tauri.conf.json bundle.resources</code> 追加 <code>"../public"</code>：NSIS 安装器会把 public 整个目录解包到 <code>安装目录/resources/public/</code>（Tauri 标准位置）；安装后 <code>index.html</code> 物理存在，axum ServeDir 正确服务静态资源。</li>
-              <li>【运行时 <code>resolve_public_root</code> 5 级候选 + <code>index.html</code> 真校验】优先级：① <code>MYTEMPLE_PUBLIC_ROOT</code> 环境变量（开发/管理员强制指定）② <code>&lt;exe_dir&gt;/resources/public</code>（安装位置 NSIS 解包）③ <code>&lt;exe_dir&gt;/public</code>（绿色便携版）④ <code>CARGO_MANIFEST_DIR/../public</code>（开发机 cargo） ⑤ <code>./public</code>（进程 CWD 兜底）。候选目录必须同时"是目录 + 含 index.html 文件"才会被选中；空目录也 warn 日志记录继续下一级。</li>
-              <li>【端口占用自动回退】原写死 7321：其他电脑上 VPN/虚拟网卡/WMI/企业杀毒/浏览器 devtools/迅雷 经常占用 7321；原 <code>TcpListener::bind("127.0.0.1:7321")</code> 直接抛 AddrInUse，Tauri 窗口仍然 navigate 7321 → 404。修复：<code>server::run</code> 新增 <code>bind_first_available(start_port)</code>，按 <code>7321..=7420</code> 顺序扫描返回第一个空闲端口；<code>lib.rs</code> 通过 <code>tokio::sync::oneshot</code> 把真实端口回填，<b>轮询 axum / splash 加载 / 首页导航 / 30s 超时提示</b> 全部使用真实端口。</li>
-              <li>【前端资源缺失内置中文错误页 & 30s 超时中文引导】如果以上 5 级候选都找不到 <code>public/index.html</code>（如企业杀毒删除 resources/public 下文件），Rust 端直接返回 <b>内置最小 HTML 错误页</b>（深色主题 + 当前尝试路径列表 + 3 步解决操作提示：卸载重装最新版 / 关闭杀毒实时防护 / 设 <code>MYTEMPLE_PUBLIC_ROOT</code>），不再显示 Edge 浏览器默认"找不到此页 + 蓝色刷新按钮"。</li>
-              <li>【完整保持 v1.8.101 的 7 项导出修复】Frontmatter YAML 不外漏 / HTML DOCX 高品质离线 / TXT 语法糖剥离 + UTF-8 BOM / PPT triggerBlobDownload 调度 / MD 前端失败兜底全部不回退。</li>
-            </ul>
-          </article>
-          <article class="doc-section">
-            <h3>v1.8.101 更新日志 · 全格式导出质量升级 & Frontmatter 不再外漏</h3>
-            <ul>
-              <li>【Frontmatter YAML 不再出现在任何导出文件】菜单 7 项导出（HTML / Word DOCX / 幻灯片 PPT / PDF / 纯文本 TXT / Markdown MD / 复制为公众号）在写入前统一使用 <code>stripFrontmatter()</code> 或 Rust <code>split_frontmatter().body</code> 剥离「<code>--- schema/title/tags/domain/created/updated/status/aliases ---</code>」块；原 MD 文件写入磁盘时仍 100% 保留 frontmatter，不影响编辑 / 检索 / 图谱 / 规范化工作流。</li>
-              <li>【HTML 导出：从 HTTP 400 升级为高品质离线文档】<code>exportCurrentDoc("html")</code> 不再请求后端 <code>/api/export</code>（后端原 match 分支无 html，必 400 "Unsupported format: html"）；改为前端 <code>buildExportableHtml()</code>：离屏 900px 容器 <code>cachedRenderMarkdown</code> → <code>await renderMathInPreview + renderChartsInPreview</code>（拿到真正 KaTeX DOM + Mermaid SVG）→ <code>normalizeAssetUrlsToRelative</code> → <code>inlinePrintImages</code> 本地图片全部转 data URI → 内联 <code>PRINT_STYLES + KATEX_PRINT_CSS</code> + markdown-body 类 → 文末品牌推荐卡片 → Blob 下载。生成文件离线双击也能显示公式 / Mermaid / 中文 / 图片。</li>
-              <li>【Word DOCX 导出：从 HTTP 400 升级为 Word/WPS 可直接打开的兼容格式】<code>buildExportableDocxBlob()</code> 使用 HTML 导出的全链路内联结果 + 写入 UTF-8 BOM + <code>application/msword</code> MIME → 文件名后缀 <code>.doc</code>；Word / WPS / LibreOffice 双击即打开，图表 / 公式 / 中文正常，避免浏览器端引入几十 MB 第三方 docx 生成库依然失败的常见坑；后续可平滑替换为真正 .docx 二进制实现且 API 不变。</li>
-              <li>【TXT 导出：语法糖剥离 + 中文编码防乱码】Rust <code>strip_markdown_for_txt()</code>：删除 fenced <code>```</code> 包裹行 / ATX <code>### </code> 前缀 / Setext <code>==== ----</code> 下划线 / <code>&gt; </code> 引用块前缀 / 成对 <code>**粗**</code> <code>__粗__</code> <code>~~删除线~~</code> <code>`代码`</code> <code>*斜体*</code> <code>_斜体_</code> / 图片 <code>![alt](url)</code> → alt / 链接 <code>[text](url)</code> → text / HTML 注释；前后过密空行压缩 1 条。前端兜底 <code>cachedRenderMarkdown</code> → <code>plainText()</code> → 显式写入 <code>\uFEFF</code> UTF-8 BOM，Windows 记事本 / Typora 打开中文不出现「鎴愭湰」乱码。</li>
-              <li>【MD 导出：后端 strip + 前端兜底双重保障】<code>/api/export?format=md</code> 使用 <code>split_frontmatter</code> 拿到 body；如 Rust 端抛错 / 网络失败，前端自动降级为 <code>stripFrontmatter(raw)</code> 保存，保证 <code>schema:mytemple/v1</code> 与元数据绝不会出现在最终导出的 MD 文件里。</li>
-              <li>【保存成功率统一修复：triggerBlobDownload】所有 Blob 下载改用新函数：<code>&lt;a&gt;</code> 入 DOM 后 <code>setTimeout 50ms</code> 再触发 click（Tauri / Chromium 下载调度偶发丢 click）；3000ms 后 remove 节点 + revokeObjectURL；文件名 Windows 非法字符 <code>\/:*?"&lt;&gt;|</code> 过滤 + 60 字符上限。PPT / 幻灯片导出同步改此函数，避免出现「点击后没反应」。</li>
-              <li>【v1.8.102 缓存版本升级】<code>MARKDOWN_WORKER_URL</code> → <code>20260829-v18101-export-quality-frontmatter-3</code>；<code>MARKDOWN_RENDER_VERSION</code> → <code>20260829-v18101-export-quality-frontmatter-md-txt-html-docx</code>，保证所有解析旧缓存强制 miss。</li>
-            </ul>
-          </article>
-          <article class="doc-section">
-            <h3>v1.8.100 更新日志 · 启动红屏 SyntaxError 紧急修复</h3>
-            <ul>
-              <li>【致命语法错误修复】<code>public/app.js</code> 第 1872 行 KATEX_PRINT_CSS 中 IE10 老 Hack <code>box-sizing:content-box \10</code> 在模板字符串(Template Literal) 内被 WebView2/Chromium 解析为 <strong>八进制转义序列(Octal escape sequences not allowed in template strings)</strong>，严格模式直接抛 <code>Uncaught SyntaxError</code>，app.js 文件级解析失败、后面全部常量/函数不执行 → 启动红屏。本次删除无用 IE10 hack（2026 无 IE10 用户，KaTeX 0.16 modern 布局无依赖），模板字符串语法合法，红屏立消。</li>
-              <li>【保持 v1.8.99 三项阅读栏/阅读模式修复完整】Worker 三分支补齐 <code>renderMathInPreview + renderChartsInPreview</code>、<code>markdown-worker.js</code> 侧 mermaid/excalidraw chart-block 容器结构生成、<code>renderMarkdown</code> 与 Worker 双处「跨行 $$...$$ 占位符保护 + 还原」三条核心修复继续生效，未回归。</li>
-              <li>【缓存强失效 v1.8.100】<code>MARKDOWN_WORKER_URL</code> query 升级为 <code>20260829-v18100-octal-fix-katexprint-2</code>；<code>MARKDOWN_RENDER_VERSION</code> 升级为 <code>20260829-v18100-multiline-math-excalidraw-octal-fix</code>。编辑预览 / 阅读栏 / 阅读模式 三路缓存全部强制重算。</li>
-              <li>【全目录扫描杜绝同类】<code>public/*.js / public/styles.css / promo/*</code> 全局 grep <code>\\[1-9][0-9]?[; ]</code> 正则 0 命中，杜绝 IE Hack <code>\9 / \10 / \0</code> 再次进入模板字符串造成 SyntaxError。</li>
-              <li>【PDF 导出打印链路验证】红屏修复后 <code>KATEX_PRINT_CSS</code> 正常注入打印 iframe，Mermaid → SVG dataURL 内联、<code>katex.render()</code> → KaTeX DOM + 约 90 条内联样式仍正常工作，文末品牌推荐卡显示无回归。</li>
-            </ul>
-          </article>
-          <article class="doc-section">
-            <h3>v1.8.99 更新日志 · 阅读栏/阅读模式公式/图表全面修复</h3>
-            <ul>
-              <li>【阅读栏/阅读模式渲染调用补齐】<code>renderReaderContent</code> 主路径（Worker 成功非 chunked）、catch 回退路径（非 chunked）、<code>renderReaderContentChunked</code> 单 slice 分支三处全部在写入 <code>markdownView.innerHTML</code> 后立即调用 <code>renderMathInPreview + renderChartsInPreview</code>，与 chunked 多片分支尾部、编辑模式 <code>swapPreviewHtml</code> L5902-5903 保持一致；解决 < 500KB 常见文档 & 150KB 阈值附近单 slice 文档下公式、Mermaid、Excalidraw 永远不渲染的主因。</li>
-              <li>【Worker 端 Mermaid / Excalidraw 占位生成补齐】<code>public/markdown-worker.js</code> 渲染主路径 fenced 代码块闭合分支与主线程 <code>renderMarkdown</code> L2887-2891 严格对齐：<code>```mermaid</code> 输出 <code>.chart-block.mermaid-block + pre.mermaid-source + div.mermaid-container(空占位)</code>；<code>```excalidraw</code> 输出 <code>.chart-block.excalidraw-block + pre.excalidraw-source + div.excalidraw-container(空占位)</code>；阅读栏/阅读模式(Worker HTML 主供源) 从此产出与编辑模式预览相同的占位结构，<code>renderChartsInPreview</code> querySelectorAll 可命中，Mermaid 不再显示为代码块、Excalidraw 不再只显示纯 JSON。</li>
-              <li>【跨行块级公式 $$...$$ 修复】<code>public/markdown-worker.js</code> 与 <code>public/app.js:renderMarkdown</code> 都新增「先保护后还原」占位符机制：按 fence 分段 → 非 fence 段用 <code>\u0000MBLK_i_MBLK\u0000</code> 把整段 <code>$$\n公式体\n$$</code> 替换为一行 token → HTML 生成完成后 <code>restoreBlockMathPlaceholders</code> 还原为 <code>&lt;span class="math-block" data-math="..."&gt;</code>；彻底解决旧逐行 <code>for + &lt;p&gt;${inlineMarkdown(line)}&lt;/p&gt;</code> 切割跨行公式、导致 inlineMarkdown 多行正则永远跨不过 <code>&lt;/p&gt;&lt;p&gt;</code> 的问题；代码块内字面量 $$ 不被替换；块级公式单行、多行写法都正确被 KaTeX 识别并 displayMode 居中。</li>
-              <li>【缓存与脚本版本强制失效】<code>MARKDOWN_RENDER_VERSION</code> 升级为 <code>20260829-mathblock-multiline-excalidraw-mermaid-worker-v1.8.99</code>，<code>MARKDOWN_WORKER_URL</code> query 升级为 <code>20260829-mathblock-excalidraw-fix-1</code>；保证 <code>cachedRenderMarkdown</code> LRU + Worker 脚本 + 前端静态资源浏览器缓存全部强制走新解析。</li>
-              <li>【鲁棒性不变】占位符还原包裹 try/catch；CDN 不可达时 <code>renderMathInPreview</code> 已降级为红色公式源码 / 灰色等宽源码，<code>renderChartsInPreview</code> 已降级图表错误提示；所有兜底路径仍保证可正常阅读与 PDF 导出（PDF 导出链路在上版已独立渲染，不受 Worker 影响）。</li>
-            </ul>
-          </article>
-          <article class="doc-section">
-            <h3>v1.8.98 更新日志 · PDF 导出大升级</h3>
-            <ul>
-              <li>【图表导出】Mermaid 代码块在打印前异步调用 <code>mermaid.render</code> 生成 SVG → 逐节点 <code>getComputedStyle</code> 把 fill / stroke / stroke-width / opacity 写入 inline style → <code>XMLSerializer</code> 转 <code>data:image/svg+xml</code> → 独立 <code>&lt;img&gt;</code> 替代；脱离外部 CSS 后 PDF 内仍能完整显示，不再出现"黑线空心大色块"；Excalidraw 块无运行时则降级为等宽源码显示。</li>
-              <li>【公式导出】<code>.math-block</code> 与 <code>.math-inline</code> 在打印前使用 <code>katex.render()</code> 真实渲染 DOM；同时 <code>PRINT_STYLES</code> 内联注入约 90 条 KaTeX 关键布局类（KATEX_PRINT_CSS：.katex-display / .mfrac / .vlist / .op-symbol / .delimsizing / .mtable / .accent-body / mathbf/mathbb/mathcal 等），about:blank iframe 无需再请求 CDN CSS；\frac、\sqrt、上下标、矩阵、\sum 均正确输出。</li>
-              <li>【品牌推荐语】文末默认追加独立品牌推荐卡片（<code>section.print-brand-recommend</code>，流式文档流、<code>page-break-inside:avoid</code>，非 fixed/watermark，绝不会遮挡正文）：紫蓝渐变圆形徽章 M + 标题「本文档由『MyTemple Knowledge』导出 · 欢迎体验官网最新版」+ slogan「个人知识沉淀 · 本地 Markdown 知识库 · 让写作、阅读与管理都更安心」+ 官网下载超链接 <code>https://mytemple.fshby.cc/</code>；多页 PDF 仅末页显示。</li>
-              <li>【鲁棒性】离屏 div（<code>position:fixed;left/top:-99999px;width:900px</code>）挂载渲染，不干扰用户当前视图；Mermaid/KaTeX 加载或渲染失败自动降级为带颜色或等宽源码，绝不阻断导出；主流程 <code>buildDocumentPrintHtmlRendered()</code> 抛异常时 <code>catch</code> 回退老链路 <code>buildDocumentPrintHtml + inlinePrintImages</code>；<code>iframe.print()</code> 前 <code>requestAnimationFrame × 3 + setTimeout 320ms</code> + img 最长等待 5s，保证 data URI SVG 与图片被 Chromium 栅格化完再打印。</li>
-              <li>【图片内联】容器内相对路径 <code>&lt;img&gt;</code> 再次 <code>fetch → blob → readAsDataURL</code> 内联，PDF 离线打开图片仍完整显示；打印样式 @page <code>size:A4;margin:18mm 14mm</code>；图表块与品牌卡片用 <code>page-break-inside:avoid</code> 防跨页切裂；页眉页脚弹窗提示用户"另存为 PDF 时取消勾选页眉与页脚"。</li>
-            </ul>
-          </article>
-          <article class="doc-section">
-            <h3>v1.8.97 更新日志</h3>
-            <ul>
-              <li>Ctrl+/- 编辑器字号快捷键最终修复：事件监听同时注册在编辑器宿主（els.editor keydown，最高优先级，避免 CodeMirror 吞键）和 document 全局两重，编辑区焦点、工具栏焦点、目录焦点三种上下文都能稳定放大/缩小字号；Ctrl+0 立即重置。</li>
-              <li>重启保留用户习惯字号：loadSettings → applySettings 末尾主动 applyEditorFontSizeToDom，把 localStorage 的 docContentFontSize 同步到 #editor 及 CodeMirror 多节点；setMode('edit')、切换文档、取消预览再打开时都会重放，不会被默认 CSS 冲掉。</li>
-              <li>编辑模式字体全面优化更清晰更美观：
-                <ul>
-                  <li>等宽字体栈：Cascadia Mono / Cascadia Code / JetBrains Mono / Fira Code（Windows 11 原生可连字）→ 中文 Sarasa Mono SC / Source Han Mono SC / PingFang SC / Microsoft YaHei UI → Consolas 兜底，中英文比例更均衡不发虚。</li>
-                  <li>渲染优化：font-feature-settings liga/calt/cv11/ss01 开启等宽连字与数字替代；-webkit-font-smoothing antialiased；text-rendering optimizeLegibility；Windows 下字重 450 避免浅色主题纤细发虚；字距 0.002em 轻微拉开降低密集代码的阅读负担。</li>
-                  <li>行距与留白：主编辑行距 1.76、预览隐藏时行距放宽到 1.82；.cm-content 增加 padding-block 18px→160px（底部保留充足编辑区避免光标贴底）、左右 padding 22px；行号 gutters 透明度降到 78% + tabular-nums 保持数字整齐。</li>
-                  <li>代码文件预览（非MD阅读器）同步升级为与编辑器相同字体栈与行距、并使用 var(--doc-font-size) 随 Ctrl+/- 同步变化。</li>
-                </ul>
-              </li>
-              <li>兼容保障：字号调整会对 .cm-editor/.cm-scroller/.cm-content/.cm-line/.cm-gutters/selection/cursor/activeLine 层以及 #cursor-overlay 全部显式 setProperty(important)，并调用 requestMeasure 强制 CodeMirror 重绘避免滚动条错位。</li>
-            </ul>
-          </article>
-          <article class="doc-section">
-            <h3>v1.8.96 更新日志</h3>
-            <ul>
-              <li>UI拒绝文案彻底清除：打开 bat/vbs/js/py/ini/css/html/java/c/cpp/go/rb/sh/sql/json/xml/yaml/cs/php 等代码/文本文件时，saveBtn.disabled=false、清除旧 title（例如旧版「非 Markdown 文档不支持保存」）、强制替换为「保存 (Ctrl+S)」、移除 readonly/disabled/unsupported class。</li>
-              <li>底部 lastSaveText 正确显示：非Markdown不再出现「不可保存」。openDoc 末尾按编辑器与原内容一致性判断：有草稿且不同→未保存+scheduleAutoSave，其余→保存；自动/手动保存成功后正常显示「已保存 HH:MM」「已自动保存 HH:MM」。</li>
-              <li>保存链路再确认：非md文档打开即自动 setMode('edit') → runAutoSave gate (mode==edit &amp;&amp; currentPath) 通过 → saveCurrentDoc → /api/save（后端 save_file 已对任意文本后缀放行 v1.8.94）。</li>
-              <li>工作区视图（保留 v1.8.95 新逻辑）：折叠态整个工作区扁平 Top10 按 modified 倒序 + 当前打开文档兜底可见；展开态 renderTree 递归完整目录树（文件夹独立展开/收起 + 每层文件按 modified 倒序）。</li>
-            </ul>
-          </article>
-          <article class="doc-section">
-            <h3>v1.8.95 更新日志</h3>
-            <ul>
-              <li>基础保存修复：代码后缀打开默认进入编辑态，避免 runAutoSave 被 view 模式短路。</li>
-              <li>工作区折叠态：收起时整个工作区全部文件按 modified 倒序取前 10 个 + 保证当前打开文档可见；尾部「共 X 项，展开查看全部」。</li>
-              <li>工作区展开态：渲染真正目录树结构；所有文件夹独立展开/收起；每层文件按 modified 倒序；尾部「收起」按钮返回折叠视图。</li>
-            </ul>
-          </article>
-          <article class="doc-section">
-            <h3>v1.8.94 更新日志</h3>
-            <ul>
-              <li>非MD文件显示：工作区目录 mdOnly=false 时显示 bat/vbs/js/py/ini/txt/sh/code 等文本/代码文件（二进制黑名单+10MB 上限）。</li>
-              <li>展开全部修复：工作区目录「展开全部」时无数量限制显示全部文件，收起时保持简洁。</li>
-              <li>代码文件支持：代码后缀可正常打开编辑保存；非MD预览使用等宽字体+换行样式。</li>
-              <li>文件排序：工作区目录文件按修改时间倒序排列（最新在前）。</li>
-              <li>字体快捷键：Ctrl+= 增大编辑器字体，Ctrl+- 减小，Ctrl+0 重置（10~32px，localStorage 持久化）。</li>
-            </ul>
-          </article>
-          <article class="doc-section">
-            <h3>v1.8.93（历史）更新日志</h3>
-            <ul>
-              <li>界面与体验升级：工作区添加对话框UI修复（z-index+遮罩层级）；搜索支持多关键词 AND + 精确短语 + 评分排序；快捷键调整（Ctrl+W → Alt+W / 新增 Alt+E / Alt+O）；自升级真实 fetch 远程版本语义化比较；窗口启动默认最大化。</li>
-              <li>功能无损性能优化：状态栏 DOM 引用缓存（_statusFieldCache），每秒避免 4+ 次 querySelectorAll；页面隐藏时暂停系统时间 setInterval；合并编辑器 3 个 scroll 监听器为 1 个 passive；5 个 resize 监听器统一 100ms 去抖。</li>
-              <li>沉浸+轻量模式整合：一个按钮（⚡ 沉浸）同时实现沉浸写作与轻量编辑——进入时终止 Markdown Worker、禁用语法高亮 CSS、隐藏预览/大纲面板，退出时自动重建 Worker 并刷新预览。</li>
-              <li>文档安全加固：渲染序号竞态防护（readerRenderSeq）、Worker 失败后 5 秒冷却可重建、openDoc 被覆盖时回滚清理、切换文档前同步保存草稿、保存接口返回 contentSha256 支持乐观锁。</li>
-              <li>内存/GPU 优化：contentStore LRU 缓存（最多 50 热文档）、知识文档上限 300、轻度 trim 250MB/激进 320MB；图谱模拟间隔拉长 30%、shadowBlur 降级、backdrop-filter blur 缩小。</li>
-            </ul>
-          </article>
-      </section>
     </main>
 
     <footer class="site-footer section-wrap">

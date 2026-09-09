@@ -679,6 +679,8 @@ impl RagService {
     }
 
     /// 关键词检索
+    /// 性能优化：每个 chunk 的 title/heading/text 的 lowercase 预计算一次，
+    /// 避免在 O( chunks × tokens ) 循环中反复 to_lowercase 分配新 String。
     pub fn lexical_search(&self, question: &str, scope_path: &str) -> Vec<(usize, f64)> {
         let query_tokens: Vec<String> = tokenize(question);
         let unique_tokens: HashSet<&String> = query_tokens.iter().collect();
@@ -693,19 +695,24 @@ impl RagService {
                 if !scope_path.is_empty() && chunk.path != scope_path {
                     return None;
                 }
+                // 预计算 lowercase，避免循环内反复分配
+                let title_lower = chunk.title.to_lowercase();
+                let heading_lower = chunk.heading.to_lowercase();
+                let text_lower = chunk.text.to_lowercase();
                 let token_set: HashSet<&str> = chunk.tokens.iter().map(|s| s.as_str()).collect();
                 let mut score = 0.0f64;
                 for token in &unique_tokens {
-                    if token_set.contains(token.as_str()) {
+                    let tok = token.as_str();
+                    if token_set.contains(tok) {
                         score += 3.0;
                     }
-                    if chunk.title.to_lowercase().contains(token.as_str()) {
+                    if title_lower.contains(tok) {
                         score += 4.0;
                     }
-                    if chunk.heading.to_lowercase().contains(token.as_str()) {
+                    if heading_lower.contains(tok) {
                         score += 5.0;
                     }
-                    if chunk.text.to_lowercase().contains(token.as_str()) {
+                    if text_lower.contains(tok) {
                         score += 1.0;
                     }
                 }
@@ -715,8 +722,6 @@ impl RagService {
                     None
                 }
             })
-            .collect::<Vec<_>>()
-            .into_iter()
             .collect()
     }
 
@@ -1032,7 +1037,9 @@ impl RagService {
         let status = resp.status();
         let text = resp.text().await.unwrap_or_default();
         if !status.is_success() {
-            return Err(format!("DeepSeek HTTP {}: {}", status.as_u16(), &text[..text.len().min(500)]));
+            // 安全截断：按字符边界取前 500 字符，避免多字节 UTF-8 切片 panic
+            let snippet: String = text.chars().take(500).collect();
+            return Err(format!("DeepSeek HTTP {}: {}", status.as_u16(), snippet));
         }
         let json: serde_json::Value = serde_json::from_str(&text)
             .map_err(|e| format!("DeepSeek 响应解析失败: {}", e))?;
@@ -1079,7 +1086,9 @@ impl RagService {
         let status = resp.status();
         let text = resp.text().await.unwrap_or_default();
         if !status.is_success() {
-            return Err(format!("Ollama HTTP {}: {}", status.as_u16(), &text[..text.len().min(500)]));
+            // 安全截断：按字符边界取前 500 字符，避免多字节 UTF-8 切片 panic
+            let snippet: String = text.chars().take(500).collect();
+            return Err(format!("Ollama HTTP {}: {}", status.as_u16(), snippet));
         }
         let json: serde_json::Value = serde_json::from_str(&text)
             .map_err(|e| format!("Ollama 响应解析失败: {}", e))?;

@@ -62,6 +62,26 @@ const AI_DIAGRAM_FORMAT_RULE: &str = r#"
 - 输出前自检：我用的格式是否在上列 1/2/3 中？是则继续，否则立即替换
 "#;
 
+// ── AI 忠实性/反幻觉强约束常量 ──
+// 注入到所有「选中文本加工」模式的 system prompt，确保输出严格基于原文、杜绝 AI 幻觉。
+// 适用模式：polish / rewrite / summary / keypoints / terms / translate / comment
+// 不适用：inline-chat（生成新内容）、continue（续写新内容）、code（代码补全）
+const AI_FAITHFULNESS_RULE: &str = r#"
+【忠实性强约束 — 必须 100% 遵守，违反即为严重错误】
+1. 严格基于原文：你的输出必须且只能基于用户提供的「待处理文本」中已有的信息。
+   - 禁止编造、臆测、补充原文中不存在的事实、数据、引用、人名、日期、结论。
+   - 禁止引入你的训练数据中的「常识」来填补原文未提及的内容。
+   - 如原文信息不足以完成任务，请在输出末尾标注「【注意】原文中缺少XXX信息，已跳过」。
+2. 不得篡改原文核心语义：润色/改写时可以调整措辞与语序，但不得改变原文的事实判断、
+   观点立场、因果关系、数量关系。原文说「可能」不得改为「必然」，原文说「A 导致 B」不得改为「B 导致 A」。
+3. 不得删减关键信息：摘要/要点提取时可以精简冗余表述，但不得删除原文中的关键事实、
+   数据、条件、前提、限定词（如「在特定条件下」「截至 2024 年」）。
+4. 反幻觉自检：输出完成前逐句自问——「这句话的信息是否直接来自原文？」
+   若答案为否，立即删除该句或替换为原文的忠实转述。
+5. 用户自定义要求即硬边界：用户在「自定义要求」中设定的规范、风格、长度、格式、禁用词
+   等指令，你必须严格执行，不得以「更好」为由偏离或超越用户设定的边界。
+"#;
+
 // ── 通用响应封装 ──────────────────────────────────────────
 
 #[derive(Serialize)]
@@ -199,8 +219,14 @@ pub fn build_native_router(state: Arc<ServerState>) -> Router {
         .route("/api/screenshot/ready", post(screenshot_ready_http))
         // 截图窗口关闭信号
         .route("/api/screenshot/close", post(screenshot_close_http))
+        // 截图结果保存/复制（IPC 降级方案，前端 IPC 失败时走 HTTP）
+        .route("/api/screenshot/result", post(screenshot_result_http).layer(DefaultBodyLimit::max(10 * 1024 * 1024)))
         // 截图 OCR 文字识别（调用 Windows.Media.Ocr）
         .route("/api/screenshot/ocr", post(screenshot_ocr).layer(DefaultBodyLimit::max(10 * 1024 * 1024)))
+        // 录屏窗口关闭信号（独立于截图窗口：关闭 recorder 窗口 + 停止原生录屏 + 释放锁）
+        .route("/api/recorder/close", post(recorder_close_http))
+        // 录屏结果保存（IPC 降级方案，前端 IPC 失败时走 HTTP）
+        .route("/api/recorder/result", post(recorder_result_http).layer(DefaultBodyLimit::max(50 * 1024 * 1024)))
         // 安全防护
         .route("/api/security/check", get(security_check))
         .with_state(state)
@@ -1040,43 +1066,79 @@ async fn ai_reindex(
     let rag = &state.rag;
     let _ = rag.load();
 
+    // 并发安全：防止重复触发重建索引（用户快速点击或前端重试）
+    {
+        let (done, total) = *rag.progress.lock().unwrap();
+        if total > 0 && done < total {
+            return raw_json(serde_json::json!({
+                "ok": false,
+                "error": "索引重建正在进行中，请稍候",
+                "progress": { "done": done, "total": total },
+            }));
+        }
+    }
     let files = state.app.get_files().await;
+    let total_files = files.len() as u32;
+    *rag.progress.lock().unwrap() = (0, total_files);
 
     // Build index from files
     // 预分配：1 文件 ≈ 2~6 个 chunk（取 4 中值）；避免文件数 × 多轮 realloc
     let est_chunks = files.len().saturating_mul(4).max(64);
     let mut all_chunks: Vec<crate::rag::Chunk> = Vec::with_capacity(est_chunks);
     let mut manifest_docs = std::collections::HashMap::with_capacity(files.len().max(16));
+    let mut skipped = 0u32;
 
     for file in &files {
         // FileEntry.content 采用懒加载（scan_workspace 时为 None），RAG 索引需要真实正文，
         // 通过 read_file_force 触发磁盘读取并回填缓存，确保 chunk_markdown 拿到非空内容。
         let entry = match state.app.read_file_force(&file.path).await {
             Ok(e) => e,
-            Err(_) => continue,
+            Err(e) => {
+                log::warn!("[ai_reindex] 读取文件失败，跳过: {} — {}", file.path, e);
+                skipped += 1;
+                continue;
+            }
         };
+        let content = entry.content.clone().unwrap_or_default();
+        if content.trim().is_empty() {
+            log::debug!("[ai_reindex] 文件内容为空，跳过: {}", file.path);
+            skipped += 1;
+            continue;
+        }
         let indexed = crate::rag::IndexedFile {
             path: file.path.clone(),
             title: file.title.clone(),
-            content: entry.content.clone().unwrap_or_default(),
+            content,
             content_sha256: file.content_sha256.clone(),
             workspace_id: file.workspace_id.clone(),
         };
         let chunks = crate::rag::chunk_markdown(&indexed);
-        let doc_sig = file.content_sha256.clone();
+        // 收集 chunk_ids 时直接从 chunks 提取 id，避免额外的 iter().map().collect()
         let chunk_ids: Vec<String> = chunks.iter().map(|c| c.id.clone()).collect();
         manifest_docs.insert(file.path.clone(), crate::rag::DocManifest {
-            signature: doc_sig,
+            signature: file.content_sha256.clone(),
             chunk_ids,
         });
         all_chunks.extend(chunks);
+        // 更新进度
+        let done = {
+            let mut p = rag.progress.lock().unwrap();
+            p.0 += 1;
+            p.0
+        };
+        if done % 10 == 0 {
+            log::info!("[ai_reindex] 进度: {}/{}", done, total_files);
+        }
     }
 
-    // Update state
+    // 更新状态：用 std::mem::take 避免 clone 全量 chunks（万级 chunk 时省几十 MB 堆拷贝）
+    let chunk_count = all_chunks.len();
     {
         let mut chunks_ref = rag.chunks.lock().unwrap();
-        *chunks_ref = all_chunks.clone();
+        *chunks_ref = std::mem::take(&mut all_chunks);
     }
+    // 更新进度为完成
+    *rag.progress.lock().unwrap() = (total_files, total_files);
 
     // Build manifest
     let manifest = crate::rag::Manifest {
@@ -1126,8 +1188,10 @@ async fn ai_reindex(
 
     raw_json(serde_json::json!({
         "ok": true,
-        "chunkCount": all_chunks.len(),
+        "chunkCount": chunk_count,
         "documentCount": manifest.documents.len(),
+        "skipped": skipped,
+        "totalFiles": total_files,
         "mode": "keyword",
         "note": "Vector indexing requires Ollama embedding model. Currently using keyword-only retrieval.",
     }))
@@ -1165,7 +1229,11 @@ async fn ai_query(
 
     let system_prompt = format!(
         "你是一个知识库助手。根据以下检索到的文档片段回答用户问题。\
-        如果文档片段中没有相关信息，请如实说明。回答时引用来源编号。{}",
+        【反幻觉强约束】\
+        1. 只能基于检索到的文档片段内容回答，不得引入训练数据中的「常识」或外部信息。\
+        2. 如果文档片段中没有相关信息，必须如实说明「检索到的文档中未包含相关内容」，不得编造答案。\
+        3. 不得将片段中的碎片信息拼接臆测为完整结论；信息不完整时如实说明。\
+        4. 回答时引用来源编号 [n]，让用户可溯源验证。{}",
         AI_DIAGRAM_FORMAT_RULE
     );
     let user_prompt = format!("检索到的文档片段：\n\n{}\n\n用户问题：{}", context, req.question);
@@ -1216,7 +1284,14 @@ async fn ai_transform(
 
     // inline-chat：纯 AI 对话模式（Ctrl+I 入口），不做向量检索
     if mode == "inline-chat" {
-        let system_prompt = format!("你是一个写作助手。请根据用户的要求，在当前文档光标位置生成或补充内容。直接输出要插入的内容，不要添加额外解释、标题或前后缀。{}", AI_DIAGRAM_FORMAT_RULE);
+        let system_prompt = format!(
+            "你是一个写作助手。请根据用户的要求，在当前文档光标位置生成或补充内容。\
+            直接输出要插入的内容，不要添加额外解释、标题或前后缀。\
+            【用户指令即硬边界】用户在请求中设定的风格、字数、格式、视角、禁用词等要求，\
+            你必须严格执行，不得以「更好」为由偏离或超越用户设定的边界。\
+            若用户请求与文档上下文矛盾，以用户请求为准。{}",
+            AI_DIAGRAM_FORMAT_RULE
+        );
         let mut user_prompt = String::new();
         if let Some(ref ctx) = req.context {
             if !ctx.is_empty() {
@@ -1260,7 +1335,7 @@ async fn ai_transform(
             _ => ("中文", "English (英语)"), // direction 为空默认中译英
         };
 
-        // 强约束 system prompt：三重强制 + 禁止 + 格式保留
+        // 强约束 system prompt：三重强制 + 禁止 + 格式保留 + 忠实性
         let system_prompt = format!(
             r#"你是严谨的专业翻译引擎。请完成以下翻译任务。
 
@@ -1269,19 +1344,25 @@ async fn ai_transform(
 2. 译文的每一个字符、每一个词、每一句话、每一个段落 — 全部必须是「{}」，绝对禁止输出「{}」，绝对禁止混合两种语言。
 3. 输出只能是译文，不要任何解释、注释、括号说明、原文对照、致谢、问候语或 Markdown 代码块标记。
 
+【忠实性约束 — 杜绝翻译中的 AI 幻觉】
+4. 译文必须忠实于原文内容：不得擅自增加原文没有的信息、观点、举例、数据。
+5. 不得删减原文的关键信息：原文的每一段、每一句、每个关键术语都必须有对应译文，不得跳过或省略。
+6. 不得篡改原文语义：原文的条件、因果、程度、时态等限定关系必须准确传达。
+7. 逐句对照自检：原文有几句话，译文就应有对应数量的句段。若发现译文多出或缺少信息，立即修正。
+
 【保留要求】
 - 保留原文的 Markdown 格式（标题、列表、代码块、表格、链接、图片语法等）。
 - 保留原文中的专有名词、代码、命令、URL、版本号等不必翻译的内容原样输出。
 - 译文语言必须自然流畅，符合目标语言的母语表达习惯。
 
 【自检提示】
-输出完成前请自问：我的输出里有没有一个字不是「{}」？如果有，立即替换成正确译文。"#,
+输出完成前请自问：① 我的输出里有没有一个字不是「{}」？② 我有没有增加或删减原文信息？若发现违规，立即修正。"#,
             source_label, target_label, target_label, source_label, target_label
         );
 
         let mut user_prompt = String::new();
         if !user_instruction.is_empty() {
-            user_prompt.push_str(&format!("用户额外翻译要求（请融入译文但不得影响目标语言一致性）：{}\n\n", user_instruction));
+            user_prompt.push_str(&format!("【用户翻译要求 — 硬边界，必须严格执行】\n（请融入译文但不得影响目标语言一致性与忠实性）\n{}\n\n", user_instruction));
         }
         user_prompt.push_str(&format!("【源语言：{}】\n【目标语言：{}】\n\n请翻译以下文本：\n{}", source_label, target_label, req.text));
 
@@ -1308,13 +1389,16 @@ async fn ai_transform(
     };
 
     // 润色模式：更自然的 prompt
+    // polish/rewrite/summary/keypoints/terms/comment 等选中文本加工模式注入 AI_FAITHFULNESS_RULE
+    // （忠实性强约束 + 反幻觉 + 用户指令硬边界），确保输出严格基于原文。
+    // continue/code 为生成性模式（续写新内容/补全新代码），不注入忠实性约束。
     let system_prompt: String = match mode {
-        "polish" => format!("你是专业文字润色助手。请在保持原意不变的前提下，让文本更通顺、更专业，直接输出润色后的结果。{}", AI_DIAGRAM_FORMAT_RULE),
+        "polish" => format!("你是专业文字润色助手。请在保持原意不变的前提下，让文本更通顺、更专业，直接输出润色后的结果。{}{}", AI_DIAGRAM_FORMAT_RULE, AI_FAITHFULNESS_RULE),
         "continue" => format!("你是写作助手。请根据给定的内容，续写合理的后续，直接输出续写部分。{}", AI_DIAGRAM_FORMAT_RULE),
-        "rewrite" => format!("你是专业写作助手。请根据用户的要求重写文本，直接输出改写后的结果。{}", AI_DIAGRAM_FORMAT_RULE),
+        "rewrite" => format!("你是专业写作助手。请根据用户的要求重写文本，直接输出改写后的结果。{}{}", AI_DIAGRAM_FORMAT_RULE, AI_FAITHFULNESS_RULE),
         "code" => format!("你是代码助手。请根据上下文生成合适的代码，直接输出代码。{}", AI_DIAGRAM_FORMAT_RULE),
-        "comment" => format!("你是代码助手。请为代码添加清晰的注释，直接输出添加注释后的代码或注释内容。{}", AI_DIAGRAM_FORMAT_RULE),
-        _ => format!("你是一个文本处理助手。用户要求执行「{}」操作。请根据要求处理文本，直接输出结果，不要添加额外解释。{}", mode_labels, AI_DIAGRAM_FORMAT_RULE),
+        "comment" => format!("你是代码助手。请为代码添加清晰的注释，直接输出添加注释后的代码或注释内容。{}{}", AI_DIAGRAM_FORMAT_RULE, AI_FAITHFULNESS_RULE),
+        _ => format!("你是一个文本处理助手。用户要求执行「{}」操作。请根据要求处理文本，直接输出结果，不要添加额外解释。{}{}", mode_labels, AI_DIAGRAM_FORMAT_RULE, AI_FAITHFULNESS_RULE),
     };
 
     let instruction = req.instruction.unwrap_or_default();
@@ -1322,7 +1406,8 @@ async fn ai_transform(
 
     let mut user_prompt = String::new();
     if !instruction.is_empty() {
-        user_prompt.push_str(&format!("用户额外要求：{}\n\n", instruction));
+        // 用户自定义要求作为硬边界注入（而非软建议），确保 AI 严格在用户设定边界内执行
+        user_prompt.push_str(&format!("【用户自定义要求 — 硬边界，必须严格执行，不得偏离】\n{}\n\n", instruction));
     }
     if !context.is_empty() {
         user_prompt.push_str(&format!("上下文：\n{}\n\n", context));
@@ -3054,6 +3139,72 @@ async fn screenshot_close_http() -> impl IntoResponse {
     raw_json(serde_json::json!({ "ok": true }))
 }
 
+/// POST /api/recorder/close
+/// 录屏窗口关闭信号（独立于截图：关闭 recorder 窗口 + 停止原生录屏 + 释放录屏锁）
+/// 关键修复：recorder.html 之前错误调用 /api/screenshot/close（只关截图窗口，录屏窗口残留
+/// always_on_top 挡住鼠标）。此端点调用 close_recorder_window 真正关闭录屏窗口。
+async fn recorder_close_http() -> impl IntoResponse {
+    let app_handle = match crate::APP_HANDLE.get() {
+        Some(h) => h.clone(),
+        None => return json_err(StatusCode::INTERNAL_SERVER_ERROR, "AppHandle 未初始化"),
+    };
+    crate::global_capture::close_recorder_window(&app_handle);
+    raw_json(serde_json::json!({ "ok": true }))
+}
+
+/// POST /api/recorder/result
+/// 录屏结果保存（IPC 降级方案）。前端优先走 Tauri IPC recorder_result，IPC 不可用时降级走此端点。
+/// 先关闭窗口再后台保存（不阻塞 HTTP 响应）。
+#[derive(Deserialize)]
+struct RecorderResultRequest {
+    image: String,
+    action: String,
+    #[serde(default)]
+    filename: String,
+}
+
+async fn recorder_result_http(Json(req): Json<RecorderResultRequest>) -> impl IntoResponse {
+    let app_handle = match crate::APP_HANDLE.get() {
+        Some(h) => h.clone(),
+        None => return json_err(StatusCode::INTERNAL_SERVER_ERROR, "AppHandle 未初始化"),
+    };
+    // 先关闭窗口（防止保存过程中窗口挡在屏幕上），close_recorder_window 内部会停止原生录屏 + 释放锁
+    crate::global_capture::close_recorder_window(&app_handle);
+    let app_clone = app_handle.clone();
+    tokio::task::spawn_blocking(move || {
+        let _ = crate::global_capture::handle_recorder_result(
+            &app_clone,
+            req.image,
+            req.action,
+            req.filename,
+        );
+    });
+    raw_json(serde_json::json!({ "ok": true }))
+}
+
+/// POST /api/screenshot/result
+/// 截图结果保存/复制（IPC 降级方案）。
+/// 前端优先走 Tauri IPC screenshot_result，IPC 不可用时降级走此 HTTP 端点。
+#[derive(Deserialize)]
+struct ScreenshotResultRequest {
+    image: String,
+    action: String,
+}
+
+async fn screenshot_result_http(Json(req): Json<ScreenshotResultRequest>) -> impl IntoResponse {
+    let app_handle = match crate::APP_HANDLE.get() {
+        Some(h) => h.clone(),
+        None => return json_err(StatusCode::INTERNAL_SERVER_ERROR, "AppHandle 未初始化"),
+    };
+    // 先关闭窗口，再后台保存（不阻塞 HTTP 响应）
+    crate::global_capture::close_screenshot_window(&app_handle);
+    let app_clone = app_handle.clone();
+    tokio::task::spawn_blocking(move || {
+        let _ = crate::global_capture::handle_screenshot_result(&app_clone, req.image, req.action);
+    });
+    raw_json(serde_json::json!({ "ok": true }))
+}
+
 /// GET /api/screenshot/bg
 /// 直接返回截图 PNG 二进制（Content-Type: image/png）
 /// 前端用 fetch → blob → URL.createObjectURL 加载，不依赖任何 IPC
@@ -3137,9 +3288,16 @@ try {
 "#
     .replace("__IMAGE_PATH__", &temp_path.display().to_string());
 
-    let output = std::process::Command::new("powershell")
-        .args(["-NoProfile", "-NonInteractive", "-Command", &ps_script])
-        .output();
+    // CREATE_NO_WINDOW (0x08000000)：防止 OCR 时弹出黑色 PowerShell 控制台窗口
+    #[cfg(target_os = "windows")]
+    use std::os::windows::process::CommandExt;
+    let mut cmd = std::process::Command::new("powershell");
+    cmd.args(["-NoProfile", "-NonInteractive", "-Command", &ps_script]);
+    #[cfg(target_os = "windows")]
+    {
+        cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    }
+    let output = cmd.output();
 
     let _ = std::fs::remove_file(&temp_path);
 

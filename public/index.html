@@ -18,9 +18,9 @@
       body.license-locked #licenseModal,
       body.license-locked #settingsModal { pointer-events: auto; }
     </style>
-    <link rel="stylesheet" href="/styles.css?v=20260822-v14" />
+    <link rel="stylesheet" href="/styles.css?v=20260908-v6" />
 <link rel="modulepreload" href="/editor-core.js?v=20260822-v4" />
-<link rel="modulepreload" href="/app.js?v=20260822-v14" />
+<link rel="modulepreload" href="/app.js?v=20260908-v6" />
   </head>
   <body>
     <div id="appSplash" class="app-splash">
@@ -115,11 +115,13 @@
         <div class="welcome-panel" data-welcome-panel="2">
           <div class="welcome-shortcuts">
             <div class="welcome-shortcut-row"><span class="welcome-key">Ctrl</span> + <span class="welcome-key">S</span><span class="welcome-shortcut-desc">保存当前文档</span></div>
-            <div class="welcome-shortcut-row"><span class="welcome-key">Ctrl</span> + <span class="welcome-key">P</span><span class="welcome-shortcut-desc">快速打开文档</span></div>
-            <div class="welcome-shortcut-row"><span class="welcome-key">Ctrl</span> + <span class="welcome-key">K</span><span class="welcome-shortcut-desc">聚焦搜索框</span></div>
-            <div class="welcome-shortcut-row"><span class="welcome-key">Ctrl</span> + <span class="welcome-key">E</span><span class="welcome-shortcut-desc">切换阅读/修改模式</span></div>
-            <div class="welcome-shortcut-row"><span class="welcome-key">Ctrl</span> + <span class="welcome-key">\\</span><span class="welcome-shortcut-desc">插入表格</span></div>
-            <div class="welcome-shortcut-row"><span class="welcome-key">Ctrl</span> + <span class="welcome-key">Shift</span> + <span class="welcome-key">F</span><span class="welcome-shortcut-desc">文档内查找</span></div>
+            <div class="welcome-shortcut-row"><span class="welcome-key">Alt</span> + <span class="welcome-key">E</span><span class="welcome-shortcut-desc">切换阅读/编辑模式</span></div>
+            <div class="welcome-shortcut-row"><span class="welcome-key">Alt</span> + <span class="welcome-key">O</span><span class="welcome-shortcut-desc">切换沉浸模式</span></div>
+            <div class="welcome-shortcut-row"><span class="welcome-key">Alt</span> + <span class="welcome-key">A</span><span class="welcome-shortcut-desc">区域截图</span></div>
+            <div class="welcome-shortcut-row"><span class="welcome-key">Alt</span> + <span class="welcome-key">M</span><span class="welcome-shortcut-desc">区域录屏</span></div>
+            <div class="welcome-shortcut-row"><span class="welcome-key">F2</span><span class="welcome-shortcut-desc">重命名文档</span></div>
+            <div class="welcome-shortcut-row"><span class="welcome-key">Ctrl</span> + <span class="welcome-key">Shift</span> + <span class="welcome-key">F</span><span class="welcome-shortcut-desc">切换沉浸编辑</span></div>
+            <div class="welcome-shortcut-row"><span class="welcome-key">双击</span> <span class="welcome-key">Shift</span><span class="welcome-shortcut-desc">全局搜索</span></div>
           </div>
         </div>
         <div class="welcome-actions">
@@ -283,58 +285,6 @@
               <button type="button" data-format="chart-git" title="Git图"><span class="chart-icon" aria-hidden="true">⎇</span>Git图</button>
               <button type="button" data-format="chart-mindmap" title="思维导图"><span class="chart-icon" aria-hidden="true">✿</span>思维导图</button>
               <button type="button" data-format="chart-architecture" title="架构图"><span class="chart-icon" aria-hidden="true">⬛</span>架构图</button>
-            </div>
-            <button type="button" data-toolbar-dropdown="codeblock" title="插入代码块（选语言）">⊶▾</button>
-            <div class="toolbar-dropdown-panel hidden codeblock-panel" data-panel="codeblock">
-              <p class="chart-group-title">常用语言</p>
-              <button type="button" data-format="codeblock-plain" title="无语言/纯文本"><span class="chart-icon" aria-hidden="true">T</span>纯文本</button>
-              <div class="chart-separator"></div>
-              <p class="chart-group-title">编程语言</p>
-              <button type="button" data-format="codeblock-javascript" title="JavaScript"><span class="chart-icon" aria-hidden="true">JS</span>JavaScript</button>
-              <button type="button" data-format="codeblock-typescript" title="TypeScript"><span class="chart-icon" aria-hidden="true">TS</span>TypeScript</button>
-              <button type="button" data-format="codeblock-python" title="Python"><span class="chart-icon" aria-hidden="true">Py</span>Python</button>
-              <button type="button" data-format="codeblock-java" title="Java"><span class="chart-icon" aria-hidden="true">Jv</span>Java</button>
-              <button type="button" data-format="codeblock-php" title="PHP"><span class="chart-icon" aria-hidden="true">Ph</span>PHP</button>
-              <button type="button" data-format="codeblock-c" title="C 语言"><span class="chart-icon" aria-hidden="true">C</span>C 语言</button>
-              <button type="button" data-format="codeblock-cpp" title="C++"><span class="chart-icon" aria-hidden="true">C++</span>C++</button>
-              <button type="button" data-format="codeblock-csharp" title="C#"><span class="chart-icon" aria-hidden="true">C#</span>C#</button>
-              <button type="button" data-format="codeblock-go" title="Go"><span class="chart-icon" aria-hidden="true">Go</span>Go</button>
-              <button type="button" data-format="codeblock-rust" title="Rust"><span class="chart-icon" aria-hidden="true">Rs</span>Rust</button>
-              <button type="button" data-format="codeblock-ruby" title="Ruby"><span class="chart-icon" aria-hidden="true">Rb</span>Ruby</button>
-              <button type="button" data-format="codeblock-kotlin" title="Kotlin"><span class="chart-icon" aria-hidden="true">Kt</span>Kotlin</button>
-              <button type="button" data-format="codeblock-swift" title="Swift"><span class="chart-icon" aria-hidden="true">Sw</span>Swift</button>
-              <button type="button" data-format="codeblock-lua" title="Lua"><span class="chart-icon" aria-hidden="true">Lu</span>Lua</button>
-              <button type="button" data-format="codeblock-r" title="R 语言"><span class="chart-icon" aria-hidden="true">R</span>R 语言</button>
-              <button type="button" data-format="codeblock-scala" title="Scala"><span class="chart-icon" aria-hidden="true">Sc</span>Scala</button>
-              <button type="button" data-format="codeblock-perl" title="Perl"><span class="chart-icon" aria-hidden="true">Pl</span>Perl</button>
-              <div class="chart-separator"></div>
-              <p class="chart-group-title">Web & 前端</p>
-              <button type="button" data-format="codeblock-html" title="HTML"><span class="chart-icon" aria-hidden="true">H5</span>HTML</button>
-              <button type="button" data-format="codeblock-css" title="CSS"><span class="chart-icon" aria-hidden="true">3#</span>CSS</button>
-              <button type="button" data-format="codeblock-scss" title="SCSS / Sass"><span class="chart-icon" aria-hidden="true">Sc</span>SCSS</button>
-              <button type="button" data-format="codeblock-vue" title="Vue"><span class="chart-icon" aria-hidden="true">Vu</span>Vue</button>
-              <button type="button" data-format="codeblock-react" title="React JSX"><span class="chart-icon" aria-hidden="true">Rx</span>React JSX</button>
-              <div class="chart-separator"></div>
-              <p class="chart-group-title">数据库 & 脚本</p>
-              <button type="button" data-format="codeblock-sql" title="SQL"><span class="chart-icon" aria-hidden="true">Db</span>SQL</button>
-              <button type="button" data-format="codeblock-mysql" title="MySQL"><span class="chart-icon" aria-hidden="true">My</span>MySQL</button>
-              <button type="button" data-format="codeblock-bash" title="Bash / Shell"><span class="chart-icon" aria-hidden="true">$</span>Bash / Shell</button>
-              <button type="button" data-format="codeblock-cmd" title="Windows CMD / Batch"><span class="chart-icon" aria-hidden="true">C:</span>CMD / Batch</button>
-              <button type="button" data-format="codeblock-powershell" title="PowerShell"><span class="chart-icon" aria-hidden="true">Ps</span>PowerShell</button>
-              <button type="button" data-format="codeblock-docker" title="Dockerfile"><span class="chart-icon" aria-hidden="true">Dk</span>Dockerfile</button>
-              <button type="button" data-format="codeblock-nginx" title="Nginx"><span class="chart-icon" aria-hidden="true">Nx</span>Nginx</button>
-              <div class="chart-separator"></div>
-              <p class="chart-group-title">数据 & 配置</p>
-              <button type="button" data-format="codeblock-json" title="JSON"><span class="chart-icon" aria-hidden="true">Jn</span>JSON</button>
-              <button type="button" data-format="codeblock-yaml" title="YAML"><span class="chart-icon" aria-hidden="true">Ym</span>YAML</button>
-              <button type="button" data-format="codeblock-xml" title="XML"><span class="chart-icon" aria-hidden="true">Xm</span>XML</button>
-              <button type="button" data-format="codeblock-toml" title="TOML"><span class="chart-icon" aria-hidden="true">Tm</span>TOML</button>
-              <button type="button" data-format="codeblock-csv" title="CSV"><span class="chart-icon" aria-hidden="true">Cv</span>CSV</button>
-              <button type="button" data-format="codeblock-ini" title="INI / 配置"><span class="chart-icon" aria-hidden="true">In</span>INI 配置</button>
-              <button type="button" data-format="codeblock-markdown" title="Markdown"><span class="chart-icon" aria-hidden="true">Md</span>Markdown</button>
-              <button type="button" data-format="codeblock-diff" title="Diff 对比"><span class="chart-icon" aria-hidden="true">±</span>Diff 对比</button>
-              <button type="button" data-format="codeblock-makefile" title="Makefile"><span class="chart-icon" aria-hidden="true">Mk</span>Makefile</button>
-              <button type="button" data-format="codeblock-cmake" title="CMake"><span class="chart-icon" aria-hidden="true">Cm</span>CMake</button>
             </div>
             <button data-format="code" title="行内代码 (Ctrl+`)">&lt;/&gt;</button>
             <button data-format="link" title="链接 (Ctrl+K)">Link</button>
@@ -727,6 +677,27 @@
                   <button type="button" data-save="default">默认工作路径</button>
                 </div>
               </section>
+              <section class="settings-section code-highlight-settings-section">
+                <strong>代码语法高亮颜色</strong>
+                <p class="muted">调整代码块中各类语法元素的显示颜色。修改会立即预览并在重启后保留。</p>
+                <div class="markdown-color-grid code-highlight-grid">
+                  <label class="setting-row"><span>关键字</span><input id="hlColorKeyword" type="color" value="#c084fc" /></label>
+                  <label class="setting-row"><span>字符串</span><input id="hlColorString" type="color" value="#22c55e" /></label>
+                  <label class="setting-row"><span>注释</span><input id="hlColorComment" type="color" value="#94a3b8" /></label>
+                  <label class="setting-row"><span>数字</span><input id="hlColorNumber" type="color" value="#f97316" /></label>
+                  <label class="setting-row"><span>函数名</span><input id="hlColorTitle" type="color" value="#38bdf8" /></label>
+                  <label class="setting-row"><span>类型/类</span><input id="hlColorType" type="color" value="#fbbf24" /></label>
+                  <label class="setting-row"><span>内置</span><input id="hlColorBuiltin" type="color" value="#fb7185" /></label>
+                  <label class="setting-row"><span>变量</span><input id="hlColorVariable" type="color" value="#e2e8f0" /></label>
+                  <label class="setting-row"><span>属性</span><input id="hlColorAttr" type="color" value="#fbbf24" /></label>
+                  <label class="setting-row"><span>标签</span><input id="hlColorTag" type="color" value="#f472b6" /></label>
+                  <label class="setting-row"><span>运算符</span><input id="hlColorOperator" type="color" value="#94a3b8" /></label>
+                  <label class="setting-row"><span>元信息</span><input id="hlColorMeta" type="color" value="#94a3b8" /></label>
+                </div>
+                <div class="inline-actions">
+                  <button type="button" id="resetCodeHighlightBtn">恢复默认颜色</button>
+                </div>
+              </section>
             </section>
 
             <section class="settings-panel" data-settings-panel="workspace">
@@ -953,47 +924,79 @@
             <section class="settings-panel" data-settings-panel="shortcuts">
               <div class="settings-panel-header">
                 <h3>快捷键</h3>
-                <p class="muted">编辑器内快捷键与使用方式。</p>
+                <p class="muted">全局与编辑器快捷键一览。</p>
               </div>
               <details class="settings-section shortcut-settings-section" open>
-                <summary><strong>快捷键说明</strong><span class="muted">点击折叠/展开全部编辑快捷键</span></summary>
+                <summary><strong>全局快捷键</strong><span class="muted">任意位置可用</span></summary>
+                <div class="shortcut-grid">
+                  <div><code>Alt + A</code><span>区域截图（标注 + OCR）</span></div>
+                  <div><code>Alt + M</code><span>区域录屏（WebM）</span></div>
+                  <div><code>F2</code><span>重命名当前文档</span></div>
+                  <div><code>Alt + E</code><span>切换编辑/阅读模式</span></div>
+                  <div><code>Alt + O</code><span>切换沉浸模式</span></div>
+                  <div><code>Alt + Q</code><span>编辑模式下显示/隐藏大纲目录</span></div>
+                  <div><code>Alt + W</code><span>编辑模式下显示/隐藏预览栏</span></div>
+                  <div><code>Ctrl/Cmd + Q</code><span>显示/隐藏工作区目录</span></div>
+                  <div><code>Ctrl/Cmd + U</code><span>切换 AI 智能检索抽屉</span></div>
+                  <div><code>Ctrl/Cmd + Shift + I</code><span>导入文档</span></div>
+                  <div><code>双击 Shift</code><span>打开全局搜索</span></div>
+                  <div><code>Ctrl/Cmd + =</code><span>放大编辑器字体</span></div>
+                  <div><code>Ctrl/Cmd + -</code><span>缩小编辑器字体</span></div>
+                  <div><code>Ctrl/Cmd + 0</code><span>重置编辑器字体大小</span></div>
+                  <div><code>Escape</code><span>退出沉浸模式</span></div>
+                </div>
+              </details>
+              <details class="settings-section shortcut-settings-section">
+                <summary><strong>编辑器快捷键</strong><span class="muted">编辑器内使用</span></summary>
                 <div class="shortcut-grid">
                   <div><code>Ctrl/Cmd + S</code><span>手动保存</span></div>
-                  <div><code>Ctrl/Cmd + Z</code><span>撤销（原生增量回放）</span></div>
-                  <div><code>Ctrl/Cmd + Y / Shift+Z</code><span>重做</span></div>
+                  <div><code>Ctrl/Cmd + Z</code><span>撤销</span></div>
+                  <div><code>Ctrl/Cmd + Y</code><span>重做</span></div>
                   <div><code>Ctrl/Cmd + B</code><span>加粗</span></div>
                   <div><code>Ctrl/Cmd + I</code><span>斜体</span></div>
                   <div><code>Ctrl/Cmd + K</code><span>插入链接</span></div>
                   <div><code>Ctrl/Cmd + 1/2/3</code><span>H1 / H2 / H3</span></div>
                   <div><code>Ctrl/Cmd + Shift + 7/8</code><span>有序 / 无序列表</span></div>
-                  <div><code>Alt + S</code><span>删除线（VSCode 风格）</span></div>
+                  <div><code>Alt + S</code><span>删除线</span></div>
                   <div><code>Alt + C</code><span>任务清单勾选切换</span></div>
                   <div><code>Alt + Shift + ↑/↓</code><span>整行上移 / 下移</span></div>
                   <div><code>Ctrl/Cmd + D</code><span>复制当前行</span></div>
+                  <div><code>Ctrl/Cmd + M</code><span>删除当前行</span></div>
                   <div><code>Ctrl/Cmd + Shift + K</code><span>删除当前行（VSCode 风格）</span></div>
                   <div><code>Ctrl/Cmd + ;</code><span>插入日期</span></div>
                   <div><code>Ctrl/Cmd + '</code><span>插入时间</span></div>
+                  <div><code>Ctrl/Cmd + F</code><span>编辑器内关键字检索</span></div>
                   <div><code>Ctrl/Cmd + Shift + F</code><span>切换沉浸编辑</span></div>
-                  <div><code>Ctrl/Cmd + F</code><span>编辑器内关键字检索（行浏览目录）</span></div>
-                  <div><code>Escape</code><span>退出沉浸或多光标状态</span></div>
                   <div><code>F3 / Ctrl/Cmd + G</code><span>查找下一个匹配</span></div>
                   <div><code>Ctrl/Cmd + Alt + ↑/↓</code><span>在相邻行添加多处光标</span></div>
+                  <div><code>Alt + Shift + 1-9</code><span>在下方 n 行添加光标</span></div>
                   <div><code>Ctrl/Cmd + Shift + L</code><span>选中当前词的全部匹配项</span></div>
-                  <div><code>Ctrl/Cmd + Q</code><span>显示/隐藏工作区目录</span></div>
-                  <div><code>Alt + Q</code><span>编辑模式下显示/隐藏大纲目录</span></div>
-                  <div><code>Ctrl/Cmd + W</code><span>编辑模式下显示/隐藏预览栏</span></div>
+                  <div><code>Tab</code><span>自动缩进</span></div>
+                  <div><code>Escape</code><span>退出沉浸或多光标状态</span></div>
                 </div>
               </details>
               <details class="settings-section shortcut-settings-section">
                 <summary><strong>AI 快捷键</strong><span class="muted">编辑器内调用 AI 辅助功能</span></summary>
                 <div class="shortcut-grid">
-                  <div><code>Ctrl/Cmd + Shift + A</code><span>AI 代码补全（根据光标处上下文）</span></div>
-                  <div><code>Ctrl/Cmd + Shift + /</code><span>AI 生成注释（为选中代码/文本加注释）</span></div>
-                  <div><code>Ctrl/Cmd + Shift + P</code><span>AI 润色（优化选中文字表达）</span></div>
-                  <div><code>Ctrl/Cmd + Shift + X</code><span>AI 续写（基于选中内容继续扩展）</span></div>
-                  <div><code>双击 Shift</code><span>打开全局搜索</span></div>
+                  <div><code>Ctrl/Cmd + I</code><span>AI 行内对话</span></div>
+                  <div><code>Ctrl/Cmd + Shift + A</code><span>AI 代码补全</span></div>
+                  <div><code>Ctrl/Cmd + Shift + /</code><span>AI 生成注释</span></div>
+                  <div><code>Ctrl/Cmd + Shift + P</code><span>AI 润色</span></div>
+                  <div><code>Ctrl/Cmd + Shift + X</code><span>AI 续写</span></div>
                 </div>
               </details>
+              <section class="settings-section capture-shortcut-settings">
+                <strong>屏幕捕获快捷键</strong>
+                <p class="muted">按下快捷键后将在全屏幕弹出框选遮罩，鼠标拖拽选定区域即可触发截图或录屏。系统任意位置均可触发，无需调起主程序界面。</p>
+                <label class="setting-row">
+                  <span><code>Alt + A</code> 区域截图 → 标注编辑 → 复制到剪贴板 / 另存为 PNG</span>
+                  <input type="checkbox" id="enableCaptureShortcutToggle" />
+                </label>
+                <label class="setting-row">
+                  <span><code>Alt + M</code> 区域录屏 → 按 ESC 停止并另存为 WebM</span>
+                  <input type="checkbox" id="enableRecordShortcutToggle" />
+                </label>
+              </section>
             </section>
 
             <section class="settings-panel" data-settings-panel="about">
@@ -1252,6 +1255,10 @@
           <button type="button" id="aiTransformCloseBtn" class="settings-close" aria-label="关闭">×</button>
         </header>
         <p id="aiTransformSource" class="muted"></p>
+        <label class="setting-field ai-transform-target-lang-field hidden" id="aiTransformTargetLangWrap">
+          <span>目标语言（可自由输入）</span>
+          <input id="aiTransformTargetLang" type="text" placeholder="例如：英语 / 德语 / 日语 / 法语 / 俄语 / English / Deutsch …" maxlength="32" />
+        </label>
         <label class="setting-field ai-transform-instruction-field hidden" id="aiTransformInstructionWrap">
           <span>写作要求（代写模式必填）</span>
           <textarea id="aiTransformInstruction" rows="3" placeholder="例如：根据我的能力写一份简历，要求格式完善、结构清晰"></textarea>
@@ -1492,7 +1499,7 @@
     <script src="/vendor/highlight/langs/haskell.min.js?v=20260903"></script>
     <script src="/vendor/highlight/langs/elixir.min.js?v=20260903"></script>
     <script src="/vendor/highlight/langs/clojure.min.js?v=20260903"></script>
-    <script src="/app.js?v=20260822-v13" type="module"></script>
+    <script src="/app.js?v=20260908-v6" type="module"></script>
 
     <div class="menu-dropdowns" id="menuDropdowns">
       <div class="menu-dropdown hidden" data-dropdown="file" role="menu">
@@ -1521,13 +1528,13 @@
         <button class="menu-option" data-action="replace"><span class="menu-option-icon">🔄</span>替换<kbd>Ctrl+H</kbd></button>
       </div>
       <div class="menu-dropdown hidden" data-dropdown="view" role="menu">
-        <button class="menu-option" data-action="toggle-edit"><span class="menu-option-icon">✏️</span>编辑模式<kbd>Ctrl+E</kbd></button>
+        <button class="menu-option" data-action="toggle-edit"><span class="menu-option-icon">✏️</span>编辑模式<kbd>Alt+E</kbd></button>
         <button class="menu-option" data-action="toggle-reading"><span class="menu-option-icon">📖</span>阅读模式</button>
         <div class="menu-separator"></div>
         <button class="menu-option" data-action="toggle-sidebar"><span class="menu-option-icon">◧</span>切换侧边栏<kbd>Ctrl+B</kbd></button>
         <button class="menu-option" data-action="toggle-outline"><span class="menu-option-icon">📑</span>切换大纲</button>
         <div class="menu-separator"></div>
-        <button class="menu-option" data-action="zoom-in"><span class="menu-option-icon">🔍+</span>放大字体<kbd>Ctrl++</kbd></button>
+        <button class="menu-option" data-action="zoom-in"><span class="menu-option-icon">🔍+</span>放大字体<kbd>Ctrl+=</kbd></button>
         <button class="menu-option" data-action="zoom-out"><span class="menu-option-icon">🔍−</span>缩小字体<kbd>Ctrl+−</kbd></button>
         <button class="menu-option" data-action="zoom-reset"><span class="menu-option-icon">1:1</span>重置缩放<kbd>Ctrl+0</kbd></button>
       </div>

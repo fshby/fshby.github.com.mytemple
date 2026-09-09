@@ -565,7 +565,7 @@ function renderMarkdown(source, options = {}) {
           } else {
             html.push(`<div class="code-block" data-language="chart"><span class="code-language">chart JSON</span><button class="code-copy" type="button">复制</button><pre><code class="language-json">${escapeHtml(raw)}</code></pre></div>`);
           }
-        } else if (normalizedLang === "html-inline" || normalizedLang === "raw-html") {
+        } else if (normalizedLang === "html-inline" || normalizedLang === "raw-html" || (normalizedLang === "html" && /^\s*<!doctype\s+html|<html[\s>]|<!DOCTYPE\s+HTML/i.test(raw))) {
           // 内嵌 HTML 网页：srcdoc 模式（HTML 内容直接内嵌）
           // allow-scripts + sandbox 隔离：脚本可运行但无法访问父 DOM
           html.push(`<div class="html-inline-block"><iframe class="html-inline-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-popups" srcdoc="${escapeHtml(raw)}"></iframe></div>`);

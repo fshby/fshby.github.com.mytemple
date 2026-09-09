@@ -45,6 +45,15 @@ pub static SERVER_PORT: OnceLock<u16> = OnceLock::new();
 pub fn run() {
     env_logger::init();
 
+    // ── 0.1 预热授权缓存（后台线程，不阻塞启动）─────────────
+    // verify_license 首次调用需 PowerShell 查询 WMI（CPU/磁盘/主板/UUID + OS 安装时间），
+    // 单次耗时 2~5s。若不预热，前端首次 /api/license/check 会因 1.5s 超时误判为「未授权」
+    // 并弹出授权窗口，几秒后缓存就绪才自动消失。这里在进程最早时刻启动后台线程预热，
+    // 确保前端发起授权检查时缓存已就绪（微秒级返回）。
+    std::thread::spawn(|| {
+        crate::license::prewarm_caches();
+    });
+
     // ── 0. 修复 WebView2Loader.dll 位置 ──────────────────
     if let Ok(exe_path) = std::env::current_exe() {
         if let Some(exe_dir) = exe_path.parent() {
@@ -1700,10 +1709,13 @@ pub async fn screenshot_result(
     image_base64: String,
     action: String,
 ) -> Result<(), String> {
-    // 无论处理成功与否，都必须销毁截图窗口，否则遮罩会卡住屏幕
-    let result = crate::global_capture::handle_screenshot_result(&app_handle, image_base64, action);
+    // 先立即关闭窗口（防止保存过程中窗口挡在屏幕上，用户以为卡死）
     crate::global_capture::close_screenshot_window(&app_handle);
-    result
+    // 后台线程处理保存/剪贴板（PowerShell 调用阻塞 1-3 秒，不能卡住 async runtime）
+    tauri::async_runtime::spawn_blocking(move || {
+        let _ = crate::global_capture::handle_screenshot_result(&app_handle, image_base64, action);
+    });
+    Ok(())
 }
 
 /// 截图窗口请求 OCR 识别
@@ -1792,10 +1804,11 @@ pub async fn recorder_result(
     action: String,
     filename: String,
 ) -> Result<(), String> {
-    // 无论处理成功与否，都必须销毁录屏窗口
-    let result = crate::global_capture::handle_recorder_result(&app_handle, image_base64, action, filename);
+    // 先立即关闭窗口（防止保存过程中窗口挡在屏幕上）
     crate::global_capture::close_recorder_window(&app_handle);
-    result
+    // 再处理保存（后台处理，不影响用户）
+    let _ = crate::global_capture::handle_recorder_result(&app_handle, image_base64, action, filename);
+    Ok(())
 }
 
 /// 关闭录屏窗口

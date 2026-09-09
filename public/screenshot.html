@@ -183,7 +183,7 @@
 </style>
 </head>
 <body>
-<div id="loadingTip" class="loading-tip">正在截图…</div>
+<div id="loadingTip" class="loading-tip" style="display:none">正在截图…</div>
 
 <script type="module">
 const TOOLS = [
@@ -264,6 +264,19 @@ let currentVersion = 0;
 let isActive = false; // 截图窗口是否激活（正在显示）
 let pollTimer = null;
 
+// ── 事件监听器追踪：防止内存泄漏和二次截图交互异常 ──
+let registeredListeners = [];
+function addDocumentListener(event, handler, capture) {
+  document.addEventListener(event, handler, capture);
+  registeredListeners.push({ event, handler, capture });
+}
+function removeAllDocumentListeners() {
+  for (const { event, handler, capture } of registeredListeners) {
+    document.removeEventListener(event, handler, capture);
+  }
+  registeredListeners = [];
+}
+
 // ── 版本号轮询：检测新截图（窗口复用模式） ──
 function startVersionPolling() {
   if (pollTimer) return;
@@ -300,21 +313,33 @@ async function loadAndShow() {
       log('Image.onload 失败');
       document.getElementById('loadingTip').textContent = '截图加载失败，正在关闭...';
       URL.revokeObjectURL(url);
+      isActive = false;
       setTimeout(() => closeWindow(), 1500);
     };
     img.src = url;
   } catch (err) {
     log('截图加载失败: ' + (err?.message || err));
     document.getElementById('loadingTip').textContent = '截图加载失败: ' + (err?.message || err);
+    isActive = false;
     setTimeout(() => closeWindow(), 2000);
   }
 }
 
 // ── 重置截图 UI 状态（窗口复用时清理上次状态） ──
 function resetScreenshotUI() {
+  // 先清理所有 document 事件监听器（防止上次截图的监听器泄漏）
+  removeAllDocumentListeners();
   // 清理 overlay（包含 canvas、工具栏、标注层）
-  const overlay = document.getElementById('screenshotOverlay');
-  if (overlay) overlay.remove();
+  // 注意：必须用与全局变量不同的名字，否则 const 会遮蔽全局 let，后续赋值会抛 TypeError
+  const oldOverlay = document.getElementById('screenshotOverlay');
+  if (oldOverlay) oldOverlay.remove();
+  // 清理 OCR 弹窗
+  const oldOcrModal = document.querySelector('.ocr-result-modal');
+  if (oldOcrModal) oldOcrModal.remove();
+  // 释放上一次截图的 blob URL（防止内存泄漏）
+  if (bgImg && bgImg.src && bgImg.src.startsWith('blob:')) {
+    try { URL.revokeObjectURL(bgImg.src); } catch (_) {}
+  }
   // 重置全局变量
   bgImg = null;
   annotations = [];
@@ -330,6 +355,18 @@ function resetScreenshotUI() {
   textInputEl = null;
   mosaicCanvas = null;
   region = null;
+  overlay = null;
+  canvas = null;
+  ctx = null;
+  toolbar = null;
+  tooltip = null;
+  hint = null;
+  startPos = null;
+  curPos = null;
+  scaleX = 1;
+  scaleY = 1;
+  bgImgWidth = 0;
+  bgImgHeight = 0;
 }
 
 function initWithPlaceholder() {
@@ -413,8 +450,9 @@ function startRegionSelection() {
     ctx.setLineDash([]);
     tooltip.style.display = 'block';
     tooltip.textContent = `${Math.round(r.w)} × ${Math.round(r.h)} px`;
-    tooltip.style.left = Math.max(8, r.x) + 'px';
-    tooltip.style.top = Math.max(8, r.y - 28) + 'px';
+    // 工具提示位置也约束在视口内
+    tooltip.style.left = Math.max(8, Math.min(r.x, window.innerWidth - 120)) + 'px';
+    tooltip.style.top = Math.max(8, Math.min(r.y - 28, window.innerHeight - 30)) + 'px';
   };
 
   const onDown = (e) => {
@@ -431,14 +469,20 @@ function startRegionSelection() {
     tagCounter = 0;
     hint.style.display = 'block';
     hint.textContent = '拖拽框选区域 · ESC 取消';
-    startX = curX = e.clientX;
-    startY = curY = e.clientY;
+    // 边界约束：将鼠标坐标限制在视口范围内，防止选区框跑到屏幕外难以选中
+    const mx = Math.max(0, Math.min(e.clientX, window.innerWidth));
+    const my = Math.max(0, Math.min(e.clientY, window.innerHeight));
+    startX = curX = mx;
+    startY = curY = my;
     dragging = true;
     draw();
   };
 
   const onMove = (e) => {
-    curX = e.clientX; curY = e.clientY;
+    // 边界约束：鼠标移到屏幕边缘/外时，坐标被 clamp 在视口范围内
+    // 防止选区框超出屏幕边界导致难以选中（缺陷：自定义截图区域过大靠近屏幕边界时选区框出现在边界外）
+    curX = Math.max(0, Math.min(e.clientX, window.innerWidth));
+    curY = Math.max(0, Math.min(e.clientY, window.innerHeight));
     if (dragging) draw();
   };
 
@@ -447,7 +491,12 @@ function startRegionSelection() {
     dragging = false;
     const r = rect();
     if (r.w < 4 || r.h < 4) { draw(); return; }
-    region = { x: r.x, y: r.y, w: r.w, h: r.h };
+    // 最终区域也约束在视口范围内（防御性：即使 onMove 有边界约束，此处再保底）
+    region = {
+      x: Math.max(0, Math.min(r.x, window.innerWidth - r.w)),
+      y: Math.max(0, Math.min(r.y, window.innerHeight - r.h)),
+      w: r.w, h: r.h
+    };
     draw();
     hint.style.display = 'none';
     document.removeEventListener('mousedown', onDown);
@@ -462,10 +511,10 @@ function startRegionSelection() {
     }
   };
 
-  document.addEventListener('mousedown', onDown);
-  document.addEventListener('mousemove', onMove);
-  document.addEventListener('mouseup', onUp);
-  document.addEventListener('keydown', onKey, true);
+  addDocumentListener('mousedown', onDown, false);
+  addDocumentListener('mousemove', onMove, false);
+  addDocumentListener('mouseup', onUp, false);
+  addDocumentListener('keydown', onKey, true);
 }
 
 function startAnnotationEditor() {
@@ -484,9 +533,9 @@ function startAnnotationEditor() {
 
   toolbar.addEventListener('click', onToolbarClick);
   annoCanvas.addEventListener('mousedown', onCanvasDown);
-  document.addEventListener('mousemove', onCanvasMove);
-  document.addEventListener('mouseup', onCanvasUp);
-  document.addEventListener('keydown', onEditorKey, true);
+  addDocumentListener('mousemove', onCanvasMove, false);
+  addDocumentListener('mouseup', onCanvasUp, false);
+  addDocumentListener('keydown', onEditorKey, true);
 
   render();
   updateUndoRedo();
@@ -843,22 +892,36 @@ async function confirmEdit(action) {
   const blob = await new Promise(res => cropCanvas.toBlob(res, 'image/png'));
   if (!blob) { cleanupAndClose(); return; }
 
-  // 先清空 DOM（确保遮罩立即消失）
-  document.body.innerHTML = '';
+  // 先标记为非激活（立即允许下一次截图被检测到）
+  isActive = false;
+  // 清理所有事件监听器和 DOM（防止残留）
+  removeAllDocumentListeners();
+  const overlayEl = document.getElementById('screenshotOverlay');
+  if (overlayEl) overlayEl.remove();
+  const ocrModalEl = document.querySelector('.ocr-result-modal');
+  if (ocrModalEl) ocrModalEl.remove();
+  // 重置全局变量（确保下一次截图从干净状态开始）
+  overlay = null; canvas = null; ctx = null;
+  annoCanvas = null; annoCtx = null; toolbar = null;
+  tooltip = null; hint = null;
+  annotations = []; redoStack = [];
+  isDrawing = false; brushPath = null;
+  startPos = null; curPos = null;
+  textInputEl = null; mosaicCanvas = null;
 
   const reader = new FileReader();
   reader.onload = () => {
     const base64 = reader.result.split(',')[1];
-    // screenshot_result IPC 会处理剪贴板/保存并销毁窗口
+    // 优先走 IPC（会先关窗口再后台保存）
     invoke('screenshot_result', {
       imageBase64: base64,
       action: action || 'copy'
-    }).then(() => {
-      // Rust 已销毁窗口，无需再调 close
     }).catch((e) => {
-      log('screenshot_result failed: ' + (e?.message || e));
-      // IPC 失败时降级
-      try { window.close(); } catch(_) {}
+      log('screenshot_result IPC failed, trying HTTP fallback: ' + (e?.message || e));
+      // IPC 失败时降级：HTTP 保存 + 关闭窗口
+      httpPost('/api/screenshot/result', { image: base64, action: action || 'copy' })
+        .then(() => httpPost('/api/screenshot/close').catch(() => {}))
+        .catch(() => { httpPost('/api/screenshot/close').catch(() => {}); });
     });
   };
   reader.readAsDataURL(blob);
@@ -921,9 +984,11 @@ function showOcrResult(text) {
 
 function cleanupAndClose() {
   removeTextInput();
+  removeAllDocumentListeners();
   if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
   overlay = null; canvas = null; ctx = null;
   annoCanvas = null; annoCtx = null; toolbar = null;
+  tooltip = null; hint = null;
   annotations = []; redoStack = [];
   closeWindow();
 }
@@ -932,11 +997,12 @@ function closeWindow() {
   // 标记为非激活，轮询可以检测下一次新截图
   isActive = false;
   // 先隐藏遮罩和工具栏（即使后端没响应，前端也要立即消失）
-  const overlay = document.getElementById('screenshotOverlay');
-  if (overlay) overlay.style.display = 'none';
+  // 注意：局部变量用 oldOverlay 避免遮蔽全局 overlay
+  const oldOverlay = document.getElementById('screenshotOverlay');
+  if (oldOverlay) oldOverlay.style.display = 'none';
   const loadingTip = document.getElementById('loadingTip');
   if (loadingTip) loadingTip.style.display = 'none';
-  // 三重保险通知后端关闭
+  // 双重保险通知后端关闭
   // 1. HTTP（最可靠）
   httpPost('/api/screenshot/close').catch(() => {});
   // 2. IPC（如果可用）
@@ -945,8 +1011,7 @@ function closeWindow() {
       window.__TAURI__.core.invoke('screenshot_window_close').catch(() => {});
     }
   } catch (_) {}
-  // 3. 终极兜底：尝试 window.close（虽然对 Tauri 窗口可能无效，但多一层保险）
-  try { window.close(); } catch (_) {}
+  // 不调用 window.close()：会销毁 WebView 页面上下文，导致窗口复用时页面空白
 }
 
 // 全局错误处理

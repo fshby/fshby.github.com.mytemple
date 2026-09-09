@@ -27,7 +27,8 @@ turndown.use([
     service.addRule("tableCell", {
       filter: ["th", "td"],
       replacement(content, node) {
-        return ` ${content.trim().replace(/\n/g, " ")} |`;
+        const cleaned = content.replace(/\n+/g, " ").trim();
+        return ` ${cleaned} |`;
       },
     });
     service.addRule("tableRow", {
@@ -36,9 +37,15 @@ turndown.use([
         const cells = content.split("|").filter((c) => c.trim() !== "");
         if (cells.length === 0) return "";
         const row = `|${cells.join("|")}|\n`;
-        // 表头行后加分隔行
-        if (node.parentNode.tagName === "THEAD" ||
-            (node.rowIndex === 0 && !node.previousElementSibling)) {
+        // 判断表头行：mammoth 会将 docx 表格的 th/td 统一转成 td，
+        // 且 turndown 会把行包进 TBODY，因此用「第一行」作为表头判定。
+        const parent = node.parentNode;
+        const parentTag = parent?.tagName || "";
+        let siblings = [];
+        try { siblings = parent ? Array.from(parent.children).filter((c) => c.tagName === "TR") : []; } catch (_) {}
+        const isFirstRow = siblings.length > 0 && siblings[0] === node;
+        const isHeader = parentTag === "THEAD" || isFirstRow;
+        if (isHeader) {
           return row + `|${cells.map(() => "---").join("|")}|\n`;
         }
         return row;
@@ -47,7 +54,7 @@ turndown.use([
     service.addRule("table", {
       filter: "table",
       replacement(content, node) {
-        return `\n\n${content}\n`;
+        return `\n\n${content.trim()}\n`;
       },
     });
   },
@@ -116,10 +123,22 @@ function parseZipEntries(buffer) {
  * 使用 mammoth 提取 HTML，再用 turndown 转为 Markdown
  */
 export async function docxToMarkdown(buffer) {
-  const result = await mammoth.convertToHtml({ buffer });
+  const result = await mammoth.convertToHtml({
+    buffer,
+    styleMap: [
+      "p[style-name='Quote'] => blockquote:fresh",
+      "p[style-name='Intense Quote'] => blockquote:fresh",
+      "r[style-name='Italic'] => em",
+      "r[style-name='Emphasis'] => em",
+      "i => em",
+      "em => em",
+      "b => strong",
+      "strong => strong",
+    ],
+    includeDefaultStyleMap: true,
+  });
   let html = result.value || "";
   if (!html.trim()) return "# 导入的文档\n\n（文档内容为空）";
-  // turndown 处理
   let md = turndown.turndown(html);
   return md.trim() || "# 导入的文档\n\n（文档内容为空）";
 }

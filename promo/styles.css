@@ -1423,6 +1423,32 @@ textarea {
   margin-bottom: 4px;
 }
 
+/* 更新列表精简样式 — 版本徽章 + 单行摘要 */
+.download-secondary ul.update-list {
+  list-style: none;
+  padding-left: 0;
+}
+
+.download-secondary ul.update-list li {
+  margin-bottom: 10px;
+  padding-left: 0;
+  line-height: 1.6;
+}
+
+.download-secondary ul.update-list .ver {
+  display: inline-block;
+  min-width: 56px;
+  padding: 1px 8px;
+  margin-right: 8px;
+  border-radius: 4px;
+  background: var(--green-soft, rgba(34, 211, 238, 0.12));
+  color: var(--green-deep, #0d9488);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  white-space: nowrap;
+}
+
 .download-links {
   margin: 0;
   font-size: 14px;

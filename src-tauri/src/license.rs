@@ -173,6 +173,23 @@ fn get_fallback_fingerprint() -> String {
     hash.iter().map(|b| format!("{:02x}", b)).collect()
 }
 
+/// 启动时预热授权相关缓存（后台线程调用，不阻塞主流程）
+///
+/// 关键性能修复：verify_license 首次调用时需通过 PowerShell 查询
+/// WMI（CPU/磁盘/主板/UUID + 操作系统安装时间），单次耗时 2~5 秒。
+/// 若前端在缓存未就绪时调用 /api/license/check，会因 1.5s 前端超时
+/// 误判为「未授权」并弹出授权窗口，几秒后缓存就绪才自动消失。
+///
+/// 在进程启动早期预热这些缓存，确保前端首次授权检查时命中缓存
+/// （微秒级返回），从根源消除启动未授权弹窗。
+pub fn prewarm_caches() {
+    // 1) 硬件指纹（触发 PowerShell WMI 查询，结果缓存到 HARDWARE_CACHE）
+    let _ = get_machine_code();
+    // 2) 系统安装时间（触发 PowerShell Win32_OperatingSystem 查询）
+    let _ = get_system_reference_time();
+    log::info!("[license] 授权缓存预热完成（硬件指纹 + 系统参考时间）");
+}
+
 /// 高水位线文件路径
 fn high_water_file_path(data_root: &Path) -> PathBuf {
     data_root.join(".hwmark")

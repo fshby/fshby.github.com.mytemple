@@ -1,7 +1,7 @@
 {
-  "version": "2.0.3",
-  "downloadUrl": "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v2.0.3.exe",
-  "latestReleaseNotes": "【v2.0.3 截图架构重构 + 防卡死保障 + 图表修复】① 截图架构重构：去掉fullscreen改用无边框手动覆盖（集显更稳定）；② 窗口预创建：启动即后台准备，按快捷键毫秒级响应；③ 九防卡死保障：快捷键切换/ESC/三重关闭/心跳监控/原子锁超时等九层防护；④ 纯HTTP通信：不依赖Tauri IPC，最稳定可靠；⑤ 图表显示修复：SVG移除固定尺寸+顶部对齐+滚动提示；⑥ 首页精简：核心能力改为卡片网格布局。",
-  "releaseNotes": "v2.0.3 截图架构重构 + 防卡死保障 + 图表修复\n一、截图架构重构（最稳定方案）：\n1）去掉 fullscreen 模式：改用无边框窗口+手动覆盖屏幕，避免透明+全屏组合在集显上的驱动兼容性问题。\n2）窗口预创建：应用启动后后台预创建截图/录屏窗口并预加载页面，按快捷键只做 show，毫秒级响应。\n3）纯 HTTP 通信：不依赖 Tauri IPC，所有数据走 HTTP fetch，避开 External URL 页面 IPC 注入问题。\n4）临时文件传递：截图写入临时文件，IPC 只传文件路径，避免大 base64 通过 IPC 导致消息丢失。\n二、九重防卡死保障：\n1）Alt+A 切换关闭：再按一次快捷键立即关闭。\n2）前端 ESC 关闭：按 ESC 键退出。\n3）前端三重关闭保险：HTTP + IPC + window.close。\n4）后端四重关闭保险：取消置顶+最小化+隐藏+移出屏幕（-10000,-10000）。\n5）visibilitychange 立即检测：窗口显示时立即检查新截图。\n6）心跳监控强制关闭：前端每2秒心跳，后端每5秒检测，15秒无心跳则强制关闭（终极兜底）。\n7）原子锁30秒超时：锁卡死自动释放。\n8）5分钟超时自动关闭：长时间编辑自动退出。\n9）窗口移出屏幕兜底：以上全部失效时窗口移到屏幕外。\n三、图表显示修复：\n1）SVG 移除固定 width/height 属性，完全由 CSS 控制缩放，集显更可靠。\n2）顶部对齐（flex-start），确保图表顶部可见不被裁。\n3）高度超出时显示滚动提示。\n四、其他优化：\n1）首页核心能力改为图标卡片网格布局，更简洁整洁。\n2）文档导入按钮状态修复，避免\"导入中...\"状态残留。",
-  "releaseDate": "2026-09-08"
+  "version": "2.1.1",
+  "downloadUrl": "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v2.1.1.exe",
+  "latestReleaseNotes": "【v2.1.1 截图选区边界约束】修复自定义截图区域过大靠近屏幕边界时选区框出现在边界外难以选中的缺陷。根因：onDown/onMove 中 curX/curY 直接使用 e.clientX/e.clientY 无边界约束，鼠标移到屏幕边缘/外时选区框越界。修复：onDown 和 onMove 将坐标 clamp 到 [0, innerWidth/innerHeight]；onUp 最终 region 也 clamp 到视口范围；工具提示位置 clamp 到视口内。不影响其他功能。",
+  "releaseNotes": "v2.1.1 截图选区边界约束\n一、缺陷修复（screenshot.html）：\n1）缺陷：自定义截图区域过大靠近屏幕边界时选区框出现在边界外难以选中。\n2）根因：startRegionSelection 的 onDown 直接 startX = curX = e.clientX、onMove 直接 curX = e.clientX，鼠标坐标未经任何边界约束。当用户拖拽到屏幕边缘/外时，选区框坐标超出视口范围（负值或超过 innerWidth/innerHeight），选区框部分或全部跑到屏幕外，用户难以选中框边缘进行操作。\n3）修复：\n   ① onDown：startX/curX 用 Math.max(0, Math.min(e.clientX, window.innerWidth)) 约束；startY/curY 同理。\n   ② onMove：curX/curY 用同样的 clamp 约束，确保拖拽过程中选区框始终在视口内。\n   ③ onUp：最终 region 对象也 clamp（x 不超过 innerWidth-w，y 不超过 innerHeight-h）作为防御性保底。\n   ④ 工具提示（tooltip）位置也 clamp 到视口内（left 不超过 innerWidth-120，top 不超过 innerHeight-30）。\n\n二、健壮性增强：\n1）三层边界约束（onDown + onMove + onUp），任一层失效也有下一层保底。\n2）工具提示不会跑到屏幕外不可见。\n\n三、不影响其他功能：仅修改 screenshot.html 的 startRegionSelection 函数内 onDown/onMove/onUp 和 draw 的 tooltip 位置逻辑。录屏功能、AI 功能、知识库管理不受影响。无遮罩干扰（截图窗口已有 always_on_top + 透明 + 全屏覆盖，选区框在 canvas 内绘制不会遮挡鼠标）。",
+  "releaseDate": "2026-09-09"
 }
