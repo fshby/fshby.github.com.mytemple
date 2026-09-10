@@ -24,7 +24,7 @@
         <a href="index.html#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.1.2</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.1.3</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -40,6 +40,7 @@
         <div class="changelog-toc reveal">
           <h3>版本索引</h3>
           <ul>
+            <li><a href="#v2.1.3">v2.1.3</a> — 录屏功能稳定性加固（多次录制失败 + 默认桌面捕获 + 保存清理）</li>
             <li><a href="#v2.1.2">v2.1.2</a> — 截图保存后再次截图失败修复 + 文字大小可调</li>
             <li><a href="#v2.1.1">v2.1.1</a> — 截图选区边界约束（选区框越界难以选中）</li>
             <li><a href="#v2.1.0">v2.1.0</a> — 录屏功能稳定性加固（多次录制失败 + 桌面选择器 + 状态清理）</li>
@@ -68,6 +69,29 @@
             <li><a href="#v1.8.93">v1.8.93</a> — 界面与体验升级 + 性能优化</li>
           </ul>
         </div>
+
+        <article class="doc-section reveal" id="v2.1.3">
+          <h3>v2.1.3 · 录屏功能稳定性加固</h3>
+          <ul>
+            <li><b>缺陷1修复（录制源未默认桌面）</b>：<code>startRecording()</code> 调用 <code>api_start_native_record</code> 前先调用 <code>api_stop_native_record</code> 确保上次录屏状态完全释放，防止 <code>RecordState</code> 残留导致 <code>start_native_record</code> 返回"录屏已在进行中" → 前端降级到 <code>getDisplayMedia</code> 弹出桌面选择器。</li>
+            <li><b>缺陷2修复（多次录制失败）</b>：
+              <ul>
+                <li>后端 <code>start_native_record</code> 新增 3 次重试 + DXGI 恢复延迟（每次等待 300/600ms）：DXGI Desktop Duplication 在上次录屏停止后可能需要短暂恢复时间，第一次 <code>video_recorder()</code> 或 <code>recorder.start()</code> 可能失败，重试后即可成功。</li>
+                <li>前端 <code>startRecording()</code> 调用 <code>api_start_native_record</code> 失败后等待 1 秒再重试一次，两次都失败才降级到 <code>getDisplayMedia</code>。</li>
+                <li><code>start_native_record</code> 入口检测 <code>RecordState</code> 残留时强制清理 + 等待 500ms 让 DXGI 资源释放，而不是直接报错。</li>
+              </ul>
+            </li>
+            <li><b>缺陷3修复（保存与清理）</b>：<code>stopRecording</code> 中 <code>FileReader</code> 添加 10s 超时保护，超时走 <code>closeRecorderWindow</code> 兜底释放窗口和锁。<code>handle_recorder_result</code> 保存成功后已清理背景帧临时文件 + 释放锁 + 停止原生录屏。</li>
+            <li><b>健壮性增强</b>：
+              <ul>
+                <li><code>stop_native_record</code> 用 <code>catch_unwind</code> 防止 <code>recorder.stop()</code> panic 卡住锁。</li>
+                <li><code>close_recorder_window</code> 兜底调用 <code>stop_native_record</code> 释放 <code>RecordState</code>。</li>
+                <li><code>handle_recorder_result</code> 保存失败也释放锁和状态，防止卡住。</li>
+              </ul>
+            </li>
+            <li><b>不影响其他功能</b>：仅修改 <code>global_capture.rs</code> 和 <code>recorder.html</code>。截图、AI、知识库管理不受影响。无遮罩干扰。</li>
+          </ul>
+        </article>
 
         <article class="doc-section reveal" id="v2.1.2">
           <h3>v2.1.2 · 截图保存后再次截图失败修复 + 文字大小可调</h3>

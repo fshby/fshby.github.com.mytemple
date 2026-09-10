@@ -957,44 +957,92 @@ pub fn handle_recorder_result(app: &AppHandle, image_base64: String, _action: St
 // ── 录屏 IPC 命令（前端调用 start / stop） ────────────────
 
 /// 开始原生录屏（xcap DXGI Desktop Duplication）
+/// 健壮性增强：带重试机制，DXGI 在上次录屏停止后可能需要短暂恢复时间
 pub fn start_native_record(app: AppHandle) -> Result<(), String> {
     use xcap::Monitor;
 
-    // 防止重复 start
+    // 防止重复 start：如果上次录屏的 RecordState 未正确释放，先强制清理
     {
         let mut guard = record_state().lock().map_err(|e| e.to_string())?;
         if guard.is_some() {
-            return Err("录屏已在进行中".to_string());
+            // 状态残留：可能是上次 stop_native_record 未正确执行，强制清理
+            log::warn!("[global-capture] start_native_record: 检测到 RecordState 残留，强制清理");
+            if let Some(state) = guard.take() {
+                let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    state.recorder.stop()
+                }));
+                drop(state.frame_rx);
+            }
+            // 等待 DXGI 资源释放
+            std::thread::sleep(std::time::Duration::from_millis(500));
         }
     }
 
-    // 获取主显示器
-    let monitors = Monitor::all().map_err(|e| format!("Monitor::all: {}", e))?;
-    let monitor = if let Some(p) = monitors.iter().find(|m| m.is_primary().unwrap_or(false)) {
-        p.clone()
-    } else {
-        monitors.into_iter().next().ok_or_else(|| "无可用显示器".to_string())?
-    };
+    // 重试机制：DXGI Desktop Duplication 在上次停止后可能需要短暂恢复时间
+    // 第一次失败可能是 DXGI 资源未完全释放，等待后重试
+    let mut last_err = String::new();
+    for attempt in 1..=3 {
+        if attempt > 1 {
+            log::info!("[global-capture] start_native_record 第 {} 次重试（等待 {}ms）", attempt, attempt * 300);
+            std::thread::sleep(std::time::Duration::from_millis((attempt * 300) as u64));
+        }
 
-    let (recorder, frame_rx) = monitor
-        .video_recorder()
-        .map_err(|e| format!("video_recorder: {}", e))?;
+        // 获取主显示器
+        let monitors = match Monitor::all() {
+            Ok(m) => m,
+            Err(e) => {
+                last_err = format!("Monitor::all: {}", e);
+                log::warn!("[global-capture] 第 {} 次尝试 Monitor::all 失败: {}", attempt, e);
+                continue;
+            }
+        };
+        let monitor = if let Some(p) = monitors.iter().find(|m| m.is_primary().unwrap_or(false)) {
+            p.clone()
+        } else {
+            match monitors.into_iter().next() {
+                Some(m) => m,
+                None => {
+                    last_err = "无可用显示器".to_string();
+                    continue;
+                }
+            }
+        };
 
-    recorder.start().map_err(|e| format!("start: {}", e))?;
+        match monitor.video_recorder() {
+            Ok((recorder, frame_rx)) => {
+                match recorder.start() {
+                    Ok(()) => {
+                        // 存储状态
+                        {
+                            let mut guard = record_state().lock().map_err(|e| e.to_string())?;
+                            *guard = Some(RecordState { recorder, frame_rx });
+                        }
 
-    // 存储状态
-    {
-        let mut guard = record_state().lock().map_err(|e| e.to_string())?;
-        *guard = Some(RecordState { recorder, frame_rx });
+                        let app_clone = app.clone();
+                        std::thread::spawn(move || {
+                            stream_frames_to_frontend(app_clone);
+                        });
+
+                        log::info!("[global-capture] 原生录屏已启动（第 {} 次尝试成功）", attempt);
+                        return Ok(());
+                    }
+                    Err(e) => {
+                        last_err = format!("recorder.start: {}", e);
+                        log::warn!("[global-capture] 第 {} 次尝试 recorder.start 失败: {}", attempt, e);
+                        drop(frame_rx);
+                        continue;
+                    }
+                }
+            }
+            Err(e) => {
+                last_err = format!("video_recorder: {}", e);
+                log::warn!("[global-capture] 第 {} 次尝试 video_recorder 失败: {}", attempt, e);
+                continue;
+            }
+        }
     }
 
-    let app_clone = app.clone();
-    std::thread::spawn(move || {
-        stream_frames_to_frontend(app_clone);
-    });
-
-    log::info!("[global-capture] 原生录屏已启动");
-    Ok(())
+    Err(format!("原生录屏启动失败（重试 3 次）: {}", last_err))
 }
 
 /// 停止原生录屏
