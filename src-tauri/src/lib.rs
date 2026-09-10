@@ -186,6 +186,8 @@ pub fn run() {
             tauri_cmd::recorder_window_ready,
             tauri_cmd::recorder_result,
             tauri_cmd::recorder_window_close,
+            tauri_cmd::recorder_set_ignore_cursor,
+            tauri_cmd::recorder_browse_folder,
             // ── 安全防护 ──
             tauri_cmd::api_security_check,
             tauri_cmd::api_security_init,
@@ -1817,6 +1819,30 @@ pub async fn recorder_result(
 pub async fn recorder_window_close(app_handle: tauri::AppHandle) -> Result<(), String> {
     crate::global_capture::close_recorder_window(&app_handle);
     Ok(())
+}
+
+/// 设置录屏窗口是否忽略鼠标事件（点击穿透）
+/// ignore=true 时录屏窗口不阻挡鼠标操作屏幕（录制中使用）
+/// ignore=false 时恢复鼠标事件捕获（选区/保存对话框时使用）
+#[tauri::command]
+pub async fn recorder_set_ignore_cursor(app_handle: tauri::AppHandle, ignore: bool) -> Result<(), String> {
+    use tauri::Manager as _;
+    if let Some(win) = app_handle.get_webview_window("recorder") {
+        let _ = win.set_ignore_cursor_events(ignore);
+    }
+    Ok(())
+}
+
+/// 录屏保存对话框的目录选择（使用 Tauri dialog 插件，比 PowerShell 更可靠）
+#[tauri::command]
+pub async fn recorder_browse_folder(app_handle: tauri::AppHandle) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let (tx, rx) = tokio::sync::oneshot::channel::<Option<String>>();
+    app_handle.dialog().file().pick_folder(move |p| {
+        let _ = tx.send(p.map(|x| x.to_string()));
+    });
+    let picked = rx.await.map_err(|_| "Dialog canceled".to_string())?;
+    Ok(picked)
 }
 
 // ── 安全防护 IPC 命令 ──

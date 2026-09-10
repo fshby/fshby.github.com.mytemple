@@ -238,6 +238,10 @@ function init() {
       };
       frameImg.src = dataUrl;
     });
+    // 监听后端停止录制请求（Alt+M 热键触发）
+    window.__TAURI__.event.listen('recorder-stop-request', () => {
+      if (recording) stopRecording(false);
+    });
   }
 
   // 通过 HTTP 加载背景帧
@@ -506,6 +510,8 @@ async function startRecording() {
   recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
   recorder.start(100);
   recording = true;
+  // 录屏中：窗口设为点击穿透，不阻挡用户操作屏幕
+  try { invoke('recorder_set_ignore_cursor', { ignore: true }).catch(() => {}); } catch (_) {}
   showRecordingHint();
 }
 
@@ -517,7 +523,7 @@ function showRecordingHint() {
     <span class="recording-dot"></span>
     录屏中
     <span class="recording-time">00:00</span>
-    <button type="button" class="recording-stop-btn">停止</button>
+    <span style="color:#94a3b8;font-size:11px;margin-left:8px">按 Alt+M 停止</span>
   `;
   document.body.appendChild(hint);
 
@@ -530,15 +536,7 @@ function showRecordingHint() {
     if (t) t.textContent = `${m}:${s}`;
   }, 1000);
 
-  hint.querySelector('.recording-stop-btn').addEventListener('click', () => stopRecording(false));
-
-  document.addEventListener('keydown', function esc(e) {
-    if (e.key === 'Escape') {
-      e.preventDefault(); e.stopPropagation();
-      document.removeEventListener('keydown', esc, true);
-      stopRecording(false);
-    }
-  }, true);
+  // 录制中窗口已点击穿透，停止操作通过 Alt+M 全局热键触发（后端 emit recorder-stop-request）
 }
 
 async function stopRecording(cancel) {
@@ -601,6 +599,9 @@ async function stopRecording(cancel) {
 
 // 弹出保存对话框：让用户选择文件名和保存目录
 async function showSaveDialog(blob, base64) {
+  // 恢复鼠标捕获（保存对话框需要交互）
+  try { invoke('recorder_set_ignore_cursor', { ignore: false }).catch(() => {}); } catch (_) {}
+
   document.body.innerHTML = '';
 
   // 获取默认保存目录：工作区/Videos
@@ -648,19 +649,24 @@ async function showSaveDialog(blob, base64) {
   nameInput.focus();
   nameInput.select();
 
-  // 浏览目录
+  // 浏览目录（优先使用 Tauri dialog 插件，比 PowerShell 更可靠）
   browseBtn.addEventListener('click', async () => {
     try {
-      const res = await invoke('api_browse_folder');
-      if (res?.path) {
-        pathInput.value = res.path;
+      const res = await invoke('recorder_browse_folder');
+      if (res) {
+        pathInput.value = res;
       }
     } catch (_) {
-      // HTTP 兜底
+      // 降级：api_browse_folder (PowerShell)
       try {
-        const res = await httpGet('/api/browse-folder');
-        if (res?.path) pathInput.value = res.path;
-      } catch (__) {}
+        const res2 = await invoke('api_browse_folder');
+        if (res2?.path) pathInput.value = res2.path;
+      } catch (__) {
+        try {
+          const res3 = await httpGet('/api/browse-folder');
+          if (res3?.path) pathInput.value = res3.path;
+        } catch (___) {}
+      }
     }
   });
 

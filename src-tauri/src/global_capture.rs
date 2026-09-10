@@ -672,9 +672,15 @@ pub fn trigger_record(app: AppHandle) {
     if !throttle_record() { return; }
     use tauri::Manager as _;
 
-    // 安全开关：如果录屏窗口已经可见，按 Alt+M 直接关闭
+    // 安全开关：如果录屏窗口已经可见
     if let Some(win) = app.get_webview_window("recorder") {
         if win.is_visible().unwrap_or(false) {
+            // 如果正在录制中，通知前端停止录制（弹出保存对话框），而非直接关闭窗口丢失录屏
+            if RECORD_IN_PROGRESS.load(Ordering::SeqCst) {
+                log::info!("[recorder] 录制中，通知前端停止录制");
+                let _ = win.emit("recorder-stop-request", ());
+                return;
+            }
             log::info!("[recorder] 录屏窗口已显示，按 Alt+M 切换关闭");
             close_recorder_window(&app);
             return;
@@ -733,6 +739,7 @@ fn show_recorder_window(app: &AppHandle) {
     if let Some(win) = app.get_webview_window("recorder") {
         log::info!("[recorder-window] 复用已有录屏窗口");
         let _ = win.set_always_on_top(true);
+        let _ = win.set_ignore_cursor_events(false); // 恢复鼠标捕获（选区阶段需要）
         let _ = win.unminimize();
         // 确保窗口大小覆盖屏幕
         if let Ok(Some(mon)) = app.primary_monitor() {

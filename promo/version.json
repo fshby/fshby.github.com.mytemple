@@ -1,7 +1,7 @@
 {
-  "version": "2.1.5",
+  "version": "2.1.6",
   "downloadUrl": "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
-  "latestReleaseNotes": "【v2.1.5 录屏另存为功能】录屏停止后弹出保存对话框，支持自定义文件名和保存目录，默认为工作区/Videos目录。用户可点击「浏览...」选择任意目录保存录屏视频，也可直接修改文件名。",
-  "releaseNotes": "v2.1.5 录屏另存为功能\n\n一、新功能（recorder.html + global_capture.rs）：\n1）录屏停止后弹出保存对话框，包含：文件名输入框、保存目录输入框、浏览按钮、保存/取消按钮。\n2）默认保存目录：工作区根目录下的 Videos 子目录（通过 /api/workspaces 获取默认工作区 root）。\n3）浏览按钮调用 api_browse_folder 打开系统目录选择对话框，用户可选择任意目录。\n4）文件名默认为 recording_<时间戳>.webm，用户可自定义。\n5）显示文件大小提示。\n6）快捷键：Enter 保存，Esc 取消。\n\n二、后端改动：\n1）handle_recorder_result 新增 save_path: Option<String> 参数，优先使用用户指定目录，否则回退到 %USERPROFILE%\\Videos。\n2）recorder_result IPC 和 HTTP 端点均传递 save_path 参数。\n\n三、不影响其他功能：仅修改 recorder.html、global_capture.rs、lib.rs、handlers.rs。截图功能、AI 功能、知识库管理不受影响。无遮罩干扰。",
+  "latestReleaseNotes": "【v2.1.6 录屏交互优化】1) 录屏中窗口设为点击穿透，不阻挡鼠标操作屏幕，通过 Alt+M 热键停止录制；2) 浏览文件夹改用 Tauri dialog 原生插件，修复点击没反应问题；3) 默认保存路径为工作区/Videos 目录。",
+  "releaseNotes": "v2.1.6 录屏交互优化\n\n一、录屏中鼠标可操作屏幕：\n1）录屏开始时调用 recorder_set_ignore_cursor(true)，录屏窗口设为点击穿透，不再阻挡用户操作屏幕。\n2）停止按钮改为提示文字「按 Alt+M 停止」，通过全局热键 Alt+M 触发后端 emit recorder-stop-request 事件通知前端停止录制。\n3）保存对话框弹出时恢复鼠标捕获（ignore=false）。\n4）复用录屏窗口时重置 ignore_cursor_events=false。\n\n二、浏览文件夹修复：\n1）新增 recorder_browse_folder IPC 命令，使用 Tauri dialog 插件 pick_folder，比 PowerShell FolderBrowserDialog 更可靠。\n2）前端浏览按钮优先调用 recorder_browse_folder，失败时降级到 api_browse_folder。\n\n三、默认保存路径：工作区根目录/Videos 目录（通过 /api/workspaces 获取默认工作区 root）。",
   "releaseDate": "2026-09-10"
 }
