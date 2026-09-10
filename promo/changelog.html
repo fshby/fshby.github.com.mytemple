@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
@@ -24,7 +24,7 @@
         <a href="index.html#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.1.1</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.1.2</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -40,6 +40,7 @@
         <div class="changelog-toc reveal">
           <h3>版本索引</h3>
           <ul>
+            <li><a href="#v2.1.2">v2.1.2</a> — 截图保存后再次截图失败修复 + 文字大小可调</li>
             <li><a href="#v2.1.1">v2.1.1</a> — 截图选区边界约束（选区框越界难以选中）</li>
             <li><a href="#v2.1.0">v2.1.0</a> — 录屏功能稳定性加固（多次录制失败 + 桌面选择器 + 状态清理）</li>
             <li><a href="#v2.0.9">v2.0.9</a> — 知识库智能管理故障排查与稳定性增强</li>
@@ -67,6 +68,34 @@
             <li><a href="#v1.8.93">v1.8.93</a> — 界面与体验升级 + 性能优化</li>
           </ul>
         </div>
+
+        <article class="doc-section reveal" id="v2.1.2">
+          <h3>v2.1.2 · 截图保存后再次截图失败修复 + 文字大小可调</h3>
+          <ul>
+            <li><b>缺陷修复（screenshot.html confirmEdit）</b>：截图保存后再次截图失败。</li>
+            <li><b>根因</b>：<code>confirmEdit</code> 中 <code>bgImg/tagCounter/currentTool/currentWidth</code> 等关键变量未重置；<code>FileReader.onload</code> 为异步回调，若 <code>readAsDataURL</code> 卡住或失败，窗口和截图锁永不释放，导致下次截图被锁阻塞。</li>
+            <li><b>修复</b>：
+              <ul>
+                <li><code>confirmEdit</code> 完整重置所有全局变量（<code>bgImg/scaleX/scaleY/bgImgWidth/bgImgHeight/tagCounter/currentTool/currentColor/currentWidth/currentFontSize</code>）。</li>
+                <li><code>toBlob</code> 添加 5s 超时保护：<code>Promise.race</code> 竞争 <code>toBlob</code> 和 <code>setTimeout</code>，防止 Canvas 污染导致 <code>toBlob</code> 永不回调。</li>
+                <li><code>FileReader</code> 添加 5s 超时保护 + <code>onerror</code> 回调：超时或出错时走 <code>closeWindow</code> 兜底释放锁和窗口。</li>
+                <li><code>drawImage</code> 添加 try-catch：防止 <code>bgImg/annoCanvas</code> 异常时抛错导致后续清理代码不执行。</li>
+                <li>健壮性检查：<code>confirmEdit</code> 入口检查 <code>region/bgImg/annoCanvas/scaleX/scaleY</code> 是否有效，无效时直接 <code>cleanupAndClose</code>。</li>
+                <li><code>cleanupAndClose</code> 也完整重置所有变量（含 <code>bgImg/scaleX/scaleY/tagCounter/currentFontSize</code> 等）。</li>
+              </ul>
+            </li>
+            <li><b>新功能（文字大小可调）</b>：
+              <ul>
+                <li>新增 <code>FONT_SIZES = [14, 18, 24, 32]</code> 四档字体大小。</li>
+                <li>工具栏新增字体大小按钮区域，点击切换字体大小，选中高亮。</li>
+                <li><code>showTextInput</code> 使用 <code>currentFontSize</code> 替代硬编码 <code>16px</code>。</li>
+                <li>文字标注创建使用 <code>currentFontSize</code> 替代硬编码 <code>18</code>。</li>
+                <li>编辑文字时切换字体大小可实时同步到输入框。</li>
+              </ul>
+            </li>
+            <li><b>不影响其他功能</b>：仅修改 screenshot.html。录屏功能、AI 功能、知识库管理不受影响。无遮罩干扰。</li>
+          </ul>
+        </article>
 
         <article class="doc-section reveal" id="v2.1.1">
           <h3>v2.1.1 · 截图选区边界约束（选区框越界难以选中）</h3>
