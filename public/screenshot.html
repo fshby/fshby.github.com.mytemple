@@ -593,15 +593,36 @@ function buildToolbarHTML() {
 }
 
 function positionToolbar() {
-  const btnW = toolbar.offsetWidth || 600;
-  const btnH = toolbar.offsetHeight || 40;
-  let left = region.x + region.w - btnW;
-  let top = region.y + region.h + 6;
-  if (top + btnH > window.innerHeight) top = region.y - btnH - 6;
-  if (left < 4) left = 4;
-  if (left + btnW > window.innerWidth) left = window.innerWidth - btnW - 4;
-  toolbar.style.left = left + 'px';
-  toolbar.style.top = top + 'px';
+  // 延迟一帧确保浏览器完成布局计算，offsetWidth/Height 才能拿到真实值
+  requestAnimationFrame(() => {
+    const btnW = toolbar.offsetWidth || 600;
+    const btnH = toolbar.offsetHeight || 40;
+    let left = region.x + region.w - btnW;
+    let top = region.y + region.h + 6;
+
+    // 1. 尝试放在选区下方
+    if (top + btnH > window.innerHeight) {
+      // 2. 下方放不下，尝试放在选区上方
+      top = region.y - btnH - 6;
+      // 3. 上方也放不下（选区接近全屏，top < 0），则叠加在选区底边内侧
+      if (top < 0) {
+        top = Math.max(4, region.y + region.h - btnH - 4);
+      }
+    }
+
+    // 最终兜底：top 仍超出视口上沿时，固定在视口底部
+    if (top + btnH > window.innerHeight) {
+      top = Math.max(4, window.innerHeight - btnH - 4);
+    }
+
+    // 水平位置：右对齐选区，然后夹紧到视口
+    if (left < 4) left = 4;
+    if (left + btnW > window.innerWidth) left = window.innerWidth - btnW - 4;
+    if (left < 0) left = 0;
+
+    toolbar.style.left = left + 'px';
+    toolbar.style.top = top + 'px';
+  });
 }
 
 function onToolbarClick(e) {
