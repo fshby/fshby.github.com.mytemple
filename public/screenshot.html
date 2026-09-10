@@ -112,6 +112,22 @@
   .anno-width:hover { background: rgba(100, 116, 139, 0.25); }
   .anno-width.active { background: rgba(34, 211, 238, 0.25); }
 
+  .anno-font-sizes { display: flex; gap: 1px; }
+  .anno-font-size {
+    min-width: 24px; height: 22px;
+    border: none;
+    background: transparent;
+    color: #cbd5e1;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    padding: 0 4px;
+    font-size: 12px; font-family: ui-monospace, monospace;
+    transition: background 0.12s;
+  }
+  .anno-font-size:hover { background: rgba(100, 116, 139, 0.25); }
+  .anno-font-size.active { background: rgba(34, 211, 238, 0.25); color: #22d3ee; }
+
   .anno-text-input {
     position: absolute; z-index: 5;
     border-radius: 2px; outline: none;
@@ -196,11 +212,13 @@ const TOOLS = [
 ];
 const COLORS = ['#ff3333', '#ffcc00', '#33ff66', '#33aaff', '#ffffff', '#000000'];
 const WIDTHS = [2, 4, 8];
+const FONT_SIZES = [14, 18, 24, 32];
 const TAG_COLORS = ['#e8462e', '#f5a623', '#4caf50', '#2196f3', '#9c27b0', '#00bcd4'];
 
 let currentTool = 'rectangle';
 let currentColor = '#ff3333';
 let currentWidth = 4;
+let currentFontSize = 18;
 let annotations = [];
 let redoStack = [];
 let isDrawing = false;
@@ -347,6 +365,7 @@ function resetScreenshotUI() {
   currentTool = 'rectangle';
   currentColor = '#ff3333';
   currentWidth = 4;
+  currentFontSize = 18;
   tagCounter = 0;
   annoCanvas = null;
   annoCtx = null;
@@ -551,12 +570,17 @@ function buildToolbarHTML() {
   const widthBtns = WIDTHS.map(w =>
     `<button type="button" class="anno-width${w === currentWidth ? ' active' : ''}" data-width="${w}" title="${w}px"><span style="height:${w}px;width:14px;background:currentColor;border-radius:2px;display:block"></span></button>`
   ).join('');
+  const fontSizeBtns = FONT_SIZES.map(s =>
+    `<button type="button" class="anno-font-size${s === currentFontSize ? ' active' : ''}" data-font-size="${s}" title="${s}px 字体">${s}</button>`
+  ).join('');
   return `
     <div class="anno-tools">${toolBtns}</div>
     <div class="anno-divider"></div>
     <div class="anno-colors">${colorBtns}</div>
     <div class="anno-divider"></div>
     <div class="anno-widths">${widthBtns}</div>
+    <div class="anno-divider"></div>
+    <div class="anno-font-sizes">${fontSizeBtns}</div>
     <div class="anno-divider"></div>
     <button type="button" class="anno-action anno-undo" title="撤销 (Ctrl+Z)" disabled>↶</button>
     <button type="button" class="anno-action anno-redo" title="重做 (Ctrl+Y)" disabled>↷</button>
@@ -598,6 +622,16 @@ function onToolbarClick(e) {
   if (widthBtn) {
     currentWidth = parseInt(widthBtn.dataset.width);
     toolbar.querySelectorAll('.anno-width').forEach(b => b.classList.toggle('active', b.dataset.width == currentWidth));
+    return;
+  }
+  const fontSizeBtn = e.target.closest('[data-font-size]');
+  if (fontSizeBtn) {
+    currentFontSize = parseInt(fontSizeBtn.dataset.fontSize);
+    toolbar.querySelectorAll('.anno-font-size').forEach(b => b.classList.toggle('active', b == fontSizeBtn));
+    // 如果当前正在编辑文字输入框，同步更新其字体大小
+    if (textInputEl) {
+      textInputEl.style.fontSize = currentFontSize + 'px';
+    }
     return;
   }
   if (e.target.closest('.anno-undo')) { undo(); return; }
@@ -705,14 +739,14 @@ function showTextInput(x, y) {
   textInputEl = document.createElement('input');
   textInputEl.type = 'text';
   textInputEl.className = 'anno-text-input';
-  textInputEl.style.cssText = `left:${x}px;top:${y - 12}px;color:${currentColor};border:2px solid ${currentColor};font-size:16px;padding:2px 6px;`;
+  textInputEl.style.cssText = `left:${x}px;top:${y - 12}px;color:${currentColor};border:2px solid ${currentColor};font-size:${currentFontSize}px;padding:2px 6px;`;
   overlay.appendChild(textInputEl);
   textInputEl.focus();
 
   const finish = () => {
     const text = textInputEl.value.trim();
     if (text) {
-      annotations.push({ type: 'text', x, y, text, color: currentColor, size: 18 });
+      annotations.push({ type: 'text', x, y, text, color: currentColor, size: currentFontSize });
       redoStack = [];
       render();
       updateUndoRedo();
@@ -875,6 +909,13 @@ function drawMosaicRect(ctx, x, y, w, h, blockSize) {
 async function confirmEdit(action) {
   removeTextInput();
 
+  // 健壮性检查：确保必要变量有效，防止 confirmEdit 在异常状态下抛错导致锁卡死
+  if (!region || !bgImg || !annoCanvas || !scaleX || !scaleY) {
+    log('confirmEdit: 状态异常，region/bgImg/annoCanvas/scaleX/scaleY 不完整，走 cleanupAndClose');
+    cleanupAndClose();
+    return;
+  }
+
   // 生成最终截图（背景裁剪 + 标注叠加）
   // 使用 scaleX/scaleY 将 CSS 坐标转换为物理像素坐标
   const cropCanvas = document.createElement('canvas');
@@ -885,11 +926,26 @@ async function confirmEdit(action) {
   const sx = Math.max(0, Math.round(region.x * scaleX));
   const sy = Math.max(0, Math.round(region.y * scaleY));
   // 从背景图（物理像素）裁剪
-  cctx.drawImage(bgImg, sx, sy, sw, sh, 0, 0, sw, sh);
-  // 标注画布是 CSS 像素尺寸，缩放到物理像素
-  cctx.drawImage(annoCanvas, region.x, region.y, region.w, region.h, 0, 0, sw, sh);
+  try {
+    cctx.drawImage(bgImg, sx, sy, sw, sh, 0, 0, sw, sh);
+    // 标注画布是 CSS 像素尺寸，缩放到物理像素
+    cctx.drawImage(annoCanvas, region.x, region.y, region.w, region.h, 0, 0, sw, sh);
+  } catch (drawErr) {
+    log('confirmEdit: drawImage 失败: ' + (drawErr?.message || drawErr));
+    cleanupAndClose();
+    return;
+  }
 
-  const blob = await new Promise(res => cropCanvas.toBlob(res, 'image/png'));
+  // toBlob 添加超时保护：防止 Canvas 污染或 WebView2 异常导致 toBlob 永不回调
+  let blob = null;
+  try {
+    blob = await Promise.race([
+      new Promise(res => cropCanvas.toBlob(res, 'image/png')),
+      new Promise(res => setTimeout(() => res(null), 5000)),
+    ]);
+  } catch (blobErr) {
+    log('confirmEdit: toBlob 异常: ' + (blobErr?.message || blobErr));
+  }
   if (!blob) { cleanupAndClose(); return; }
 
   // 先标记为非激活（立即允许下一次截图被检测到）
@@ -900,7 +956,12 @@ async function confirmEdit(action) {
   if (overlayEl) overlayEl.remove();
   const ocrModalEl = document.querySelector('.ocr-result-modal');
   if (ocrModalEl) ocrModalEl.remove();
+  // 释放上一次截图的 blob URL（防止内存泄漏）
+  if (bgImg && bgImg.src && bgImg.src.startsWith('blob:')) {
+    try { URL.revokeObjectURL(bgImg.src); } catch (_) {}
+  }
   // 重置全局变量（确保下一次截图从干净状态开始）
+  // 关键：bgImg、tagCounter、currentTool 等必须全部重置，防止下次截图状态残留
   overlay = null; canvas = null; ctx = null;
   annoCanvas = null; annoCtx = null; toolbar = null;
   tooltip = null; hint = null;
@@ -908,9 +969,26 @@ async function confirmEdit(action) {
   isDrawing = false; brushPath = null;
   startPos = null; curPos = null;
   textInputEl = null; mosaicCanvas = null;
+  bgImg = null; bgImgWidth = 0; bgImgHeight = 0;
+  scaleX = 1; scaleY = 1;
+  tagCounter = 0;
+  currentTool = 'rectangle';
+  currentColor = '#ff3333';
+  currentWidth = 4;
+  currentFontSize = 18;
 
+  // FileReader 添加超时保护：防止 readAsDataURL 在大图片时卡住
+  let saved = false;
   const reader = new FileReader();
+  const saveTimeout = setTimeout(() => {
+    if (!saved) {
+      log('confirmEdit: FileReader 超时 5s，走 closeWindow 兜底');
+      closeWindow();
+    }
+  }, 5000);
   reader.onload = () => {
+    saved = true;
+    clearTimeout(saveTimeout);
     const base64 = reader.result.split(',')[1];
     // 优先走 IPC（会先关窗口再后台保存）
     invoke('screenshot_result', {
@@ -923,6 +1001,12 @@ async function confirmEdit(action) {
         .then(() => httpPost('/api/screenshot/close').catch(() => {}))
         .catch(() => { httpPost('/api/screenshot/close').catch(() => {}); });
     });
+  };
+  reader.onerror = () => {
+    saved = true;
+    clearTimeout(saveTimeout);
+    log('confirmEdit: FileReader.onerror，走 closeWindow 兜底');
+    closeWindow();
   };
   reader.readAsDataURL(blob);
 }
@@ -986,10 +1070,21 @@ function cleanupAndClose() {
   removeTextInput();
   removeAllDocumentListeners();
   if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
+  // 释放 blob URL 防止内存泄漏
+  if (bgImg && bgImg.src && bgImg.src.startsWith('blob:')) {
+    try { URL.revokeObjectURL(bgImg.src); } catch (_) {}
+  }
   overlay = null; canvas = null; ctx = null;
   annoCanvas = null; annoCtx = null; toolbar = null;
   tooltip = null; hint = null;
   annotations = []; redoStack = [];
+  bgImg = null; bgImgWidth = 0; bgImgHeight = 0;
+  scaleX = 1; scaleY = 1;
+  tagCounter = 0;
+  currentTool = 'rectangle';
+  currentColor = '#ff3333';
+  currentWidth = 4;
+  currentFontSize = 18;
   closeWindow();
 }
 
