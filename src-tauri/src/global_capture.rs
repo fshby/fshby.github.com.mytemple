@@ -899,7 +899,8 @@ pub fn close_recorder_window(app: &AppHandle) {
 }
 
 /// 处理录屏结果（保存 WebM 文件，保存成功后清理临时资源）
-pub fn handle_recorder_result(app: &AppHandle, image_base64: String, _action: String, filename: String) -> Result<(), String> {
+/// save_path: 可选的自定义保存目录。未提供时回退到 %USERPROFILE%\Videos。
+pub fn handle_recorder_result(app: &AppHandle, image_base64: String, _action: String, filename: String, save_path: Option<String>) -> Result<(), String> {
     use base64::Engine;
     let bytes = base64::engine::general_purpose::STANDARD.decode(&image_base64)
         .map_err(|e| format!("base64 解码失败: {}", e))?;
@@ -910,10 +911,13 @@ pub fn handle_recorder_result(app: &AppHandle, image_base64: String, _action: St
         return Err("录屏内容为空".to_string());
     }
 
-    // 保存到视频目录
-    let save_dir = std::env::var("USERPROFILE")
-        .map(|p| std::path::PathBuf::from(p).join("Videos"))
-        .unwrap_or_else(|_| std::path::PathBuf::from("."));
+    // 保存目录：优先使用用户自定义目录，否则回退到 %USERPROFILE%\Videos
+    let save_dir = match save_path {
+        Some(p) if !p.trim().is_empty() => std::path::PathBuf::from(p.trim()),
+        _ => std::env::var("USERPROFILE")
+            .map(|p| std::path::PathBuf::from(p).join("Videos"))
+            .unwrap_or_else(|_| std::path::PathBuf::from(".")),
+    };
     let _ = std::fs::create_dir_all(&save_dir);
     let fname = if filename.is_empty() {
         format!("recording_{}.webm", chrono::Local::now().format("%Y%m%d_%H%M%S"))
