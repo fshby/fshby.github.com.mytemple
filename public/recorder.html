@@ -344,11 +344,30 @@ async function startRecording() {
   outCtx.fillStyle = '#000';
   outCtx.fillRect(0, 0, outCanvas.width, outCanvas.height);
 
-  // 通知 Rust 开始原生录屏
+  // 关键修复：先调用 api_stop_native_record 确保上次录屏状态完全释放
+  // 防止 RecordState 残留导致 api_start_native_record 报"录屏已在进行中"
+  try { await invoke('api_stop_native_record'); } catch (_) {}
+
+  // 通知 Rust 开始原生录屏（xcap DXGI 桌面捕获，不弹选择器）
+  // start_native_record 内部已有 3 次重试 + DXGI 恢复延迟
+  let nativeStarted = false;
   try {
     await invoke('api_start_native_record');
+    nativeStarted = true;
   } catch (e) {
-    // 降级：使用 getDisplayMedia
+    // 原生录屏启动失败，再重试一次（等待 1 秒让 DXGI 恢复）
+    try {
+      await new Promise(res => setTimeout(res, 1000));
+      await invoke('api_start_native_record');
+      nativeStarted = true;
+    } catch (e2) {
+      // 两次都失败，才降级到 getDisplayMedia（会弹桌面选择器）
+      nativeStarted = false;
+    }
+  }
+
+  if (!nativeStarted) {
+    // 降级：使用 getDisplayMedia（最后手段，会弹桌面/窗口选择器）
     try {
       const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
       const track = stream.getVideoTracks()[0];
@@ -472,7 +491,18 @@ async function stopRecording(cancel) {
   chunks = [];
 
   const reader = new FileReader();
+  // FileReader 超时保护：防止大视频文件 readAsDataURL 卡住
+  let saved = false;
+  const saveTimeout = setTimeout(() => {
+    if (!saved) {
+      saved = true;
+      // 超时兜底：直接走 closeRecorderWindow 释放窗口和锁
+      closeRecorderWindow();
+    }
+  }, 10000);
   reader.onload = () => {
+    saved = true;
+    clearTimeout(saveTimeout);
     const base64 = reader.result.split(',')[1];
     const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const fname = `recording_${ts}.webm`;
@@ -489,6 +519,8 @@ async function stopRecording(cancel) {
     });
   };
   reader.onerror = () => {
+    saved = true;
+    clearTimeout(saveTimeout);
     // FileReader 失败也要清理状态
     cleanupAndClose();
   };
