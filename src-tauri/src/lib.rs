@@ -1803,11 +1803,12 @@ pub async fn recorder_result(
     image_base64: String,
     action: String,
     filename: String,
+    save_path: Option<String>,
 ) -> Result<(), String> {
     // 先立即关闭窗口（防止保存过程中窗口挡在屏幕上）
     crate::global_capture::close_recorder_window(&app_handle);
     // 再处理保存（后台处理，不影响用户）
-    let _ = crate::global_capture::handle_recorder_result(&app_handle, image_base64, action, filename);
+    let _ = crate::global_capture::handle_recorder_result(&app_handle, image_base64, action, filename, save_path);
     Ok(())
 }
 

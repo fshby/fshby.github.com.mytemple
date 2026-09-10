@@ -77,6 +77,78 @@
     text-shadow: 0 2px 8px rgba(0,0,0,0.8);
     z-index: 10;
   }
+
+  /* 录屏保存对话框 */
+  .save-dialog {
+    position: fixed; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(22, 28, 39, 0.98);
+    border: 1px solid rgba(100, 116, 139, 0.4);
+    border-radius: 12px;
+    padding: 24px;
+    width: 460px; max-width: 90vw;
+    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6);
+    z-index: 100;
+    backdrop-filter: blur(12px);
+  }
+  .save-dialog h3 {
+    margin: 0 0 16px; color: #f1f5f9; font-size: 16px; font-weight: 600;
+  }
+  .save-dialog label {
+    display: block; color: #94a3b8; font-size: 12px; margin-bottom: 6px;
+  }
+  .save-dialog input[type="text"] {
+    width: 100%; padding: 8px 12px;
+    background: rgba(15, 23, 42, 0.8);
+    border: 1px solid rgba(100, 116, 139, 0.4);
+    border-radius: 6px; color: #f1f5f9;
+    font-size: 13px; font-family: inherit;
+    box-sizing: border-box;
+  }
+  .save-dialog input[type="text"]:focus {
+    outline: none; border-color: rgba(34, 211, 238, 0.6);
+  }
+  .save-path-row {
+    display: flex; gap: 8px; align-items: stretch;
+  }
+  .save-path-row input { flex: 1; }
+  .save-dialog .browse-btn {
+    background: rgba(100, 116, 139, 0.2);
+    border: 1px solid rgba(100, 116, 139, 0.4);
+    color: #cbd5e1;
+    padding: 0 14px;
+    border-radius: 6px; cursor: pointer;
+    font-size: 12px; font-family: inherit;
+    white-space: nowrap;
+    transition: background 0.12s;
+  }
+  .save-dialog .browse-btn:hover {
+    background: rgba(100, 116, 139, 0.35); color: #f1f5f9;
+  }
+  .save-dialog-actions {
+    display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px;
+  }
+  .save-dialog .save-btn {
+    background: rgba(34, 211, 238, 0.2);
+    border: 1px solid rgba(34, 211, 238, 0.4);
+    color: #67e8f9; padding: 7px 18px;
+    border-radius: 6px; cursor: pointer;
+    font-size: 13px; font-family: inherit; font-weight: 600;
+    transition: background 0.12s;
+  }
+  .save-dialog .save-btn:hover { background: rgba(34, 211, 238, 0.3); }
+  .save-dialog .cancel-btn {
+    background: transparent;
+    border: 1px solid rgba(100, 116, 139, 0.4);
+    color: #94a3b8; padding: 7px 16px;
+    border-radius: 6px; cursor: pointer;
+    font-size: 13px; font-family: inherit;
+    transition: background 0.12s;
+  }
+  .save-dialog .cancel-btn:hover { background: rgba(100, 116, 139, 0.2); color: #cbd5e1; }
+  .save-dialog .file-size {
+    color: #64748b; font-size: 11px; margin-top: 4px;
+  }
 </style>
 </head>
 <body>
@@ -113,6 +185,23 @@ function httpPost(url, body) {
     headers: { 'Content-Type': 'application/json' },
     body: body ? JSON.stringify(body) : undefined,
   }).then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)));
+}
+
+// HTTP GET 简化版
+function httpGet(url) {
+  return fetch(url, { cache: 'no-store' }).then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)));
+}
+
+// 获取默认工作区根目录（用于默认保存路径）
+async function getDefaultWorkspaceRoot() {
+  try {
+    const res = await httpGet('/api/workspaces');
+    const wsList = res?.workspaces || [];
+    const defId = res?.defaultWorkspaceId || 'default';
+    const defWs = wsList.find(w => w.id === defId) || wsList[0];
+    if (defWs?.root) return defWs.root;
+  } catch (_) {}
+  return '';
 }
 
 function closeRecorderWindow() {
@@ -481,50 +570,140 @@ async function stopRecording(cancel) {
     return;
   }
 
-  // 先清空 DOM
-  document.body.innerHTML = '';
-
   const mimeType = savedRecorder?.mimeType || 'video/webm';
   const blob = new Blob(savedChunks, { type: mimeType });
   // 保存后清理前端引用，避免数据残留
   recorder = null;
   chunks = [];
 
+  // 读取为 base64，然后弹出保存对话框
   const reader = new FileReader();
-  // FileReader 超时保护：防止大视频文件 readAsDataURL 卡住
   let saved = false;
   const saveTimeout = setTimeout(() => {
     if (!saved) {
       saved = true;
-      // 超时兜底：直接走 closeRecorderWindow 释放窗口和锁
       closeRecorderWindow();
     }
-  }, 10000);
+  }, 15000);
   reader.onload = () => {
     saved = true;
     clearTimeout(saveTimeout);
     const base64 = reader.result.split(',')[1];
-    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    const fname = `recording_${ts}.webm`;
-    invoke('recorder_result', {
-      imageBase64: base64,
-      action: 'save',
-      filename: fname
-    }).then(() => {
-      // Rust 已关闭窗口并清理状态
-    }).catch(() => {
-      // IPC 降级：HTTP 端点（先关窗口再后台保存，不丢失录屏）
-      httpPost('/api/recorder/result', { image: base64, action: 'save', filename: fname })
-        .catch(() => { try { window.close(); } catch(_) {} });
-    });
+    showSaveDialog(blob, base64);
   };
   reader.onerror = () => {
     saved = true;
     clearTimeout(saveTimeout);
-    // FileReader 失败也要清理状态
     cleanupAndClose();
   };
   reader.readAsDataURL(blob);
+}
+
+// 弹出保存对话框：让用户选择文件名和保存目录
+async function showSaveDialog(blob, base64) {
+  document.body.innerHTML = '';
+
+  // 获取默认保存目录：工作区/Videos
+  let defaultDir = '';
+  try {
+    const wsRoot = await getDefaultWorkspaceRoot();
+    if (wsRoot) {
+      defaultDir = wsRoot.replace(/[\\/]+$/, '') + (wsRoot.includes('\\') ? '\\Videos' : '/Videos');
+    }
+  } catch (_) {}
+
+  const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const defaultName = `recording_${ts}.webm`;
+  const sizeMB = (blob.size / 1024 / 1024).toFixed(2);
+
+  const dialog = document.createElement('div');
+  dialog.className = 'save-dialog';
+  dialog.innerHTML = `
+    <h3>保存录屏</h3>
+    <div style="margin-bottom:14px">
+      <label>文件名</label>
+      <input type="text" id="saveFileName" value="${defaultName}" />
+    </div>
+    <div style="margin-bottom:14px">
+      <label>保存位置${defaultDir ? '（默认：工作区/Videos）' : ''}</label>
+      <div class="save-path-row">
+        <input type="text" id="saveFilePath" value="${defaultDir}" placeholder="选择保存目录..." />
+        <button type="button" class="browse-btn" id="browseBtn">浏览...</button>
+      </div>
+      <div class="file-size">文件大小：${sizeMB} MB</div>
+    </div>
+    <div class="save-dialog-actions">
+      <button type="button" class="cancel-btn" id="cancelSaveBtn">取消</button>
+      <button type="button" class="save-btn" id="confirmSaveBtn">保存</button>
+    </div>
+  `;
+  document.body.appendChild(dialog);
+
+  const nameInput = dialog.querySelector('#saveFileName');
+  const pathInput = dialog.querySelector('#saveFilePath');
+  const browseBtn = dialog.querySelector('#browseBtn');
+  const cancelBtn = dialog.querySelector('#cancelSaveBtn');
+  const saveBtn = dialog.querySelector('#confirmSaveBtn');
+
+  nameInput.focus();
+  nameInput.select();
+
+  // 浏览目录
+  browseBtn.addEventListener('click', async () => {
+    try {
+      const res = await invoke('api_browse_folder');
+      if (res?.path) {
+        pathInput.value = res.path;
+      }
+    } catch (_) {
+      // HTTP 兜底
+      try {
+        const res = await httpGet('/api/browse-folder');
+        if (res?.path) pathInput.value = res.path;
+      } catch (__) {}
+    }
+  });
+
+  // 保存
+  const doSave = () => {
+    const fname = nameInput.value.trim() || defaultName;
+    const savePath = pathInput.value.trim();
+    saveBtn.disabled = true;
+    cancelBtn.disabled = true;
+    saveBtn.textContent = '保存中...';
+
+    const finish = () => {
+      document.body.innerHTML = '';
+      closeRecorderWindow();
+    };
+
+    invoke('recorder_result', {
+      imageBase64: base64,
+      action: 'save',
+      filename: fname,
+      savePath: savePath || undefined,
+    }).then(finish).catch(() => {
+      // IPC 降级：HTTP（HTTP 结构体用 snake_case 字段名）
+      httpPost('/api/recorder/result', {
+        image: base64,
+        action: 'save',
+        filename: fname,
+        save_path: savePath || undefined,
+      }).then(finish).catch(finish);
+    });
+  };
+
+  saveBtn.addEventListener('click', doSave);
+  cancelBtn.addEventListener('click', () => {
+    document.body.innerHTML = '';
+    cleanupAndClose();
+  });
+
+  // 快捷键：Enter 保存，Esc 取消
+  dialog.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); doSave(); }
+    else if (e.key === 'Escape') { e.preventDefault(); cancelBtn.click(); }
+  }, true);
 }
 
 function cleanupAndClose() {

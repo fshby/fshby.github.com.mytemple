@@ -1,7 +1,7 @@
 {
-  "version": "2.1.4",
+  "version": "2.1.5",
   "downloadUrl": "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
-  "latestReleaseNotes": "【v2.1.4 截图全屏选区标记栏缺失修复】修复截图选区接近全屏时标注工具栏不出现的缺陷。根因：positionToolbar 只处理下方→上方切换，选区接近全屏时上方也放不下（top<0）导致工具栏跑到视口外不可见。修复：三级回退定位（选区下方→选区上方→选区底边内侧叠加）+ requestAnimationFrame 延迟测量 offsetWidth 确保布局值准确。",
-  "releaseNotes": "v2.1.4 截图全屏选区标记栏缺失修复\n\n一、缺陷修复（screenshot.html positionToolbar）：\n1）缺陷：截图选区接近全屏时标注工具栏不出现，无法完成截图。\n2）根因：positionToolbar 的工具栏定位逻辑只处理了下方放不下→放上方，但当选区接近全屏时上方也放不下（top < 0），工具栏跑到视口上方完全不可见。同时 toolbar.offsetWidth 在 DOM 刚 append 后可能还没完成布局计算，导致宽度估算偏差。\n3）修复：\n   ① 三级回退定位：选区下方 → 选区上方 → 选区底边内侧叠加。\n   ② 最终兜底：仍超出视口时固定在视口底部。\n   ③ requestAnimationFrame 延迟一帧，确保 offsetWidth/offsetHeight 拿到真实布局值。\n   ④ 水平位置增加 left < 0 兜底夹紧。\n\n二、不影响其他功能：仅修改 screenshot.html 的 positionToolbar 函数。录屏功能、AI 功能、知识库管理不受影响。无遮罩干扰。",
+  "latestReleaseNotes": "【v2.1.5 录屏另存为功能】录屏停止后弹出保存对话框，支持自定义文件名和保存目录，默认为工作区/Videos目录。用户可点击「浏览...」选择任意目录保存录屏视频，也可直接修改文件名。",
+  "releaseNotes": "v2.1.5 录屏另存为功能\n\n一、新功能（recorder.html + global_capture.rs）：\n1）录屏停止后弹出保存对话框，包含：文件名输入框、保存目录输入框、浏览按钮、保存/取消按钮。\n2）默认保存目录：工作区根目录下的 Videos 子目录（通过 /api/workspaces 获取默认工作区 root）。\n3）浏览按钮调用 api_browse_folder 打开系统目录选择对话框，用户可选择任意目录。\n4）文件名默认为 recording_<时间戳>.webm，用户可自定义。\n5）显示文件大小提示。\n6）快捷键：Enter 保存，Esc 取消。\n\n二、后端改动：\n1）handle_recorder_result 新增 save_path: Option<String> 参数，优先使用用户指定目录，否则回退到 %USERPROFILE%\\Videos。\n2）recorder_result IPC 和 HTTP 端点均传递 save_path 参数。\n\n三、不影响其他功能：仅修改 recorder.html、global_capture.rs、lib.rs、handlers.rs。截图功能、AI 功能、知识库管理不受影响。无遮罩干扰。",
   "releaseDate": "2026-09-10"
 }

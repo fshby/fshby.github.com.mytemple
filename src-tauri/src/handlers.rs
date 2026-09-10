@@ -3161,6 +3161,8 @@ struct RecorderResultRequest {
     action: String,
     #[serde(default)]
     filename: String,
+    #[serde(default)]
+    save_path: Option<String>,
 }
 
 async fn recorder_result_http(Json(req): Json<RecorderResultRequest>) -> impl IntoResponse {
@@ -3177,6 +3179,7 @@ async fn recorder_result_http(Json(req): Json<RecorderResultRequest>) -> impl In
             req.image,
             req.action,
             req.filename,
+            req.save_path,
         );
     });
     raw_json(serde_json::json!({ "ok": true }))
