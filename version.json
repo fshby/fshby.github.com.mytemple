@@ -1,7 +1,7 @@
 {
-  "version": "2.1.7",
+  "version": "2.1.8",
   "downloadUrl": "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
-  "latestReleaseNotes": "【v2.1.7 修复版本自升级缺陷】1) 后端 check_update 默认使用本地 version.json 的版本号（与关于页一致），而非编译时的 CARGO_PKG_VERSION；2) 前端捕获 check_update 响应，upToDate=false 时弹出更新对话框，提供「立即下载」和「稍后提醒」按钮；upToDate=true 时提示「已是最新版本」。",
-  "releaseNotes": "v2.1.7 修复版本自升级缺陷\n\n一、后端（handlers.rs + ipc.rs）：\n1) check_update 默认使用本地 version.json 的 version 字段作为当前版本号，与关于页显示一致。\n2) 新增 read_local_version_string() 和 read_local_version_json() 辅助函数，多路径查找 version.json（开发环境/打包资源目录/exe 目录）。\n\n二、前端（app.js + index.html + styles.css）：\n1) checkUpdateBtn 捕获 /api/update/check 响应，根据 upToDate 字段决定行为。\n2) upToDate=false 时弹出更新对话框，显示当前版本、最新版本、更新内容，提供「立即下载」和「稍后提醒」按钮。\n3) 「立即下载」通过 /api/open-url 在系统浏览器中打开下载链接。\n4) upToDate=true 时提示「已是最新版本」，远程不可达时显示降级提示。\n5) 移除误导性 Toast（原「已请求桌面启动器强制检查升级」文案）。",
+  "latestReleaseNotes": "【v2.1.8 JSON格式化预览】1) JSON文件自动渲染bejson风格树形视图（可折叠、类型颜色标记）；2) 修复小文件打开后编辑器内容同步问题（CodeMirror强制刷新）；3) 统一非Markdown文件预览逻辑为renderCodePreview公共函数。",
+  "releaseNotes": "v2.1.8 JSON格式化预览\n\n一、JSON 树形视图（public/app.js + styles.css）：\n1) JSON文件(.json/.jsonc/.json5)打开后在预览面板显示bejson风格树形视图\n2) 支持点击箭头折叠/展开，折叠时显示 { N keys } / [ N items ] 摘要\n3) 类型颜色：key紫色、string绿色、number蓝色、boolean红色、null灰色\n4) JSON解析失败时自动降级到普通语法高亮代码预览\n5) 支持暗/亮主题\n\n二、小文件打开稳定性：\n1) openDoc中设置editor.value后用requestAnimationFrame强制CodeMirror刷新\n2) 防止刚打开大文件后立即开小文件时编辑器显示上一份内容\n\n三、代码重构：\n1) 抽离renderCodePreview公共函数，消除非Markdown文件预览的重复代码",
   "releaseDate": "2026-09-11"
 }
