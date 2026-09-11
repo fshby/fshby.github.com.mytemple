@@ -10823,6 +10823,65 @@ html body .print-body.print-body .callout.callout.callout-example.callout-exampl
   /* 外部代码文件预览的额外 padding/family 内联已设，但给 code tag 也补上 */
 }
 
+/* ── JSON 代码块树形视图（Markdown 中 ```json 自动渲染） ── */
+.code-block.json-code-block {
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 8px;
+  overflow: hidden;
+  margin: 12px 0;
+  background: var(--bg-subtle, #fafafa);
+}
+.code-block.json-code-block > pre { display: none; } /* 树形视图渲染后隐藏原始 pre */
+.json-code-block.details {
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 8px;
+  margin: 12px 0;
+  overflow: hidden;
+  background: var(--bg, #fff);
+}
+.json-code-block.details > .json-code-summary {
+  padding: 8px 14px;
+  background: var(--bg-subtle, #f3f4f6);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text, #1f2937);
+  cursor: pointer;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+  list-style: none;
+}
+.json-code-block.details > .json-code-summary::-webkit-details-marker { display: none; }
+.json-code-block.details > .json-code-summary::before {
+  content: "▼";
+  display: inline-block;
+  margin-right: 8px;
+  font-size: 10px;
+  color: var(--muted, #9ca3af);
+  transition: transform 0.15s;
+}
+.json-code-block.details:not([open]) > .json-code-summary::before { transform: rotate(-90deg); }
+.json-code-block.details > .json-code-summary:hover { background: var(--border, #e5e7eb); }
+.json-tree-wrapper {
+  max-height: 600px;
+  overflow: auto;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+}
+.json-code-raw {
+  border-top: 1px solid var(--border, #e5e7eb);
+}
+.json-code-raw > summary {
+  padding: 6px 14px;
+  font-size: 12px;
+  color: var(--muted, #6b7280);
+  cursor: pointer;
+  background: var(--bg-subtle, #f9fafb);
+  list-style: none;
+}
+.json-code-raw > summary::-webkit-details-marker { display: none; }
+.json-code-raw > summary::before {
+  content: "🔍";
+  margin-right: 6px;
+}
+
 /* ── JSON 树形视图（bejson 风格） ── */
 .json-tree {
   padding: 16px;
@@ -10831,6 +10890,21 @@ html body .print-body.print-body .callout.callout.callout-example.callout-exampl
   line-height: 1.7;
   color: var(--text, #1f2937);
   background: var(--bg, #fff);
+}
+.json-lenient-tip {
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 6px;
+  color: #b45309;
+  font-size: 12px;
+  font-family: var(--sans-font, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif);
+}
+[data-theme="dark"] .json-lenient-tip {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: rgba(245, 158, 11, 0.4);
+  color: #fbbf24;
 }
 .json-row {
   display: flex;
