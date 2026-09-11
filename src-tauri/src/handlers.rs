@@ -2370,7 +2370,8 @@ struct CheckUpdateRequest {
 async fn check_update(
     Json(req): Json<CheckUpdateRequest>,
 ) -> impl IntoResponse {
-    let current = req.current_version.unwrap_or_else(|| env!("CARGO_PKG_VERSION").to_string());
+    // 默认使用本地 version.json 的版本号（与关于页显示一致），而非编译时的 CARGO_PKG_VERSION
+    let current = req.current_version.unwrap_or_else(crate::ipc::read_local_version_string);
 
     // 拉取远程最新版本信息
     match fetch_remote_version().await {
