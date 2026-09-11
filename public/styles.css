@@ -10823,6 +10823,90 @@ html body .print-body.print-body .callout.callout.callout-example.callout-exampl
   /* 外部代码文件预览的额外 padding/family 内联已设，但给 code tag 也补上 */
 }
 
+/* ── JSON 树形视图（bejson 风格） ── */
+.json-tree {
+  padding: 16px;
+  font-family: var(--mono-font, 'Cascadia Code', 'Fira Code', Consolas, monospace);
+  font-size: var(--doc-font-size, 14px);
+  line-height: 1.7;
+  color: var(--text, #1f2937);
+  background: var(--bg, #fff);
+}
+.json-row {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  padding: 0;
+}
+.json-toggle {
+  display: inline-block;
+  width: 1.2em;
+  text-align: center;
+  cursor: pointer;
+  user-select: none;
+  color: #64748b;
+  font-size: 0.75em;
+  padding-top: 0.15em;
+  flex-shrink: 0;
+}
+.json-row.collapsed > .json-children {
+  display: none;
+}
+.json-key {
+  color: #9333ea;
+  font-weight: 500;
+}
+.json-colon {
+  color: #64748b;
+  margin: 0 4px;
+}
+.json-brace {
+  color: #475569;
+  font-weight: 600;
+}
+.json-brace-close {
+  padding-left: 1.2em;
+}
+.json-children {
+  display: block;
+  padding-left: 1.2em;
+}
+.json-has-comma > .json-colon::after {
+  content: ",";
+}
+.json-has-comma > .json-value::after {
+  content: ",";
+}
+.json-has-comma.json-row:not(:has(.json-brace)) > .json-colon::after {
+  content: ",";
+}
+.json-value {
+  font-weight: 500;
+  word-break: break-all;
+}
+.json-string { color: #059669; }
+.json-number { color: #2563eb; }
+.json-boolean { color: #dc2626; font-style: italic; }
+.json-null { color: #94a3b8; font-style: italic; }
+.json-summary {
+  color: #94a3b8;
+  font-size: 0.85em;
+  font-style: italic;
+}
+
+/* 暗色主题适配 */
+[data-theme="dark"] .json-tree {
+  color: #e2e8f0;
+  background: #0f172a;
+}
+[data-theme="dark"] .json-key { color: #c084fc; }
+[data-theme="dark"] .json-colon { color: #94a3b8; }
+[data-theme="dark"] .json-brace { color: #cbd5e1; }
+[data-theme="dark"] .json-string { color: #34d399; }
+[data-theme="dark"] .json-number { color: #60a5fa; }
+[data-theme="dark"] .json-boolean { color: #f87171; }
+[data-theme="dark"] .json-null { color: #64748b; }
+
 /* ── 屏幕区域捕获遮罩 ── */
 .capture-overlay {
   position: fixed;

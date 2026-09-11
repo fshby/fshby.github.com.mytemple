@@ -3763,6 +3763,157 @@ const HLJS_FALLBACK = {
   reasonml: "ocaml",
 };
 
+// ── JSON 树形视图渲染（bejson 风格：可折叠、类型标记、key-value 对齐） ──
+function renderJsonTree(content) {
+  let data;
+  try {
+    data = JSON.parse(content);
+  } catch (e) {
+    // JSON 无效，返回 null 让调用方降级到普通代码高亮
+    return null;
+  }
+  const container = document.createElement("div");
+  container.className = "json-tree";
+  const root = renderJsonNode(data, "", true);
+  container.appendChild(root);
+  return container;
+}
+
+function renderJsonNode(value, key = "", isRoot = false) {
+  const row = document.createElement("div");
+  row.className = "json-row";
+
+  const type = jsonValueType(value);
+  const isContainer = type === "object" || type === "array";
+
+  // 可折叠的容器节点
+  if (isContainer) {
+    const toggle = document.createElement("span");
+    toggle.className = "json-toggle";
+    toggle.textContent = "▼";
+    toggle.addEventListener("click", () => {
+      const collapsed = row.classList.toggle("collapsed");
+      toggle.textContent = collapsed ? "▶" : "▼";
+      updateCollapsedSummary(row, value);
+    });
+    row.appendChild(toggle);
+
+    const keySpan = document.createElement("span");
+    keySpan.className = "json-key";
+    keySpan.textContent = key ? `"${key}"` : "";
+    if (key) row.appendChild(keySpan);
+
+    const braceOpen = document.createElement("span");
+    braceOpen.className = "json-brace";
+    braceOpen.textContent = type === "object" ? "{" : "[";
+    row.appendChild(braceOpen);
+
+    const childContainer = document.createElement("div");
+    childContainer.className = "json-children";
+
+    if (type === "object") {
+      const entries = Object.entries(value);
+      entries.forEach(([k, v], i) => {
+        const childRow = renderJsonNode(v, k, false);
+        if (i < entries.length - 1) childRow.classList.add("json-has-comma");
+        childContainer.appendChild(childRow);
+      });
+    } else {
+      value.forEach((v, i) => {
+        const childRow = renderJsonNode(v, "", false);
+        if (i < value.length - 1) childRow.classList.add("json-has-comma");
+        childContainer.appendChild(childRow);
+      });
+    }
+
+    row.appendChild(childContainer);
+
+    const braceClose = document.createElement("div");
+    braceClose.className = "json-row json-brace-close";
+    const closeSpan = document.createElement("span");
+    closeSpan.className = "json-brace";
+    closeSpan.textContent = type === "object" ? "}" : "]";
+    braceClose.appendChild(closeSpan);
+    row.appendChild(braceClose);
+  } else {
+    // 叶子节点
+    const indent = document.createElement("span");
+    indent.className = "json-toggle";
+    row.appendChild(indent);
+
+    if (key) {
+      const keySpan = document.createElement("span");
+      keySpan.className = "json-key";
+      keySpan.textContent = `"${key}"`;
+      row.appendChild(keySpan);
+    }
+
+    const colon = document.createElement("span");
+    colon.className = "json-colon";
+    colon.textContent = ":";
+    row.appendChild(colon);
+
+    const valueSpan = document.createElement("span");
+    valueSpan.className = `json-value json-${type}`;
+    valueSpan.textContent = formatJsonValue(value, type);
+    row.appendChild(valueSpan);
+  }
+
+  return row;
+}
+
+function updateCollapsedSummary(row, value) {
+  // 折叠时在 { 或 [ 后显示摘要，如 { 5 keys } 或 [ 3 items ]
+  const summary = row.querySelector(".json-summary");
+  if (summary) summary.remove();
+  if (row.classList.contains("collapsed")) {
+    const count = value && typeof value === "object"
+      ? (Array.isArray(value) ? value.length : Object.keys(value).length)
+      : 0;
+    const summarySpan = document.createElement("span");
+    summarySpan.className = "json-summary";
+    summarySpan.textContent = Array.isArray(value) ? ` ${count} items` : ` ${count} keys`;
+    const braceOpen = row.querySelector(".json-brace");
+    if (braceOpen) braceOpen.after(summarySpan);
+  }
+}
+
+function jsonValueType(value) {
+  if (value === null) return "null";
+  if (Array.isArray(value)) return "array";
+  return typeof value;
+}
+
+function formatJsonValue(value, type) {
+  switch (type) {
+    case "string": return `"${value}"`;
+    case "null": return "null";
+    case "undefined": return "undefined";
+    default: return String(value);
+  }
+}
+
+// ── 非 Markdown 文件：语法高亮代码预览（抽离为公共函数） ──
+function renderCodePreview(container, content, ext) {
+  const lang = normalizeCodeLanguage(ext);
+  const preview = document.createElement("pre");
+  preview.className = "code-preview";
+  preview.style.whiteSpace = "pre-wrap";
+  preview.style.wordBreak = "break-word";
+  preview.style.padding = "16px";
+  preview.style.fontFamily = "var(--mono-font, 'Cascadia Code', 'Fira Code', Consolas, monospace)";
+  preview.style.fontSize = "var(--doc-font-size, 14px)";
+  preview.style.lineHeight = "1.6";
+  preview.style.tabSize = "4";
+  preview.dataset.language = lang;
+  const codeEl = document.createElement("code");
+  codeEl.className = `language-${lang}`;
+  codeEl.textContent = content || "";
+  preview.appendChild(codeEl);
+  container.appendChild(preview);
+  highlightCodeBlocks(container);
+}
+
 function normalizeCodeLanguage(value) {
   const raw = String(value || "").trim().toLowerCase();
   const aliases = {
@@ -5351,6 +5502,12 @@ async function openDoc(docPath, options = {}) {
   const draftContent = restoreDraft(doc.path);
   const effectiveContent = (draftContent != null && draftContent !== doc.content) ? draftContent : doc.content;
   els.editor.value = effectiveContent;
+  // 强制 CodeMirror 同步内容到 DOM（防止刚打开大文件后立即开小文件时编辑器显示上一份内容）
+  requestAnimationFrame(() => {
+    if (els.editor && els.editor.view) {
+      els.editor.view.dispatch({ changes: { from: 0, to: els.editor.view.state.doc.length, insert: effectiveContent } });
+    }
+  });
   // Bugfix B-编辑器侧：空内容 + 无草稿 时给编辑器一个可见占位符，避免左栏也是一片白
   if (isEmptyContent && (draftContent == null || draftContent.trim() === "")) {
     els.editor.placeholder =
@@ -5377,45 +5534,66 @@ async function openDoc(docPath, options = {}) {
       els.markdownView.innerHTML = `<p style="color: var(--danger);">文档渲染失败：${escapeHtml(error?.message || "未知错误")}</p>`;
     }
   } else {
-    // 非Markdown文件（代码/文本）：默认进入编辑态以便直接修改+自动保存；
-    // readerPanel 里仍然渲染一份带语法高亮的代码预览（编辑态下 readerPanel 隐藏，
-    // 不影响正常使用；用户切回 view 态时可见）。
+    // 非Markdown文件（代码/文本/JSON）：默认进入编辑态以便直接修改+自动保存；
+    // readerPanel 里仍然渲染预览（JSON 用 bejson 风格树形视图，其他用语法高亮代码预览）
     els.markdownView.innerHTML = "";
     const ext = (doc.path || "").split(".").pop()?.toLowerCase() || "txt";
-    const lang = normalizeCodeLanguage(ext);
-    const preview = document.createElement("pre");
-    preview.className = "code-preview";
-    preview.style.whiteSpace = "pre-wrap";
-    preview.style.wordBreak = "break-word";
-    preview.style.padding = "16px";
-    preview.style.fontFamily = "var(--mono-font, 'Cascadia Code', 'Fira Code', Consolas, monospace)";
-    preview.style.fontSize = "var(--doc-font-size, 14px)";
-    preview.style.lineHeight = "1.6";
-    preview.style.tabSize = "4";
-    preview.dataset.language = lang;
-    const codeEl = document.createElement("code");
-    codeEl.className = `language-${lang}`;
-    codeEl.textContent = doc.content || "";
-    preview.appendChild(codeEl);
-    els.markdownView.appendChild(preview);
-    // 对外部代码文件同样应用 hljs 语法高亮
-    highlightCodeBlocks(els.markdownView);
-    renderOutlineItems([]);
-    // 非Markdown文档：默认进入编辑态，允许输入、自动保存与手动保存。
-    if (state.mode !== "edit") setMode("edit");
-    // 双重保障：强制刷新保存状态 + 清除旧版本遗留的"非Markdown不支持保存"等拒绝性UI
-    if (els.saveBtn) {
-      els.saveBtn.disabled = false;
-      els.saveBtn.removeAttribute("title");
-      els.saveBtn.title = "保存 (Ctrl+S)";
-      els.saveBtn.classList.remove("readonly", "disabled", "unsupported");
-    }
-    // 按当前编辑器内容重新判断保存状态（确保底部lastSaveText 不出现"不可保存"）
-    if (els.editor.value === (doc.content || "")) {
-      setSaveStatus("\u4fdd\u5b58", false);
+    // JSON 文件：优先尝试 bejson 风格树形视图
+    if (/^json(c|5)?$/.test(ext)) {
+      const jsonTree = renderJsonTree(doc.content || "");
+      if (jsonTree) {
+        els.markdownView.appendChild(jsonTree);
+        renderOutlineItems([]);
+        if (state.mode !== "edit") setMode("edit");
+        // ... 保存状态处理和下面一样，继续向下
+        if (els.saveBtn) {
+          els.saveBtn.disabled = false;
+          els.saveBtn.removeAttribute("title");
+          els.saveBtn.title = "保存 (Ctrl+S)";
+          els.saveBtn.classList.remove("readonly", "disabled", "unsupported");
+        }
+        if (els.editor.value === (doc.content || "")) {
+          setSaveStatus("\u4fdd\u5b58", false);
+        } else {
+          setSaveStatus("\u672a\u4fdd\u5b58", true);
+          scheduleAutoSave();
+        }
+        // 跳过下面的代码高亮渲染（JSON 树形已渲染）
+      } else {
+        // JSON 解析失败，降级到普通代码高亮
+        renderCodePreview(els.markdownView, doc.content, ext);
+        renderOutlineItems([]);
+        if (state.mode !== "edit") setMode("edit");
+        if (els.saveBtn) {
+          els.saveBtn.disabled = false;
+          els.saveBtn.removeAttribute("title");
+          els.saveBtn.title = "保存 (Ctrl+S)";
+          els.saveBtn.classList.remove("readonly", "disabled", "unsupported");
+        }
+        if (els.editor.value === (doc.content || "")) {
+          setSaveStatus("\u4fdd\u5b58", false);
+        } else {
+          setSaveStatus("\u672a\u4fdd\u5b58", true);
+          scheduleAutoSave();
+        }
+      }
     } else {
-      setSaveStatus("\u672a\u4fdd\u5b58", true);
-      scheduleAutoSave();
+      // 其他非 Markdown 文件：语法高亮代码预览
+      renderCodePreview(els.markdownView, doc.content, ext);
+      renderOutlineItems([]);
+      if (state.mode !== "edit") setMode("edit");
+      if (els.saveBtn) {
+        els.saveBtn.disabled = false;
+        els.saveBtn.removeAttribute("title");
+        els.saveBtn.title = "保存 (Ctrl+S)";
+        els.saveBtn.classList.remove("readonly", "disabled", "unsupported");
+      }
+      if (els.editor.value === (doc.content || "")) {
+        setSaveStatus("\u4fdd\u5b58", false);
+      } else {
+        setSaveStatus("\u672a\u4fdd\u5b58", true);
+        scheduleAutoSave();
+      }
     }
   }
   els.preview.classList.remove("preview-pending");
