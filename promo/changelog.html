@@ -24,7 +24,7 @@
         <a href="index.html#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.1.3</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.1.13</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -40,6 +40,15 @@
         <div class="changelog-toc reveal">
           <h3>版本索引</h3>
           <ul>
+            <li><a href="#v2.1.13">v2.1.13</a> — JSON 格式化全面修复（MD 代码块树形 + 模式切换不失效 + processJsonCodeBlocks 统一）</li>
+            <li><a href="#v2.1.12">v2.1.12</a> — JSON 树形三处渲染路径统一 + setMode 跳过非 Markdown 渲染</li>
+            <li><a href="#v2.1.11">v2.1.11</a> — 小文档 BOM 检测修复（BOM 移到 UTF-8 纯解码之前）</li>
+            <li><a href="#v2.1.10">v2.1.10</a> — JSON 预览实时更新修复（setPreviewVisible + renderCurrentPreviewAsync）</li>
+            <li><a href="#v2.1.9">v2.1.9</a> — JSON 宽松解析 + 录屏 captureStream 修复</li>
+            <li><a href="#v2.1.8">v2.1.8</a> — JSON 格式化预览新增 + 小文件编辑器同步修复</li>
+            <li><a href="#v2.1.7">v2.1.7</a> — 版本自升级修复（check_update + 更新对话框）</li>
+            <li><a href="#v2.1.6">v2.1.6</a> — 录屏鼠标可操作性修复（click-through + Alt+M 停止）</li>
+            <li><a href="#v2.1.4">v2.1.4</a> — 版本自升级缺陷修复（后端 version.json + 前端更新对话框）</li>
             <li><a href="#v2.1.3">v2.1.3</a> — 录屏功能稳定性加固（多次录制失败 + 默认桌面捕获 + 保存清理）</li>
             <li><a href="#v2.1.2">v2.1.2</a> — 截图保存后再次截图失败修复 + 文字大小可调</li>
             <li><a href="#v2.1.1">v2.1.1</a> — 截图选区边界约束（选区框越界难以选中）</li>
@@ -69,6 +78,94 @@
             <li><a href="#v1.8.93">v1.8.93</a> — 界面与体验升级 + 性能优化</li>
           </ul>
         </div>
+
+        <article class="doc-section reveal" id="v2.1.13">
+          <h3>v2.1.13 · JSON 格式化全面修复</h3>
+          <ul>
+            <li><b>MD 中 JSON 代码块自动渲染树形视图</b>：<code>renderMarkdown</code> 新增 JSON 代码块分支，生成带 <code>data-json-raw</code> 属性的容器；<code>processJsonCodeBlocks</code> 统一后处理函数在阅读模式、编辑模式预览、chunked 分片渲染三个路径都调用，遍历 <code>.json-code-block</code> 调用 <code>renderJsonTree</code> 替换为可折叠树形视图。</li>
+            <li><b>编辑/阅读模式切换格式化不再失效</b>：<code>renderCurrentPreviewNow</code>（同步渲染）新增 JSON 分支：<code>canPreviewAsJson()</code> 时直接调 <code>renderJsonTree</code> 渲染树形，不再走 <code>cachedRenderMarkdown</code> 把 JSON 当 Markdown 渲染。</li>
+            <li><b>renderJsonTree 三级宽松解析</b>：严格 <code>JSON.parse</code> → <code>repairJson</code>（去注释/补引号/去尾逗号）→ <code>extractFirstJsonObject</code>（从混合文本提取 JSON 并自动补全缺失括号）。</li>
+            <li><b>looksLikeJson 正则修复</b>：<code>s*</code> 修正为 <code>\s*</code>，修复 txt/log 文件 JSON 内容检测。</li>
+            <li><b>chunked 渲染路径 JSON 后处理</b>：<code>renderReaderContentChunked</code> 单片和多片路径都增加 <code>processJsonCodeBlocks</code> 调用。</li>
+          </ul>
+        </article>
+
+        <article class="doc-section reveal" id="v2.1.12">
+          <h3>v2.1.12 · JSON 树形三处渲染路径统一 + setMode 跳过非 Markdown 渲染</h3>
+          <ul>
+            <li><b>openDoc 同时渲染到 preview + markdownView</b>：JSON 树形原本只渲染到 <code>els.preview</code>（编辑模式可见），阅读模式切换后看不到内容。修复后同步渲染到 <code>els.markdownView</code>，保证两个模式都能看到。</li>
+            <li><b>JSON 降级路径和其他代码文件也同步到 markdownView</b>：<code>renderCodePreview</code> 降级路径和其他非 Markdown 文件都额外渲染到 <code>els.markdownView</code>。</li>
+            <li><b>setMode('view') 跳过非 Markdown 的 renderReaderContent</b>：非 Markdown 文件 + markdownView 已有内容时只恢复滚动位置，不再走 <code>renderReaderContent</code> 把 JSON 当 Markdown 解析输出纯 <code>&lt;pre&gt;&lt;code&gt;</code>。</li>
+            <li><b>MD 中 JSON 代码块新增特殊标记</b>：<code>renderMarkdown</code> 的 <code>else if (normalizedLang === "json")</code> 分支生成 <code>&lt;div class="code-block json-code-block" data-json-raw="..."&gt;</code> 容器。</li>
+          </ul>
+        </article>
+
+        <article class="doc-section reveal" id="v2.1.11">
+          <h3>v2.1.11 · 小文档 BOM 检测修复</h3>
+          <ul>
+            <li><b>BOM 检测顺序修复（app.rs decode_bytes_smart）</b>：原代码 UTF-8 纯解码（<code>std::str::from_utf8</code>）排在 BOM 检测之前，UTF-8 BOM（<code>EF BB BF</code>）是合法 UTF-8 字节序列所以解码成功，但 <code>U+FEFF</code> 字符被当作内容开头保留，导致 <code>looksLikeJson</code> 检测失败和 <code>JSON.parse</code> 失败。修复：BOM 5 种检测（UTF-8/16LE/16BE/32LE/32BE）全部移到 UTF-8 纯解码之前，先剥离 BOM 字节再解码 body。</li>
+            <li><b>影响范围</b>：中文 Windows 记事本、WPS 等编辑器保存小文件时默认写入 UTF-8 BOM，修复后 <code>encoding: utf-8-bom</code>，首字节 <code>123</code> = <code>{</code>（BOM 已剥离）。</li>
+          </ul>
+        </article>
+
+        <article class="doc-section reveal" id="v2.1.10">
+          <h3>v2.1.10 · JSON 预览实时更新修复</h3>
+          <ul>
+            <li><b>setPreviewVisible 不再强制禁用 JSON 文件</b>：原代码 <code>!state.currentIsMarkdown</code> 就强制隐藏预览面板，修复为 <code>!state.currentIsMarkdown && !canPreviewAsJson()</code>。</li>
+            <li><b>预览按钮不再禁用 JSON 文件</b>：<code>previewToggleBtn.disabled</code> 条件增加 <code>!canPreviewAsJson()</code>。</li>
+            <li><b>renderCurrentPreviewAsync 增加 JSON 分支</b>：编辑器输入时实时更新树形视图，不再只走 <code>cachedRenderMarkdown</code>。</li>
+            <li><b>新增 canPreviewAsJson 辅助函数</b>：检测 <code>.json/.jsonc/.json5</code> 扩展名，以及 <code>.txt/.log</code> 文件内容疑似 JSON（<code>looksLikeJson</code>）。</li>
+          </ul>
+        </article>
+
+        <article class="doc-section reveal" id="v2.1.9">
+          <h3>v2.1.9 · JSON 宽松解析 + 录屏 captureStream 修复</h3>
+          <ul>
+            <li><b>parseJsonLenient 三级解析策略</b>：严格 <code>JSON.parse</code> → <code>repairJson</code>（未加引号 key、单引号字符串、尾随逗号、JS 注释）→ <code>extractFirstJsonObject</code>（从混合文本如 HTTP 日志中自动提取 JSON 对象，自动补全缺失括号）。</li>
+            <li><b>.txt/.log 文件自动检测 JSON 内容</b>：通过 <code>looksLikeJson</code> 判断内容是否包含 JSON 结构，是则尝试树形渲染。</li>
+            <li><b>宽松解析提示条</b>：内容经过修复/提取时显示橙色提示。</li>
+            <li><b>录屏 captureStream 修复（recorder.html）</b>：<code>outCanvas</code> 加入 DOM（<code>position:absolute; left:-99999px</code>），确保 WebView2 中 <code>captureStream</code> 稳定产生帧，解决录制黑屏/无画面问题。</li>
+            <li><b>录屏提示条 3 秒后自动淡出</b>：避免被 xcap 捕获进录屏画面，用户仍可通过 Alt+M 停止录制。</li>
+          </ul>
+        </article>
+
+        <article class="doc-section reveal" id="v2.1.8">
+          <h3>v2.1.8 · JSON 格式化预览新增 + 小文件编辑器同步修复</h3>
+          <ul>
+            <li><b>JSON 树形视图新增（app.js + styles.css）</b>：<code>renderJsonTree</code> + <code>renderJsonNode</code> 实现 bejson 风格可折叠树形视图，类型颜色标记（紫色 key、绿色 string、蓝色 number、红色 boolean、灰色 null）。亮/暗主题自动适配。</li>
+            <li><b>小文件编辑器内容同步修复</b>：打开大文件后立即打开小文件时编辑器有时显示大文件内容。修复：<code>requestAnimationFrame</code> 中调 <code>els.editor.view.dispatch</code> 强制刷新 CodeMirror 内容。</li>
+            <li><b>JSON 解析失败降级</b>：<code>renderJsonTree</code> 返回 null 时自动降级到 <code>renderCodePreview</code> 普通代码高亮。</li>
+            <li><b>代码预览重构</b>：提取 <code>renderCodePreview</code> 可复用函数。</li>
+          </ul>
+        </article>
+
+        <article class="doc-section reveal" id="v2.1.7">
+          <h3>v2.1.7 · 版本自升级修复</h3>
+          <ul>
+            <li><b>后端 check_update 使用本地 version.json（handlers.rs + ipc.rs）</b>：原代码使用编译时 <code>CARGO_PKG_VERSION</code>，与关于页显示版本不一致。修复：新增 <code>read_local_version_json</code> 和 <code>read_local_version_string</code> 辅助函数，<code>check_update</code> 读取本地 <code>version.json</code> 的版本号。</li>
+            <li><b>前端更新对话框（app.js + index.html + styles.css）</b>：<code>checkUpdateBtn</code> 重写，捕获 <code>check_update</code> 响应：<code>upToDate=false</code> 弹出更新对话框（"立即下载"通过 <code>/api/open-url</code> 打开浏览器下载 + "稍后提醒"按钮）；<code>upToDate=true</code> 提示"已是最新版本"。</li>
+          </ul>
+        </article>
+
+        <article class="doc-section reveal" id="v2.1.6">
+          <h3>v2.1.6 · 录屏鼠标可操作性修复</h3>
+          <ul>
+            <li><b>录屏窗口 click-through（global_capture.rs + recorder.html）</b>：新增 IPC 命令 <code>recorder_set_ignore_cursor</code>，录制时让录屏窗口鼠标穿透（click-through），用户可正常操作底层软件。停止录制弹出保存对话框时恢复交互。</li>
+            <li><b>停止录制改为 Alt+M 热键</b>：click-through 后停止按钮不可点击，改用 Alt+M 全局热键停止录制。</li>
+            <li><b>Browse 文件夹按钮修复</b>：PowerShell <code>FolderBrowserDialog</code> 替换为 Tauri dialog 插件的 <code>pick_folder</code>，通过新 IPC 命令 <code>recorder_browse_folder</code> 调用。</li>
+            <li><b>默认保存路径</b>：确认工作区根目录的 Videos 目录（如 <code>C:\Users\fshby\dos\Videos</code>）。</li>
+          </ul>
+        </article>
+
+        <article class="doc-section reveal" id="v2.1.4">
+          <h3>v2.1.4 · 版本自升级缺陷修复</h3>
+          <ul>
+            <li><b>后端 check_update 读取 version.json（handlers.rs）</b>：原 <code>check_update</code> 使用编译时 <code>CARGO_PKG_VERSION</code> 作为当前版本号，与关于页显示的版本号不一致（关于页读 version.json）。修复：改为读取本地 <code>version.json</code> 的版本号，与关于页保持一致。</li>
+            <li><b>新增 read_local_version_json / read_local_version_string（ipc.rs）</b>：辅助函数读取并解析 <code>version.json</code>。</li>
+            <li><b>前端捕获 check_update 响应（app.js）</b>：<code>checkUpdateBtn</code> 重写：<code>upToDate=false</code> 弹出更新对话框，提供"立即下载"（通过 <code>/api/open-url</code> 打开浏览器下载）和"稍后提醒"按钮；<code>upToDate=true</code> 提示"已是最新版本"。</li>
+            <li><b>更新对话框 UI（index.html + styles.css）</b>：新增 <code>.update-dialog</code> 模态框和样式。</li>
+          </ul>
+        </article>
 
         <article class="doc-section reveal" id="v2.1.3">
           <h3>v2.1.3 · 录屏功能稳定性加固</h3>

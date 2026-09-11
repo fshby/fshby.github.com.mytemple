@@ -423,12 +423,16 @@ async function startRecording() {
     overlay = null; canvas = null; ctx = null;
   }
 
-  // 初始化输出 canvas
+  // 初始化输出 canvas（必须加入 DOM，否则 captureStream 在部分 WebView2 版本中不产生帧）
   const sw = Math.max(1, Math.round(region.w * dpr));
   const sh = Math.max(1, Math.round(region.h * dpr));
   outCanvas = document.createElement('canvas');
   outCanvas.width = Math.min(3840, sw);
   outCanvas.height = Math.min(2160, sh);
+  // 关键：将 canvas 加入 DOM（定位到屏幕外，不可见但保持渲染管线活跃）
+  // display:none 会导致 captureStream 黑屏，因此用 position:absolute + left:-99999px
+  outCanvas.style.cssText = 'position:absolute;left:-99999px;top:0;width:1px;height:1px;opacity:0;pointer-events:none;';
+  document.body.appendChild(outCanvas);
   outCtx = outCanvas.getContext('2d');
   frameImg = new Image();
   frameImg.crossOrigin = 'anonymous';
@@ -537,6 +541,14 @@ function showRecordingHint() {
   }, 1000);
 
   // 录制中窗口已点击穿透，停止操作通过 Alt+M 全局热键触发（后端 emit recorder-stop-request）
+  // 提示条显示 3 秒后自动隐藏，避免被 xcap 捕获进录屏画面
+  setTimeout(() => {
+    if (hint.parentNode) {
+      hint.style.transition = 'opacity 0.3s';
+      hint.style.opacity = '0';
+      setTimeout(() => { if (hint.parentNode) hint.remove(); }, 300);
+    }
+  }, 3000);
 }
 
 async function stopRecording(cancel) {

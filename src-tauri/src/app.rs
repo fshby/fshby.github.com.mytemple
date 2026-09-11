@@ -63,19 +63,16 @@ pub fn decode_utf32(body: &[u8], little_endian: bool) -> Option<String> {
 }
 
 /// 智能解码原始字节 -> (UTF-8 字符串, 识别出的编码标签)
-/// 优先级：UTF-8 strict -> BOM 检测 (UTF8 / UTF16 LE/BE / UTF32 LE/BE)
+/// 优先级：BOM 检测 (UTF8 / UTF16 LE/BE / UTF32 LE/BE) -> UTF-8 strict
 ///       -> encoding_rs (GBK / GB18030 / Big5 / EUC-KR / Shift_JIS)
 ///       -> 最后 lossy UTF-8（替换非法字节，保证 UI 不空白）
 /// 江西电信 WPS 导出 md 默认 GBK；中文 Win 记事本另存常用 UTF16 LE BOM。
+/// 注意：BOM 检测必须在 UTF-8 strict 之前，因为 UTF-8 BOM 是合法 UTF-8 字节序列，
+/// 若先过 UTF-8 strict 会把 U+FEFF 字符当作内容开头保留，导致 JSON 等文本文件首字节异常。
 pub fn decode_bytes_smart(raw: &[u8]) -> (String, String) {
     use encoding_rs::*;
 
-    // 1) 尝试纯 UTF-8（无 BOM）
-    if let Ok(s) = std::str::from_utf8(raw) {
-        return (s.to_string(), "utf-8".into());
-    }
-
-    // 2) BOM 优先（匹配后跳过对应字节长度再解码）
+    // 1) BOM 优先（匹配后跳过对应字节长度再解码）
     if raw.len() >= 3 && &raw[0..3] == b"\xef\xbb\xbf" {
         // UTF-8 BOM
         let body = &raw[3..];
@@ -105,6 +102,11 @@ pub fn decode_bytes_smart(raw: &[u8]) -> (String, String) {
         let body = &raw[2..];
         let (cow, _enc, _had_err) = UTF_16BE.decode(body);
         return (cow.into_owned(), "utf-16be-bom".into());
+    }
+
+    // 2) 纯 UTF-8（无 BOM）——走到这里说明文件没有任何 BOM 前缀
+    if let Ok(s) = std::str::from_utf8(raw) {
+        return (s.to_string(), "utf-8".into());
     }
 
     // 3) encoding_rs 猜测序列（中文环境下命中概率由高到低，GB18030 兼容 GBK）

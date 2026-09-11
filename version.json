@@ -1,7 +1,7 @@
 {
-  "version": "2.1.8",
+  "version": "2.1.13",
   "downloadUrl": "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
-  "latestReleaseNotes": "【v2.1.8 JSON格式化预览】1) JSON文件自动渲染bejson风格树形视图（可折叠、类型颜色标记）；2) 修复小文件打开后编辑器内容同步问题（CodeMirror强制刷新）；3) 统一非Markdown文件预览逻辑为renderCodePreview公共函数。",
-  "releaseNotes": "v2.1.8 JSON格式化预览\n\n一、JSON 树形视图（public/app.js + styles.css）：\n1) JSON文件(.json/.jsonc/.json5)打开后在预览面板显示bejson风格树形视图\n2) 支持点击箭头折叠/展开，折叠时显示 { N keys } / [ N items ] 摘要\n3) 类型颜色：key紫色、string绿色、number蓝色、boolean红色、null灰色\n4) JSON解析失败时自动降级到普通语法高亮代码预览\n5) 支持暗/亮主题\n\n二、小文件打开稳定性：\n1) openDoc中设置editor.value后用requestAnimationFrame强制CodeMirror刷新\n2) 防止刚打开大文件后立即开小文件时编辑器显示上一份内容\n\n三、代码重构：\n1) 抽离renderCodePreview公共函数，消除非Markdown文件预览的重复代码",
+  "latestReleaseNotes": "【v2.1.13 JSON格式化全面修复】1) MD中JSON代码块自动渲染bejson风格树形视图（可折叠、类型颜色标记）；2) 编辑/阅读模式切换时JSON格式化不再失效；3) processJsonCodeBlocks统一三处渲染路径后处理；4) renderJsonTree三级宽松解析（严格→修复→提取）；5) 小文档BOM检测修复",
+  "releaseNotes": "v2.1.13 JSON 格式化全面修复\n\n一、MD 中 JSON 代码块自动渲染树形视图（app.js + styles.css）：\n1) renderMarkdown 新增 JSON 代码块分支，生成带 data-json-raw 属性的容器\n2) processJsonCodeBlocks 统一后处理函数，在阅读模式、编辑模式预览、chunked 分片渲染三个路径都调用\n3) 遍历 .json-code-block 调 renderJsonTree 替换为可折叠树形视图\n\n二、编辑/阅读模式切换格式化不再失效（app.js）：\n1) renderCurrentPreviewNow（同步渲染）新增 JSON 分支：canPreviewAsJson() 时直接调 renderJsonTree\n2) 不再走 cachedRenderMarkdown 把 JSON 当 Markdown 渲染\n\n三、renderJsonTree 三级宽松解析（app.js）：\n1) 严格 JSON.parse\n2) repairJson 修复：未加引号key、单引号字符串、尾随逗号、JS注释\n3) extractFirstJsonObject 从混合文本提取JSON并自动补全缺失括号\n\n四、小文档 BOM 检测修复（app.rs）：\n1) BOM 5 种检测移到 UTF-8 纯解码之前\n2) 修复 UTF-8 BOM 文件首字符 U+FEFF 导致 JSON 解析失败\n\n五、其他修复：\n1) looksLikeJson 正则 s* → \\s* 修复\n2) chunked 渲染路径增加 processJsonCodeBlocks 调用\n3) openDoc 同时渲染到 preview + markdownView\n4) setMode('view') 跳过非 Markdown 的 renderReaderContent",
   "releaseDate": "2026-09-11"
 }

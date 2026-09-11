@@ -25,7 +25,7 @@
         <a href="#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.1.3</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.1.13</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -33,7 +33,7 @@
     <main id="top">
       <section class="hero section-wrap" aria-labelledby="hero-title">
         <div class="hero-copy reveal">
-          <p class="eyebrow"><span class="status-dot"></span> 本地 Markdown 工作区 <em>v2.1.3 桌面版</em></p>
+          <p class="eyebrow"><span class="status-dot"></span> 本地 Markdown 工作区 <em>v2.1.13 桌面版</em></p>
           <h1 id="hero-title">本地 Markdown 知识库与编辑器</h1>
           <p class="hero-lede">围绕本地 Markdown 文件提供阅读、编辑、目录、图谱、检索、主题与多工作区管理。</p>
           <div class="hero-actions">
@@ -119,6 +119,16 @@
             <div class="feature-icon">📷</div>
             <h3>截图与录屏</h3>
             <p>Alt+A 区域截图标注，Alt+M 区域录屏，无感触发。</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">🧩</div>
+            <h3>JSON 格式化预览</h3>
+            <p>JSON 文件自动渲染树形视图，Markdown 中 JSON 代码块也可格式化显示。</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">🔄</div>
+            <h3>版本自更新</h3>
+            <p>内置版本检查与一键下载更新，无需手动关注发布渠道。</p>
           </div>
           <div class="feature-card">
             <div class="feature-icon">🌿</div>
@@ -242,20 +252,22 @@
         </div>
         <div class="download-block reveal">
           <div class="download-primary">
-            <span class="download-badge">当前稳定版 v2.1.3</span>
-            <p>独立窗口截图标注、录屏、OCR 文字识别、知识图谱、主题、增量索引、绘图编辑器、代码语法高亮与可选 AI 辅助功能。</p>
+            <span class="download-badge">当前稳定版 v2.1.13</span>
+            <p>独立窗口截图标注、录屏、OCR 文字识别、知识图谱、主题、增量索引、绘图编辑器、代码语法高亮、JSON 格式化预览、版本自更新与可选 AI 辅助功能。</p>
             <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载安装包</a>
           </div>
           <div class="download-secondary">
             <h3>最近更新</h3>
             <ul class="update-list">
-              <li><span class="ver">v2.1.3</span> 录屏功能稳定性加固 — start_native_record 3 次重试+DXGI 恢复延迟，前端先 stop 再 start 防止状态残留，FileReader 10s 超时保护。</li>
-              <li><span class="ver">v2.1.2</span> 截图保存后再次截图失败修复 + 文字大小可调 — confirmEdit 完整重置所有变量，toBlob/FileReader 超时保护，新增 14/18/24/32px 四档字体大小。</li>
-              <li><span class="ver">v2.1.1</span> 截图选区边界约束 — 修复选区框靠近屏幕边界时越界难以选中的缺陷，三层坐标 clamp 确保选区框始终在视口内。</li>
-              <li><span class="ver">v2.1.0</span> 录屏功能稳定性加固 — 修复多次录制失败、默认不录桌面弹选择器、stop panic 卡锁等问题，复用窗口时 reload 重置前端状态。</li>
-              <li><span class="ver">v2.0.9</span> 知识库智能管理增强 — ai_reindex 内存零拷贝优化、静默吞错修复、进度反馈、切片 panic 修复、检索性能优化、并发安全。</li>
-              <li><span class="ver">v2.0.8</span> AI 忠实性强约束 + 反幻觉 — 选中文本加工五重约束（基于原文/不篡改/不删减/反幻觉自检/用户指令硬边界），翻译忠实性强化，RAG 反幻觉。</li>
-              <li><span class="ver">v2.0.7</span> 启动授权弹窗修复 — WMI 硬件指纹缓存预热，前端超时放宽至 3s，消除每次启动误弹「未授权」窗口。</li>
+              <li><span class="ver">v2.1.13</span> JSON 格式化全面修复 — MD 中 JSON 代码块自动渲染树形视图，编辑/阅读模式切换时格式化不再失效，processJsonCodeBlocks 统一后处理。</li>
+              <li><span class="ver">v2.1.12</span> JSON 树形视图三处渲染路径统一 — openDoc 同时渲染到 preview+markdownView，setMode 跳过非 Markdown 的 renderReaderContent。</li>
+              <li><span class="ver">v2.1.11</span> 小文档 BOM 检测修复 — BOM 5 种检测移到 UTF-8 纯解码之前，修复 UTF-8 BOM 文件首字符 U+FEFF 导致 JSON 解析失败。</li>
+              <li><span class="ver">v2.1.10</span> JSON 预览实时更新修复 — setPreviewVisible 和预览按钮不再强制禁用 JSON 文件，renderCurrentPreviewAsync 增加 JSON 分支。</li>
+              <li><span class="ver">v2.1.9</span> JSON 宽松解析 + 录屏修复 — 三级解析策略（严格→修复→提取），outCanvas 加入 DOM 确保 captureStream 稳定。</li>
+              <li><span class="ver">v2.1.8</span> JSON 格式化预览新增 + 小文件编辑器同步修复 — bejson 风格树形视图，CodeMirror view.dispatch 强制刷新内容。</li>
+              <li><span class="ver">v2.1.7</span> 版本自升级修复 — check_update 使用本地 version.json，前端更新对话框（立即下载/稍后提醒）。</li>
+              <li><span class="ver">v2.1.6</span> 录屏鼠标可操作性修复 — 录制窗口 click-through，Alt+M 停止录制，Tauri pick_folder 替代 PowerShell 对话框。</li>
+              <li><span class="ver">v2.1.4</span> 版本自升级缺陷修复 — 后端 check_update 读取 version.json，前端捕获响应弹出更新对话框。</li>
             </ul>
             <p class="download-links">
               <a href="privacy.html">隐私声明</a> ·

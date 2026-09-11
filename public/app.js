@@ -3483,6 +3483,8 @@ async function renderReaderContent(source, options = {}) {
     } else {
       if (seq !== state.readerRenderSeq) return;
       els.markdownView.innerHTML = finalHtml;
+      // 后处理：把 Markdown 中的 JSON 代码块替换为树形视图
+      processJsonCodeBlocks(els.markdownView);
       renderOutlineItems(outline || extractOutline(content));
     }
   } catch (error) {
@@ -3588,6 +3590,8 @@ async function renderReaderContentChunked(html, outline, seq) {
     renderChartsInPreview(els.markdownView);
     // 问题4: chunked 单片路径也调用代码高亮
     highlightCodeBlocks(els.markdownView);
+    // JSON 代码块后处理（单片路径）
+    processJsonCodeBlocks(els.markdownView);
     return;
   }
   if (seq != null && seq !== state.readerRenderSeq) return;
@@ -3608,6 +3612,8 @@ async function renderReaderContentChunked(html, outline, seq) {
   renderChartsInPreview(els.markdownView);
   // 问题4: chunked 多片路径全部写入后调用代码高亮
   highlightCodeBlocks(els.markdownView);
+  // JSON 代码块后处理（多片路径）
+  processJsonCodeBlocks(els.markdownView);
 }
 
 function splitHtmlForChunkedRender(html, sliceBytes) {
@@ -3764,13 +3770,149 @@ const HLJS_FALLBACK = {
 };
 
 // ── JSON 树形视图渲染（bejson 风格：可折叠、类型标记、key-value 对齐） ──
+// 判断文本内容是否疑似 JSON（宽松检测）
+function looksLikeJson(content) {
+  if (typeof content !== "string") return false;
+  const text = content.trim();
+  if (!text) return false;
+  if (/^[{[]/.test(text)) return true;
+  if (/[{[]\s*["']?[A-Za-z_$][\w$]*["']?\s*:/.test(text)) return true;
+  return false;
+}
+
+// 判断当前文件是否可作为 JSON 预览
+function canPreviewAsJson() {
+  if (state.currentIsMarkdown) return false;
+  const ext = (state.currentPath || "").split(".").pop()?.toLowerCase() || "";
+  if (/^json(c|5)?$/.test(ext)) return true;
+  if (/^txt|text|log$/.test(ext) && looksLikeJson(state.currentContent || els.editor.value || "")) return true;
+  return false;
+}
+
+// 把容器中所有 .json-code-block 替换为 bejson 风格树形视图
+// 用于 Markdown 渲染后处理（阅读模式 + 编辑模式预览 + chunked 分片渲染）
+function processJsonCodeBlocks(container) {
+  if (!container || typeof renderJsonTree !== "function") return;
+  try {
+    const jsonBlocks = container.querySelectorAll(".json-code-block:not(.details)");
+    jsonBlocks.forEach((block) => {
+      const raw = block.getAttribute("data-json-raw") || "";
+      if (!raw) return;
+      let treeHtml = "";
+      try {
+        const temp = document.createElement("div");
+        temp.style.position = "fixed";
+        temp.style.left = "-99999px";
+        document.body.appendChild(temp);
+        const tree = renderJsonTree(raw);
+        if (tree) {
+          temp.appendChild(tree);
+          treeHtml = temp.innerHTML;
+        }
+        document.body.removeChild(temp);
+      } catch (e) { return; }
+      if (treeHtml) {
+        const details = document.createElement("details");
+        details.className = "json-code-block details";
+        details.open = true;
+        details.innerHTML = `<summary class="json-code-summary">📋 JSON 树形视图</summary><div class="json-tree-wrapper">${treeHtml}</div><details class="json-code-raw"><summary>查看原始代码</summary>${block.querySelector("pre")?.outerHTML || ""}</details>`;
+        block.replaceWith(details);
+      }
+    });
+  } catch (_) {}
+}
+
+// 宽松 JSON 修复：处理常见非标准 JSON 格式
+function repairJson(text) {
+  let s = text.trim();
+  // 去除 JS 风格注释（// 行注释 和 /* */ 块注释）
+  s = s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
+  // 未加引号的 key：{name:} → {"name":}（只处理冒号前的裸 key）
+  s = s.replace(/([{,]\s*)([A-Za-z_$][\w$]*)\s*:/g, '$1"$2":');
+  // 单引号字符串 → 双引号
+  s = s.replace(/'([^']*)'/g, '"$1"');
+  // 去除尾随逗号
+  s = s.replace(/,(\s*[}\]])/g, "$1");
+  return s;
+}
+
+// 从混合文本中提取第一个完整 JSON 对象/数组（自动补全缺失的括号）
+function extractFirstJsonObject(text) {
+  const start = text.search(/[{[]/);
+  if (start < 0) return null;
+  const openCh = text[start];
+  const closeCh = openCh === "{" ? "}" : "]";
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (escape) { escape = false; continue; }
+    if (ch === "\\") { escape = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === openCh) depth++;
+    else if (ch === closeCh) {
+      depth--;
+      if (depth === 0) return text.slice(start, i + 1);
+    }
+  }
+  // 括号不匹配：从末尾逐步缩短并补全
+  const partial = text.slice(start);
+  let shortage = depth;
+  let suffix = "";
+  for (let i = 0; i < shortage; i++) suffix += closeCh;
+  // 尝试在 partial 的不同截断位置补全括号
+  for (let end = partial.length; end >= start; end--) {
+    let candidate = partial.slice(0, end);
+    // 去除末尾不完整的 token（如 "key": 或 "key": va）
+    candidate = candidate.replace(/[,{[]\s*$/, "").replace(/"([^"]*)$/, '"$1"');
+    // 重新计算深度
+    let d = 0, ins = false, esc = false;
+    for (let i = 0; i < candidate.length; i++) {
+      const ch = candidate[i];
+      if (esc) { esc = false; continue; }
+      if (ch === "\\") { esc = true; continue; }
+      if (ch === '"') { ins = !ins; continue; }
+      if (ins) continue;
+      if (ch === "{") d++; else if (ch === "}") d--;
+      else if (ch === "[") d++; else if (ch === "]") d--;
+    }
+    if (d <= 0) continue;
+    let fix = "";
+    while (d > 0) { fix += "}"; d--; }
+    try {
+      JSON.parse(candidate + fix);
+      return candidate + fix;
+    } catch (_) {}
+  }
+  return null;
+}
+
 function renderJsonTree(content) {
+  if (typeof content !== "string" || !content.trim()) return null;
   let data;
+  let isRepaired = false;
+  // 三级解析策略：严格 → 修复 → 提取
   try {
     data = JSON.parse(content);
   } catch (e) {
-    // JSON 无效，返回 null 让调用方降级到普通代码高亮
-    return null;
+    // 二级：宽松修复
+    try {
+      data = JSON.parse(repairJson(content));
+      isRepaired = true;
+    } catch (_) {
+      // 三级：从混合文本中提取第一个 JSON 对象
+      const extracted = extractFirstJsonObject(content);
+      if (extracted) {
+        try {
+          data = JSON.parse(extracted);
+          isRepaired = true;
+        } catch (__) { return null; }
+      } else {
+        return null;
+      }
+    }
   }
   const container = document.createElement("div");
   container.className = "json-tree";
@@ -4239,6 +4381,9 @@ function renderMarkdown(source, options = {}) {
           } else {
             html.push(`<div class="code-block"><pre><code class="language-text">html-web 需要一个有效 URL：https://example.com</code></pre></div>`);
           }
+        } else if (normalizedLang === "json") {
+          // JSON 代码块：生成带特殊标记的容器，后处理时替换为树形视图
+          html.push(`<div class="code-block json-code-block" data-language="json" data-json-raw="${escapeHtml(raw).replace(/"/g, "&quot;")}" data-source-line="${codeStartLine}"><span class="code-language">JSON</span><button class="code-copy" type="button">\u590d\u5236</button><pre><code class="language-json">${escapeHtml(raw)}</code></pre></div>`);
         } else {
           html.push(`<div class="code-block" data-language="${codeLanguage}"><span class="code-language">${escapeHtml(codeLanguage)}</span><button class="code-copy" type="button">\u590d\u5236</button><pre><code class="language-${codeLanguage}">${escapeHtml(raw)}</code></pre></div>`);
         }
@@ -5320,21 +5465,34 @@ function setMode(mode, { deferReaderRender = false } = {}) {
     // deferReaderRender: 调用方（如 openGsResult）即将 openDoc 渲染新内容，
     // 跳过本次旧内容渲染与滚动恢复，避免重复渲染浪费与视觉闪烁。
     if (!deferReaderRender) {
-      // 阅读模式：先 await 渲染完成，再恢复滚动，避免 scrollHeight 未稳定时比例换算错位；
-      // rAF×3 确保 reflow 完成后应用滚动位置，和编辑模式切出时保存的 editorScrollRatio 对齐。
-      (async () => {
-        await renderReaderContent(state.currentContent);
-        if (state.mode !== "view") return;
+      // 非 Markdown 文件（JSON/代码）：openDoc 已把树形/高亮渲染到 markdownView，
+      // 直接恢复滚动位置即可，不要再走 renderReaderContent 把内容当 Markdown 解析
+      // （会输出纯 <pre><code> 覆盖掉已渲染的 JSON 树形）
+      const isNonMarkdown = !state.currentIsMarkdown && state.currentPath;
+      if (isNonMarkdown && els.markdownView.children.length > 0) {
         const restoreReaderScroll = () => {
           const readerMax = Math.max(1, els.markdownView.scrollHeight - els.markdownView.clientHeight);
           els.markdownView.scrollTop = Math.round(readerMax * (state.editorScrollRatio ?? state.readerScrollRatio ?? 0));
         };
         restoreReaderScroll();
-        requestAnimationFrame(() => {
+        requestAnimationFrame(() => { restoreReaderScroll(); requestAnimationFrame(restoreReaderScroll); });
+      } else {
+        // 阅读模式：先 await 渲染完成，再恢复滚动，避免 scrollHeight 未稳定时比例换算错位；
+        // rAF×3 确保 reflow 完成后应用滚动位置，和编辑模式切出时保存的 editorScrollRatio 对齐。
+        (async () => {
+          await renderReaderContent(state.currentContent);
+          if (state.mode !== "view") return;
+          const restoreReaderScroll = () => {
+            const readerMax = Math.max(1, els.markdownView.scrollHeight - els.markdownView.clientHeight);
+            els.markdownView.scrollTop = Math.round(readerMax * (state.editorScrollRatio ?? state.readerScrollRatio ?? 0));
+          };
           restoreReaderScroll();
-          requestAnimationFrame(restoreReaderScroll);
-        });
-      })();
+          requestAnimationFrame(() => {
+            restoreReaderScroll();
+            requestAnimationFrame(restoreReaderScroll);
+          });
+        })();
+      }
     }
   }
   if (mode !== "graph") {
@@ -5539,10 +5697,18 @@ async function openDoc(docPath, options = {}) {
     els.markdownView.innerHTML = "";
     const ext = (doc.path || "").split(".").pop()?.toLowerCase() || "txt";
     // JSON 文件：优先尝试 bejson 风格树形视图
-    if (/^json(c|5)?$/.test(ext)) {
+    if (/^json(c|5)?$/.test(ext) || (/^txt|text|log$/.test(ext) && looksLikeJson(doc.content || ""))) {
       const jsonTree = renderJsonTree(doc.content || "");
       if (jsonTree) {
-        els.markdownView.appendChild(jsonTree);
+        els.preview.replaceChildren();
+        els.preview.appendChild(jsonTree);
+        // 同步渲染到 markdownView，保证阅读模式下也能看到 JSON 树形
+        const jsonTreeReader = renderJsonTree(doc.content || "");
+        if (jsonTreeReader) {
+          els.markdownView.classList.remove("empty-state");
+          els.markdownView.replaceChildren();
+          els.markdownView.appendChild(jsonTreeReader);
+        }
         renderOutlineItems([]);
         if (state.mode !== "edit") setMode("edit");
         // ... 保存状态处理和下面一样，继续向下
@@ -5561,6 +5727,10 @@ async function openDoc(docPath, options = {}) {
         // 跳过下面的代码高亮渲染（JSON 树形已渲染）
       } else {
         // JSON 解析失败，降级到普通代码高亮
+        renderCodePreview(els.preview, doc.content, ext);
+        // 降级时也同步到 markdownView，保证阅读模式可见
+        els.markdownView.classList.remove("empty-state");
+        els.markdownView.replaceChildren();
         renderCodePreview(els.markdownView, doc.content, ext);
         renderOutlineItems([]);
         if (state.mode !== "edit") setMode("edit");
@@ -5579,6 +5749,10 @@ async function openDoc(docPath, options = {}) {
       }
     } else {
       // 其他非 Markdown 文件：语法高亮代码预览
+      renderCodePreview(els.preview, doc.content, ext);
+      // 同步到 markdownView，保证阅读模式可见
+      els.markdownView.classList.remove("empty-state");
+      els.markdownView.replaceChildren();
       renderCodePreview(els.markdownView, doc.content, ext);
       renderOutlineItems([]);
       if (state.mode !== "edit") setMode("edit");
@@ -5603,11 +5777,16 @@ async function openDoc(docPath, options = {}) {
     state.previewLastContent = "";
     if (state.previewVisible) setPreviewVisible(false, { automatic: true });
   } else if (!state.currentIsMarkdown) {
-    // 非 Markdown 文档不渲染预览，避免按 Markdown 解析导致卡顿或错位
-    clearTimeout(state.previewTimer);
-    els.preview.replaceChildren();
-    state.previewLastContent = "";
-    if (state.previewVisible) setPreviewVisible(false, { automatic: true });
+    // 非 Markdown 文档：JSON 内容保留预览面板（树形视图/代码高亮），其他内容清空隐藏
+    if (canPreviewAsJson()) {
+      state.previewLastContent = doc.content;
+      if (!state.previewVisible) setPreviewVisible(true, { automatic: true });
+    } else {
+      clearTimeout(state.previewTimer);
+      els.preview.replaceChildren();
+      state.previewLastContent = "";
+      if (state.previewVisible) setPreviewVisible(false, { automatic: true });
+    }
   } else {
     if (state.previewAutoHidden) setPreviewVisible(true, { automatic: true });
     if (state.previewVisible) {
@@ -7826,6 +8005,8 @@ function swapPreviewHtml(html) {
   preview.scrollTop = savedScroll;
   renderChartsInPreview(preview);
   renderMathInPreview(preview);
+  // 后处理：把 Markdown 中的 JSON 代码块替换为树形视图
+  processJsonCodeBlocks(preview);
   // 问题4: 编辑模式分屏预览的代码块也调用高亮
   highlightCodeBlocks(preview);
   if (_previewSwapScheduled) return;
@@ -7839,6 +8020,21 @@ function swapPreviewHtml(html) {
 function renderCurrentPreviewNow(content = state.currentContent) {
   if (!state.previewVisible || state.mode !== "edit") return;
   const nextContent = String(content || els.editor.value || state.currentContent || "");
+  // JSON 文件：直接渲染树形视图，不走 Markdown 渲染
+  if (!state.currentIsMarkdown && canPreviewAsJson()) {
+    const jsonTree = renderJsonTree(nextContent);
+    els.preview.replaceChildren();
+    if (jsonTree) {
+      els.preview.appendChild(jsonTree);
+    } else {
+      renderCodePreview(els.preview, nextContent, (state.currentPath || "").split(".").pop()?.toLowerCase() || "txt");
+    }
+    renderOutlineItems([]);
+    els.preview.classList.remove("preview-pending");
+    state.previewLastContent = nextContent;
+    syncPreviewToEditor();
+    return;
+  }
   swapPreviewHtml(cachedRenderMarkdown(nextContent, { editTools: true }));
   syncPreviewSourceAnchors(nextContent);
   attachImageDeleteButtons();
@@ -7855,6 +8051,27 @@ async function renderCurrentPreviewAsync(content = state.currentContent, seq = +
     syncPreviewToEditor();
     return;
   }
+  // JSON 内容：渲染为 bejson 风格树形视图
+  if (!state.currentIsMarkdown && canPreviewAsJson()) {
+    const jsonTree = renderJsonTree(content);
+    if (jsonTree) {
+      els.preview.replaceChildren();
+      els.preview.appendChild(jsonTree);
+      renderOutlineItems([]);
+      els.preview.classList.remove("preview-pending");
+      state.previewLastContent = content;
+      syncPreviewToEditor();
+      return;
+    }
+    // JSON 解析失败：降级到代码高亮
+    els.preview.replaceChildren();
+    renderCodePreview(els.preview, content, (state.currentPath || "").split(".").pop()?.toLowerCase() || "txt");
+    els.preview.classList.remove("preview-pending");
+    state.previewLastContent = content;
+    syncPreviewToEditor();
+    return;
+  }
+  // Markdown 内容：渲染为 HTML
   try {
     const html = cachedRenderMarkdown(content, { editTools: true });
     if (seq !== state.previewRenderSeq || content !== state.currentContent) return;
@@ -7942,7 +8159,7 @@ function replaceFencedBlockInEditor(lang, oldContent, newBlock) {
 
 function setPreviewVisible(visible, { automatic = false } = {}) {
   // 非 Markdown 文档不支持预览，避免按 Markdown 语法解析引起卡顿或错位
-  if (visible && state.currentPath && !state.currentIsMarkdown) {
+  if (visible && state.currentPath && !state.currentIsMarkdown && !canPreviewAsJson()) {
     visible = false;
     state.previewAutoHidden = true;
   }
@@ -7959,7 +8176,7 @@ function setPreviewVisible(visible, { automatic = false } = {}) {
     ? "\u9690\u85cf\u9884\u89c8"
     : state.largeDocument ? "\u663e\u793a\u9884\u89c8\uff08\u5927\u6587\u6863\uff09" : (!state.currentIsMarkdown ? "\u9884\u89c8\u4e0d\u53ef\u7528" : "\u663e\u793a\u9884\u89c8");
   els.previewToggleBtn.setAttribute("aria-pressed", String(state.previewVisible));
-  els.previewToggleBtn.disabled = !state.currentIsMarkdown && !!state.currentPath;
+  els.previewToggleBtn.disabled = !state.currentIsMarkdown && !canPreviewAsJson() && !!state.currentPath;
   if (state.previewVisible) {
     if (state.largeDocument) schedulePreviewUpdate();
     else requestAnimationFrame(() => schedulePreviewUpdate({ immediate: true }));
