@@ -24,8 +24,11 @@ pub async fn knowledge_health(s: &ServerState) -> serde_json::Value { s.app.heal
 pub async fn get_version(refresh: &str) -> serde_json::Value {
     use super::handlers::fetch_remote_version_pub;
     if bool_flag(refresh) { if let Ok(r) = fetch_remote_version_pub().await { return r; } }
-    // 多路径查找 version.json：开发环境从 CARGO_MANIFEST_DIR 向上找，
-    // 安装后从 Tauri 打包的 resources/ 目录找（bundle.resources 映射了 ../version.json → resources/version.json）
+    read_local_version_json()
+}
+
+/// 读取本地 version.json 并返回完整 JSON（多路径查找，与关于页一致）
+pub fn read_local_version_json() -> serde_json::Value {
     let m = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
     let mut candidates: Vec<std::path::PathBuf> = Vec::new();
     // 1) 开发环境：<manifest>/../version.json（项目根目录）
@@ -34,7 +37,6 @@ pub async fn get_version(refresh: &str) -> serde_json::Value {
     if let Ok(exe) = std::env::current_exe() {
         if let Some(exe_dir) = exe.parent() {
             candidates.push(exe_dir.join("resources").join("version.json"));
-            // 也检查 exe 所在目录直接放 version.json 的情况
             candidates.push(exe_dir.join("version.json"));
         }
     }
@@ -52,6 +54,15 @@ pub async fn get_version(refresh: &str) -> serde_json::Value {
         "releaseDate": "",
         "latestReleaseNotes": "稳定版本"
     })
+}
+
+/// 读取本地 version.json 中的 version 字段（与关于页显示的版本号一致）
+pub fn read_local_version_string() -> String {
+    read_local_version_json()
+        .get("version")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| env!("CARGO_PKG_VERSION").to_string())
 }
 pub async fn get_system_paths() -> serde_json::Value {
     let h = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")).unwrap_or_else(|_| ".".into());

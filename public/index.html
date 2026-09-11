@@ -1418,6 +1418,33 @@
         </div>
       </div>
     </div>
+    <!-- 更新对话框 -->
+    <div id="updateModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="updateModalTitle">
+      <div class="modal-dialog update-dialog">
+        <button type="button" class="close-donation-btn" id="closeUpdateBtn" aria-label="关闭">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+        <div class="update-header">
+          <h2 id="updateModalTitle">发现新版本</h2>
+          <div class="update-versions">
+            <span class="update-version-current">当前版本：<strong id="updateCurrentVersion">--</strong></span>
+            <span class="update-version-arrow">→</span>
+            <span class="update-version-latest">最新版本：<strong id="updateLatestVersion">--</strong></span>
+          </div>
+        </div>
+        <div class="update-notes">
+          <strong>更新内容</strong>
+          <div id="updateReleaseNotes"></div>
+        </div>
+        <div class="update-actions">
+          <button type="button" id="updateLaterBtn" class="secondary">稍后提醒</button>
+          <button type="button" id="updateDownloadBtn" class="primary">立即下载</button>
+        </div>
+      </div>
+    </div>
     <div id="globalSearchOverlay" class="global-search-overlay hidden" role="dialog" aria-modal="true" aria-label="全局搜索">
       <div class="global-search-dialog">
         <div class="global-search-input-wrap">

@@ -1,7 +1,7 @@
 {
-  "version": "2.1.6",
+  "version": "2.1.7",
   "downloadUrl": "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
-  "latestReleaseNotes": "【v2.1.6 录屏交互优化】1) 录屏中窗口设为点击穿透，不阻挡鼠标操作屏幕，通过 Alt+M 热键停止录制；2) 浏览文件夹改用 Tauri dialog 原生插件，修复点击没反应问题；3) 默认保存路径为工作区/Videos 目录。",
-  "releaseNotes": "v2.1.6 录屏交互优化\n\n一、录屏中鼠标可操作屏幕：\n1）录屏开始时调用 recorder_set_ignore_cursor(true)，录屏窗口设为点击穿透，不再阻挡用户操作屏幕。\n2）停止按钮改为提示文字「按 Alt+M 停止」，通过全局热键 Alt+M 触发后端 emit recorder-stop-request 事件通知前端停止录制。\n3）保存对话框弹出时恢复鼠标捕获（ignore=false）。\n4）复用录屏窗口时重置 ignore_cursor_events=false。\n\n二、浏览文件夹修复：\n1）新增 recorder_browse_folder IPC 命令，使用 Tauri dialog 插件 pick_folder，比 PowerShell FolderBrowserDialog 更可靠。\n2）前端浏览按钮优先调用 recorder_browse_folder，失败时降级到 api_browse_folder。\n\n三、默认保存路径：工作区根目录/Videos 目录（通过 /api/workspaces 获取默认工作区 root）。",
-  "releaseDate": "2026-09-10"
+  "latestReleaseNotes": "【v2.1.7 修复版本自升级缺陷】1) 后端 check_update 默认使用本地 version.json 的版本号（与关于页一致），而非编译时的 CARGO_PKG_VERSION；2) 前端捕获 check_update 响应，upToDate=false 时弹出更新对话框，提供「立即下载」和「稍后提醒」按钮；upToDate=true 时提示「已是最新版本」。",
+  "releaseNotes": "v2.1.7 修复版本自升级缺陷\n\n一、后端（handlers.rs + ipc.rs）：\n1) check_update 默认使用本地 version.json 的 version 字段作为当前版本号，与关于页显示一致。\n2) 新增 read_local_version_string() 和 read_local_version_json() 辅助函数，多路径查找 version.json（开发环境/打包资源目录/exe 目录）。\n\n二、前端（app.js + index.html + styles.css）：\n1) checkUpdateBtn 捕获 /api/update/check 响应，根据 upToDate 字段决定行为。\n2) upToDate=false 时弹出更新对话框，显示当前版本、最新版本、更新内容，提供「立即下载」和「稍后提醒」按钮。\n3) 「立即下载」通过 /api/open-url 在系统浏览器中打开下载链接。\n4) upToDate=true 时提示「已是最新版本」，远程不可达时显示降级提示。\n5) 移除误导性 Toast（原「已请求桌面启动器强制检查升级」文案）。",
+  "releaseDate": "2026-09-11"
 }

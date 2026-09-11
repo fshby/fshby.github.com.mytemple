@@ -6333,7 +6333,8 @@ body[data-theme="image"] button.primary {
 body[data-theme="image"] .modal-dialog,
 body[data-theme="image"] .settings-dialog,
 body[data-theme="image"] .welcome-dialog,
-body[data-theme="image"] .donation-dialog {
+body[data-theme="image"] .donation-dialog,
+body[data-theme="image"] .update-dialog {
   background-color: rgba(255, 255, 255, 0.85) !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
@@ -8762,6 +8763,85 @@ body.low-gpu-mode .coffee-steam span {
   @page {
     margin: 18mm 16mm;
   }
+}
+
+/* ===== 更新对话框 ===== */
+.update-dialog {
+  max-width: 480px;
+  width: 90%;
+  padding: 0;
+  overflow: hidden;
+}
+
+.update-header {
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%);
+  padding: 28px 24px 20px;
+  color: #fff;
+}
+
+.update-header h2 {
+  margin: 0 0 12px;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.update-versions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  opacity: 0.95;
+  flex-wrap: wrap;
+}
+
+.update-versions strong {
+  font-weight: 600;
+}
+
+.update-version-arrow {
+  opacity: 0.7;
+}
+
+.update-version-latest {
+  color: #fef08a;
+}
+
+.update-notes {
+  padding: 20px 24px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.update-notes strong {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.update-notes > div {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary, var(--muted));
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.update-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 0 24px 24px;
+}
+
+.update-actions .secondary {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.update-actions .secondary:hover {
+  background: var(--control-bg);
+  color: var(--text);
 }
 
 /* ===== 全局搜索对话框 ===== */

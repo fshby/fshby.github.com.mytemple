@@ -14446,10 +14446,25 @@ if (enableRecordShortcutToggle) {
 els.checkUpdateBtn?.addEventListener("click", async () => {
   showToast("正在检查更新...");
   try {
-    await api.post("/api/update/check", {});
-    await api.get("/api/version?refresh=1");
+    const checkRes = await api.post("/api/update/check", {});
+    // 刷新关于页的版本信息（本地 version.json）
     await loadAboutInfo();
-    showToast("已请求桌面启动器强制检查升级，稍后将显示升级提示");
+
+    if (checkRes.upToDate) {
+      showToast(checkRes.warning ? `已是最新版本（${checkRes.warning}）` : "已是最新版本");
+      return;
+    }
+
+    // 有新版本，弹出更新对话框
+    if (els.updateCurrentVersion) els.updateCurrentVersion.textContent = checkRes.currentVersion || "--";
+    if (els.updateLatestVersion) els.updateLatestVersion.textContent = checkRes.latestVersion || "--";
+    if (els.updateReleaseNotes) {
+      els.updateReleaseNotes.textContent = checkRes.latestReleaseNotes || checkRes.releaseNotes || "暂无更新说明";
+    }
+    if (els.updateDownloadBtn && checkRes.downloadUrl) {
+      els.updateDownloadBtn.dataset.url = checkRes.downloadUrl;
+    }
+    els.updateModal?.classList.remove("hidden");
   } catch (error) {
     showToast(error.message || "检查更新失败");
   }
@@ -14471,6 +14486,37 @@ els.donationModal.addEventListener("click", (event) => {
   if (event.target === els.donationModal) {
     els.donationModal.classList.add("hidden");
   }
+});
+
+// ── 更新对话框 ──
+els.updateModal = document.querySelector("#updateModal");
+els.closeUpdateBtn = document.querySelector("#closeUpdateBtn");
+els.updateLaterBtn = document.querySelector("#updateLaterBtn");
+els.updateDownloadBtn = document.querySelector("#updateDownloadBtn");
+els.updateCurrentVersion = document.querySelector("#updateCurrentVersion");
+els.updateLatestVersion = document.querySelector("#updateLatestVersion");
+els.updateReleaseNotes = document.querySelector("#updateReleaseNotes");
+
+function closeUpdateModal() {
+  els.updateModal?.classList.add("hidden");
+}
+
+els.closeUpdateBtn?.addEventListener("click", closeUpdateModal);
+els.updateLaterBtn?.addEventListener("click", closeUpdateModal);
+els.updateModal?.addEventListener("click", (event) => {
+  if (event.target === els.updateModal) closeUpdateModal();
+});
+
+els.updateDownloadBtn?.addEventListener("click", async () => {
+  const url = els.updateDownloadBtn.dataset.url || "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe";
+  try {
+    await api.post("/api/open-url", { url });
+    showToast("已在浏览器中打开下载页面");
+  } catch {
+    // 兜底：直接打开
+    window.open(url, "_blank");
+  }
+  closeUpdateModal();
 });
 
 document.querySelectorAll(".copy-btn").forEach((btn) => {
