@@ -3,5 +3,20 @@
   "framework": null,
   "buildCommand": null,
   "outputDirectory": "promo",
-  "cleanUrls": true
+  "cleanUrls": true,
+  "headers": [
+    {
+      "source": "/downloads/(.*\\.exe)",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/octet-stream"
+        },
+        {
+          "key": "Content-Disposition",
+          "value": "attachment; filename=\"$1\""
+        }
+      ]
+    }
+  ]
 }
