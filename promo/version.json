@@ -1,7 +1,7 @@
 {
-  "version": "2.1.13",
+  "version": "2.1.14",
   "downloadUrl": "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
-  "latestReleaseNotes": "【v2.1.13 JSON格式化全面修复】1) MD中JSON代码块自动渲染bejson风格树形视图（可折叠、类型颜色标记）；2) 编辑/阅读模式切换时JSON格式化不再失效；3) processJsonCodeBlocks统一三处渲染路径后处理；4) renderJsonTree三级宽松解析（严格→修复→提取）；5) 小文档BOM检测修复",
-  "releaseNotes": "v2.1.13 JSON 格式化全面修复\n\n一、MD 中 JSON 代码块自动渲染树形视图（app.js + styles.css）：\n1) renderMarkdown 新增 JSON 代码块分支，生成带 data-json-raw 属性的容器\n2) processJsonCodeBlocks 统一后处理函数，在阅读模式、编辑模式预览、chunked 分片渲染三个路径都调用\n3) 遍历 .json-code-block 调 renderJsonTree 替换为可折叠树形视图\n\n二、编辑/阅读模式切换格式化不再失效（app.js）：\n1) renderCurrentPreviewNow（同步渲染）新增 JSON 分支：canPreviewAsJson() 时直接调 renderJsonTree\n2) 不再走 cachedRenderMarkdown 把 JSON 当 Markdown 渲染\n\n三、renderJsonTree 三级宽松解析（app.js）：\n1) 严格 JSON.parse\n2) repairJson 修复：未加引号key、单引号字符串、尾随逗号、JS注释\n3) extractFirstJsonObject 从混合文本提取JSON并自动补全缺失括号\n\n四、小文档 BOM 检测修复（app.rs）：\n1) BOM 5 种检测移到 UTF-8 纯解码之前\n2) 修复 UTF-8 BOM 文件首字符 U+FEFF 导致 JSON 解析失败\n\n五、其他修复：\n1) looksLikeJson 正则 s* → \\s* 修复\n2) chunked 渲染路径增加 processJsonCodeBlocks 调用\n3) openDoc 同时渲染到 preview + markdownView\n4) setMode('view') 跳过非 Markdown 的 renderReaderContent",
-  "releaseDate": "2026-09-11"
+  "latestReleaseNotes": "【v2.1.14 交互与链接修复】1) JSON树形视图折叠/展开无响应修复（processJsonCodeBlocks改为直接挂载DOM节点保留事件监听）；2) JSON树形视图新增一键复制按钮（复制格式化JSON，含深浅主题样式）；3) 长链接参数丢失修复（rundll32 url.dll替换cmd /c start，避免&被当作命令分隔符）",
+  "releaseNotes": "v2.1.14 交互与链接修复\n\n一、JSON 树形视图折叠/展开无响应修复（app.js）：\n1) processJsonCodeBlocks 原通过 temp.innerHTML 序列化再赋值 details.innerHTML，导致 renderJsonNode 上 addEventListener 的折叠事件全部丢失\n2) 改为用 appendChild 直接挂载真实 DOM 节点，事件监听器得以保留\n\n二、JSON 树形视图新增一键复制按钮（app.js + styles.css）：\n1) renderJsonTree 顶部新增工具栏 + 「复制 JSON」按钮\n2) 复制内容取 data-json-formatted（JSON.stringify(data,null,2)），不从渲染后 DOM 提取，避免混入折叠符号\n3) 优先 navigator.clipboard，失败回退 textarea+execCommand\n4) 新增 .json-toolbar / .json-copy-btn 样式，支持深浅主题\n\n三、长链接参数丢失修复（ipc.rs + lib.rs）：\n1) 根因：cmd /c start \"\" url 把 URL 中的 & 当作命令分隔符，导致 ?a=1&b=2 被拆成多条命令\n2) 替换为 rundll32 url.dll,FileProtocolHandler，Windows 原生打开 URL，不经过 cmd 命令解析，& 等特殊字符完整保留",
+  "releaseDate": "2026-09-17"
 }

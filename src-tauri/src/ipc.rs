@@ -278,7 +278,15 @@ pub async fn open_folder(path: String) -> serde_json::Value {
 pub async fn open_url(url: String) -> Result<serde_json::Value, String> {
     if !url.starts_with("http://") && !url.starts_with("https://") { return Err(err("Only http/https URLs are supported")); }
     #[cfg(target_os="windows")]
-    { std::process::Command::new("cmd").args(["/c", "start", "", &url]).creation_flags(0x08000000).spawn().ok(); }
+    {
+        // 用 rundll32 url.dll,FileProtocolHandler 打开 URL，
+        // 避免 cmd /c start 把 URL 中的 & 当作命令分隔符导致参数丢失
+        std::process::Command::new("rundll32")
+            .args(["url.dll,FileProtocolHandler", &url])
+            .creation_flags(0x08000000)
+            .spawn()
+            .ok();
+    }
     #[cfg(target_os="macos")]
     { std::process::Command::new("open").arg(&url).spawn().ok(); }
     Ok(serde_json::json!({"ok":true}))
