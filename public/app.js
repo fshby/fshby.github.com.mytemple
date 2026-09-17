@@ -14940,10 +14940,38 @@ if (enableRecordShortcutToggle) {
 }
 
 // 关于内容已内联到设置「关于」面板，切换至该 Tab 时由 settings-nav-item 处理器自动加载。
+
+// 启动时自动检查更新：延迟 3 秒执行，有新版本时弹出更新对话框
+function checkUpdateOnStartup() {
+  // 距离上次主动检查不足 1 小时则跳过（避免频繁弹窗）
+  const lastCheck = parseInt(localStorage.getItem("lastUpdateCheck") || "0", 10);
+  if (Date.now() - lastCheck < 60 * 60 * 1000) return;
+  setTimeout(async () => {
+    try {
+      const checkRes = await api.post("/api/update/check", {});
+      localStorage.setItem("lastUpdateCheck", String(Date.now()));
+      if (checkRes.upToDate) return;
+      // 有新版本，填充并弹出更新对话框
+      if (els.updateCurrentVersion) els.updateCurrentVersion.textContent = checkRes.currentVersion || "--";
+      if (els.updateLatestVersion) els.updateLatestVersion.textContent = checkRes.latestVersion || "--";
+      if (els.updateReleaseNotes) {
+        els.updateReleaseNotes.textContent = checkRes.latestReleaseNotes || checkRes.releaseNotes || "暂无更新说明";
+      }
+      if (els.updateDownloadBtn && checkRes.downloadUrl) {
+        els.updateDownloadBtn.dataset.url = checkRes.downloadUrl;
+      }
+      els.updateModal?.classList.remove("hidden");
+    } catch (_) {
+      // 检查失败静默处理，不打扰用户
+    }
+  }, 3000);
+}
+
 els.checkUpdateBtn?.addEventListener("click", async () => {
   showToast("正在检查更新...");
   try {
     const checkRes = await api.post("/api/update/check", {});
+    localStorage.setItem("lastUpdateCheck", String(Date.now()));
     // 刷新关于页的版本信息（本地 version.json）
     await loadAboutInfo();
 
@@ -15006,12 +15034,25 @@ els.updateModal?.addEventListener("click", (event) => {
 
 els.updateDownloadBtn?.addEventListener("click", async () => {
   const url = els.updateDownloadBtn.dataset.url || "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe";
+  const originalText = els.updateDownloadBtn.textContent;
+  els.updateDownloadBtn.disabled = true;
+  els.updateDownloadBtn.textContent = "正在下载并安装…";
   try {
-    await api.post("/api/open-url", { url });
-    showToast("已在浏览器中打开下载页面");
-  } catch {
-    // 兜底：直接打开
-    window.open(url, "_blank");
+    const invoke = window.__TAURI__?.core?.invoke || window.__TAURI__?.invoke;
+    if (invoke) {
+      await invoke("api_update_download_and_install", { url });
+      showToast("正在启动安装程序，应用即将退出…");
+    } else {
+      // 非 Tauri 环境：退回浏览器下载
+      await api.post("/api/open-url", { url });
+      showToast("已在浏览器中打开下载页面");
+    }
+  } catch (err) {
+    showToast(err?.message || "下载安装失败，将打开浏览器下载");
+    // 失败兜底：打开浏览器下载
+    try { await api.post("/api/open-url", { url }); } catch {}
+    els.updateDownloadBtn.disabled = false;
+    els.updateDownloadBtn.textContent = originalText;
   }
   closeUpdateModal();
 });
@@ -16151,6 +16192,8 @@ async function startupLicenseCheck() {
       setSplashProgress(100, "加载完成");
       hideSplash();
       startPeriodicLicenseCheck();
+      // 启动后延迟检查更新（不阻塞用户操作），有新版本时提示
+      checkUpdateOnStartup();
     })();
 
     if (usedCache) {

@@ -25,7 +25,7 @@
         <a href="#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.1.14</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.1.16</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -33,7 +33,7 @@
     <main id="top">
       <section class="hero section-wrap" aria-labelledby="hero-title">
         <div class="hero-copy reveal">
-          <p class="eyebrow"><span class="status-dot"></span> 本地 Markdown 工作区 <em>v2.1.14 桌面版</em></p>
+          <p class="eyebrow"><span class="status-dot"></span> 本地 Markdown 工作区 <em>v2.1.16 桌面版</em></p>
           <h1 id="hero-title">本地 Markdown 知识库与编辑器</h1>
           <p class="hero-lede">围绕本地 Markdown 文件提供阅读、编辑、目录、图谱、检索、主题与多工作区管理。</p>
           <div class="hero-actions">
@@ -252,13 +252,15 @@
         </div>
         <div class="download-block reveal">
           <div class="download-primary">
-            <span class="download-badge">当前稳定版 v2.1.14</span>
+            <span class="download-badge">当前稳定版 v2.1.16</span>
             <p>独立窗口截图标注、录屏、OCR 文字识别、知识图谱、主题、增量索引、绘图编辑器、代码语法高亮、JSON 格式化预览、版本自更新与可选 AI 辅助功能。</p>
             <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载安装包</a>
           </div>
           <div class="download-secondary">
             <h3>最近更新</h3>
             <ul class="update-list">
+              <li><span class="ver">v2.1.16</span> 打包流程稳定化 — 固定 packaging/ 为图标唯一主源，编译前自动同步到 public/ 和 promo/，新增 build-release.ps1 一键打包脚本（版本号管理+图标同步+编译+部署+web页更新）。</li>
+              <li><span class="ver">v2.1.15</span> 自动更新升级 — 启动后自动检测新版本并弹窗，下载改为后台静默下载自动安装（不再跳转浏览器），JSON 折叠/展开兼容性修复。</li>
               <li><span class="ver">v2.1.14</span> 交互与链接修复 — JSON 树形视图折叠/展开无响应修复（直接挂载 DOM 保留事件监听），新增一键复制按钮，长链接 & 参数丢失修复（rundll32 替换 cmd /c start）。</li>
               <li><span class="ver">v2.1.13</span> JSON 格式化全面修复 — MD 中 JSON 代码块自动渲染树形视图，编辑/阅读模式切换时格式化不再失效，processJsonCodeBlocks 统一后处理。</li>
               <li><span class="ver">v2.1.12</span> JSON 树形视图三处渲染路径统一 — openDoc 同时渲染到 preview+markdownView，setMode 跳过非 Markdown 的 renderReaderContent。</li>

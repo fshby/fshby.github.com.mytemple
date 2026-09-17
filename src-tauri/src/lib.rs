@@ -191,6 +191,8 @@ pub fn run() {
             // ── 安全防护 ──
             tauri_cmd::api_security_check,
             tauri_cmd::api_security_init,
+            // ── 自动更新 ──
+            tauri_cmd::api_update_download_and_install,
         ])
         .setup(move |app| -> Result<(), Box<dyn std::error::Error>> {
             // 注入全局 AppHandle 单例：HTTP handler（axum）需要弹原生对话框
@@ -1867,6 +1869,56 @@ pub async fn api_security_check(s: Srv<'_>) -> Result<serde_json::Value, String>
     let data_root = s.app.data_root.clone();
     let status = crate::security::runtime_security_check(&data_root);
     Ok(serde_json::to_value(&status).map_err(|e| e.to_string())?)
+}
+
+/// 自动下载并静默安装更新包（替代跳转浏览器手动下载）
+/// 流程：下载 exe 到临时目录 → 以 /S 静默参数启动安装器 → 退出当前应用
+#[tauri::command]
+pub async fn api_update_download_and_install(
+    url: String,
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    // 下载到系统临时目录
+    let tmp_dir = std::env::temp_dir();
+    let file_name = url
+        .rsplit('/')
+        .next()
+        .filter(|s| !s.is_empty())
+        .unwrap_or("MyTempleKnowledge_Setup.exe");
+    // 清理文件名中的查询参数
+    let file_name = file_name.split('?').next().unwrap_or(file_name);
+    let dest = tmp_dir.join(file_name);
+
+    // 下载
+    let resp = reqwest::get(&url)
+        .await
+        .map_err(|e| format!("下载失败: {}", e))?;
+    if !resp.status().is_success() {
+        return Err(format!("下载失败: HTTP {}", resp.status()));
+    }
+    let bytes = resp
+        .bytes()
+        .await
+        .map_err(|e| format!("读取下载内容失败: {}", e))?;
+    std::fs::write(&dest, &bytes).map_err(|e| format!("写入临时文件失败: {}", e))?;
+
+    let dest_str = dest.to_string_lossy().to_string();
+
+    // 启动安装器（NSIS /S = 静默安装），然后退出当前应用
+    // 用 cmd /c start 让安装器独立运行，不被子进程退出影响
+    std::process::Command::new("cmd")
+        .args(["/c", "start", "", &dest_str, "/S"])
+        .spawn()
+        .map_err(|e| format!("启动安装器失败: {}", e))?;
+
+    // 延迟退出，给安装器启动留时间
+    let ah = app_handle.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        ah.exit(0);
+    });
+
+    Ok(())
 }
 
 } // pub mod tauri_cmd
