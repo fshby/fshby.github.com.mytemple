@@ -1,0 +1,111 @@
+﻿BL = chr(123)
+BR = chr(125)
+DQ = chr(34)
+
+def write_chunk(idx, content_lines):
+    content = chr(10).join(content_lines) + chr(10)
+    content = content.replace('BRACE_L', BL).replace('BRACE_R', BR)
+    content = content.replace('DQ', DQ)
+    import base64
+    encoded = base64.b64encode(content.encode('utf-8')).decode('ascii')
+    path = f'd:/game/mytemple/chunk_{idx:02d}.b64'
+    with open(path, 'w') as f:
+        f.write(encoded)
+    print(f'Wrote chunk {idx:02d}: {len(content)} chars')
+
+write_chunk(1, [
+    'encoding: DQutf-8DQ.to_string(),',
+    '',
+    '        BRACE_R',
+    '',
+    '    BRACE_R',
+    '',
+    '    /// Move a file or folder to a target folder',
+    '    pub async fn move_entry(&self, source: &str, target_folder: &str) -> anyhow::Result<(String, bool)> BRACE_L',
+    '        let src = self.normalize_doc_path(source)?;',
+    '        let tgt = self.normalize_doc_path(target_folder)?;',
+    '',
+    '        let src_abs = Path::new(&src.absolute);',
+    '        let tgt_abs = Path::new(&tgt.absolute);',
+    '',
+    '        if !src_abs.exists() BRACE_L',
+    '            anyhow::bail!(DQSource not foundDQ);',
+    '        BRACE_R',
+    '        if !tgt_abs.exists() || !tgt_abs.is_dir() BRACE_L',
+    '            anyhow::bail!(DQTarget folder not foundDQ);',
+    '        BRACE_R',
+    '',
+    '        let is_dir = src_abs.is_dir();',
+    '        if !is_dir && !src.relative.ends_with(DQ.mdDQ) BRACE_L',
+    '            anyhow::bail!(DQOnly .md files can be movedDQ);',
+    '        BRACE_R',
+])
+write_chunk(2, [
+    '        // Prevent moving folder into itself',
+    '        if is_dir BRACE_L',
+    '            let src_root = format!(DQDQ, src.absolute, std::path::MAIN_SEPARATOR);',
+    '            let tgt_root = format!(DQDQ, tgt.absolute, std::path::MAIN_SEPARATOR);',
+    '            if tgt_root.starts_with(&src_root) BRACE_L',
+    '                anyhow::bail!(DQFolder cannot be moved into itselfDQ);',
+    '            BRACE_R',
+    '        BRACE_R',
+    '',
+    '        let dest_name = src_relative_name(&src.relative);',
+    '        let dest_relative = format!(DQDQ, tgt.relative, dest_name);',
+    '        let dest = self.normalize_doc_path(&dest_relative)?;',
+    '        let dest_abs = Path::new(&dest.absolute);',
+    '',
+    '        if src.absolute == dest.absolute BRACE_L',
+    '            return Ok((src.ref, false));',
+    '        BRACE_R',
+    '        if dest_abs.exists() BRACE_L',
+    '            anyhow::bail!(DQDestination already existsDQ);',
+    '        BRACE_R',
+    '',
+    '        if src.workspace_id == tgt.workspace_id BRACE_L',
+    '            std::fs::rename(&src.absolute, &dest.absolute)?;',
+    '        BRACE_R else BRACE_L',
+    '            // Cross-workspace: copy then delete',
+    '            copy_dir_all(&src.absolute, &dest.absolute)?;',
+    '            if is_dir BRACE_L',
+    '                std::fs::remove_dir_all(&src.absolute)?;',
+    '            BRACE_R else BRACE_L',
+    '                std::fs::remove_file(&src.absolute)?;',
+    '            BRACE_R',
+    '        BRACE_R',
+    '',
+    '        self.refresh_cache().await?;',
+    '        Ok((dest.ref, is_dir))',
+    '    BRACE_R',
+])
+write_chunk(3, [
+    '',
+    '    /// Copy a file or folder to a target folder',
+    '    pub async fn copy_entry(&self, source: &str, target_folder: &str) -> anyhow::Result<String> BRACE_L',
+    '        let src = self.normalize_doc_path(source)?;',
+    '        let tgt = self.normalize_doc_path(target_folder)?;',
+    '',
+    '        let src_abs = Path::new(&src.absolute);',
+    '        let tgt_abs = Path::new(&tgt.absolute);',
+    '',
+    '        if !src_abs.exists() BRACE_L',
+    '            anyhow::bail!(DQSource not foundDQ);',
+    '        BRACE_R',
+    '        if !tgt_abs.exists() || !tgt_abs.is_dir() BRACE_L',
+    '            anyhow::bail!(DQTarget folder not foundDQ);',
+    '        BRACE_R',
+    '',
+    '        let dest_name = src_relative_name(&src.relative);',
+    '        let dest_relative = format!(DQDQ, tgt.relative, dest_name);',
+    '        let dest = self.normalize_doc_path(&dest_relative)?;',
+    '        let dest_abs = Path::new(&dest.absolute);',
+    '',
+    '        if dest_abs.exists() BRACE_L',
+    '            anyhow::bail!(DQDestination already existsDQ);',
+    '        BRACE_R',
+    '',
+    '        copy_dir_all(&src.absolute, &dest.absolute)?;',
+    '        self.refresh_cache().await?;',
+    '        Ok(dest.ref)',
+    '    BRACE_R',
+])

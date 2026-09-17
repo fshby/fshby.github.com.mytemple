@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#88a956">
+  <meta name="description" content="MyTemple Knowledge 使用文档 — 安装启动、文档编写规范、图谱标记、主题外观与快捷键参考。">
+  <title>使用文档 · MyTemple Knowledge</title>
+  <link rel="icon" href="logo.ico" type="image/x-icon">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="site-shell shell-clip">
+    <header class="site-nav" data-nav>
+      <a class="brand" href="index.html" aria-label="MyTemple Knowledge 首页">
+        <span class="brand-mark" aria-hidden="true"><img src="logo.ico" alt=""></span>
+        <span class="brand-text">MyTemple <b>Knowledge</b></span>
+      </a>
+      <nav class="nav-links" aria-label="主导航">
+        <a href="index.html#features">核心能力</a>
+        <a href="index.html#screens">界面展示</a>
+        <a href="index.html#themes">主题预设</a>
+        <a href="changelog.html">更新日志</a>
+        <a href="index.html#downloads">版本下载</a>
+      </nav>
+      <div class="nav-actions">
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup_v2.0.2.exe" download>下载 v2.0.2</a>
+      </div>
+      <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
+    </header>
+
+    <main class="page-body">
+      <section class="section-wrap docs-page">
+        <div class="section-intro reveal">
+          <p class="eyebrow">DOCUMENTS & GUIDES</p>
+          <h2>使用文档</h2>
+          <p class="section-desc">从安装启动到快捷键速查，覆盖全部核心使用场景。</p>
+        </div>
+
+        <div class="docs-toc reveal">
+          <h3>文档目录</h3>
+          <ul>
+            <li><a href="#install">01 · 安装与启动</a></li>
+            <li><a href="#writing">02 · 文档编写规范</a></li>
+            <li><a href="#graph">03 · 图谱标记与维护</a></li>
+            <li><a href="#theme">04 · 主题与外观</a></li>
+            <li><a href="#ai">05 · 可选辅助功能</a></li>
+            <li><a href="#shortcuts">06 · 快捷键参考</a></li>
+            <li><a href="#ai-shortcuts">07 · AI 辅助快捷键</a></li>
+          </ul>
+        </div>
+
+        <div class="docs-content reveal">
+          <article class="doc-section" id="install">
+            <h3>安装与启动</h3>
+            <ol>
+              <li>下载 Windows 安装包（.exe），双击运行。</li>
+              <li>选择安装目录，完成安装后桌面会出现快捷方式。</li>
+              <li>首次启动需选择工作目录（本地 Markdown 文件夹），之后自动记忆。</li>
+              <li>支持多工作路径，在设置中可添加、切换或移除。</li>
+            </ol>
+          </article>
+          <article class="doc-section" id="writing">
+            <h3>文档编写规范</h3>
+            <ul>
+              <li>支持标准 Markdown 语法，包括标题、列表、表格、代码块、引用等。</li>
+              <li>Frontmatter 支持(title、date、tags 等元信息字段)。</li>
+              <li>文档间链接使用 <code>[文本](相对路径.md)</code> 格式，图谱会自动识别关联。</li>
+              <li>支持数学公式（LaTeX 语法）、Mermaid 图表、Excalidraw 绘图。</li>
+              <li>高亮标注块：<code>:::tip</code> / <code>:::warning</code> / <code>:::note</code> 等。</li>
+            </ul>
+          </article>
+          <article class="doc-section" id="graph">
+            <h3>图谱标记与维护</h3>
+            <ul>
+              <li>文档之间的链接关系自动生成知识神经图谱。</li>
+              <li>最新文档自动居中，有链接的文档互相引力更强。</li>
+              <li>拖拽节点松开后按引力规则缓慢复原。</li>
+              <li>图谱运动参数可在设置中调节，不查看时不占用 GPU。</li>
+            </ul>
+          </article>
+          <article class="doc-section" id="theme">
+            <h3>主题与外观</h3>
+            <ul>
+              <li>内置深色、明亮、护眼、柔光四种核心主题。</li>
+              <li>柔光主题：暖琥珀金强调色，低饱和度，适合长时间写作。</li>
+              <li>图片主题：上传背景图并自动取色，支持文字明暗切换。</li>
+              <li>字体、字号、窗口缩放均可自定义，重启后自动恢复。</li>
+            </ul>
+          </article>
+          <article class="doc-section" id="ai">
+            <h3>可选辅助功能</h3>
+            <ul>
+              <li>默认关闭，在设置中按需开启，不干扰核心编辑与阅读体验。</li>
+              <li>支持本地或云端模型接入，模型配置在设置中填写。</li>
+              <li>提供选中翻译、润色续写、代码补全与生成注释等辅助能力。</li>
+              <li>问答侧栏助手回复可一键润色、续写或插入到当前文档。</li>
+              <li>所有辅助功能均可独立开关，按需使用。</li>
+            </ul>
+          </article>
+          <article class="doc-section" id="shortcuts">
+            <h3>快捷键参考</h3>
+            <p class="muted">全局快捷键（任意位置可用）：</p>
+            <ul>
+              <li><kbd>Alt+A</kbd> 区域截图（标注 + OCR） · <kbd>Alt+M</kbd> 区域录屏（WebM）</li>
+              <li><kbd>F2</kbd> 重命名文档 · <kbd>Alt+E</kbd> 切换编辑/阅读模式 · <kbd>Alt+O</kbd> 沉浸模式</li>
+              <li><kbd>Alt+Q</kbd> 大纲目录 · <kbd>Alt+W</kbd> 预览栏 · <kbd>Ctrl+Q</kbd> 工作区目录</li>
+              <li><kbd>Ctrl+U</kbd> AI 智能检索 · <kbd>Ctrl+Shift+I</kbd> 导入文档 · <kbd>双击 Shift</kbd> 全局搜索</li>
+              <li><kbd>Ctrl+=</kbd> 放大字体 · <kbd>Ctrl+-</kbd> 缩小字体 · <kbd>Ctrl+0</kbd> 重置缩放 · <kbd>Esc</kbd> 退出沉浸</li>
+            </ul>
+            <p class="muted">编辑器快捷键：</p>
+            <ul>
+              <li><kbd>Ctrl+B</kbd> 加粗 · <kbd>Ctrl+I</kbd> 斜体 · <kbd>Ctrl+K</kbd> 链接</li>
+              <li><kbd>Ctrl+1/2/3</kbd> 一/二/三级标题 · <kbd>Ctrl+S</kbd> 保存</li>
+              <li><kbd>Ctrl+F</kbd> 关键字检索 · <kbd>Ctrl+Shift+F</kbd> 沉浸编辑 · <kbd>Esc</kbd> 退出沉浸/多光标</li>
+              <li><kbd>Tab</kbd> 缩进 · <kbd>Ctrl+Shift+7/8</kbd> 有序/无序列表</li>
+              <li><kbd>Ctrl+Z</kbd> 撤销 · <kbd>Ctrl+Y</kbd> 重做 · <kbd>Ctrl+D</kbd> 复制行 · <kbd>Ctrl+M</kbd> 删除行</li>
+              <li><kbd>Ctrl+;</kbd> 插入日期 · <kbd>Ctrl+'</kbd> 插入时间</li>
+              <li><kbd>F3</kbd> / <kbd>Ctrl+G</kbd> 查找下一个 · <kbd>Ctrl+Alt+↑/↓</kbd> 多处光标 · <kbd>Ctrl+Shift+L</kbd> 选中全部匹配</li>
+            </ul>
+          </article>
+          <article class="doc-section" id="ai-shortcuts">
+            <h3>AI 辅助快捷键</h3>
+            <ul>
+              <li><kbd>Ctrl+Shift+A</kbd> 代码补全 · <kbd>Ctrl+Shift+/</kbd> 生成注释</li>
+              <li><kbd>Ctrl+Shift+P</kbd> 润色 · <kbd>Ctrl+Shift+X</kbd> 续写</li>
+              <li><kbd>Ctrl+U</kbd> 顶部智能检索 · <kbd>Ctrl+I</kbd> 行内对话</li>
+              <li>辅助快捷键需在设置中开启对应功能后生效</li>
+            </ul>
+          </article>
+        </div>
+
+        <p class="back-home"><a href="index.html" class="button button-soft">← 返回首页</a></p>
+      </section>
+    </main>
+
+    <footer class="site-footer section-wrap">
+      <div class="footer-brand">
+        <span class="brand-mark" aria-hidden="true"><img src="logo.ico" alt=""></span>
+        <div>
+          <strong>MyTemple Knowledge</strong>
+          <p>本地 Markdown 知识库与编辑器，重点服务长期维护、低干扰阅读与顺手编辑。</p>
+        </div>
+      </div>
+      <div class="footer-links">
+        <a href="index.html#features">核心能力</a>
+        <a href="index.html#themes">主题预设</a>
+        <a href="changelog.html">更新日志</a>
+        <a href="index.html#downloads">版本下载</a>
+      </div>
+      <small>© <span data-year></span> MyTemple Knowledge</small>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
