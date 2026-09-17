@@ -1,0 +1,4 @@
+﻿if is_dir {
+    let x = 1;
+    let y = format!({} {}, a, b);
+}

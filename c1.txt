@@ -1,0 +1,25 @@
+﻿encoding:  utf-8.to_string(),
+
+        }
+
+    }
+
+    /// Move a file or folder to a target folder
+    pub async fn move_entry(&self, source: &str, target_folder: &str) -> anyhow::Result<(String, bool)> {
+        let src = self.normalize_doc_path(source)?;
+        let tgt = self.normalize_doc_path(target_folder)?;
+
+        let src_abs = Path::new(&src.absolute);
+        let tgt_abs = Path::new(&tgt.absolute);
+
+        if !src_abs.exists() {
+            anyhow::bail!(Source not found);
+        }
+        if !tgt_abs.exists() || !tgt_abs.is_dir() {
+            anyhow::bail!(Target folder not found);
+        }
+
+        let is_dir = src_abs.is_dir();
+        if !is_dir && !src.relative.ends_with(.md) {
+            anyhow::bail!(Only .md files can be moved);
+        }

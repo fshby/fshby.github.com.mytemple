@@ -1,0 +1,38 @@
+﻿node.exe :         Info Looking up installed tauri packages to check mismatched versions...
+At line:1 char:1
++ & "E:\Node/node.exe" "E:\Node/node_modules/npm/bin/npx-cli.js" tauri  ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (        Info Lo...hed versions...:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+[1m[92m   Compiling[0m mytemple-server v1.8.77 (D:\game\mytemple\src-tauri)
+[1m[91merror[0m: failed to run custom build command for `mytemple-server v1.8.77 (D:\game\mytemple\src-tauri)`
+
+Caused by:
+  process didn't exit successfully: `D:\game\mytemple\src-tauri\target\debug\build\mytemple-server-520a92c7dc91c714\bui
+ld-script-build` (exit code: 101)
+  --- stdout
+  cargo:rerun-if-env-changed=TAURI_CONFIG
+  cargo:rustc-check-cfg=cfg(desktop)
+  cargo:rustc-cfg=desktop
+  cargo:rustc-check-cfg=cfg(mobile)
+  cargo:rerun-if-changed=D:\game\mytemple\src-tauri\tauri.conf.json
+  cargo:rustc-env=TAURI_ANDROID_PACKAGE_NAME_APP_NAME=knowledge
+  cargo:rustc-env=TAURI_ANDROID_PACKAGE_NAME_PREFIX=com_mytemple
+  cargo:rustc-check-cfg=cfg(dev)
+  cargo:PERMISSION_FILES_PATH=D:\game\mytemple\src-tauri\target\debug\build\mytemple-server-8c45be57dedb9a96\out\app-ma
+nifest\__app__-permission-files
+  cargo:rerun-if-changed=capabilities
+  cargo:rerun-if-env-changed=REMOVE_UNUSED_COMMANDS
+  cargo:rustc-env=TAURI_ENV_TARGET_TRIPLE=x86_64-pc-windows-gnu
+  cargo:rerun-if-changed=WebView2Loader.dll
+  package.metadata does not exist
+
+  --- stderr
+
+  thread 'main' (15972) panicked at C:\Users\fshby\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\tauri-winres-0.3.6\s
+rc\lib.rs:543:14:
+  called `Result::unwrap()` on an `Err` value: NotAttempted("windres")
+  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+failed to build app: failed to build app
+       Error failed to build app: failed to build app

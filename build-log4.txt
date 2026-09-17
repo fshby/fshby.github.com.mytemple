@@ -1,0 +1,83 @@
+﻿node.exe :         Info Looking up installed tauri packages to check mismatched versions...
+At line:1 char:1
++ & "E:\Node/node.exe" "E:\Node/node_modules/npm/bin/npx-cli.js" tauri  ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (        Info Lo...hed versions...:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+[1m[92m   Compiling[0m mytemple-server v1.8.77 (D:\game\mytemple\src-tauri)
+[1m[93mwarning[0m[1m[97m: unused import: `Method`[0m
+  [1m[96m--> [0msrc\server.rs:15:36
+   [1m[96m|[0m
+[1m[96m15[0m [1m[96m|[0m     http::{HeaderMap, HeaderValue, Method, StatusCode},
+   [1m[96m|[0m                                    [1m[93m^^^^^^[0m
+   [1m[96m|[0m
+   [1m[96m= [0m[1m[97mnote[0m: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+[1m[93mwarning[0m[1m[97m: unused import: `PathBuf`[0m
+  [1m[96m--> [0msrc\utils.rs:10:23
+   [1m[96m|[0m
+[1m[96m10[0m [1m[96m|[0m use std::path::{Path, PathBuf};
+   [1m[96m|[0m                       [1m[93m^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: unused variable: `timeout_secs`[0m
+   [1m[96m--> [0msrc\license.rs:456:33
+    [1m[96m|[0m
+[1m[96m456[0m [1m[96m|[0m fn run_powershell(script: &str, timeout_secs: u64) -> Result<String, String> {
+    [1m[96m|[0m                                 [1m[93m^^^^^^^^^^^^[0m [1m[93mhelp: if this is intentional, pre
+fix it with an underscore: `_timeout_secs`[0m
+    [1m[96m|[0m
+    [1m[96m= [0m[1m[97mnote[0m: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+[1m[93mwarning[0m[1m[97m: variable does not need to be mutable[0m
+   [1m[96m--> [0msrc\utils.rs:267:9
+    [1m[96m|[0m
+[1m[96m267[0m [1m[96m|[0m     let mut add_node = |nodes: &mut Vec<GraphNode>, node_ids: &mut HashSet<String>, nod
+e: GraphNode| -> bool {
+    [1m[96m|[0m         [1m[96m----[0m[1m[93m^^^^^^^^[0m
+    [1m[96m|[0m         [1m[96m|[0m
+    [1m[96m|[0m         [1m[96mhelp: remove this `mut`[0m
+    [1m[96m|[0m
+    [1m[96m= [0m[1m[97mnote[0m: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+[1m[93mwarning[0m[1m[97m: variable does not need to be mutable[0m
+   [1m[96m--> [0msrc\utils.rs:276:9
+    [1m[96m|[0m
+[1m[96m276[0m [1m[96m|[0m     let mut add_edge = |edge_map: &mut HashMap<String, GraphEdge>, source: &str, target
+: &str, edge_type: &str, weight: f64, direct[1m[96m...[0m
+    [1m[96m|[0m         [1m[96m----[0m[1m[93m^^^^^^^^[0m
+    [1m[96m|[0m         [1m[96m|[0m
+    [1m[96m|[0m         [1m[96mhelp: remove this `mut`[0m
+
+[1m[93mwarning[0m[1m[97m: static `TRAILING_HASHES_RE` is never used[0m
+  [1m[96m--> [0msrc\frontmatter.rs:30:8
+   [1m[96m|[0m
+[1m[96m30[0m [1m[96m|[0m static TRAILING_HASHES_RE: LazyLock<Regex> =
+   [1m[96m|[0m        [1m[93m^^^^^^^^^^^^^^^^^^[0m
+   [1m[96m|[0m
+   [1m[96m= [0m[1m[97mnote[0m: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+[1m[93mwarning[0m[1m[97m: function `now_ms` is never used[0m
+   [1m[96m--> [0msrc\rag.rs:193:4
+    [1m[96m|[0m
+[1m[96m193[0m [1m[96m|[0m fn now_ms() -> u64 {
+    [1m[96m|[0m    [1m[93m^^^^^^[0m
+
+[1m[93mwarning[0m: `mytemple-server` (lib) generated 7 warnings (run `cargo fix --lib -p mytemple-server` to apply 5
+ suggestions)
+[1m[93mwarning[0m[1m[97m: linker stderr: C:/Users/fshby/AppData/Local/Microsoft/WinGet/Packages/BrechtSanders.WinL
+ibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/16.1.0/../../../../x86_6
+4-w64-mingw32/bin/ld.exe: .rsrc merge failure: multiple non-default manifests[0m
+  [1m[96m|[0m
+  [1m[96m= [0m[1m[97mnote[0m: `#[warn(linker_messages)]` on by default
+
+[1m[93mwarning[0m: `mytemple-server` (bin "mytemple-server") generated 1 warning
+[1m[92m    Finished[0m `dev` profile [unoptimized + debuginfo] target(s) in 18.32s
+       Built application at: D:\game\mytemple\src-tauri\target\debug\mytemple-server.exe
+        Info Patching D:\game\mytemple\src-tauri\target\debug\mytemple-server.exe with bundle type information: nsis
+        Info Target: x64
+ Downloading https://go.microsoft.com/fwlink/p/?LinkId=2124703
+     Running makensis to produce D:\game\mytemple\src-tauri\target\debug\bundle\nsis\MyTemple Knowledge_1.8.77_x64-setu
+p.exe
+failed to bundle project: `另一个程序正在使用此文件，进程无法访问。 (os error 32)`
+       Error failed to bundle project: `另一个程序正在使用此文件，进程无法访问。 (os error 32)`
