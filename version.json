@@ -1,7 +1,7 @@
 {
-  "version": "2.1.14",
-  "downloadUrl": "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
-  "latestReleaseNotes": "【v2.1.14 交互与链接修复】1) JSON树形视图折叠/展开无响应修复（processJsonCodeBlocks改为直接挂载DOM节点保留事件监听）；2) JSON树形视图新增一键复制按钮（复制格式化JSON，含深浅主题样式）；3) 长链接参数丢失修复（rundll32 url.dll替换cmd /c start，避免&被当作命令分隔符）",
-  "releaseNotes": "v2.1.14 交互与链接修复\n\n一、JSON 树形视图折叠/展开无响应修复（app.js）：\n1) processJsonCodeBlocks 原通过 temp.innerHTML 序列化再赋值 details.innerHTML，导致 renderJsonNode 上 addEventListener 的折叠事件全部丢失\n2) 改为用 appendChild 直接挂载真实 DOM 节点，事件监听器得以保留\n\n二、JSON 树形视图新增一键复制按钮（app.js + styles.css）：\n1) renderJsonTree 顶部新增工具栏 + 「复制 JSON」按钮\n2) 复制内容取 data-json-formatted（JSON.stringify(data,null,2)），不从渲染后 DOM 提取，避免混入折叠符号\n3) 优先 navigator.clipboard，失败回退 textarea+execCommand\n4) 新增 .json-toolbar / .json-copy-btn 样式，支持深浅主题\n\n三、长链接参数丢失修复（ipc.rs + lib.rs）：\n1) 根因：cmd /c start \"\" url 把 URL 中的 & 当作命令分隔符，导致 ?a=1&b=2 被拆成多条命令\n2) 替换为 rundll32 url.dll,FileProtocolHandler，Windows 原生打开 URL，不经过 cmd 命令解析，& 等特殊字符完整保留",
-  "releaseDate": "2026-09-17"
+    "version":  "2.1.16",
+    "downloadUrl":  "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
+    "latestReleaseNotes":  "v2.1.16 packaging stabilization - fixed packaging/ as single icon source, sync to public/ and promo/ before build, new build-release.ps1 one-click script",
+    "releaseNotes":  "v2.1.16 release. See changelog for details.",
+    "releaseDate":  "2026-09-17"
 }
