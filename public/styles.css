@@ -10891,6 +10891,40 @@ html body .print-body.print-body .callout.callout.callout-example.callout-exampl
   color: var(--text, #1f2937);
   background: var(--bg, #fff);
 }
+.json-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+}
+.json-copy-btn {
+  padding: 4px 12px;
+  font-size: 12px;
+  font-family: var(--sans-font, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif);
+  color: var(--text, #1f2937);
+  background: var(--bg-soft, #f3f4f6);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.json-copy-btn:hover {
+  background: var(--border, #e5e7eb);
+  border-color: var(--accent, #88a956);
+}
+.json-copy-btn:active {
+  transform: scale(0.97);
+}
+[data-theme="dark"] .json-copy-btn {
+  color: #e2e8f0;
+  background: #1e293b;
+  border-color: #334155;
+}
+[data-theme="dark"] .json-copy-btn:hover {
+  background: #334155;
+  border-color: #88a956;
+}
 .json-lenient-tip {
   padding: 8px 12px;
   margin-bottom: 12px;

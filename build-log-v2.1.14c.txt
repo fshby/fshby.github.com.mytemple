@@ -1,0 +1,248 @@
+﻿node.exe :         Info Looking up installed tauri packages to check mismatched versions...
+At line:1 char:1
++ & "E:\Node/node.exe" "E:\Node/node_modules/npm/bin/npx-cli.js" tauri  ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (        Info Lo...hed versions...:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+     Running beforeBuildCommand `powershell.exe -NoProfile -Command "$ErrorActionPreference='Stop'; robocopy ..\public 
+resources\public /MIR /NFL /NDL /NJH /NJS; if ($LASTEXITCODE -gt 7) { exit 1 } else { exit 0 }"`
+Continue='Stop'; robocopy ..\public resources\public /MIR /NFL /NDL /NJH /NJS; if ( -gt 7) { exit 1 } else { exit 0 }
+[1m[92m   Compiling[0m mytemple-server v2.1.3 (D:\game\mytemple\src-tauri)
+[1m[93mwarning[0m[1m[97m: unused import: `std::collections::HashMap`[0m
+ [1m[96m--> [0msrc\app.rs:6:5
+  [1m[96m|[0m
+[1m[96m6[0m [1m[96m|[0m use std::collections::HashMap;
+  [1m[96m|[0m     [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [1m[96m|[0m
+  [1m[96m= [0m[1m[97mnote[0m: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+[1m[93mwarning[0m[1m[97m: unnecessary braces around block return value[0m
+   [1m[96m--> [0msrc\app.rs:187:9
+    [1m[96m|[0m
+[1m[96m187[0m [1m[96m|[0m         { if let Some(&id) = self.forward.read().unwrap().get(s) { return id; } }
+    [1m[96m|[0m         [1m[93m^^[0m                                                                     [1m[93
+m^^[0m
+    [1m[96m|[0m
+    [1m[96m= [0m[1m[97mnote[0m: `#[warn(unused_braces)]` (part of `#[warn(unused)]`) on by default
+[1m[96mhelp[0m: remove these braces
+    [1m[96m|[0m
+[1m[96m187[0m [91m- [0m        [91m{ [0mif let Some(&id) = self.forward.read().unwrap().get(s) { return id; }[9
+1m }[0m
+[1m[96m187[0m [92m+ [0m        if let Some(&id) = self.forward.read().unwrap().get(s) { return id; }
+    [1m[96m|[0m
+
+[1m[93mwarning[0m[1m[97m: unnecessary parentheses around `if` condition[0m
+   [1m[96m--> [0msrc\global_capture.rs:399:20
+    [1m[96m|[0m
+[1m[96m399[0m [1m[96m|[0m                 if (is_visible) {
+    [1m[96m|[0m                    [1m[93m^[0m          [1m[93m^[0m
+    [1m[96m|[0m
+    [1m[96m= [0m[1m[97mnote[0m: `#[warn(unused_parens)]` (part of `#[warn(unused)]`) on by default
+[1m[96mhelp[0m: remove these parentheses
+    [1m[96m|[0m
+[1m[96m399[0m [91m- [0m                if [91m([0mis_visible[91m)[0m {
+[1m[96m399[0m [92m+ [0m                if is_visible {
+    [1m[96m|[0m
+
+[1m[93mwarning[0m[1m[97m: unused import: `std::io::Write`[0m
+   [1m[96m--> [0msrc\global_capture.rs:597:9
+    [1m[96m|[0m
+[1m[96m597[0m [1m[96m|[0m     use std::io::Write;
+    [1m[96m|[0m         [1m[93m^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: unused import: `axum::body::Body`[0m
+    [1m[96m--> [0msrc\handlers.rs:1815:9
+     [1m[96m|[0m
+[1m[96m1815[0m [1m[96m|[0m     use axum::body::Body;
+     [1m[96m|[0m         [1m[93m^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: unused import: `axum::body::Body`[0m
+    [1m[96m--> [0msrc\handlers.rs:2058:9
+     [1m[96m|[0m
+[1m[96m2058[0m [1m[96m|[0m     use axum::body::Body;
+     [1m[96m|[0m         [1m[93m^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: unused import: `PathBuf`[0m
+  [1m[96m--> [0msrc\utils.rs:10:23
+   [1m[96m|[0m
+[1m[96m10[0m [1m[96m|[0m use std::path::{Path, PathBuf};
+   [1m[96m|[0m                       [1m[93m^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: unused import: `Shortcut`[0m
+   [1m[96m--> [0msrc\lib.rs:216:71
+    [1m[96m|[0m
+[1m[96m216[0m [1m[96m|[0m                 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, Shortcu
+tState};
+    [1m[96m|[0m                                                                       [1m[93m^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: variable does not need to be mutable[0m
+   [1m[96m--> [0msrc\handlers.rs:768:9
+    [1m[96m|[0m
+[1m[96m768[0m [1m[96m|[0m     let mut compat_embedding = serde_json::json!({});
+    [1m[96m|[0m         [1m[96m----[0m[1m[93m^^^^^^^^^^^^^^^^[0m
+    [1m[96m|[0m         [1m[96m|[0m
+    [1m[96m|[0m         [1m[96mhelp: remove this `mut`[0m
+    [1m[96m|[0m
+    [1m[96m= [0m[1m[97mnote[0m: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+[1m[93mwarning[0m[1m[97m: variable does not need to be mutable[0m
+   [1m[96m--> [0msrc\handlers.rs:769:9
+    [1m[96m|[0m
+[1m[96m769[0m [1m[96m|[0m     let mut compat_chat = serde_json::json!({});
+    [1m[96m|[0m         [1m[96m----[0m[1m[93m^^^^^^^^^^^[0m
+    [1m[96m|[0m         [1m[96m|[0m
+    [1m[96m|[0m         [1m[96mhelp: remove this `mut`[0m
+
+[1m[93mwarning[0m[1m[97m: unused import: `std::os::windows::process::CommandExt`[0m
+  [1m[96m--> [0msrc\handlers.rs:17:5
+   [1m[96m|[0m
+[1m[96m17[0m [1m[96m|[0m use std::os::windows::process::CommandExt;
+   [1m[96m|[0m     [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: unused import: `Manager`[0m
+  [1m[96m--> [0msrc\lib.rs:25:32
+   [1m[96m|[0m
+[1m[96m25[0m [1m[96m|[0m use tauri::{Emitter, Listener, Manager};
+   [1m[96m|[0m                                [1m[93m^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: unused variable: `win`[0m
+   [1m[96m--> [0msrc\global_capture.rs:449:12
+    [1m[96m|[0m
+[1m[96m449[0m [1m[96m|[0m         Ok(win) => {
+    [1m[96m|[0m            [1m[93m^^^[0m [1m[93mhelp: if this is intentional, prefix it with an underscore: `_w
+in`[0m
+    [1m[96m|[0m
+    [1m[96m= [0m[1m[97mnote[0m: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+[1m[93mwarning[0m[1m[97m: unused variable: `app`[0m
+   [1m[96m--> [0msrc\global_capture.rs:564:33
+    [1m[96m|[0m
+[1m[96m564[0m [1m[96m|[0m pub fn handle_screenshot_result(app: &AppHandle, image_base64: String, action: String) 
+-> Result<(), String> {
+    [1m[96m|[0m                                 [1m[93m^^^[0m [1m[93mhelp: if this is intentional, prefix it wi
+th an underscore: `_app`[0m
+
+[1m[93mwarning[0m[1m[97m: unused variable: `app`[0m
+   [1m[96m--> [0msrc\global_capture.rs:634:32
+    [1m[96m|[0m
+[1m[96m634[0m [1m[96m|[0m pub fn capture_screenshot_data(app: &AppHandle) -> Result<serde_json::Value, String> {
+    [1m[96m|[0m                                [1m[93m^^^[0m [1m[93mhelp: if this is intentional, prefix it wit
+h an underscore: `_app`[0m
+
+[1m[93mwarning[0m[1m[97m: unused variable: `latin_count`[0m
+    [1m[96m--> [0msrc\handlers.rs:1319:13
+     [1m[96m|[0m
+[1m[96m1319[0m [1m[96m|[0m         let latin_count = source_text.chars().filter(|c| c.is_ascii_alphabetic()).coun
+t();
+     [1m[96m|[0m             [1m[93m^^^^^^^^^^^[0m [1m[93mhelp: if this is intentional, prefix it with an under
+score: `_latin_count`[0m
+
+[1m[93mwarning[0m[1m[97m: variable does not need to be mutable[0m
+   [1m[96m--> [0msrc\utils.rs:269:9
+    [1m[96m|[0m
+[1m[96m269[0m [1m[96m|[0m     let mut add_node = |nodes: &mut Vec<GraphNode>, node_ids: &mut HashSet<String>, nod
+e: GraphNode| -> bool {
+    [1m[96m|[0m         [1m[96m----[0m[1m[93m^^^^^^^^[0m
+    [1m[96m|[0m         [1m[96m|[0m
+    [1m[96m|[0m         [1m[96mhelp: remove this `mut`[0m
+
+[1m[93mwarning[0m[1m[97m: variable does not need to be mutable[0m
+   [1m[96m--> [0msrc\utils.rs:278:9
+    [1m[96m|[0m
+[1m[96m278[0m [1m[96m|[0m     let mut add_edge = |edge_map: &mut HashMap<String, GraphEdge>, source: &str, target
+: &str, edge_type: &str, weight: f64, direct[1m[96m...[0m
+    [1m[96m|[0m         [1m[96m----[0m[1m[93m^^^^^^^^[0m
+    [1m[96m|[0m         [1m[96m|[0m
+    [1m[96m|[0m         [1m[96mhelp: remove this `mut`[0m
+
+[1m[93mwarning[0m[1m[97m: function `frontmatter_summary` is never used[0m
+    [1m[96m--> [0msrc\app.rs:2082:4
+     [1m[96m|[0m
+[1m[96m2082[0m [1m[96m|[0m fn frontmatter_summary(content: &str) -> std::collections::BTreeMap<String, String> {
+     [1m[96m|[0m    [1m[93m^^^^^^^^^^^^^^^^^^^[0m
+     [1m[96m|[0m
+     [1m[96m= [0m[1m[97mnote[0m: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+[1m[93mwarning[0m[1m[97m: static `TRAILING_HASHES_RE` is never used[0m
+  [1m[96m--> [0msrc\frontmatter.rs:30:8
+   [1m[96m|[0m
+[1m[96m30[0m [1m[96m|[0m static TRAILING_HASHES_RE: LazyLock<Regex> =
+   [1m[96m|[0m        [1m[93m^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: fields `width`, `height`, and `version` are never read[0m
+   [1m[96m--> [0msrc\global_capture.rs:162:5
+    [1m[96m|[0m
+[1m[96m160[0m [1m[96m|[0m struct PendingScreenshot {
+    [1m[96m|[0m        [1m[96m-----------------[0m [1m[96mfields in this struct[0m
+[1m[96m161[0m [1m[96m|[0m     file_path: String,
+[1m[96m162[0m [1m[96m|[0m     width: u32,
+    [1m[96m|[0m     [1m[93m^^^^^[0m
+[1m[96m163[0m [1m[96m|[0m     height: u32,
+    [1m[96m|[0m     [1m[93m^^^^^^[0m
+[1m[96m164[0m [1m[96m|[0m     version: u64,  // 版本号，前端轮询检测新截图
+    [1m[96m|[0m     [1m[93m^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `try_get_pending_screenshot` is never used[0m
+   [1m[96m--> [0msrc\global_capture.rs:525:8
+    [1m[96m|[0m
+[1m[96m525[0m [1m[96m|[0m pub fn try_get_pending_screenshot() -> Option<serde_json::Value> {
+    [1m[96m|[0m        [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `show_focus_main` is never used[0m
+    [1m[96m--> [0msrc\global_capture.rs:1140:4
+     [1m[96m|[0m
+[1m[96m1140[0m [1m[96m|[0m fn show_focus_main(app: &AppHandle) {
+     [1m[96m|[0m    [1m[93m^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: field `workspace_id` is never read[0m
+    [1m[96m--> [0msrc\handlers.rs:2541:5
+     [1m[96m|[0m
+[1m[96m2539[0m [1m[96m|[0m struct PasteWorkspaceRequest {
+     [1m[96m|[0m        [1m[96m---------------------[0m [1m[96mfield in this struct[0m
+[1m[96m2540[0m [1m[96m|[0m     #[serde(rename = "workspaceId")]
+[1m[96m2541[0m [1m[96m|[0m     workspace_id: String,
+     [1m[96m|[0m     [1m[93m^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: constant `LICENSE_FILENAME` is never used[0m
+    [1m[96m--> [0msrc\handlers.rs:2936:7
+     [1m[96m|[0m
+[1m[96m2936[0m [1m[96m|[0m const LICENSE_FILENAME: &str = ".license";
+     [1m[96m|[0m       [1m[93m^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `license_file_path` is never used[0m
+    [1m[96m--> [0msrc\handlers.rs:2939:4
+     [1m[96m|[0m
+[1m[96m2939[0m [1m[96m|[0m fn license_file_path(data_root: &std::path::Path) -> std::path::PathBuf {
+     [1m[96m|[0m    [1m[93m^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `read_saved_license` is never used[0m
+    [1m[96m--> [0msrc\handlers.rs:2944:4
+     [1m[96m|[0m
+[1m[96m2944[0m [1m[96m|[0m fn read_saved_license(data_root: &std::path::Path) -> Option<String> {
+     [1m[96m|[0m    [1m[93m^^^^^^^^^^^^^^^^^^[0m
+
+[1m[93mwarning[0m[1m[97m: function `now_ms` is never used[0m
+   [1m[96m--> [0msrc\rag.rs:194:4
+    [1m[96m|[0m
+[1m[96m194[0m [1m[96m|[0m fn now_ms() -> u64 {
+    [1m[96m|[0m    [1m[93m^^^^^^[0m
+
+[1m[93mwarning[0m: `mytemple-server` (lib) generated 28 warnings (run `cargo fix --lib -p mytemple-server` to apply 
+16 suggestions)
+[1m[93mwarning[0m[1m[97m: linker stderr: C:/Users/fshby/AppData/Local/Microsoft/WinGet/Packages/BrechtSanders.WinL
+ibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/16.1.0/../../../../x86_6
+4-w64-mingw32/bin/ld.exe: .rsrc merge failure: multiple non-default manifests[0m
+  [1m[96m|[0m
+  [1m[96m= [0m[1m[97mnote[0m: `#[warn(linker_messages)]` on by default
+
+[1m[93mwarning[0m: `mytemple-server` (bin "mytemple-server") generated 1 warning
+[1m[92m    Finished[0m `release` profile [optimized] target(s) in 4m 49s
+       Built application at: D:\game\mytemple\src-tauri\target\release\mytemple-server.exe
+        Info Patching D:\game\mytemple\src-tauri\target\release\mytemple-server.exe with bundle type information: nsis
+        Info Target: x64
+     Running makensis to produce D:\game\mytemple\src-tauri\target\release\bundle\nsis\MyTemple Knowledge_2.1.14_x64-se
+tup.exe
+    Finished 1 bundle at:
+        D:\game\mytemple\src-tauri\target\release\bundle\nsis\MyTemple Knowledge_2.1.14_x64-setup.exe
+

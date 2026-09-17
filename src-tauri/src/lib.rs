@@ -734,8 +734,10 @@ pub async fn cmd_open_url(url: &str) -> Result<(), String> {
     }
     #[cfg(target_os = "windows")]
     {
-        std::process::Command::new("cmd")
-            .args(["/c", "start", "", url])
+        // 用 rundll32 url.dll,FileProtocolHandler 打开 URL，
+        // 避免 cmd /c start 把 URL 中的 & 当作命令分隔符导致参数丢失
+        std::process::Command::new("rundll32")
+            .args(["url.dll,FileProtocolHandler", url])
             .creation_flags(0x08000000)
             .spawn()
             .map_err(|e| format!("打开 URL 失败: {}", e))?;

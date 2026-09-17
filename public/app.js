@@ -3798,26 +3798,36 @@ function processJsonCodeBlocks(container) {
     jsonBlocks.forEach((block) => {
       const raw = block.getAttribute("data-json-raw") || "";
       if (!raw) return;
-      let treeHtml = "";
       try {
-        const temp = document.createElement("div");
-        temp.style.position = "fixed";
-        temp.style.left = "-99999px";
-        document.body.appendChild(temp);
         const tree = renderJsonTree(raw);
         if (tree) {
-          temp.appendChild(tree);
-          treeHtml = temp.innerHTML;
+          // 用真实 DOM 节点替换，保留 renderJsonNode 上的 addEventListener 折叠/展开事件
+          const details = document.createElement("details");
+          details.className = "json-code-block details";
+          details.open = true;
+
+          const summary = document.createElement("summary");
+          summary.className = "json-code-summary";
+          summary.textContent = "📋 JSON 树形视图";
+          details.appendChild(summary);
+
+          const wrapper = document.createElement("div");
+          wrapper.className = "json-tree-wrapper";
+          wrapper.appendChild(tree);
+          details.appendChild(wrapper);
+
+          const rawDetails = document.createElement("details");
+          rawDetails.className = "json-code-raw";
+          const rawSummary = document.createElement("summary");
+          rawSummary.textContent = "查看原始代码";
+          rawDetails.appendChild(rawSummary);
+          const pre = block.querySelector("pre");
+          if (pre) rawDetails.appendChild(pre.cloneNode(true));
+          details.appendChild(rawDetails);
+
+          block.replaceWith(details);
         }
-        document.body.removeChild(temp);
       } catch (e) { return; }
-      if (treeHtml) {
-        const details = document.createElement("details");
-        details.className = "json-code-block details";
-        details.open = true;
-        details.innerHTML = `<summary class="json-code-summary">📋 JSON 树形视图</summary><div class="json-tree-wrapper">${treeHtml}</div><details class="json-code-raw"><summary>查看原始代码</summary>${block.querySelector("pre")?.outerHTML || ""}</details>`;
-        block.replaceWith(details);
-      }
     });
   } catch (_) {}
 }
@@ -3916,6 +3926,48 @@ function renderJsonTree(content) {
   }
   const container = document.createElement("div");
   container.className = "json-tree";
+  // 存储原始内容与格式化后内容，供复制按钮使用（避免从渲染后的 DOM 提取导致混入折叠符号）
+  try { container.setAttribute("data-json-raw", content); } catch (_) {}
+  let formatted = content;
+  try { formatted = JSON.stringify(data, null, 2); } catch (_) {}
+  try { container.setAttribute("data-json-formatted", formatted); } catch (_) {}
+
+  // 顶部工具栏：复制按钮
+  const toolbar = document.createElement("div");
+  toolbar.className = "json-toolbar";
+  const copyBtn = document.createElement("button");
+  copyBtn.type = "button";
+  copyBtn.className = "json-copy-btn";
+  copyBtn.textContent = "复制 JSON";
+  copyBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const text = container.getAttribute("data-json-formatted") || container.getAttribute("data-json-raw") || "";
+    if (!text) return;
+    navigator.clipboard?.writeText(text).then(() => {
+      copyBtn.textContent = "已复制";
+      setTimeout(() => { copyBtn.textContent = "复制 JSON"; }, 1500);
+    }).catch(() => {
+      // 回退方案：用临时 textarea
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.left = "-99999px";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+        copyBtn.textContent = "已复制";
+        setTimeout(() => { copyBtn.textContent = "复制 JSON"; }, 1500);
+      } catch (__) {
+        copyBtn.textContent = "复制失败";
+        setTimeout(() => { copyBtn.textContent = "复制 JSON"; }, 1500);
+      }
+    });
+  });
+  toolbar.appendChild(copyBtn);
+  container.appendChild(toolbar);
+
   const root = renderJsonNode(data, "", true);
   container.appendChild(root);
   return container;
@@ -3933,12 +3985,14 @@ function renderJsonNode(value, key = "", isRoot = false) {
     const toggle = document.createElement("span");
     toggle.className = "json-toggle";
     toggle.textContent = "▼";
-    toggle.addEventListener("click", () => {
-      const collapsed = row.classList.toggle("collapsed");
-      toggle.textContent = collapsed ? "▶" : "▼";
-      updateCollapsedSummary(row, value);
-    });
+    // 注意：不在此绑定 click 事件，改由容器级事件委托（handleJsonTreeToggle）统一处理，
+    // 避免 innerHTML 序列化导致 addEventListener 丢失。
     row.appendChild(toggle);
+
+    // 存储折叠摘要所需数据，供事件委托读取
+    const childCount = type === "object" ? Object.keys(value).length : value.length;
+    row.setAttribute("data-json-child-count", String(childCount));
+    row.setAttribute("data-json-is-array", type === "array" ? "1" : "0");
 
     const keySpan = document.createElement("span");
     keySpan.className = "json-key";
@@ -4019,6 +4073,51 @@ function updateCollapsedSummary(row, value) {
     if (braceOpen) braceOpen.after(summarySpan);
   }
 }
+
+// JSON 树形视图折叠/展开——document 捕获阶段事件委托
+// 不依赖 :scope 选择器（部分 WebView2 版本 querySelector(":scope >") 会抛 SyntaxError 导致静默失败）
+// 改用 data 属性 + row.children 遍历，确保最大兼容性
+function handleJsonTreeToggle(event) {
+  const toggle = event.target.closest(".json-toggle");
+  if (!toggle) return false;
+  const row = toggle.closest(".json-row");
+  if (!row) return false;
+  // 仅容器节点可折叠：renderJsonNode 在容器节点上设置了 data-json-child-count
+  if (row.getAttribute("data-json-child-count") === null) return false;
+
+  event.preventDefault();
+  event.stopImmediatePropagation();
+
+  const collapsed = row.classList.toggle("collapsed");
+  toggle.textContent = collapsed ? "\u25b6" : "\u25bc";
+
+  // 折叠摘要：遍历 row.children 查找直接子元素，避免 :scope 选择器
+  const kids = row.children;
+  let summaryEl = null;
+  let braceOpenEl = null;
+  for (let i = 0; i < kids.length; i++) {
+    const c = kids[i];
+    if (c.classList.contains("json-summary")) summaryEl = c;
+    else if (c.classList.contains("json-brace") && !braceOpenEl) braceOpenEl = c;
+  }
+  if (summaryEl) summaryEl.remove();
+  if (collapsed) {
+    const count = row.getAttribute("data-json-child-count") || "0";
+    const isArray = row.getAttribute("data-json-is-array") === "1";
+    const summarySpan = document.createElement("span");
+    summarySpan.className = "json-summary";
+    summarySpan.textContent = isArray ? " " + count + " items" : " " + count + " keys";
+    if (braceOpenEl) braceOpenEl.after(summarySpan);
+    else row.appendChild(summarySpan);
+  }
+  return true;
+}
+
+// 在 document 捕获阶段统一处理 JSON 折叠/展开，确保在任何其他处理器之前拦截，
+// 避免被 els.preview/els.markdownView 以外的容器或事件拦截导致无响应
+document.addEventListener("click", (event) => {
+  handleJsonTreeToggle(event);
+}, true);
 
 function jsonValueType(value) {
   if (value === null) return "null";
@@ -13542,6 +13641,7 @@ els.searchResults.addEventListener("click", (event) => {
   }
 });
 els.markdownView.addEventListener("click", (event) => {
+  // JSON 折叠/展开已由 document 捕获阶段统一处理
   const img = event.target.closest("img");
   if (img && !img.closest(".code-block") && !img.closest(".chart-block")) {
     event.preventDefault();
@@ -13592,6 +13692,7 @@ els.markdownView.addEventListener("copy", (event) => {
   }
 });
 els.preview.addEventListener("click", async (event) => {
+  // JSON 折叠/展开已由 document 捕获阶段统一处理
   const img = event.target.closest("img");
   if (img && !img.closest(".code-block") && !img.closest(".chart-block")) {
     event.preventDefault();
@@ -13660,6 +13761,7 @@ els.preview.addEventListener("click", async (event) => {
 });
 // 需求8：阅读模式（阅读栏）markdownView 中链接同样处理：外部链接走系统默认浏览器
 els.markdownView.addEventListener("click", async (event) => {
+  // JSON 折叠/展开已由 document 捕获阶段统一处理
   const img = event.target.closest("img");
   if (img && !img.closest(".code-block") && !img.closest(".chart-block")) {
     event.preventDefault();
