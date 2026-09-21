@@ -12056,22 +12056,19 @@ async function handleScreenshotBlob(blob, action) {
   let copied = false;
   let saved = false;
 
-  // 复制到剪贴板（对标微信截图）
-  if (action === "copy" || action === "both") {
-    try {
-      if (navigator.clipboard && window.ClipboardItem) {
-        await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-        copied = true;
-      } else {
-        // 降级：用 <a download> 触发下载
-        console.warn("[screenshot] 浏览器不支持 ClipboardItem，降级保存");
-      }
-    } catch (e) {
-      console.error("[screenshot] 复制到剪贴板失败:", e);
+  // 无论什么 action，都复制到剪贴板（对标微信截图：保存时也复制）
+  try {
+    if (navigator.clipboard && window.ClipboardItem) {
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+      copied = true;
+    } else {
+      console.warn("[screenshot] 浏览器不支持 ClipboardItem");
     }
+  } catch (e) {
+    console.error("[screenshot] 复制到剪贴板失败:", e);
   }
 
-  // 保存到文件
+  // action=save 或 both 时，额外保存到文件
   if (action === "save" || action === "both" || !copied) {
     try {
       await saveBlobWithDialog(blob, name);

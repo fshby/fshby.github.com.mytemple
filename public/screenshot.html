@@ -83,6 +83,8 @@
   }
   .anno-action:disabled { opacity: 0.35; cursor: default; }
   .anno-action:disabled:hover { background: transparent; color: #cbd5e1; }
+  .anno-save { color: #60a5fa; font-size: 15px; }
+  .anno-save:hover { background: rgba(96, 165, 250, 0.18); color: #60a5fa; }
   .anno-confirm { color: #4ade80; font-weight: 600; }
   .anno-confirm:hover { background: rgba(74, 222, 128, 0.18); color: #4ade80; }
   .anno-cancel { color: #f87171; }
@@ -587,6 +589,7 @@ function buildToolbarHTML() {
     <div class="anno-divider"></div>
     <button type="button" class="anno-action anno-ocr" title="识别文字">OCR</button>
     <div class="anno-divider"></div>
+    <button type="button" class="anno-action anno-save" title="保存到文件">💾</button>
     <button type="button" class="anno-action anno-confirm" title="复制到剪贴板 (Enter)">✓</button>
     <button type="button" class="anno-action anno-cancel" title="取消 (ESC)">✕</button>
   `;
@@ -658,6 +661,7 @@ function onToolbarClick(e) {
   if (e.target.closest('.anno-undo')) { undo(); return; }
   if (e.target.closest('.anno-redo')) { redo(); return; }
   if (e.target.closest('.anno-ocr')) { doOCR(); return; }
+  if (e.target.closest('.anno-save')) { confirmEdit('both'); return; }
   if (e.target.closest('.anno-confirm')) { confirmEdit('copy'); return; }
   if (e.target.closest('.anno-cancel')) { cleanupAndClose(); return; }
 }
