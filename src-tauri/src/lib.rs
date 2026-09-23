@@ -1586,8 +1586,10 @@ pub async fn api_create_document(s: Srv<'_>, parent: String, name: String) -> Re
 
 // 搜索 / 图谱
 #[tauri::command]
-pub async fn api_search(s: Srv<'_>, q: String) -> Result<serde_json::Value, String> {
-    Ok(crate::ipc::search(&s, q).await)
+pub async fn api_search(s: Srv<'_>, q: String, offset: Option<usize>, limit: Option<usize>) -> Result<serde_json::Value, String> {
+    let o = offset.unwrap_or(0);
+    let l = limit.unwrap_or(80).min(500);
+    Ok(crate::ipc::search(&s, q, o, l).await)
 }
 #[tauri::command]
 pub async fn api_get_graph(s: Srv<'_>) -> Result<serde_json::Value, String> {

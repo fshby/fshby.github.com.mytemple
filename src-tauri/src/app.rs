@@ -284,13 +284,162 @@ pub struct AppState {
 
 pub struct SearchIndex {
 
-    pub entries: Vec<usize>,
+    /// 倒排索引：token_hash → 该 token 出现的所有文档的 Posting 列表
+    pub inverted: HashMap<u32, Vec<Posting>>,
+
+    /// 每个文档的标题/正文字段长度（token 数），用于 BM25 长度归一
+    pub doc_metas: Vec<DocMeta>,
+
+    /// 标题字段平均 token 数
+    pub avg_title_len: f64,
+
+    /// 正文字段平均 token 数
+    pub avg_body_len: f64,
+
+    /// 文档总数
+    pub total_docs: u32,
 
 }
 
+#[derive(Debug, Default, Clone, Copy)]
+pub struct Posting {
+    pub doc_idx: u32,
+    pub tf_title: u16,
+    pub tf_body: u16,
+}
 
+#[derive(Debug, Default, Clone)]
+pub struct DocMeta {
+    pub title_len: u32,
+    pub body_len: u32,
+}
 
-// SearchEntry removed — SearchIndex stores Vec<usize> indices into files
+/// FNV-1a 32-bit 哈希：用于把 token 字符串映射到 u32 作为倒排索引 key
+/// 非密码学用途，仅追求速度与均匀分布
+fn hash_token_u32(s: &str) -> u32 {
+    let mut h: u32 = 0x811c9dc5;
+    for b in s.as_bytes() {
+        h ^= *b as u32;
+        h = h.wrapping_mul(0x01000193);
+    }
+    h
+}
+
+/// 判断字符是否属于 CJK（含汉字、假名、韩文音节）
+/// 参考 Lucene CJKAnalyzer 的 CJK 范围判定
+fn is_cjk_char(ch: char) -> bool {
+    let cp = ch as u32;
+    matches!(cp,
+        0x4E00..=0x9FFF       // CJK 统一表意文字
+        | 0x3400..=0x4DBF     // CJK 扩展 A
+        | 0x20000..=0x2A6DF   // CJK 扩展 B
+        | 0x2A700..=0x2B73F   // CJK 扩展 C
+        | 0x2B740..=0x2B81F   // CJK 扩展 D
+        | 0x3040..=0x309F     // 平假名
+        | 0x30A0..=0x30FF     // 片假名
+        | 0xAC00..=0xD7AF     // 韩文音节
+    )
+}
+
+/// CJK 双字分词 + ASCII 单词分词（零依赖，参考 Lucene CJKAnalyzer）
+/// - 连续 CJK 字符按 N=2 滑动窗口切分："知识图谱" → "知识"、"识图"、"图谱"
+/// - 单个 CJK 字符直接作为 token
+/// - ASCII 字母/数字按连续单词切分（复用 TOKEN_RE 逻辑：[\p{L}\p{N}][\p{L}\p{N}_.\-]{1,}）
+/// - 其他字符（空格、标点、符号）作为分隔符
+fn tokenize_cjk_terms(text: &str) -> Vec<String> {
+    use std::collections::VecDeque;
+    let normalized = text.to_lowercase();
+    let mut tokens: Vec<String> = Vec::new();
+    let mut cjk_buffer: VecDeque<char> = VecDeque::new();
+    let mut ascii_buffer: String = String::new();
+
+    let flush_cjk = |buf: &mut VecDeque<char>, out: &mut Vec<String>| {
+        let chars: Vec<char> = buf.drain(..).collect();
+        if chars.is_empty() { return; }
+        if chars.len() == 1 {
+            out.push(chars[0].to_string());
+        } else {
+            for w in chars.windows(2) {
+                out.push(format!("{}{}", w[0], w[1]));
+            }
+        }
+    };
+
+    let flush_ascii = |buf: &mut String, out: &mut Vec<String>| {
+        if !buf.is_empty() {
+            let s = buf.trim();
+            if s.len() > 1 {
+                out.push(s.to_string());
+            } else if s.len() == 1 {
+                // 单字符 ASCII 也保留（如数字、单字母），与 CJK 单字一致
+                out.push(s.to_string());
+            }
+            buf.clear();
+        }
+    };
+
+    for ch in normalized.chars() {
+        if is_cjk_char(ch) {
+            flush_ascii(&mut ascii_buffer, &mut tokens);
+            cjk_buffer.push_back(ch);
+        } else if ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' || ch == '.' {
+            flush_cjk(&mut cjk_buffer, &mut tokens);
+            ascii_buffer.push(ch);
+        } else {
+            // 分隔符：先 flush 两边缓冲
+            flush_cjk(&mut cjk_buffer, &mut tokens);
+            flush_ascii(&mut ascii_buffer, &mut tokens);
+        }
+    }
+    flush_cjk(&mut cjk_buffer, &mut tokens);
+    flush_ascii(&mut ascii_buffer, &mut tokens);
+    tokens
+}
+
+/// 从文件列表构建倒排索引（refresh_cache 与懒扫描 hidden ws 共用）
+/// - CJK 双字分词 + 标题/正文字段词频统计
+/// - BM25 长度归一元数据（doc_metas / avg_*_len）
+fn build_search_index(files: &[FileEntry]) -> SearchIndex {
+    let mut idx = SearchIndex::default();
+    idx.total_docs = files.len() as u32;
+    idx.doc_metas = Vec::with_capacity(files.len());
+    let mut title_len_sum: u64 = 0;
+    let mut body_len_sum: u64 = 0;
+    for (i, file) in files.iter().enumerate() {
+        let title_tokens = tokenize_cjk_terms(&file.title);
+        let body_tokens = tokenize_cjk_terms(&file.plain);
+        title_len_sum += title_tokens.len() as u64;
+        body_len_sum += body_tokens.len() as u64;
+        idx.doc_metas.push(DocMeta {
+            title_len: title_tokens.len() as u32,
+            body_len: body_tokens.len() as u32,
+        });
+        let mut tf_map: HashMap<u32, (u16, u16)> = HashMap::new();
+        for t in &title_tokens {
+            let id = hash_token_u32(t);
+            tf_map.entry(id).or_default().0 += 1;
+        }
+        for t in &body_tokens {
+            let id = hash_token_u32(t);
+            tf_map.entry(id).or_default().1 += 1;
+        }
+        for (token_id, (tf_title, tf_body)) in tf_map {
+            idx.inverted.entry(token_id).or_default().push(Posting {
+                doc_idx: i as u32,
+                tf_title,
+                tf_body,
+            });
+        }
+    }
+    let n = files.len();
+    idx.avg_title_len = if n == 0 { 0.0 } else { title_len_sum as f64 / n as f64 };
+    idx.avg_body_len = if n == 0 { 0.0 } else { body_len_sum as f64 / n as f64 };
+    log::info!(
+        "[search_index] 倒排索引构建完成 docs={} tokens={} avg_title={:.1} avg_body={:.1}",
+        idx.total_docs, idx.inverted.len(), idx.avg_title_len, idx.avg_body_len
+    );
+    idx
+}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -298,7 +447,10 @@ pub struct SearchResult {
     pub path: String,
     pub title: String,
     pub snippet: String,
-    pub score: u32,
+    pub score: f64,
+    pub matched_tokens: Vec<String>,
+    pub total_matches: u32,
+    pub total_tokens: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -480,7 +632,8 @@ impl AppState {
 
 
 
-        let search_indices: Vec<usize> = (0..all_files.len()).collect();
+        // 构建倒排索引（替代旧版 Vec<usize> 空操作）
+        let new_index = build_search_index(&all_files);
         let tree = build_tree(&all_files, &workspaces);
 
 
@@ -497,7 +650,7 @@ impl AppState {
 
             let mut idx = self.search_index.write().await;
 
-            idx.entries = search_indices;
+            *idx = new_index;
 
         }
 
@@ -850,9 +1003,10 @@ impl AppState {
             for e in new_entries.into_iter() {
                 if !existing_paths.contains(&e.path) { files.push(e); }
             }
-            // 重建 search_index（保持 entries = 0..files.len()）
+            // 重建倒排索引（files 已合并新条目，需全量重建）
+            let new_index = build_search_index(files.as_slice());
             let mut idx = self.search_index.write().await;
-            idx.entries = (0..files.len()).collect();
+            *idx = new_index;
         }
 
         // 重建 tree（包含所有 workspaces —— 即使 hidden 只对 search/read_file 有效，
@@ -1420,7 +1574,6 @@ impl AppState {
 
 
     pub async fn search(&self, query: &str) -> Vec<SearchResult> {
-
         fn align_boundary(s: &str, byte_pos: usize, forward: bool) -> usize {
             let clamped = byte_pos.min(s.len());
             if s.is_char_boundary(clamped) { return clamped; }
@@ -1431,111 +1584,151 @@ impl AppState {
             }
         }
 
-        // 解析查询：提取引号内精确短语 + 其余按空格分词
         let query_trimmed = query.trim();
         if query_trimmed.is_empty() { return Vec::new(); }
 
+        // 1. 解析引号内精确短语（复用现有逻辑）
         let mut phrases: Vec<String> = Vec::new();
         let mut remaining = query_trimmed.to_string();
-        // 提取 "..." 短语
         while let Some(start) = remaining.find('"') {
             if let Some(end) = remaining[start + 1..].find('"') {
                 let phrase = remaining[start + 1..start + 1 + end].to_lowercase();
-                if !phrase.is_empty() {
-                    phrases.push(phrase);
-                }
+                if !phrase.is_empty() { phrases.push(phrase); }
                 remaining = format!("{} {}", &remaining[..start], &remaining[start + 1 + end + 1..]);
-            } else {
-                break;
-            }
+            } else { break; }
         }
-        let mut tokens: Vec<String> = remaining
-            .split_whitespace()
-            .map(|s| s.to_lowercase())
-            .filter(|s| s.len() >= 1)
-            .collect();
-        // 去重
+
+        // 2. CJK 双字分词（替代 split_whitespace，中文查询才能被切分）
+        let mut tokens = tokenize_cjk_terms(&remaining);
         tokens.sort();
         tokens.dedup();
 
+        // 无 token 也无短语时，用原始查询做兜底分词（避免单字查询落空）
+        if tokens.is_empty() && phrases.is_empty() {
+            tokens = tokenize_cjk_terms(&query_trimmed.to_lowercase());
+            tokens.sort();
+            tokens.dedup();
+        }
+        let total_tokens = tokens.len() as u32;
+
         let index = self.search_index.read().await;
         let files = self.files.read().await;
+        if index.total_docs == 0 || index.doc_metas.len() != files.len() {
+            return Vec::new();
+        }
 
-        let mut results: Vec<SearchResult> = index
-            .entries
-            .iter()
-            .filter_map(|&idx| {
-                let entry = &files[idx];
-                let title_lower = entry.title.to_lowercase();
-                let plain_lower = entry.plain.to_lowercase();
+        // 3. OR 候选集：任一 token 命中倒排索引即收集
+        // doc_idx → Vec<(token_idx_in_query, Posting)>
+        let mut candidates: HashMap<u32, Vec<(u32, Posting)>> = HashMap::new();
+        for (token_idx, t) in tokens.iter().enumerate() {
+            let tid = hash_token_u32(t);
+            if let Some(postings) = index.inverted.get(&tid) {
+                for p in postings {
+                    candidates
+                        .entry(p.doc_idx)
+                        .or_default()
+                        .push((token_idx as u32, *p));
+                }
+            }
+        }
 
-                // 精确短语必须全部匹配
+        // 4. BM25F 评分 + 精确短语后置过滤
+        let k1 = 1.2_f64;
+        let b_body = 0.75_f64;
+        let b_title = 0.5_f64;
+        let w_title = 3.0_f64;
+        let w_body = 1.0_f64;
+        let n = index.total_docs as f64;
+        let avg_t = index.avg_title_len.max(1.0);
+        let avg_b = index.avg_body_len.max(1.0);
+
+        let mut scored: Vec<SearchResult> = Vec::new();
+        for (doc_idx, hits) in candidates {
+            let file = match files.get(doc_idx as usize) {
+                Some(f) => f,
+                None => continue,
+            };
+            let title_lower = file.title.to_lowercase();
+            let plain_lower = file.plain.to_lowercase();
+
+            // 精确短语必须连续命中（contains 即子串连续匹配）
+            if !phrases.is_empty() {
                 let phrases_ok = phrases.iter().all(|p| title_lower.contains(p) || plain_lower.contains(p));
-                if !phrases_ok && !phrases.is_empty() { return None; }
+                if !phrases_ok { continue; }
+            }
 
-                // 分词：全部匹配才算通过（AND 逻辑）
-                let mut all_match = tokens.is_empty() || phrases.is_empty();
-                if !tokens.is_empty() && !phrases.is_empty() {
-                    all_match = phrases_ok;
-                } else if !tokens.is_empty() {
-                    all_match = tokens.iter().all(|t| title_lower.contains(t) || plain_lower.contains(t));
-                }
-                if !all_match { return None; }
+            let mut total_score: f64 = 0.0;
+            let meta = &index.doc_metas[doc_idx as usize];
+            let mut matched: Vec<String> = Vec::new();
 
-                // 评分：title 命中 +50/个关键词，content 命中 +10/个，精确短语 +30/个
-                let mut score: u32 = 0;
-                for t in &tokens {
-                    if title_lower.contains(t) { score += 50; }
-                    if plain_lower.contains(t) { score += 10; }
-                }
-                for p in &phrases {
-                    if title_lower.contains(p) { score += 80; }
-                    if plain_lower.contains(p) { score += 30; }
-                }
-                if tokens.is_empty() && phrases.is_empty() {
-                    // 单关键词 fallback
-                    if title_lower.contains(&query_trimmed.to_lowercase()) { score = 100; }
-                    else if plain_lower.contains(&query_trimmed.to_lowercase()) { score = 50; }
-                }
+            for (token_idx, posting) in &hits {
+                let token = &tokens[*token_idx as usize];
+                matched.push(token.clone());
+                let df = index.inverted.get(&hash_token_u32(token))
+                    .map(|v| v.len() as f64)
+                    .unwrap_or(1.0);
+                let idf = (1.0 + (n - df + 0.5) / (df + 0.5)).ln();
 
-                // 找 snippet：优先 title 匹配，否则找第一个匹配关键词的位置
-                let snippet = if tokens.iter().any(|t| title_lower.contains(t)) || phrases.iter().any(|p| title_lower.contains(p)) {
-                    entry.title.clone()
+                if posting.tf_title > 0 {
+                    let tf = posting.tf_title as f64;
+                    let dl = meta.title_len as f64;
+                    let s = idf * (tf * (k1 + 1.0)) / (tf + k1 * (1.0 - b_title + b_title * dl / avg_t));
+                    total_score += w_title * s;
+                }
+                if posting.tf_body > 0 {
+                    let tf = posting.tf_body as f64;
+                    let dl = meta.body_len as f64;
+                    let s = idf * (tf * (k1 + 1.0)) / (tf + k1 * (1.0 - b_body + b_body * dl / avg_b));
+                    total_score += w_body * s;
+                }
+            }
+            // 精确短语加分（高于 token BM25，强化精确匹配优先级）
+            for p in &phrases {
+                if title_lower.contains(p) { total_score += 30.0; }
+                if plain_lower.contains(p) { total_score += 10.0; }
+            }
+
+            // snippet 构造：优先 title 命中，否则在 plain 中定位首个匹配 token
+            let matched_token_refs: Vec<&str> = matched.iter().map(|s| s.as_str()).collect();
+            let title_hit = matched_token_refs.iter().any(|t| title_lower.contains(t))
+                || phrases.iter().any(|p| title_lower.contains(p));
+            let snippet = if title_hit {
+                file.title.clone()
+            } else {
+                let first_pos = matched_token_refs.iter()
+                    .filter_map(|t| plain_lower.find(t))
+                    .chain(phrases.iter().filter_map(|p| plain_lower.find(p)))
+                    .min()
+                    .unwrap_or(0);
+                let raw_start = first_pos.saturating_sub(40);
+                let raw_end = (first_pos + query_trimmed.len() + 60).min(file.plain.len());
+                let start = align_boundary(&file.plain, raw_start, true);
+                let end = align_boundary(&file.plain, raw_end, false);
+                if start >= end {
+                    String::new()
                 } else {
-                    let first_pos = tokens.iter()
-                        .filter_map(|t| plain_lower.find(t))
-                        .chain(phrases.iter().filter_map(|p| plain_lower.find(p)))
-                        .min()
-                        .unwrap_or(0);
-                    let raw_start = first_pos.saturating_sub(40);
-                    let raw_end = (first_pos + query_trimmed.len() + 60).min(entry.plain.len());
-                    let start = align_boundary(&entry.plain, raw_start, true);
-                    let end = align_boundary(&entry.plain, raw_end, false);
-                    if start >= end {
-                        String::new()
-                    } else {
-                        let context = &entry.plain[start..end];
-                        if start > 0 {
-                            format!("...{}", context)
-                        } else {
-                            context.to_string()
-                        }
-                    }
-                };
+                    let context = &file.plain[start..end];
+                    if start > 0 { format!("...{}", context) } else { context.to_string() }
+                }
+            };
 
-                Some(SearchResult {
-                    path: entry.path.clone(),
-                    title: entry.title.clone(),
-                    snippet,
-                    score,
-                })
-            })
-            .collect();
+            scored.push(SearchResult {
+                path: file.path.clone(),
+                title: file.title.clone(),
+                snippet,
+                score: total_score,
+                matched_tokens: matched,
+                total_matches: hits.len() as u32,
+                total_tokens,
+            });
+        }
 
-        // 按 score 降序排序
-        results.sort_by(|a, b| b.score.cmp(&a.score));
-        results
-
+        // 5. 精排：分数降序；同分按命中 token 数降序
+        scored.sort_by(|a, b| {
+            b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| b.total_matches.cmp(&a.total_matches))
+        });
+        scored
     }
 
 
