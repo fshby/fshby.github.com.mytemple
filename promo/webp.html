@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>批量图片转 WebP 工具（调试版 v2026-04-23d）</title>
+<style>
+  :root{
+    --bg:#0f1420; --panel:#171e2e; --panel2:#1e2739; --line:#2a3550;
+    --txt:#e6ebf5; --txt2:#9aa7c2; --acc:#4f8cff; --acc2:#3b6fd6;
+    --ok:#2ecc8f; --warn:#f5a623; --bad:#ff5b5b; --chip:#232d42;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--txt);
+    font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    min-height:100vh;
+  }
+  .wrap{max-width:1180px;margin:0 auto;padding:28px 22px 80px}
+  header h1{font-size:22px;margin:0 0 6px;letter-spacing:.5px}
+  header p{margin:0;color:var(--txt2);font-size:13px}
+  .card{
+    background:var(--panel); border:1px solid var(--line); border-radius:12px;
+    padding:18px; margin-top:18px;
+  }
+  .card h2{
+    font-size:14px;margin:0 0 14px;color:var(--txt2);
+    text-transform:uppercase;letter-spacing:1px;font-weight:600;
+  }
+  .row{display:flex;gap:10px;flex-wrap:wrap}
+  button{
+    background:var(--panel2); color:var(--txt); border:1px solid var(--line);
+    border-radius:8px; padding:9px 15px; font-size:13px; cursor:pointer;
+    transition:.15s; font-family:inherit;
+  }
+  button:hover:not(:disabled){border-color:var(--acc);background:#232f47}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  button.primary{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+  button.primary:hover:not(:disabled){background:var(--acc2);border-color:var(--acc2)}
+  button.ghost{background:transparent}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  @media(max-width:760px){.grid2{grid-template-columns:1fr}}
+  label.field{display:block;margin-bottom:14px}
+  label.field>span{display:block;color:var(--txt2);font-size:12px;margin-bottom:6px}
+  input[type=number],select{
+    width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:8px;
+    color:var(--txt);padding:8px 10px;font-size:13px;font-family:inherit;
+  }
+  input[type=range]{width:100%;accent-color:var(--acc)}
+  .qrow{display:flex;align-items:center;gap:12px}
+  .qval{
+    min-width:44px;text-align:center;background:var(--chip);border-radius:6px;
+    padding:3px 0;font-variant-numeric:tabular-nums;font-weight:600;
+  }
+  .chips{display:flex;gap:6px;flex-wrap:wrap}
+  .chip{
+    background:var(--chip);border:1px solid var(--line);border-radius:20px;
+    padding:5px 11px;font-size:12px;cursor:pointer;user-select:none;
+  }
+  .chip.on{background:rgba(79,140,255,.18);border-color:var(--acc);color:#cfe0ff}
+  .stat{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+  @media(max-width:760px){.stat{grid-template-columns:repeat(2,1fr)}}
+  .stat div{
+    background:var(--panel2);border:1px solid var(--line);border-radius:10px;
+    padding:12px;text-align:center;
+  }
+  .stat b{display:block;font-size:22px;font-variant-numeric:tabular-nums;line-height:1.3}
+  .stat small{color:var(--txt2);font-size:11px;text-transform:uppercase;letter-spacing:1px}
+  .bar{height:6px;background:var(--panel2);border-radius:4px;overflow:hidden;margin-top:10px}
+  .bar>i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--acc),#7ab3ff);transition:width .2s}
+  .hint{font-size:12px;color:var(--txt2);margin-top:8px}
+  .hint.warn{color:var(--warn)}
+  .hint.ok{color:var(--ok)}
+  .toolbar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th,td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--line);vertical-align:middle}
+  th{color:var(--txt2);font-weight:600;cursor:pointer;white-space:nowrap;position:sticky;top:0;background:var(--panel);z-index:2}
+  th:hover{color:var(--acc)}
+  th .ar{opacity:.35;font-size:10px;margin-left:2px}
+  th.sorted{color:var(--acc)}th.sorted .ar{opacity:1}
+  td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .rate{font-weight:600}
+  .rate.g{color:var(--ok)}.rate.y{color:var(--warn)}.rate.r{color:var(--bad)}
+  .st{font-size:11px;padding:2px 8px;border-radius:10px;white-space:nowrap}
+  .st.done{background:rgba(46,204,143,.15);color:var(--ok)}
+  .st.fail{background:rgba(255,91,91,.15);color:var(--bad)}
+  .st.skip{background:var(--chip);color:var(--txt2)}
+  .path{color:var(--txt2);font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;word-break:break-all}
+  .prev{display:flex;gap:6px;align-items:center}
+  .prev img{width:34px;height:34px;object-fit:cover;border-radius:4px;border:1px solid var(--line);background:#000}
+  .scroll{max-height:420px;overflow:auto;border:1px solid var(--line);border-radius:10px}
+  .scroll::-webkit-scrollbar{width:9px;height:9px}
+  .scroll::-webkit-scrollbar-thumb{background:var(--line);border-radius:5px}
+  .empty{padding:26px;text-align:center;color:var(--txt2);font-size:13px}
+  .log{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;color:var(--txt2);white-space:pre-wrap;max-height:180px;overflow:auto;background:#0b0f18;border-radius:8px;padding:10px}
+  .badge{font-size:11px;padding:2px 7px;border-radius:4px;background:var(--chip);color:var(--txt2)}
+  .badge.y{background:rgba(245,166,35,.15);color:var(--warn)}
+  .badge.r{background:rgba(255,91,91,.15);color:var(--bad)}
+  .badge.g{background:rgba(46,204,143,.15);color:var(--ok)}
+  details{margin-top:10px}
+  summary{cursor:pointer;color:var(--txt2);font-size:12px}
+  .note{font-size:12px;color:var(--txt2);line-height:1.9}
+  .note code{background:var(--chip);padding:1px 5px;border-radius:4px;font-size:11.5px}
+  .hr{height:1px;background:var(--line);margin:16px 0}
+  .ctrls{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>批量图片转 WebP <span style="font-size:12px;color:var(--warn)">调试版 v2026-04-23d</span></h1>
+    <p>纯浏览器本地处理，图片不上传服务器 · 保留原始目录结构与文件名（仅替换扩展名后缀为 .webp）</p>
+  </header>
+
+  <!-- 步骤 1 -->
+  <section class="card">
+    <h2>1 · 选择源目录</h2>
+    <div class="row">
+      <button id="btnPickIn" class="primary">选择源文件夹</button>
+      <button id="btnClear" class="ghost">清空列表</button>
+    </div>
+    <p class="hint" id="inHint">点击按钮，在弹出的系统对话框里选择包含图片的文件夹，程序会递归读取其中所有图片文件。</p>
+  </section>
+
+  <!-- 步骤 2 -->
+  <section class="card">
+    <h2>2 · 转换参数</h2>
+    <div class="grid2">
+      <div>
+        <label class="field">
+          <span>输出质量 <span class="qval" id="qDisp">0.80</span></span>
+          <div class="qrow">
+            <input type="range" id="quality" min="0.5" max="1" step="0.05" value="0.8">
+          </div>
+          <span class="hint" id="qHint">质量越低体积越小，人像/文字内容低于 0.75 可能出现可见模糊。</span>
+        </label>
+        <label class="field">
+          <span>最大边长（px，0 = 不缩放）</span>
+          <input type="number" id="maxSide" min="0" step="1" value="0">
+          <span class="hint" id="sideHint">等比缩放，取宽高中的较大值。填 0 保持原始尺寸。</span>
+        </label>
+      </div>
+      <div>
+        <label class="field">
+          <span>输入格式（勾选要纳入转换的格式）</span>
+          <div class="chips" id="fmtChips"></div>
+        </label>
+        <label class="field">
+          <span>编码并发数</span>
+          <input type="number" id="concur" min="1" max="8" step="1" value="4">
+          <span class="hint">建议 2~4。数值过高会因 CPU 争抢反而变慢。</span>
+        </label>
+      </div>
+    </div>
+    <div class="hr"></div>
+    <div class="ctrls">
+      <button id="btnPickOut" class="primary" disabled>选择输出文件夹并转换</button>
+      <button id="btnZip" disabled>导出为 ZIP（浏览器不支持目录时可用）</button>
+      <button id="btnRetry" class="ghost" disabled>仅重试失败项</button>
+      <button id="btnCopyReport" class="ghost" disabled>复制统计报告</button>
+    </div>
+    <p class="hint" id="outHint">选择输出文件夹后，转换结果会写入该文件夹，目录结构与文件名保持一致。</p>
+  </section>
+
+  <!-- 进度 -->
+  <section class="card" id="progCard" style="display:none">
+    <h2>转换进度</h2>
+    <div class="stat">
+      <div><b id="sDone">0</b><small>已完成</small></div>
+      <div><b id="sFail">0</b><small>失败</small></div>
+      <div><b id="sSaved">0 KB</b><small>节省空间</small></div>
+      <div><b id="sPct">0%</b><small>综合压缩率</small></div>
+    </div>
+    <div class="bar"><i id="bar"></i></div>
+  </section>
+
+  <!-- 结果 -->
+  <section class="card" id="resCard" style="display:none">
+    <div class="toolbar">
+      <h2 style="margin:0">处理结果</h2>
+      <div class="chips" id="filterChips">
+        <span class="chip on" data-f="all">全部</span>
+        <span class="chip" data-f="done">成功</span>
+        <span class="chip" data-f="fail">失败</span>
+        <span class="chip" data-f="big">变大</span>
+      </div>
+    </div>
+    <div class="scroll" style="margin-top:12px">
+      <table>
+        <thead>
+          <tr>
+            <th data-k="path">文件 <span class="ar">▼</span></th>
+            <th data-k="before" class="num">原始大小 <span class="ar">▼</span></th>
+            <th data-k="after" class="num">输出大小 <span class="ar">▼</span></th>
+            <th data-k="rate" class="num">压缩率 <span class="ar">▼</span></th>
+            <th data-k="status">状态 <span class="ar">▼</span></th>
+            <th data-k="msg">说明</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <p class="hint" id="resHint"></p>
+    <details open>
+      <summary>运行日志（调试版默认展开）</summary>
+      <div class="log" id="log"></div>
+    </details>
+  </section>
+
+  <section class="card">
+    <h2>说明</h2>
+    <div class="note">
+      · 转换规则：<code>照片.png</code> → <code>照片.webp</code>，<code>照片.jpg</code> → <code>照片.webp</code>，仅替换扩展名后缀，不带原扩展名。<br>
+      · 同名碰撞检测以<strong>最终文件名</strong>为准，发生冲突时追加序号（如 <code>照片.1.webp</code>），不会互相覆盖。<br>
+      · 目录写入依赖 File System Access API，Chrome / Edge 最新版支持最佳；Firefox 与 Safari 下输出请使用「导出为 ZIP」。<br>
+      · 目录选择期间若浏览器提示权限，请允许；长时间运行后权限可能过期，可点击「仅重试失败项」重新授权。<br>
+      · GIF / APNG 动图经 canvas 编码只会保留<strong>第一帧</strong>；SVG 与部分 HEIC/AVIF 可能无法解码，会列入失败项。<br>
+      · 调试版 v2026-04-23d：扫描阶段不再读取文件内容，仅记录句柄；每个阶段均打印耗时，便于定位卡顿。
+    </div>
+  </section>
+</div>
+
+<script>
+
+
+/* ============================================================
+   批量图片转 WebP —— 调试版 v2026-04-23d
+   本次关键改动：
+     1) 扫描阶段完全不做 getFile() / arrayBuffer()，只遍历句柄
+     2) 文件大小与解码放到转换阶段，扫描应为纯内存毫秒级
+     3) 每个阶段打印耗时，快速定位卡顿环节
+     4) 单一 click 处理器，含全局 try/catch，不再静默卡死
+   ============================================================ */
+
+const $ = (s) => document.querySelector(s);
+const FORMATS = [
+  ['png','image/png'],['jpg','image/jpeg'],['jpeg','image/jpeg'],
+  ['webp','image/webp'],['avif','image/avif'],['gif','image/gif'],
+  ['bmp','image/bmp'],['tif','image/tiff'],['tiff','image/tiff'],
+  ['ico','image/x-icon'],['svg','image/svg+xml']
+];
+const FMT_SET = new Set(FORMATS.map(f => f[0]));
+const MIME_SET = new Set(FORMATS.map(f => f[1]));
+const SUPPORTS_DIR = ('showDirectoryPicker' in window);
+
+/* ---------- 计时工具 ---------- */
+function now(){ return Date.now(); }
+function tlog(tag){
+  console.log('[WebP] ⏱ ' + tag + '  +' + (now()-_t0) + 'ms  (' + (arguments[1]!==undefined?arguments[1]:'') + ')');
+}
+var _t0 = now();
+
+/* ---------- 日志 ---------- */
+const logEl = $('#log');
+async function log(msg){
+  const t = new Date().toLocaleTimeString('zh-CN',{hour12:false});
+  logEl.textContent += `[${t}] ${msg}\n`;
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+/* ---------- 启动标记：一眼确认是不是新版 ---------- */
+_t0 = now();
+console.log('%c[WebP] version 2026-04-21d LOADED', 'color:#4f8cff;font-weight:bold;font-size:14px');
+console.log('[WebP] SUPPORTS_DIR =', SUPPORTS_DIR, '| userAgent =', navigator.userAgent);
+tlog('脚本开始执行');
+
+/* ---------- 格式勾选 ---------- */
+const selFmts = new Set(['png','jpg','jpeg','webp','gif','bmp','tif','tiff','svg']);
+$('#fmtChips').innerHTML = FORMATS.map(([ext]) =>
+  `<span class="chip ${selFmts.has(ext)?'on':''}" data-ext="${ext}">${ext}</span>`).join('');
+$('#fmtChips').addEventListener('click', e=>{
+  const c = e.target.closest('.chip'); if(!c) return;
+  const ext = c.dataset.ext;
+  if(selFmts.has(ext)){ selFmts.delete(ext); c.classList.remove('on'); }
+  else { selFmts.add(ext); c.classList.add('on'); }
+});
+
+/* ---------- 质量联动 ---------- */
+$('#quality').addEventListener('input', e=>{
+  const v = parseFloat(e.target.value);
+  $('#qDisp').textContent = v.toFixed(2);
+  $('#qHint').textContent = v < 0.75
+    ? '⚠ 质量偏低，人像与文字内容可能出现可见模糊。'
+    : '质量越低体积越小，人像/文字内容低于 0.75 可能出现可见模糊。';
+  $('#qHint').className = 'hint' + (v < 0.75 ? ' warn' : '');
+});
+
+/* ---------- 输入目录读取（零 IO，纯句柄遍历） ---------- */
+let inputRoot = null;
+let allEntries = [];   // {handle, relPath, name, ext, size, status, before, after, msg, rate, order, outRel, blob}
+
+async function* walk(dirHandle, prefix){
+  let iter;
+  try{ iter = dirHandle.entries(); }
+  catch(err){ log('目录无法遍历 ' + prefix + '：' + err.message); return; }
+  while(true){
+    let next;
+    try{ next = await iter.next(); }
+    catch(err){ log('读取目录项失败 ' + prefix + '：' + err.message); return; }
+    if(next.done) return;
+    const entry = next.value;
+    if(!entry){ continue; }
+    const name = entry[0], handle = entry[1];
+    if(!handle){ continue; }
+    const rel = prefix ? prefix + '/' + name : name;
+    try{
+      if(handle.kind === 'directory') yield* walk(handle, rel);
+      else if(handle.kind === 'file') yield {handle:handle, rel:rel};
+    }catch(err){
+      log('跳过 ' + rel + '：' + err.message);
+    }
+  }
+}
+
+/* ---------- 单一 click 处理器，全程 try/catch ---------- */
+$('#btnPickIn').addEventListener('click', async ()=>{
+  const btn = $('#btnPickIn');
+  if(btn.disabled){ console.warn('[WebP] 上一次扫描未完成，忽略重复点击'); return; }
+  if(!SUPPORTS_DIR){
+    alert('当前浏览器不支持文件夹选择 API（需要 Chrome / Edge 最新版）。');
+    return;
+  }
+  try{
+    console.log('[WebP] 用户点击选择源文件夹');
+    inputRoot = await window.showDirectoryPicker({mode:'read'});
+    console.log('[WebP] 已获得目录句柄：', inputRoot && inputRoot.name);
+    await scanDir();
+  }catch(err){
+    if(err && err.name === 'AbortError'){ console.log('[WebP] 用户取消了文件夹选择'); return; }
+    console.error('[WebP] scanDir 外层异常：', err);
+    log('扫描异常：' + (err && err.message || err));
+    $('#inHint').innerHTML = '<span style="color:var(--bad)">扫描失败：' + (err && err.message || err) + '</span>';
+    btn.disabled = false;
+  }
+});
+
+async function scanDir(){
+  const startedAt = now();
+  _t0 = now(); // 重置阶段计时
+  console.log('[WebP] ── scanDir 开始 ──');
+  $('#inHint').innerHTML = '正在读取目录结构…';
+  $('#btnPickIn').disabled = true;
+  allEntries = [];
+  let total = 0, matched = 0;
+  const t1 = now();
+  try{
+    for await (const item of walk(inputRoot, '')){
+      total++;
+      const rel = item.rel;
+      const m = rel.match(/\.([^.]+)$/);
+      const ext = m ? m[1].toLowerCase() : '';
+      if(!ext || !FMT_SET.has(ext) || !selFmts.has(ext)) continue;
+      matched++;
+      allEntries.push({
+        handle: item.handle, relPath:rel, name:rel.split('/').pop(),
+        ext:ext, size:null, status:'queued', before:0, after:0, msg:'', rate:0, order:matched,
+        outRel:'', blob:null
+      });
+    }
+  }catch(err){
+    console.error('[WebP] walk 迭代异常：', err);
+    log('遍历异常：' + (err && err.message));
+  }
+  console.log('[WebP] ⏱ walk 迭代完成：total=' + total + ' matched=' + matched + '  耗时 ' + (now()-t1) + 'ms');
+
+  // 关键：扫描阶段不再调用 getFile()，size 留 null，转换阶段再取
+  const t2 = now();
+  allEntries.sort((a,b)=> a.relPath.localeCompare(b.relPath,'zh-Hans-CN'));
+  console.log('[WebP] ⏱ 排序完成  耗时 ' + (now()-t2) + 'ms');
+
+  const t3 = now();
+  const tbody = document.getElementById('tbody');
+  if(!tbody){ console.warn('[WebP] tbody 不存在，跳过渲染'); }
+  else { renderTable(); }
+  console.log('[WebP] ⏱ 首次渲染完成  耗时 ' + (now()-t3) + 'ms');
+
+  $('#inHint').innerHTML = `已扫描 <b>${total}</b> 个文件，命中 <b style="color:var(--acc)">${matched}</b> 张可转换图片。` +
+    (matched ? '继续选择输出文件夹开始转换。' : '当前格式勾选范围内没有匹配的图片，请检查格式勾选。');
+  $('#btnPickIn').disabled = false;
+  $('#btnPickOut').disabled = matched === 0;
+  $('#btnZip').disabled = matched === 0;
+  if(matched) $('#resCard').style.display = 'block';
+  console.log('[WebP] ── scanDir 结束，总耗时 ' + (now()-startedAt) + 'ms ──');
+}
+
+/* ---------- 并发控制（带超时保护，绝不永久挂起） ---------- */
+async function mapLimit(items, limit, fn, label){
+  return new Promise(res=>{
+    const n = items.length;
+    if(!n){ console.log('[WebP] mapLimit[' + label + '] 空队列，直接返回'); return res(); }
+    const slots = Math.max(1, limit);
+    let idx = 0, done = 0, active = 0, lastDone = 0;
+    const tStart = now();
+    console.log('[WebP] mapLimit[' + label + '] 开始：' + n + ' 项，并发 ' + slots);
+    let waiter = null;
+    const awaitSlot = ()=> new Promise(r=>{ waiter = r; });
+    const release = ()=>{ const w = waiter; waiter = null; if(w) w(); };
+    const finish = ()=>{
+      done++;
+      if(done >= n){
+        clearInterval(wd);
+        console.log('[WebP] mapLimit[' + label + '] 全部完成，耗时 ' + (now()-tStart) + 'ms');
+        res();
+      }
+    };
+    // 看门狗：连续 5 秒零进度才报警，按进度续期
+    const wd = setInterval(()=>{
+      if(done >= n) return;
+      if(done === lastDone){
+        console.error('[WebP] mapLimit[' + label + '] 超过 5 秒无新完成项（done=' +
+          done + '/' + n + '，active=' + active + '），可能已挂起');
+      }
+      lastDone = done;
+    }, 5000);
+    const runOne = async (cur)=>{
+      const t1 = now();
+      const item = items[cur];
+      const name = (item && (item.name || (item.handle && item.handle.name))) || ('#'+cur);
+      try{ await fn(item, cur, n); }
+      catch(err){ console.error('[WebP] mapLimit[' + label + '] 项异常 [' + name + ']：', err); }
+      finally{
+        active--;
+        const cost = now() - t1;
+        if(cost > 8000){ console.warn('[WebP] mapLimit[' + label + '] 单任务 [' + name + '] 耗时 ' + cost + 'ms'); }
+        finish();
+        release();
+      }
+    };
+    (async ()=>{
+      for(;;){
+        while(idx < n && active < slots){
+          active++;
+          runOne(idx++);
+        }
+        if(idx >= n) break;
+        await awaitSlot();
+      }
+    })();
+  });
+}
+
+
+
+/* ---------- 编码调度 ---------- */
+let running = false, shouldStop = false;
+const seenKeys = new Map();   // finalRelPath -> counter
+
+function finalName(entry){var p=entry.relPath,dot=p.lastIndexOf('.');return(dot>0?p.slice(0,dot):p)+'.webp';} function uniqueRel(rel){var key=rel,c=seenKeys.get(rel)||0;if(c){key=rel.replace(/\.webp$/,'.'+c+'.webp');}seenKeys.set(rel,c+1);return key;} async function convertOne(entry){
+  let file;
+  try{
+    file = await entry.handle.getFile();   // 这是转换阶段唯一读取文件的地方
+  }catch(err){
+    return {status:'fail', msg:'读取失败：'+(err&&err.message), before:0, after:0, rate:0};
+  }
+  // MIME 兜底：file.type 可能为空，用扩展名查表
+  const srcType = (file.type && MIME_SET.has(file.type))
+    ? file.type
+    : (function(){ var fm=FORMATS; for(var i=0;i<fm.length;i++){ if(fm[i][0]===entry.ext) return fm[i][1]; } return 'image/png'; })();
+  const quality = parseFloat($('#quality').value) || 0.8;
+  console.log('[WebP] 编码', entry.relPath, '| ext='+entry.ext, '| file.type='+JSON.stringify(file.type), '| srcType='+srcType, '| size='+file.size);
+  let bmp, out;
+  try{
+    bmp = await createImageBitmap(file);   // 浏览器自动读 MIME 并处理 EXIF 方向
+  }catch(err){
+    return {status:'fail', msg:'解码失败（该格式可能不支持）：'+(err&&err.message), before:file.size||0, after:0, rate:0};
+  }
+  try{
+    let w = bmp.width, h = bmp.height;
+    let scale = 1;
+    const maxSide = parseInt($('#maxSide').value, 10) || 0;
+    if(maxSide > 0 && Math.max(w,h) > maxSide){
+      scale = maxSide / Math.max(w,h);
+      w = Math.max(1, Math.round(w*scale));
+      h = Math.max(1, Math.round(h*scale));
+    }
+    const canvas = new OffscreenCanvas(w, h);
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(bmp, 0, 0, w, h);
+    if(bmp.close){ try{ bmp.close(); }catch(e){} }
+    out = await canvas.convertToBlob({type:'image/webp', quality:quality});  // 真重编码为 webp
+  }catch(err){
+    return {status:'fail', msg:'编码失败：'+(err&&err.message), before:file.size||0, after:0, rate:0};
+  }
+  const before = file.size || 0, after = out.size || 0;
+  const rate = before ? (after/before*100) : 0;
+  const outRel = uniqueRel(finalName(entry));
+  console.log('[WebP] 完成 '+entry.relPath+' | '+before+'B → '+after+'B | 压缩率 '+rate.toFixed(1)+'%');
+  return {
+    status: after >= before ? 'big' : 'done',
+    before:before, after:after, rate:rate, outRel:outRel, blob:out,
+    msg: rate > 100 ? '体积反而变大' : '成功'
+  };
+}
+
+/* ---------- 目录写出 ---------- */
+async function ensureDir(root, rel){
+  const parts = rel.split('/').slice(0,-1);
+  let cur = root;
+  for(const p of parts){
+    if(!p) continue;
+    cur = await cur.getDirectoryHandle(p, {create:true});
+  }
+  return cur;
+}
+
+async function writeEntry(dirHandle, entry){
+  const segs = entry.outRel.split('/');
+  const dir = await ensureDir(dirHandle, entry.outRel);
+  const name = segs[segs.length-1];
+  const tmp = name + '.tmp';
+  const fh = await dir.getFileHandle(tmp, {create:true});
+  const ws = await fh.createWritable();
+  try{
+    await ws.write(entry.blob);
+    await ws.close();
+    try{ await dir.removeEntry(name); }catch(e){ /* 不存在即好 */ }
+    if(fh.move){ await fh.move(name); }
+    else { /* 无 move 支持，静默跳过原子替换 */ }
+  }catch(err){
+    try{ await ws.close(); }catch(e){}
+    throw err;
+  }
+}
+
+/* ---------- 统计 ---------- */
+function recompute(){
+  let done=0,fail=0,saved=0,beforeTotal=0;
+  for(const e of allEntries){
+    if(e.status==='done'){ done++; saved += (e.before-e.after); beforeTotal += e.before; }
+    else if(e.status==='big'){ done++; beforeTotal += e.before; }
+    else if(e.status==='fail') fail++;
+  }
+  $('#sDone').textContent = done;
+  $('#sFail').textContent = fail;
+  $('#sSaved').textContent = fmtSize(saved);
+  $('#sPct').textContent = beforeTotal ? (saved/beforeTotal*100).toFixed(1)+'%' : '0%';
+  const total = allEntries.filter(e=>e.status!=='queued').length;
+  const all = allEntries.length;
+  $('#bar').style.width = (all? Math.min(100, total/all*100) : 0) + '%';
+}
+
+/* ---------- 主流程 ---------- */
+$('#btnPickOut').addEventListener('click', startConvert);
+$('#btnRetry').addEventListener('click', retryFailed);
+
+async function startConvert(){
+  if(running){ console.warn('[WebP] 已有任务运行中'); return; }
+  let outDir;
+  try{ outDir = await window.showDirectoryPicker({mode:'readwrite'}); }
+  catch(e){ if(e&&e.name!=='AbortError') console.warn('[WebP] 用户取消输出目录'); return; }
+  let perm;
+  try{ perm = await verifyPermission(outDir, 'readwrite'); }
+  catch(err){ console.error('[WebP] 权限校验异常：', err); return; }
+  if(perm === 'denied'){ alert('未获得输出目录的写入权限。'); return; }
+  beginRun(outDir);
+}
+
+async function verifyPermission(handle, mode){
+  const opts = {mode:mode};
+  let cur;
+  try{ cur = await handle.queryPermission(opts); }catch(e){ cur = 'denied'; }
+  if(cur === 'granted') return 'granted';
+  return handle.requestPermission(opts);
+}
+
+async function beginRun(outDir){
+  running = true; shouldStop = false;
+  $('#btnPickOut').disabled = true; $('#btnZip').disabled = true;
+  $('#btnRetry').disabled = true; $('#btnCopyReport').disabled = true;
+  $('#progCard').style.display = 'block'; $('#resCard').style.display = 'block';
+  seenKeys.clear();
+  const tStart = now();
+
+  const concur = Math.max(1, Math.min(8, parseInt($('#concur').value,10)||4));
+  log(`启动 ${concur} 路并发编码（主线程）`);
+
+  const queue = allEntries.filter(e=>e.status==='queued').slice();
+  console.log('[WebP] ── beginRun 开始，待处理 ' + queue.length + ' 项 ──');
+
+  let lastTick = 0;
+  const tick = ()=>{
+    renderTable(); recompute();
+    const todo = allEntries.filter(e=>e.status==='queued').length;
+    $('#outHint').textContent = `处理中：${allEntries.length-todo} / ${allEntries.length}`;
+  };
+  await mapLimit(queue, concur, async (entry)=>{
+    if(shouldStop) return;
+    let r;
+    try{ r = await convertOne(entry); }
+    catch(err){
+      console.error('[WebP] convertOne 抛出未捕获异常：', err);
+      r = {status:'fail', msg:'异常：'+(err&&err.message||err), before:0, after:0, rate:0};
+    }
+    // 合并结果到原对象（保留 handle 等字段）
+    entry.status = r.status;
+    entry.before = r.before; entry.after = r.after;
+    entry.rate = r.rate; entry.outRel = r.outRel || '';
+    entry.blob = r.blob || null; entry.msg = r.msg || '';
+    if(entry.blob && outDir){
+      try{ await writeEntry(outDir, entry); }
+      catch(err){ entry.status='fail'; entry.msg='写入失败：'+err.message; }
+    }
+    // 节流刷新：至少 80ms 一次
+    if(now()-lastTick > 80){ lastTick = now(); tick(); }
+    else { recompute(); }
+  }, 'encode');
+
+  tick(); // 最后一次补齐
+  running = false;
+  $('#btnPickOut').disabled = false; $('#btnZip').disabled = false;
+  $('#btnRetry').disabled = !allEntries.some(e=>e.status==='fail');
+  $('#btnCopyReport').disabled = false;
+  const ok = allEntries.filter(e=>e.status==='done').length;
+  const fail = allEntries.filter(e=>e.status==='fail').length;
+  $('#outHint').innerHTML = `完成：${ok} 成功 · ${fail} 失败 · 节省 ${$('#sSaved').textContent}`;
+  log(`完成：成功 ${ok}，失败 ${fail}`);
+  console.log('[WebP] ── beginRun 结束，总耗时 ' + (now()-tStart) + 'ms ──');
+}
+
+async function retryFailed(){
+  for(const e of allEntries){ if(e.status==='fail'){ e.status='queued'; e.msg=''; e.blob=null; } }
+  let outDir;
+  try{ outDir = await window.showDirectoryPicker({mode:'readwrite'}); }
+  catch(e){ return; }
+  let perm;
+  try{ perm = await verifyPermission(outDir, 'readwrite'); }catch(err){ perm='denied'; }
+  if(perm === 'denied'){ alert('未获得写入权限。'); return; }
+  beginRun(outDir);
+}
+
+/* ---------- ZIP 降级 ---------- */
+$('#btnZip').addEventListener('click', exportZip);
+async function exportZip(){
+  if(running){ console.warn('[WebP] 已有任务运行中'); return; }
+  running = true; $('#btnZip').disabled = true;
+  seenKeys.clear();
+  const concur = Math.max(1, Math.min(8, parseInt($('#concur').value,10)||4));
+  log(`启动 ${concur} 路并发编码（ZIP 导出）`);
+  const queue = allEntries.filter(e=>e.status==='queued' || e.status==='fail').slice();
+  for(const e of queue){ e.status='queued'; e.msg=''; e.blob=null; }
+  await mapLimit(queue, concur, async (entry)=>{
+    let r;
+    try{ r = await convertOne(entry); }
+    catch(err){ r = {status:'fail', msg:'异常：'+(err&&err.message), before:0, after:0, rate:0}; }
+    entry.status = r.status;
+    entry.before = r.before; entry.after = r.after;
+    entry.rate = r.rate; entry.outRel = r.outRel || '';
+    entry.blob = r.blob || null; entry.msg = r.msg || '';
+    renderTable(); recompute();
+  }, 'encode-zip');
+
+  console.log('[WebP] 动态加载 JSZip…');
+  try{ await loadScript('https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js'); }
+  catch(err){ console.error('[WebP] JSZip 加载失败：', err); alert('无法加载 JSZip 库，请检查网络。'); running=false; return; }
+  const zip = new JSZip();
+  let n = 0;
+  for(const e of allEntries){
+    if(e.blob && e.outRel){ zip.file(e.outRel, e.blob); n++; }
+  }
+  const rootName = inputRoot ? (inputRoot.name || 'images') : 'images';
+  console.log('[WebP] 生成 ZIP，共 ' + n + ' 个文件');
+  const content = await zip.generateAsync({type:'blob', compression:'STORE'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(content);
+  a.download = rootName + '_webp.zip';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  running = false; $('#btnZip').disabled = n === 0;
+  log(`已导出 ${n} 个文件到 ${a.download}`);
+}
+
+function loadScript(src){
+  return new Promise((res,rej)=>{
+    if(window.JSZip) return res();
+    const s = document.createElement('script');
+    s.src = src; s.onload = res; s.onerror = rej; document.head.appendChild(s);
+  });
+}
+
+/* ---------- 表格渲染与排序 ---------- */
+let curFilter = 'all', sortKey = 'order', sortDir = 1;
+$('#filterChips').addEventListener('click', e=>{
+  const c = e.target.closest('.chip'); if(!c) return;
+  $('#filterChips').querySelectorAll('.chip').forEach(x=>x.classList.remove('on'));
+  c.classList.add('on'); curFilter = c.dataset.f; renderTable();
+});
+document.querySelectorAll('th[data-k]').forEach(th=>{
+  th.addEventListener('click', ()=>{
+    const k = th.dataset.k;
+    if(sortKey===k) sortDir *= -1; else { sortKey = k; sortDir = 1; }
+    renderTable();
+  });
+});
+
+function fmtSize(b){
+  if(b === null || b === undefined) return '–';
+  if(!b && b!==0) return '–';
+  if(b < 1024) return b+' B';
+  if(b < 1048576) return (b/1024).toFixed(1)+' KB';
+  return (b/1048576).toFixed(2)+' MB';
+}
+
+async function renderTable(){
+  if(!document.body){ console.warn('[WebP] renderTable：document.body 不存在'); return; }
+  const tbody = document.getElementById('tbody');
+  if(!tbody){ console.warn('[WebP] renderTable：tbody 不存在'); return; }
+  const view = allEntries.filter(e=>{
+    if(curFilter==='done') return e.status==='done';
+    if(curFilter==='fail') return e.status==='fail';
+    if(curFilter==='big') return e.status==='big';
+    return true;
+  });
+  const sorted = view.slice().sort((a,b)=>{
+    let va = a[sortKey], vb = b[sortKey];
+    if(va === undefined) va = '';
+    if(vb === undefined) vb = '';
+    if(typeof va === 'string' || typeof vb === 'string'){
+      return String(va).localeCompare(String(vb),'zh-Hans-CN')*sortDir;
+    }
+    return (va-vb)*sortDir;
+  });
+  // 表头箭头（加空判断，避免 set properties of null）
+  var thEls = document.querySelectorAll('th[data-k]');
+  if(thEls && thEls.length){
+    for(var ti=0; ti<thEls.length; ti++){
+      var th = thEls[ti];
+      th.classList.toggle('sorted', th.dataset.k===sortKey);
+      var ar = th.querySelector('.ar');
+      if(ar){ ar.textContent = th.dataset.k===sortKey ? (sortDir>0?'▲':'▼') : '▼'; }
+    }
+  }
+  const rows = sorted.map(e=>{
+    const st = e.status==='done' ? '<span class="st done">成功</span>'
+      : e.status==='fail' ? '<span class="st fail">失败</span>'
+      : e.status==='big' ? '<span class="st done">变大</span>'
+      : '<span class="st skip">待处理</span>';
+    const cls = e.rate<=0 ? 'r' : e.rate<70 ? 'g' : e.rate<100 ? 'y' : 'r';
+    const rateTxt = (e.status==='queued' || e.status==='') ? '–' : (e.rate==null? '–' : e.rate.toFixed(1)+'%');
+    const prev = e.blob ? URL.createObjectURL(e.blob) : '';
+    return `<tr>
+      <td><div class="prev">${prev?`<img src="${prev}">`:''}<span class="path">${e.relPath}</span></div></td>
+      <td class="num">${fmtSize(e.before)}</td>
+      <td class="num">${e.after?fmtSize(e.after):'–'}</td>
+      <td class="num rate ${cls}">${rateTxt}</td>
+      <td>${st}</td>
+      <td class="path">${e.msg||''}</td>
+    </tr>`;
+  }).join('');
+  tbody.innerHTML = rows || '<tr><td colspan="6" class="empty">没有符合条件的记录</td></tr>';
+  const done = allEntries.filter(e=>e.status==='done').length;
+  const big = allEntries.filter(e=>e.status==='big').length;
+  $('#resHint').innerHTML = `共 ${allEntries.length} 项 · 成功 ${done} · ` +
+    (big? `<span style="color:var(--warn)">${big} 项体积反而变大，可尝试提高质量或降低最大边长</span>` : '无体积变大项');
+  recompute();
+}
+
+/* ---------- 报告 ---------- */
+$('#btnCopyReport').addEventListener('click', async ()=>{
+  const lines = ['批量图片转 WebP 报告', '='.repeat(40),
+    `源目录：${inputRoot?inputRoot.name:'-'}`,
+    `时间：${new Date().toLocaleString('zh-CN')}`,
+    `参数：质量 ${$('#quality').value} · 最大边长 ${$('#maxSide').value||'不缩放'}px · 并发 ${$('#concur').value}`,
+    `总计：${allEntries.length} 项`,
+    `成功：${allEntries.filter(e=>e.status==='done').length}`,
+    `体积变大：${allEntries.filter(e=>e.status==='big').length}`,
+    `失败：${allEntries.filter(e=>e.status==='fail').length}`,
+    `节省：${$('#sSaved').textContent}（综合压缩率 ${$('#sPct').textContent}）`,
+    '', '明细：',
+    ...allEntries.map(e=>`${e.relPath}  ${fmtSize(e.before)} → ${fmtSize(e.after)}  ${e.rate==null?'-':e.rate.toFixed(1)}%  ${e.msg}`)
+  ];
+  const txt = lines.join('\n');
+  try{ await navigator.clipboard.writeText(txt); $('#btnCopyReport').textContent='已复制 ✓'; setTimeout(()=>$('#btnCopyReport').textContent='复制统计报告',1500); }
+  catch{ prompt('复制失败，可手动选择：', txt); }
+});
+
+$('#btnClear').addEventListener('click', ()=>{
+  allEntries = []; inputRoot = null; seenKeys.clear();
+  const tbody = document.getElementById('tbody');
+  if(tbody) tbody.innerHTML = '';
+  $('#inHint').textContent = '点击按钮，在弹出的系统对话框里选择包含图片的文件夹，程序会递归读取其中所有图片文件。';
+  $('#outHint').textContent = '选择输出文件夹后，转换结果会写入该文件夹，目录结构与文件名保持一致。';
+  $('#btnPickOut').disabled = true; $('#btnZip').disabled = true;
+  $('#btnRetry').disabled = true; $('#btnCopyReport').disabled = true;
+  $('#resCard').style.display = 'none'; $('#progCard').style.display = 'none';
+  console.log('[WebP] 列表已清空');
+});
+
+if(!SUPPORTS_DIR){
+  $('#inHint').innerHTML = '<span style="color:var(--bad)">当前浏览器不支持文件夹选择 API，建议使用 Chrome 或 Edge 最新版。</span>';
+}
+window.addEventListener('unhandledrejection', e=>{
+  console.error('[WebP] 未处理的 Promise 拒绝：', e.reason);
+  log('异步异常：'+(e.reason && e.reason.message || e.reason));
+  e.preventDefault();
+});
+window.onerror = function(msg, url, line, col, err){
+  console.error('[WebP] 全局错误 line'+line+':'+col+' '+msg, err);
+  log('全局错误：'+msg);
+};
+log('就绪。');
+console.log('[WebP] ⏱ 脚本执行完毕，总耗时 ' + (now()-_t0) + 'ms');
+
+
+</script>
+</body>
+</html>

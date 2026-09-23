@@ -168,8 +168,17 @@ pub async fn create_document(s: &ServerState, parent: String, name: String) -> R
 }
 
 // 5. Search + Graph
-pub async fn search(s: &ServerState, q: String) -> serde_json::Value {
-    serde_json::json!({"results": s.app.search(&q).await})
+pub async fn search(s: &ServerState, q: String, offset: usize, limit: usize) -> serde_json::Value {
+    let mut results = s.app.search(&q).await;
+    let total = results.len();
+    let end = (offset + limit).min(total);
+    let visible: Vec<_> = results.drain(..end).skip(offset).collect();
+    serde_json::json!({
+        "results": visible,
+        "total": total,
+        "offset": offset,
+        "limit": limit
+    })
 }
 pub async fn get_graph(s: &ServerState) -> serde_json::Value {
     let f = s.app.get_files().await;

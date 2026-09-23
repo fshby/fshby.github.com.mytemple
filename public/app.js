@@ -146,6 +146,11 @@ const state = {
   activeWorkspaceId: "",
   openSeq: 0,
   searchSeq: 0,
+  searchOffset: 0,
+  searchTotal: 0,
+  searchLimit: 50,
+  searchHistory: [],
+  searchLastQuery: "",
   saveSeq: 0,
   createMode: "doc",
   createSubmitting: false,
@@ -313,6 +318,7 @@ const els = {
   docCount: document.querySelector("#docCount"),
   searchInput: document.querySelector("#searchInput"),
   searchResults: document.querySelector("#searchResults"),
+  searchHistoryDropdown: document.querySelector("#searchHistoryDropdown"),
   docPath: document.querySelector("#docPath"),
   docTitle: document.querySelector("#docTitle"),
   readerPanel: document.querySelector("#readerPanel"),
@@ -8841,43 +8847,75 @@ async function applySemanticTags() {
   }
 }
 
+// 转义 HTML 实体，防止 XSS（高亮前必须先转义）
+function escapeHtml(s) {
+  return String(s || "").replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[c]);
+}
+
+// 在文本中按 token 命中位置包裹 <mark>（先 escape 再高亮，安全）
+function highlightTokens(text, tokens) {
+  const safe = escapeHtml(text);
+  if (!tokens || !tokens.length) return safe;
+  // 按 token 长度降序，避免短 token 先匹配破坏长 token
+  const sorted = [...new Set(tokens)].filter(Boolean).sort((a, b) => b.length - a.length);
+  if (!sorted.length) return safe;
+  const escaped = sorted.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  try {
+    const re = new RegExp(`(${escaped.join("|")})`, "gi");
+    return safe.replace(re, '<mark class="search-hit">$1</mark>');
+  } catch {
+    return safe;
+  }
+}
+
+// 渲染单条搜索结果为 DOM 节点
+function renderSearchItem(item, query) {
+  const fileByPath = state.flatFilesByPath;
+  const file = fileByPath.get(item.path) || item;
+  const button = document.createElement("button");
+  button.className = "search-item";
+  button.dataset.path = item.path;
+  button.dataset.query = query;
+  const title = document.createElement("strong");
+  title.innerHTML = highlightTokens(displayName(file), item.matchedTokens);
+  const snippet = document.createElement("span");
+  const snippetText = item.snippet || displayRelativePath(item.path);
+  snippet.innerHTML = highlightTokens(snippetText, item.matchedTokens);
+  button.append(title, snippet);
+  return button;
+}
+
 async function runSearch() {
   const seq = ++state.searchSeq;
   const query = els.searchInput.value.trim();
   els.searchResults.classList.toggle("hidden", !query);
+  hideSearchHistory();
   if (!query) {
     els.searchResults.innerHTML = "";
+    state.searchTotal = 0;
+    state.searchOffset = 0;
     return;
   }
-  const { results } = await api.get(`/api/search?q=${encodeURIComponent(query)}`);
+  state.searchOffset = 0;
+  state.searchLastQuery = query;
+  const limit = state.searchLimit;
+  const res = await api.get(`/api/search?q=${encodeURIComponent(query)}&offset=0&limit=${limit}`);
   if (seq !== state.searchSeq) return;
+  const results = res.results || [];
+  state.searchTotal = res.total || results.length;
   const fragment = document.createDocumentFragment();
   if (results.length) {
-    // 复用共享索引（flatFilesByPath 内部已按 flatFiles.length 失效重建），
-    // 不再为每次搜索单独构建一次 Map，10k 文件下搜索延迟 ~-2-5ms。
-    const fileByPath = state.flatFilesByPath;
-    const visible = results.slice(0, 80);
-    for (const item of visible) {
-      const file = fileByPath.get(item.path) || item;
-      const button = document.createElement("button");
-      button.className = "search-item";
-      button.dataset.path = item.path;
-      button.dataset.query = query;
+    for (const item of results) fragment.appendChild(renderSearchItem(item, query));
+    if (state.searchTotal > results.length) {
+      const more = document.createElement("button");
+      more.className = "search-item search-load-more";
+      more.type = "button";
       const title = document.createElement("strong");
-      title.textContent = displayName(file);
-      const snippet = document.createElement("span");
-      snippet.textContent = item.snippet || displayRelativePath(item.path);
-      button.append(title, snippet);
-      fragment.appendChild(button);
-    }
-    if (results.length > visible.length) {
-      const more = document.createElement("div");
-      more.className = "search-item search-more";
-      const title = document.createElement("strong");
-      title.textContent = `已显示 ${visible.length} 条`;
-      const detail = document.createElement("span");
-      detail.textContent = `还有 ${results.length - visible.length} 条结果，继续输入可缩小范围`;
-      more.append(title, detail);
+      title.textContent = `加载更多（已显示 ${results.length} / ${state.searchTotal}）`;
+      more.appendChild(title);
+      more.addEventListener("click", loadMoreSearch);
       fragment.appendChild(more);
     }
   } else {
@@ -8891,6 +8929,94 @@ async function runSearch() {
     fragment.appendChild(empty);
   }
   els.searchResults.replaceChildren(fragment);
+}
+
+async function loadMoreSearch() {
+  const query = state.searchLastQuery;
+  if (!query) return;
+  const seq = state.searchSeq;
+  const offset = state.searchOffset + state.searchLimit;
+  const limit = state.searchLimit;
+  const res = await api.get(`/api/search?q=${encodeURIComponent(query)}&offset=${offset}&limit=${limit}`);
+  if (seq !== state.searchSeq) return;
+  const results = res.results || [];
+  if (!results.length) return;
+  state.searchOffset = offset;
+  // 移除旧的「加载更多」按钮
+  const oldMore = els.searchResults.querySelector(".search-load-more");
+  if (oldMore) oldMore.remove();
+  const fragment = document.createDocumentFragment();
+  for (const item of results) fragment.appendChild(renderSearchItem(item, query));
+  const shown = state.searchOffset + results.length;
+  if (state.searchTotal > shown) {
+    const more = document.createElement("button");
+    more.className = "search-item search-load-more";
+    more.type = "button";
+    const title = document.createElement("strong");
+    title.textContent = `加载更多（已显示 ${shown} / ${state.searchTotal}）`;
+    more.appendChild(title);
+    more.addEventListener("click", loadMoreSearch);
+    fragment.appendChild(more);
+  }
+  els.searchResults.appendChild(fragment);
+}
+
+// ── 搜索历史 ──────────────────────────────────────────────
+function loadSearchHistory() {
+  try {
+    state.searchHistory = JSON.parse(localStorage.getItem("searchHistory") || "[]");
+  } catch {
+    state.searchHistory = [];
+  }
+}
+
+function pushSearchHistory(query) {
+  const q = String(query || "").trim();
+  if (!q) return;
+  const arr = state.searchHistory.filter((x) => x !== q);
+  arr.unshift(q);
+  state.searchHistory = arr.slice(0, 20);
+  try { localStorage.setItem("searchHistory", JSON.stringify(state.searchHistory)); } catch {}
+}
+
+function showSearchHistory() {
+  const dropdown = els.searchHistoryDropdown;
+  if (!dropdown) return;
+  if (!state.searchHistory.length || els.searchInput.value.trim()) {
+    dropdown.classList.add("hidden");
+    return;
+  }
+  const fragment = document.createDocumentFragment();
+  for (const term of state.searchHistory.slice(0, 10)) {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "search-history-item";
+    item.textContent = term;
+    item.addEventListener("click", () => {
+      els.searchInput.value = term;
+      hideSearchHistory();
+      runSearch();
+    });
+    fragment.appendChild(item);
+  }
+  if (state.searchHistory.length) {
+    const clear = document.createElement("button");
+    clear.type = "button";
+    clear.className = "search-history-clear";
+    clear.textContent = "清空历史";
+    clear.addEventListener("click", () => {
+      state.searchHistory = [];
+      try { localStorage.removeItem("searchHistory"); } catch {}
+      hideSearchHistory();
+    });
+    fragment.appendChild(clear);
+  }
+  dropdown.replaceChildren(fragment);
+  dropdown.classList.remove("hidden");
+}
+
+function hideSearchHistory() {
+  if (els.searchHistoryDropdown) els.searchHistoryDropdown.classList.add("hidden");
 }
 
 function currentParent() {
@@ -9108,8 +9234,9 @@ function displayNameFromPath(path) {
 }
 
 function closeSearchWhenIdle(event) {
-  if (event.target.closest(".search-box") || event.target.closest("#searchResults")) return;
+  if (event.target.closest(".search-box") || event.target.closest("#searchResults") || event.target.closest("#searchHistoryDropdown")) return;
   els.searchResults.classList.add("hidden");
+  hideSearchHistory();
 }
 
 function resizeCanvas() {
@@ -12265,12 +12392,15 @@ if (els.videoFileInput) {
 
 els.searchInput.addEventListener("input", debounce(runSearch, 160));
 els.searchInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && state.mode === "edit" && els.editor.openSearchPanelWithQuery) {
+  if (e.key === "Enter") {
     const term = els.searchInput.value.trim();
-    if (term) {
+    if (term) pushSearchHistory(term);
+    if (state.mode === "edit" && els.editor.openSearchPanelWithQuery) {
       e.preventDefault();
       els.editor.openSearchPanelWithQuery(term);
     }
+  } else if (e.key === "Escape") {
+    hideSearchHistory();
   }
 });
 els.tree.addEventListener("dragover", allowRootDrop);
@@ -13626,7 +13756,11 @@ async function runNormalizeMd() {
   }
 }
 els.searchInput.addEventListener("focus", () => {
-  if (els.searchInput.value.trim()) runSearch();
+  if (els.searchInput.value.trim()) {
+    runSearch();
+  } else {
+    showSearchHistory();
+  }
 });
 document.addEventListener("click", closeSearchWhenIdle);
 els.searchResults.addEventListener("click", (event) => {
@@ -15982,6 +16116,7 @@ if (els.recentDocs) {
 
 async function bootstrap(refresh = false) {
   try {
+    loadSearchHistory();
     const data = await api.get(`/api/tree${refresh ? "?refresh=1" : ""}`);
     state.tree = data.tree;
     state.flatFiles = flatten(state.tree, []);

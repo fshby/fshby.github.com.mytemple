@@ -541,13 +541,17 @@ async fn create_document(
 #[derive(Deserialize)]
 struct SearchQuery {
     q: String,
+    offset: Option<usize>,
+    limit: Option<usize>,
 }
 
 async fn search(
     State(state): State<Arc<ServerState>>,
     Query(params): Query<SearchQuery>,
 ) -> impl IntoResponse {
-    crate::ipc::ok_response(crate::ipc::search(&state, params.q).await)
+    let offset = params.offset.unwrap_or(0);
+    let limit = params.limit.unwrap_or(80).min(500);
+    crate::ipc::ok_response(crate::ipc::search(&state, params.q, offset, limit).await)
 }
 
 // ── 知识图谱 ─────────────────────────────────────────────
