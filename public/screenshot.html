@@ -283,6 +283,7 @@ function httpGet(url) {
 let currentVersion = 0;
 let isActive = false; // 截图窗口是否激活（正在显示）
 let pollTimer = null;
+let readySent = false; // ready 信号是否为本次截图发送过（防止重复通知后端 show）
 
 // ── 事件监听器追踪：防止内存泄漏和二次截图交互异常 ──
 let registeredListeners = [];
@@ -308,10 +309,13 @@ function startVersionPolling() {
 // ── 核心：加载截图并显示 ──
 async function loadAndShow() {
   isActive = true;
+  readySent = false;
   // 重置 UI 状态
   resetScreenshotUI();
-  document.getElementById('loadingTip').style.display = 'block';
-  document.getElementById('loadingTip').textContent = '加载中...';
+  // 注意：窗口由后端在收到 ready 之后才显示，因此这里绝不能显示任何提示文字。
+  // 旧实现会浮出白色「加载中...」，此刻窗口已经置顶，白字直接叠在真实桌面上非常显眼。
+  const tip = document.getElementById('loadingTip');
+  if (tip) tip.style.display = 'none';
 
   log('开始加载截图背景...');
   try {
@@ -325,13 +329,12 @@ async function loadAndShow() {
     const img = new Image();
     img.onload = () => {
       log('截图背景图已加载: ' + img.naturalWidth + 'x' + img.naturalHeight);
+      // startScreenshot 内部会在冻结帧真正合成到页面后再发 ready
       startScreenshot(url, img.naturalWidth, img.naturalHeight);
-      // 通知后端显示窗口（首次或复用都通知）
-      httpPost('/api/screenshot/ready').catch(() => {});
     };
     img.onerror = () => {
       log('Image.onload 失败');
-      document.getElementById('loadingTip').textContent = '截图加载失败，正在关闭...';
+      showLoadingTip('截图加载失败，正在关闭...');
       URL.revokeObjectURL(url);
       isActive = false;
       setTimeout(() => closeWindow(), 1500);
@@ -339,11 +342,76 @@ async function loadAndShow() {
     img.src = url;
   } catch (err) {
     log('截图加载失败: ' + (err?.message || err));
-    document.getElementById('loadingTip').textContent = '截图加载失败: ' + (err?.message || err);
+    showLoadingTip('截图加载失败: ' + (err?.message || err));
     isActive = false;
     setTimeout(() => closeWindow(), 2000);
   }
 }
+
+// 失败路径才显示提示文字（窗口已由后端的超时兜底显示出来时，用户需要知道发生了什么）
+function showLoadingTip(text) {
+  const tip = document.getElementById('loadingTip');
+  if (!tip) return;
+  tip.textContent = text;
+  tip.style.display = 'block';
+}
+
+// 通知后端显示窗口（唯一显示出口）：本次截图只发一次
+function signalReady() {
+  if (readySent) return;
+  readySent = true;
+  httpPost('/api/screenshot/ready').catch(() => {});
+}
+
+// 等待遮罩背景图解码完成，再通知后端显示窗口。
+// 这样窗口第一次出现在屏幕上时，显示的就是冻结帧，不会先露出实时桌面。
+// 注意：不能用 requestAnimationFrame —— 窗口此刻是隐藏的，隐藏页面 rAF 不会触发；
+// 同理隐藏页面的定时器会被浏览器节流，所以这里用"解码完成 + 50ms 上限"兜底，保证 ready 一定会发出。
+function waitOverlayPainted() {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      resolve();
+    };
+    setTimeout(finish, 50);
+    const el = overlay && overlay.querySelector('.capture-fullscreen-bg');
+    if (!el) return finish();
+    const onReady = () => {
+      if (typeof el.decode === 'function') {
+        el.decode().then(finish).catch(finish);
+      } else {
+        finish();
+      }
+    };
+    if (el.complete) return onReady();
+    el.addEventListener('load', onReady, { once: true });
+    el.addEventListener('error', finish, { once: true });
+  });
+}
+
+// 后端触发新截图时主动唤醒（Rust 通过 win.eval 调用）：
+// 隐藏窗口里的轮询会被浏览器节流到秒级，靠 eval 唤醒才能做到"按下即出现"。
+window.__mtScreenshotWake = function () {
+  if (!isActive) checkNewScreenshot();
+};
+
+// 后端主动关闭窗口时（心跳兜底 / 超时 / 外部关闭）由 Rust eval 调用，复位前端状态。
+// 不做任何网络请求：关闭动作已经由后端完成，这里只负责把页面清干净，
+// 否则 isActive 会一直停在 true，轮询被抑制 → 下一次截图窗口永远不显示。
+window.__mtScreenshotReset = function () {
+  try {
+    isActive = false;
+    readySent = false;
+    resetScreenshotUI();
+    const tip = document.getElementById('loadingTip');
+    if (tip) tip.style.display = 'none';
+    log('已响应后端复位请求');
+  } catch (e) {
+    log('复位失败: ' + (e?.message || e));
+  }
+};
 
 // ── 重置截图 UI 状态（窗口复用时清理上次状态） ──
 function resetScreenshotUI() {
@@ -402,14 +470,15 @@ function initWithPlaceholder() {
 }
 
 function startScreenshot(imgSrc, imgWidth, imgHeight) {
-  document.getElementById('loadingTip').style.display = 'none';
+  const tip = document.getElementById('loadingTip');
+  if (tip) tip.style.display = 'none';
 
   // 保存原始图片尺寸（物理像素），用于最终裁剪
   bgImgWidth = imgWidth;
   bgImgHeight = imgHeight;
 
   bgImg = new Image();
-  bgImg.onload = () => {
+  bgImg.onload = async () => {
     // 计算物理像素到 CSS 像素的缩放比
     const cssW = window.innerWidth;
     const cssH = window.innerHeight;
@@ -418,10 +487,13 @@ function startScreenshot(imgSrc, imgWidth, imgHeight) {
     log('截图加载成功: 物理尺寸=' + bgImg.width + 'x' + bgImg.height + ' CSS尺寸=' + cssW + 'x' + cssH + ' 缩放比=' + scaleX + 'x' + scaleY);
     createOverlay();
     startRegionSelection();
+    // 冻结帧已经画进页面后再通知后端显示窗口（无感截图的关键：显示即冻结帧）
+    await waitOverlayPainted();
+    signalReady();
   };
   bgImg.onerror = (e) => {
     log('截图加载失败: ' + imgSrc);
-    document.getElementById('loadingTip').textContent = '截图加载失败，正在关闭...';
+    showLoadingTip('截图加载失败，正在关闭...');
     setTimeout(() => closeWindow(), 1500);
   };
   bgImg.src = imgSrc;

@@ -258,19 +258,19 @@ async function loadBackgroundFrame() {
     bgImg.onload = () => {
       document.getElementById('loadingTip').style.display = 'none';
       startRegionSelection();
-      // 通知后端显示窗口
-      httpPost('/api/screenshot/ready').catch(() => {});
+      // 通知后端显示窗口（录屏窗口的唯一显示出口：后端此时才 show，避免 reload 白底闪现）
+      httpPost('/api/recorder/ready').catch(() => {});
     };
     bgImg.onerror = () => {
       document.getElementById('loadingTip').style.display = 'none';
       startRegionSelection();
-      httpPost('/api/screenshot/ready').catch(() => {});
+      httpPost('/api/recorder/ready').catch(() => {});
     };
     bgImg.src = url;
   } catch (err) {
     document.getElementById('loadingTip').style.display = 'none';
     startRegionSelection();
-    httpPost('/api/screenshot/ready').catch(() => {});
+    httpPost('/api/recorder/ready').catch(() => {});
   }
 }
 

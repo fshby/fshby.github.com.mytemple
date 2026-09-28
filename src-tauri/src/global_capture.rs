@@ -295,17 +295,64 @@ fn schedule_recorder_destroy(app: &AppHandle) {
     }
 }
 
+// ── 窗口几何缓存：避免每次显示都重新 set_size/set_position ──
+// 透明置顶窗口每次改尺寸/位置都会让 DWM 重新分配合成表面，集显上会闪一下；
+// 位置/尺寸实际没变时跳过，可显著降低切换时的视觉抖动。
+static SCREENSHOT_RECT: std::sync::OnceLock<Mutex<Option<(u32, u32, i32, i32)>>> = std::sync::OnceLock::new();
+static RECORDER_RECT: std::sync::OnceLock<Mutex<Option<(u32, u32, i32, i32)>>> = std::sync::OnceLock::new();
+
+fn screenshot_rect() -> &'static Mutex<Option<(u32, u32, i32, i32)>> {
+    SCREENSHOT_RECT.get_or_init(|| Mutex::new(None))
+}
+
+fn recorder_rect() -> &'static Mutex<Option<(u32, u32, i32, i32)>> {
+    RECORDER_RECT.get_or_init(|| Mutex::new(None))
+}
+
+/// 让窗口覆盖主显示器（仅在几何参数变化时真正下发设置指令）
+fn apply_window_geometry<R: tauri::Runtime>(
+    win: &tauri::WebviewWindow<R>,
+    app: &AppHandle<R>,
+    cache: &Mutex<Option<(u32, u32, i32, i32)>>,
+) {
+    let (w, h) = match app.primary_monitor() {
+        Ok(Some(mon)) => {
+            let size = mon.size();
+            (size.width, size.height)
+        }
+        _ => (0, 0),
+    };
+    if w == 0 || h == 0 {
+        return;
+    }
+    let target = (w, h, 0i32, 0i32);
+    let changed = match cache.lock() {
+        Ok(guard) => *guard != Some(target),
+        Err(_) => true,
+    };
+    if !changed {
+        return;
+    }
+    let _ = win.set_size(tauri::PhysicalSize::new(w, h));
+    let _ = win.set_position(tauri::PhysicalPosition::new(0, 0));
+    if let Ok(mut guard) = cache.lock() {
+        *guard = Some(target);
+    }
+    log::info!("[capture-window] 几何参数已更新: {}x{} @ (0,0)", w, h);
+}
+
 // ── 全局截图入口 ────────────────────────────────────────
 
 pub fn trigger_screenshot(app: AppHandle) {
     if !throttle_screenshot() { return; }
     use tauri::Manager as _;
 
-    // 安全开关：如果截图窗口已经可见，按 Alt+A 直接关闭（防止用户卡住无法退出）
+    // 防误触/防长按闪退：截图窗口已经在屏幕上时，忽略重复触发。
+    // 原因：Alt+A 是全局快捷键 + 主窗口 JS keydown 双通道，长按会自动重复；
+    // 旧实现在这里直接 close，导致窗口刚出现就闪退。退出统一交给 ESC（前端已支持）。
     if let Some(win) = app.get_webview_window("screenshot") {
         if win.is_visible().unwrap_or(false) {
-            log::info!("[screenshot] 截图窗口已显示，按 Alt+A 切换关闭");
-            close_screenshot_window(&app);
+            log::info!("[screenshot] 截图窗口已在显示中，忽略本次重复触发（ESC 可取消）");
             return;
         }
     }
@@ -357,8 +404,10 @@ pub fn trigger_screenshot(app: AppHandle) {
         });
     }
 
-    // 显示截图窗口（复用已有窗口，毫秒级响应；首次创建则预创建）
-    show_screenshot_window(&app);
+    // 准备截图窗口（复用已有窗口，毫秒级响应；首次创建则新建）。
+    // 注意：这里只准备、不显示——显示统一由 on_screenshot_window_ready 负责，
+    // 保证窗口第一次出现在屏幕上时，冻结帧已经画进页面，避免"先看到实时桌面再跳回冻结帧"的闪屏。
+    prepare_screenshot_window(&app);
 }
 
 /// 预创建截图/录屏窗口（应用启动时调用，隐藏状态，页面预加载）
@@ -379,7 +428,7 @@ pub fn precreate_windows(app: &AppHandle, port: u16) {
 
     // 预创建截图窗口
     if app.get_webview_window("screenshot").is_none() {
-        let url = format!("http://127.0.0.1:{}/screenshot.html?v=20260920", port);
+        let url = format!("http://127.0.0.1:{}/screenshot.html?v=20260928-v2", port);
         if let Ok(url_parsed) = url::Url::parse(&url) {
             match tauri::WebviewWindowBuilder::new(
                 app,
@@ -394,12 +443,17 @@ pub fn precreate_windows(app: &AppHandle, port: u16) {
                 .skip_taskbar(true)
                 .visible(false)
                 .inner_size(mon_w, mon_h)
-                // 预创建时放在屏幕外（避免启动时闪烁/残留，集显上透明窗口初始化可能有渲染残留）
-                // show 的时候再移回 (0,0)
-                .position(-10000.0, -10000.0)
+                // 预创建即最终位置：窗口 visible(false) 用户看不到，无需"移出屏幕再移回"
+                // （旧实现预创建在 (-10000,-10000)，首次显示时要移动回 (0,0)，会多一次 DWM 重新合成）
+                .position(0.0, 0.0)
                 .build()
             {
-                Ok(_) => log::info!("[screenshot-window] 截图窗口预创建成功 (屏幕外预创建，无边框+手动覆盖，更稳定)"),
+                Ok(_) => {
+                    if let Ok(mut guard) = screenshot_rect().lock() {
+                        *guard = Some((mon_w as u32, mon_h as u32, 0, 0));
+                    }
+                    log::info!("[screenshot-window] 截图窗口预创建成功（已在最终位置，显示时零位移）");
+                }
                 Err(e) => log::warn!("[screenshot-window] 截图窗口预创建失败: {}", e),
             }
         }
@@ -422,10 +476,15 @@ pub fn precreate_windows(app: &AppHandle, port: u16) {
                 .skip_taskbar(true)
                 .visible(false)
                 .inner_size(mon_w, mon_h)
-                .position(-10000.0, -10000.0)
+                .position(0.0, 0.0)
                 .build()
             {
-                Ok(_) => log::info!("[recorder-window] 录屏窗口预创建成功 (屏幕外预创建，无边框+手动覆盖，更稳定)"),
+                Ok(_) => {
+                    if let Ok(mut guard) = recorder_rect().lock() {
+                        *guard = Some((mon_w as u32, mon_h as u32, 0, 0));
+                    }
+                    log::info!("[recorder-window] 录屏窗口预创建成功（已在最终位置，显示时零位移）");
+                }
                 Err(e) => log::warn!("[recorder-window] 录屏窗口预创建失败: {}", e),
             }
         }
@@ -458,33 +517,57 @@ pub fn precreate_windows(app: &AppHandle, port: u16) {
     });
 }
 
-/// 显示/创建截图窗口（无边框、透明、置顶、手动覆盖屏幕）
+/// 准备截图窗口（无边框、透明、置顶、覆盖屏幕）
 /// 优化：复用已有窗口，避免每次重建 WebView2（重建需要几百毫秒到 1 秒）
 /// 关键：不用 fullscreen 模式（透明+全屏组合在集显上容易卡死）
-fn show_screenshot_window(app: &AppHandle) {
+/// 关键：只准备不显示——由前端 ready 回调统一 show，避免显示时冻结帧还没准备好
+fn prepare_screenshot_window(app: &AppHandle) {
     use tauri::Manager as _;
 
-    // 如果窗口已存在，直接显示（毫秒级响应）
+    // 如果窗口已存在，重置状态后等待 ready 显示（毫秒级响应）
     if let Some(win) = app.get_webview_window("screenshot") {
-        log::info!("[screenshot-window] 复用已有截图窗口");
-        // 恢复窗口状态（关闭时做了多重保险，打开时要全部恢复）
+        log::info!("[screenshot-window] 复用已有截图窗口（等待前端 ready 后显示）");
         let _ = win.set_always_on_top(true);
-        let _ = win.unminimize();
-        // 确保窗口大小覆盖屏幕（每次 show 都重新设置，防止 DPI 变化）
-        if let Ok(Some(mon)) = app.primary_monitor() {
-            let size = mon.size();
-            let _ = win.set_size(tauri::PhysicalSize::new(size.width, size.height));
-            let _ = win.set_position(tauri::PhysicalPosition::new(0, 0));
-        }
-        let _ = win.show();
-        let _ = win.set_focus();
+        let _ = win.set_ignore_cursor_events(false);
+        // 只在几何参数变化时下发设置，避免 DWM 重新合成导致闪屏
+        apply_window_geometry(&win, app, screenshot_rect());
+        // 主动唤醒隐藏页面去检测新截图：隐藏窗口里的前端轮询会被浏览器节流到秒级，
+        // 靠 eval 唤醒才能做到"按下即出现"（轮询仍保留作为兜底通道）。
+        let _ = win.eval("window.__mtScreenshotWake && window.__mtScreenshotWake();");
+
+        // 兜底：复用路径下页面早已加载完成，ready 正常应在 200ms 内到达；
+        // 若 2 秒仍无 ready（前端异常 / 页面被浏览器深度节流），强制显示，避免"按了快捷键毫无反应"。
+        // 首次创建路径不加这个兜底：页面冷加载可能超过 2 秒，提前 show 会露出空壳。
+        let trigger_version = get_screenshot_version();
+        let app_clone = app.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(2000));
+            if get_screenshot_version() != trigger_version {
+                return; // 期间已开始新的截图
+            }
+            if let Some(w) = app_clone.get_webview_window("screenshot") {
+                if !w.is_visible().unwrap_or(false) {
+                    log::warn!("[screenshot] ready 信号超时 2s，兜底显示截图窗口");
+                    let _ = w.unminimize();
+                    let _ = w.show();
+                    let _ = w.set_focus();
+                }
+            }
+        });
+        // 注意：这里不能调用 unminimize()——Windows 的 SW_RESTORE 会把窗口直接显示出来，
+        // 破坏"ready 之后才显示"的时序。窗口恢复统一放到 on_screenshot_window_ready 里做。
         // 5 分钟超时保护（用户可能长时间编辑标注，不能太短）
+        let timeout_version = get_screenshot_version();
         let app_clone = app.clone();
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_secs(300));
+            // 期间若已开始新的截图，则本次超时作废（避免误关用户正在标注的新截图）
+            if get_screenshot_version() != timeout_version {
+                return;
+            }
             if let Some(w) = app_clone.get_webview_window("screenshot") {
                 let is_visible = w.is_visible().unwrap_or(false);
-                if (is_visible) {
+                if is_visible {
                     log::warn!("[screenshot-window] 截图超时 5 分钟，自动关闭");
                     crate::global_capture::close_screenshot_window(&app_clone);
                 }
@@ -536,7 +619,11 @@ fn show_screenshot_window(app: &AppHandle) {
     match result {
         Ok(win) => {
             log::info!("[screenshot-window] 截图窗口创建成功");
-
+            // 记录几何参数，后续 show 不再重复 set_size/set_position
+            if let Ok(mut guard) = screenshot_rect().lock() {
+                *guard = Some((mon_w as u32, mon_h as u32, 0, 0));
+            }
+            let _ = win.hide();
             // 首次创建：等待前端加载完成后由前端调用 ready 显示
             // 30 秒超时监控
             let app_clone = app.clone();
@@ -572,7 +659,8 @@ fn show_screenshot_window(app: &AppHandle) {
     }
 }
 
-/// 截图窗口已就绪（前端图片已加载完成），显示窗口
+/// 截图窗口已就绪（前端图片已解码并合成到页面），显示窗口
+/// 这是截图窗口唯一的显示出口：显示时冻结帧已经在页面里，用户不会看到实时桌面到冻结帧的跳变。
 pub fn on_screenshot_window_ready(app: &AppHandle) {
     use tauri::Manager as _;
     // 安全检查：只有当有待处理的截图数据时才显示窗口（防止窗口误显示挡住屏幕）
@@ -585,9 +673,13 @@ pub fn on_screenshot_window_ready(app: &AppHandle) {
         return;
     }
     if let Some(win) = app.get_webview_window("screenshot") {
+        let _ = win.set_always_on_top(true);
+        apply_window_geometry(&win, app, screenshot_rect());
+        // 恢复可能的最小化状态（SW_RESTORE 本身也会显示窗口，所以必须在 ready 阶段做）
+        let _ = win.unminimize();
         let _ = win.show();
         let _ = win.set_focus();
-        log::info!("[screenshot] 窗口已显示");
+        log::info!("[screenshot] 窗口已显示（冻结帧已就绪）");
     }
 }
 
@@ -624,6 +716,8 @@ pub fn try_get_pending_screenshot() -> Option<serde_json::Value> {
 }
 
 /// 关闭截图窗口（隐藏而非销毁，复用窗口提升后续截图响应速度）
+/// 关键：只做 hide。早期实现的 minimize()→hide()→set_position(-10000) 三重奏会在 Windows 上
+/// 触发最小化动画 + 窗口移出屏幕的重新合成，形成肉眼可见的第二次闪屏。
 pub fn close_screenshot_window(app: &AppHandle) {
     use tauri::Manager as _;
     // 先清理状态（最优先，确保后续截图能正常触发）
@@ -634,17 +728,15 @@ pub fn close_screenshot_window(app: &AppHandle) {
             let _ = std::fs::remove_file(&p.file_path);
         }
     }
-    // 多重保险确保窗口消失：取消置顶 → 最小化 → 隐藏 → 移出屏幕
     if let Some(win) = app.get_webview_window("screenshot") {
-        // 1. 取消置顶（防止挡住其他窗口）
-        let _ = win.set_always_on_top(false);
-        // 2. 最小化（最可靠的"消失"方式）
-        let _ = win.minimize();
-        // 3. 隐藏
+        // 1. 隐藏（唯一需要的"消失"动作）——必须最先做：窗口还在可见状态时清 DOM 会露出桌面
         let _ = win.hide();
-        // 4. 移动到屏幕外（终极兜底）
-        let _ = win.set_position(tauri::PhysicalPosition::new(-10000, -10000));
-        log::info!("[screenshot-window] 截图窗口已关闭（多重保险）");
+        // 2. 通知前端复位（isActive / overlay / 监听器），否则 Rust 主动关闭后
+        //    前端 isActive 仍为 true，轮询被抑制，下次触发窗口永远不显示
+        let _ = win.eval("window.__mtScreenshotReset && window.__mtScreenshotReset();");
+        // 3. 取消置顶放在 hide 之后：避免 hide 之前出现"掉层"的中间态
+        let _ = win.set_always_on_top(false);
+        log::info!("[screenshot-window] 截图窗口已关闭（仅 hide，无最小化动画）");
     }
 }
 
@@ -832,25 +924,26 @@ pub fn trigger_record(app: AppHandle) {
         });
     }
 
-    show_recorder_window(&app);
+    prepare_recorder_window(&app);
 }
 
-/// 显示/创建录屏窗口（独立的无边框透明全屏窗口）
-fn show_recorder_window(app: &AppHandle) {
+/// 准备录屏窗口（独立的无边框透明全屏窗口）
+/// 关键：只准备不显示——先隐藏、再 reload 页面重置前端状态，等前端 ready 后由
+/// on_recorder_window_ready 统一 show。旧实现在 reload 的同时立刻 show，
+/// 页面重载期间窗口是白底 → 必然闪一下白屏。
+fn prepare_recorder_window(app: &AppHandle) {
     use tauri::Manager as _;
 
-    // 如果窗口已存在，直接显示（毫秒级响应）
+    // 如果窗口已存在，重置状态后等待 ready 显示
     if let Some(win) = app.get_webview_window("recorder") {
-        log::info!("[recorder-window] 复用已有录屏窗口");
+        log::info!("[recorder-window] 复用已有录屏窗口（等待前端 ready 后显示）");
+        // 先隐藏，避免 reload 期间的白底被看到
+        let _ = win.hide();
         let _ = win.set_always_on_top(true);
         let _ = win.set_ignore_cursor_events(false); // 恢复鼠标捕获（选区阶段需要）
-        let _ = win.unminimize();
-        // 确保窗口大小覆盖屏幕
-        if let Ok(Some(mon)) = app.primary_monitor() {
-            let size = mon.size();
-            let _ = win.set_size(tauri::PhysicalSize::new(size.width, size.height));
-            let _ = win.set_position(tauri::PhysicalPosition::new(0, 0));
-        }
+        // 同样不能在显示前 unminimize（SW_RESTORE 会直接显示窗口）
+        // 只在几何参数变化时下发设置，避免 DWM 重新合成导致闪屏
+        apply_window_geometry(&win, app, recorder_rect());
         // 关键修复：复用窗口时必须重新加载页面，重置前端 JS 状态。
         // 不 reload 会导致：上次录屏的 recording=true/recorder/chunks/region 等变量残留，
         // init() 不再执行，DOM 已被清空 → 用户看到空白窗口无法操作；
@@ -859,8 +952,20 @@ fn show_recorder_window(app: &AppHandle) {
         let reload_url = format!("http://127.0.0.1:{}/recorder.html?_t={}", port, std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0));
         let _ = win.eval(&format!("window.location.href='{}';", reload_url));
-        let _ = win.show();
-        let _ = win.set_focus();
+
+        // 兜底：前端异常未发 ready 时强制显示，避免"按了 Alt+M 毫无反应"
+        let app_clone = app.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(1500));
+            if let Some(w) = app_clone.get_webview_window("recorder") {
+                if !w.is_visible().unwrap_or(false) && RECORD_IN_PROGRESS.load(Ordering::SeqCst) {
+                    log::warn!("[recorder] ready 信号超时 1.5s，兜底显示录屏窗口");
+                    let _ = w.unminimize();
+                    let _ = w.show();
+                    let _ = w.set_focus();
+                }
+            }
+        });
         return;
     }
 
@@ -901,12 +1006,16 @@ fn show_recorder_window(app: &AppHandle) {
         .skip_taskbar(true)
         .visible(false)
         .inner_size(mon_w, mon_h)
-        .position(-10000.0, -10000.0)
+        .position(0.0, 0.0)
         .build();
 
     match result {
-        Ok(_) => {
+        Ok(win) => {
             log::info!("[recorder-window] 录屏窗口创建成功");
+            if let Ok(mut guard) = recorder_rect().lock() {
+                *guard = Some((mon_w as u32, mon_h as u32, 0, 0));
+            }
+            let _ = win.hide();
 
             // 超时监控：30 秒内前端未就绪则自动清理
             let app_clone = app.clone();
@@ -977,8 +1086,12 @@ pub fn on_recorder_window_ready(app: &AppHandle) {
             }
         });
 
+        let _ = win.set_always_on_top(true);
+        apply_window_geometry(&win, app, recorder_rect());
+        let _ = win.unminimize();
         let _ = win.show();
         let _ = win.set_focus();
+        log::info!("[recorder] 窗口已显示（选区遮罩已就绪）");
     }
 }
 
@@ -997,15 +1110,16 @@ pub fn close_recorder_window(app: &AppHandle) {
             let _ = std::fs::remove_file(&bg.file_path);
         }
     }
-    // 多重保险确保窗口消失：取消置顶 → 最小化 → 隐藏 → 移出屏幕
+    // 只做 hide（不做 minimize/set_position/about:blank）：
+    // 旧实现的 minimize() 会播 Windows 最小化动画、set_position 移出屏幕会再触发一次合成、
+    // about:blank 会让页面变白底，三者叠加就是用户看到的关闭瞬间闪屏。
+    // 页面状态复位改由下次准备阶段（prepare_recorder_window）的 reload 完成。
     if let Some(win) = app.get_webview_window("recorder") {
-        let _ = win.set_always_on_top(false);
-        let _ = win.minimize();
         let _ = win.hide();
-        let _ = win.set_position(tauri::PhysicalPosition::new(-10000, -10000));
-        // 重置前端页面状态：导航到空白页，下次复用时 show_recorder_window 会 reload 到 recorder.html
-        let _ = win.eval("window.location.href='about:blank';");
-        log::info!("[recorder-window] 录屏窗口已关闭（多重保险，已清理原生录屏状态，已重置前端页面）");
+        let _ = win.set_always_on_top(false);
+        // 隐藏期间忽略鼠标事件，避免残留窗口吃掉点击
+        let _ = win.set_ignore_cursor_events(true);
+        log::info!("[recorder-window] 录屏窗口已关闭（仅 hide，已清理原生录屏状态）");
     }
 }
 

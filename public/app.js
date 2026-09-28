@@ -12779,6 +12779,13 @@ document.addEventListener("keydown", (event) => {
   // ── 屏幕捕获：Alt+A 区域截图 / Alt+M 区域录屏 ──
   // Tauri 环境下通过 IPC 触发独立截图窗口（不调起主窗口）
   // 非 Tauri 环境下走 HTTP 降级（在主窗口内 overlay）
+  // 长按会触发 keydown 自动重复（event.repeat=true）：必须忽略，
+  // 否则会连续调用后端，截图窗口刚显示就被重复触发逻辑处理（旧实现直接关闭 → 闪退）。
+  if (event.repeat && event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey
+      && ["a", "m"].includes(event.key.toLowerCase())) {
+    event.preventDefault(); event.stopPropagation();
+    return;
+  }
   if (event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && event.key.toLowerCase() === "a" && state.enableCaptureShortcut) {
     event.preventDefault(); event.stopPropagation();
     if (window.__TAURI__?.core?.invoke) {

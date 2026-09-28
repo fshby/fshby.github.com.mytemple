@@ -224,6 +224,8 @@ pub fn build_native_router(state: Arc<ServerState>) -> Router {
         .route("/api/screenshot/result", post(screenshot_result_http).layer(DefaultBodyLimit::max(10 * 1024 * 1024)))
         // 截图 OCR 文字识别（调用 Windows.Media.Ocr）
         .route("/api/screenshot/ocr", post(screenshot_ocr).layer(DefaultBodyLimit::max(10 * 1024 * 1024)))
+        // 录屏窗口就绪信号（录屏窗口唯一的显示出口）
+        .route("/api/recorder/ready", post(recorder_ready_http))
         // 录屏窗口关闭信号（独立于截图窗口：关闭 recorder 窗口 + 停止原生录屏 + 释放锁）
         .route("/api/recorder/close", post(recorder_close_http))
         // 录屏结果保存（IPC 降级方案，前端 IPC 失败时走 HTTP）
@@ -3222,6 +3224,18 @@ async fn screenshot_close_http() -> impl IntoResponse {
         None => return json_err(StatusCode::INTERNAL_SERVER_ERROR, "AppHandle 未初始化"),
     };
     crate::global_capture::close_screenshot_window(&app_handle);
+    raw_json(serde_json::json!({ "ok": true }))
+}
+
+/// POST /api/recorder/ready
+/// 录屏窗口前端就绪信号：录屏窗口唯一的显示出口（与截图窗口同构）。
+/// 后端在收到此信号前保持窗口隐藏，避免 reload 期间的白底 / 空壳被用户看到。
+async fn recorder_ready_http() -> impl IntoResponse {
+    let app_handle = match crate::APP_HANDLE.get() {
+        Some(h) => h.clone(),
+        None => return json_err(StatusCode::INTERNAL_SERVER_ERROR, "AppHandle 未初始化"),
+    };
+    crate::global_capture::on_recorder_window_ready(&app_handle);
     raw_json(serde_json::json!({ "ok": true }))
 }
 

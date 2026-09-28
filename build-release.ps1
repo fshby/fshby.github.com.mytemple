@@ -157,8 +157,13 @@ $cargoPattern = '^version\s*=\s*"[^"]*"'
 $cargoReplacement = "version = `"$Version`""
 $cargoNew = [regex]::Replace($cargoContent, $cargoPattern, $cargoReplacement, [System.Text.RegularExpressions.RegexOptions]::Multiline)
 if ($cargoContent -eq $cargoNew) {
-    if ($cargoContent -match $cargoPattern) { Write-OK "Cargo.toml version already $Version" }
-    else { Write-Warn2 "version field not found in Cargo.toml" }
+    # 注意：PowerShell 的 -match 不支持 Multiline，带 ^ 的模式必须用 [regex]::IsMatch + Multiline，
+    # 否则会误报 "version field not found"（文件开头是 [package]，^version 永不匹配）
+    if ([regex]::IsMatch($cargoContent, $cargoPattern, [System.Text.RegularExpressions.RegexOptions]::Multiline)) {
+        Write-OK "Cargo.toml version already $Version"
+    } else {
+        Write-Warn2 "version field not found in Cargo.toml"
+    }
 } else {
     [System.IO.File]::WriteAllText($cargoFile, $cargoNew, [System.Text.UTF8Encoding]::new($false))
     Write-OK "Cargo.toml version -> $Version"
@@ -220,8 +225,15 @@ Write-Step "Clean stale icon cache in resources/public"
 
 $resPublicDir = Join-Path $srcTauriDir "resources\public"
 if (Test-Path $resPublicDir) {
-    Get-ChildItem -Path $resPublicDir -Filter "logo.*" -File | Remove-Item -Force
-    Write-OK "Cleaned resources/public/logo.*"
+    # 注意：没有任何 logo.* 文件时不能直接把空集合管道给 Remove-Item，
+    # 会报 "Remove-Item: missing path operand" 而中断整个构建。
+    $logoFiles = Get-ChildItem -Path $resPublicDir -Filter "logo.*" -File -ErrorAction SilentlyContinue
+    if ($logoFiles) {
+        $logoFiles | Remove-Item -Force
+        Write-OK "Cleaned resources/public/logo.*"
+    } else {
+        Write-OK "resources/public has no logo.*, skip clean"
+    }
 } else {
     Write-OK "resources/public not exist, skip clean"
 }
@@ -243,7 +255,11 @@ if (-not $SkipBuild) {
 
     Push-Location $projectRoot
     try {
-        & npx tauri build 2>&1
+        # 用 cmd /c 包一层：PowerShell 5.1 会把原生命令写入 stderr 的每一行都当成 ErrorRecord，
+        # 在外层 ErrorActionPreference=Stop 的环境（如 IDE 内置终端 / 自动化工具）会把整个脚本判为失败，
+        # 即使产物已经生成（表现：日志停在 "Tauri Release build"，实则 Build succeeded 且安装包已产出）。
+        # cmd /c 在 cmd 层就把 stderr 合并进 stdout，规避该问题；退出码仍可正常判断。
+        cmd /c "npx tauri build 2>&1"
         if ($LASTEXITCODE -ne 0) {
             throw "Tauri build failed (exit $LASTEXITCODE)"
         }

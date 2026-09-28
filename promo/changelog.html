@@ -24,7 +24,7 @@
         <a href="index.html#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.1.23</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.1.24</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -40,6 +40,7 @@
         <div class="changelog-toc reveal">
           <h3>版本索引</h3>
           <ul>
+            <li><a href="#v2.1.24">v2.1.24</a> — 截图/录屏「闪屏」彻底修复 + 长按快捷键闪退</li>
             <li><a href="#v2.1.23">v2.1.23</a> — 修复冷启动授权校验超时被误判为「未授权」</li>
             <li><a href="#v2.1.22">v2.1.22</a> — 稳定性修复：导出截图资源崩溃 + 升级后启动失败（资源缓存）+ 高亮语言包补齐 + Agent 规则状态 404</li>
             <li><a href="#v2.1.21">v2.1.21</a> — 新功能：导出文档内本地截图资源 + 推广页 webp 背景图清理</li>
@@ -82,6 +83,17 @@
             <li><a href="#v1.8.93">v1.8.93</a> — 界面与体验升级 + 性能优化</li>
           </ul>
         </div>
+
+        <article class="doc-section reveal" id="v2.1.24">
+          <h3>v2.1.24 · 截图/录屏「闪屏」修复</h3>
+          <ul>
+            <li><b>修复「按 Alt+A 截图时屏幕闪一下」</b>：截图窗口此前在抓到画面后立即显示，但冻结画面还要经过前端轮询（约 100 毫秒）→ 下载 → 解码才会画上去，中间这段时间窗口已经置顶，用户看到的是实时桌面（外加一个白色「加载中…」提示），冻结帧一盖上来画面就「跳回」按下瞬间。现在截图窗口改为<strong>唯一的显示时机由前端就绪信号驱动</strong>：冻结帧解码完成后再显示，出现即定格，不再有时序空窗。</li>
+            <li><b>修复「关闭截图/录屏时再闪一次」</b>：旧关闭流程用「取消置顶 → 最小化 → 隐藏 → 移出屏幕」四连，其中最小化会播 Windows 系统动画、移出屏幕会再触发一次画面重新合成。现在关闭只做隐藏，动画与重合成全部消除。</li>
+            <li><b>修复「长按 Alt+A 截图窗口一闪即退」</b>：快捷键长按会自动重复，旧逻辑把重复触发当成「再次按下即关闭」，导致窗口刚出现就消失。现在窗口显示期间忽略重复触发，取消统一按 ESC（原有的心跳监控与超时保护仍会兜底防止卡死）。</li>
+            <li><b>修复「录屏开始瞬间白屏闪一下」</b>：录屏窗口复用时会重新加载页面，旧流程在页面重载过程中就把窗口显示出来，重载期间页面是白底。现在同样改为就绪后再显示，并为录屏补齐了就绪信号接口。</li>
+            <li><b>体验优化</b>：窗口尺寸/位置只在真正变化时才重设（减少画面重新合成）；触发时由后端主动唤醒截图页面，响应更快；截图窗口从「屏幕外预创建、显示时移回来」改为直接在最终位置预创建，显示零位移。</li>
+          </ul>
+        </article>
 
         <article class="doc-section reveal" id="v2.1.23">
           <h3>v2.1.23 · 授权校验健壮性修复</h3>
