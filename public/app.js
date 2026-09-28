@@ -14559,7 +14559,10 @@ els.goToLicenseBtn?.addEventListener("click", () => {
 // 授权管理 —— localStorage 持久化 + 首屏本地缓存优先 + 后台联网确认
 const LICENSE_CACHE_KEY = "license_cache_v1";
 const LICENSE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 分钟有效（同后台定时检查周期）
-const LICENSE_NET_TIMEOUT_MS = 3000;           // 联网校验 3s 超时（后端已预热缓存，正常 <100ms；留足余量防慢机器/首次冷启动）
+const LICENSE_NET_TIMEOUT_MS = 3000;           // 常规联网校验 3s 超时（缓存已热，正常 <100ms）
+const LICENSE_FIRST_TIMEOUT_MS = 12000;         // 首次（进程冷启动）校验超时：后端此时可能正在跑
+                                               // WMI 硬件指纹查询（实测 2~5s，慢机器更久），
+                                               // 用 3s 会把「正在算」误判成「未授权」并弹全屏授权窗。
 
 function applyLicenseResultUI(result) {
   if (!result) return;
@@ -14595,19 +14598,33 @@ function applyLicenseResultUI(result) {
   }
 }
 
+// 内存镜像缓存：WebView2 的「跟踪防护」等策略偶尔会直接阻断 localStorage，
+// 此时若只依赖 localStorage，每次授权检查都要重新走一遍后端（可能触发 WMI 慢查询）。
+// 这里额外保留一份内存缓存，localStorage 不可用时仍能命中。
+let _licenseMemCache = null;
+
 function getLicenseCache() {
   try {
     const raw = localStorage.getItem(LICENSE_CACHE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!parsed || !parsed.result) return null;
-    const age = Date.now() - (parsed.savedAt || 0);
-    if (age < 0) return null; // 时间回拨，缓存丢弃
-    return { result: parsed.result, savedAt: parsed.savedAt || 0, age };
-  } catch (_) { return null; }
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.result) {
+        const age = Date.now() - (parsed.savedAt || 0);
+        if (age >= 0) return { result: parsed.result, savedAt: parsed.savedAt || 0, age };
+      }
+    }
+  } catch (_) { /* localStorage 被阻断/损坏 → 落到内存缓存 */ }
+  if (_licenseMemCache) {
+    const age = Date.now() - (_licenseMemCache.savedAt || 0);
+    if (age >= 0) {
+      return { result: _licenseMemCache.result, savedAt: _licenseMemCache.savedAt || 0, age };
+    }
+  }
+  return null;
 }
 
 function setLicenseCache(result) {
+  _licenseMemCache = { result, savedAt: Date.now() };
   try {
     localStorage.setItem(LICENSE_CACHE_KEY, JSON.stringify({
       result, savedAt: Date.now(),
@@ -14617,6 +14634,8 @@ function setLicenseCache(result) {
 
 async function checkLicenseStatus(opts) {
   const skipNet = opts && opts.skipNetwork === true;
+  // 首次（冷启动）校验用更宽松的超时：后端可能要现算一次 WMI 硬件指纹
+  const timeoutMs = opts && opts.first ? LICENSE_FIRST_TIMEOUT_MS : LICENSE_NET_TIMEOUT_MS;
   // 1) 先走缓存（skipNetwork=true 的首屏快速路径只返回缓存）
   if (skipNet) {
     const c = getLicenseCache();
@@ -14627,14 +14646,14 @@ async function checkLicenseStatus(opts) {
     }
     return { activated: false, _cacheMiss: true };
   }
-  // 2) 正常路径：/api/license/check 拉取，带 3s 超时避免网络波动拖慢启动
+  // 2) 正常路径：/api/license/check 拉取，带超时避免网络波动拖慢启动
   //    注意：api.get 的底层可能走 Tauri IPC（无 AbortSignal），因此这里 Promise.race 超时只是
   //    *逻辑层面* 的早返回，底层 HTTP/IPC 请求仍可能继续执行并更新缓存（不影响启动时间）。
   //    后端 license::prewarm_caches() 在启动时已预热硬件指纹缓存，正常响应 <100ms。
   try {
     let timer = null;
     const timeoutP = new Promise((_, rej) => {
-      timer = setTimeout(() => rej(new Error("timeout")), LICENSE_NET_TIMEOUT_MS);
+      timer = setTimeout(() => rej(new Error("timeout")), timeoutMs);
     });
     const reqPromise = api.get("/api/license/check").then((r) => {
       // 请求在超时后才回来也刷新缓存（静默），下次启动命中
@@ -14664,14 +14683,15 @@ async function checkLicenseStatus(opts) {
       console.warn("License check network failed, using cache:", err && err.message);
       return c.result;
     }
-    console.error("License check failed:", err);
-    els.licenseActivated?.classList.add("hidden");
-    els.licenseUnactivated?.classList.remove("hidden");
+    // 无有效缓存：这次失败大概率是「后端 WMI 冷启动慢」或网络瞬断，
+    // 而不是真的未授权。绝不能据此把用户判成未授权（会弹出全屏授权窗）。
+    // 返回 _transient 标记，由调用方决定重试；底层请求仍在继续，稍后会写入缓存。
+    console.warn("License check inconclusive (transient):", err && err.message);
     if (els.licenseWarning) {
-      els.licenseWarning.textContent = "授权状态暂时无法确认，请稍后重试";
+      els.licenseWarning.textContent = "授权状态确认中…";
       els.licenseWarning.classList.remove("hidden");
     }
-    return { activated: false };
+    return { activated: false, _transient: true, error: err && err.message };
   }
 }
 
@@ -16301,11 +16321,16 @@ window.addEventListener("license-required", async (event) => {
   _licenseGateCheckPromise = (async () => {
     try {
       // 重新验证授权状态，排除瞬态错误（如文件读取失败、机器码计算异常等）
-      const result = await checkLicenseStatus();
+      const result = await checkLicenseStatus({ first: true });
       if (result && result.activated) {
         // 授权仍然有效，只是之前的API请求出现了瞬态错误
         console.warn("License is still valid but API returned 403 LICENSE_REQUIRED — cleared gate");
         clearLicenseGate();
+        return;
+      }
+      if (result && result._transient) {
+        // 无法确认（超时/网络瞬断）：既不清门也不弹窗，交给周期检查接手
+        console.warn("License re-verify inconclusive (transient), deferring to periodic check");
         return;
       }
       // 授权确实无效，显示授权弹窗
@@ -16414,8 +16439,15 @@ async function startupLicenseCheck() {
   let result = await checkLicenseStatus({ skipNetwork: true });
   let usedCache = !!result.activated;
   if (!usedCache) {
-    // 缓存未命中（首次启动 / 5 分钟 TTL 过期 / 明确未授权）→ 联网校验一次
-    result = await checkLicenseStatus();
+    // 缓存未命中（首次启动 / 5 分钟 TTL 过期 / 明确未授权）→ 联网校验。
+    // 首次校验放宽超时：后端此时可能正在算 WMI 硬件指纹（冷启动 2~5s，慢机器更久）。
+    result = await checkLicenseStatus({ first: true });
+    // 仍无确定结论（超时/瞬断）→ 短暂重试几次再下判断，避免把「正在算」误判成「未授权」
+    for (let i = 0; i < 6 && result && result._transient; i += 1) {
+      setSplashProgress(30 + i * 4, "正在确认授权…");
+      await new Promise((r) => setTimeout(r, 1200));
+      result = await checkLicenseStatus();
+    }
   }
 
   setSplashProgress(55, result.activated ? "正在加载文档库…" : "等待授权…");
@@ -16439,10 +16471,9 @@ async function startupLicenseCheck() {
       (async () => {
         try {
           const netResult = await checkLicenseStatus();
-          if (!netResult.activated) {
-            state.licenseValidatedAt = 0;
-            showLicenseGate(netResult.error || "授权已失效，请重新授权");
-          }
+          if (netResult.activated || netResult._transient) return; // 无法确认时交给周期检查
+          state.licenseValidatedAt = 0;
+          showLicenseGate(netResult.error || "授权已失效，请重新授权");
         } catch (_) { /* ignore — network issue, let periodic re-check take over */ }
       })();
     }
@@ -16451,7 +16482,8 @@ async function startupLicenseCheck() {
     state.tree = [];
     state.flatFiles = [];
     renderTree([]);
-    showLicenseGate();
+    // 重试后仍无法确认：显示「确认中」而不是「未授权」，并继续轮询直到出结论
+    showLicenseGate(result && result._transient ? "授权状态确认中，请稍候…" : undefined);
     hideSplash();
     await new Promise((resolve) => {
       const check = setInterval(async () => {
@@ -16472,7 +16504,7 @@ function startPeriodicLicenseCheck() {
   setInterval(async () => {
     try {
       const result = await checkLicenseStatus();
-      if (!result.activated && state.licenseValidatedAt > 0) {
+      if (!result.activated && !result._transient && state.licenseValidatedAt > 0) {
         state.licenseValidatedAt = 0;
         showLicenseGate(result.error || "授权已失效，请重新授权");
       }

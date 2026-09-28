@@ -100,3 +100,47 @@ test("extractOutline extracts headings from markdown", () => {
   assert.ok(outline.length >= 2);
   assert.match(outline[0].text || outline[0].title || "", /标题一|标题二/);
 });
+
+/* ── 授权检查健壮性（回归防护） ── */
+
+test("授权检查超时按「结论未知」处理，绝不判成未授权", async () => {
+  const appSource = await readApp();
+  // 超时/网络失败必须返回 _transient 标记，而不是硬编码的 { activated: false }
+  assert.match(appSource, /_transient: true/);
+  // 首次（冷启动）校验使用更宽松的超时（后端要现算 WMI 指纹）
+  assert.match(appSource, /LICENSE_FIRST_TIMEOUT_MS/);
+  assert.match(appSource, /opts\.first \? LICENSE_FIRST_TIMEOUT_MS : LICENSE_NET_TIMEOUT_MS/);
+  // 启动流程里有针对 _transient 的重试循环
+  assert.match(appSource, /result && result\._transient; i \+= 1/);
+  // 三处判「未授权」的入口都必须排除 _transient
+  assert.match(appSource, /!result\.activated && !result\._transient && state\.licenseValidatedAt > 0/);
+  assert.match(appSource, /netResult\.activated \|\| netResult\._transient/);
+  assert.match(appSource, /result && result\._transient\) \{\s*\n\s*\/\/ 无法确认（超时\/网络瞬断）/);
+  // 旧的「直接把超时打成 error 并切未授权 UI」的写法不应再存在
+  assert.doesNotMatch(appSource, /console\.error\("License check failed:"/);
+  assert.doesNotMatch(appSource, /els\.licenseUnactivated\?\.classList\.remove\("hidden"\);\s*\n\s*if \(els\.licenseWarning\) \{\s*\n\s*els\.licenseWarning\.textContent = "授权状态暂时无法确认/);
+});
+
+test("授权检查有内存缓存兜底（WebView2 跟踪防护可能阻断 localStorage）", async () => {
+  const appSource = await readApp();
+  assert.match(appSource, /let _licenseMemCache = null/);
+  assert.match(appSource, /_licenseMemCache = \{ result, savedAt: Date\.now\(\) \}/);
+  assert.match(appSource, /if \(_licenseMemCache\)/);
+});
+
+test("授权硬件指纹缓存只计算一次（避免并发重复拉起 WMI）", async () => {
+  const rustSource = await readFile(
+    path.join(process.cwd(), "src-tauri/src/license.rs"),
+    "utf8",
+  );
+  // 四个缓存必须用 OnceLock（并发调用者等待首个计算，而不是各跑一遍 PowerShell）
+  assert.match(rustSource, /static HARDWARE_CACHE: OnceLock<String>/);
+  assert.match(rustSource, /static MACHINE_CODE_CACHE: OnceLock<String>/);
+  assert.match(rustSource, /static MACHINE_FINGERPRINT_CACHE: OnceLock<String>/);
+  assert.match(rustSource, /static SYSTEM_REF_TIME_CACHE: OnceLock<u64>/);
+  assert.doesNotMatch(rustSource, /static\s+\w+:\s*Mutex</);
+  // WMI 查询的超时必须收紧：曾为 15s × 3 次（最坏 45s），远超前端超时
+  assert.doesNotMatch(rustSource, /run_powershell\(script, 15\)/);
+  assert.match(rustSource, /run_powershell\(script, 8\)/);
+});
+

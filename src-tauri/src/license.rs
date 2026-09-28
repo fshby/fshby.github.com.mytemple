@@ -14,7 +14,7 @@ use rsa::{Pkcs1v15Sign, RsaPublicKey};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
@@ -31,10 +31,14 @@ u74wALQnIgppRN3oTdg+IMWOrpGWDCAYd1Hi5ETg1EEw1pshsb1EXLz3bcc7aLFH
 -----END PUBLIC KEY-----"#;
 
 /// 缓存
-static HARDWARE_CACHE: Mutex<Option<String>> = Mutex::new(None);
-static MACHINE_CODE_CACHE: Mutex<Option<String>> = Mutex::new(None);
-static MACHINE_FINGERPRINT_CACHE: Mutex<Option<String>> = Mutex::new(None);
-static SYSTEM_REF_TIME_CACHE: Mutex<Option<u64>> = Mutex::new(None);
+// 用 OnceLock 而非 Mutex<Option<_>>：这些值的计算会同步调用 PowerShell/WMI，
+// 若用「先检查再写入」，预热线程与请求线程会各跑一遍 WMI（单次 2~5s 甚至更久），
+// 导致 /api/license/check 在冷启动时超过前端超时。OnceLock 保证只算一次，
+// 并发调用者会等待首个计算完成并复用同一结果。
+static HARDWARE_CACHE: OnceLock<String> = OnceLock::new();
+static MACHINE_CODE_CACHE: OnceLock<String> = OnceLock::new();
+static MACHINE_FINGERPRINT_CACHE: OnceLock<String> = OnceLock::new();
+static SYSTEM_REF_TIME_CACHE: OnceLock<u64> = OnceLock::new();
 
 /// 授权验证结果
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -74,11 +78,10 @@ fn now_ms() -> u64 {
 
 /// 获取 Windows 平台硬件标识
 fn get_hardware_identifiers() -> String {
-    // 检查缓存
-    if let Some(cached) = HARDWARE_CACHE.lock().unwrap().clone() {
-        return cached;
-    }
+    HARDWARE_CACHE.get_or_init(compute_hardware_identifiers).clone()
+}
 
+fn compute_hardware_identifiers() -> String {
     let mut parts: Vec<String> = Vec::new();
 
     // MAC 地址（通过 ipconfig 获取第一个非虚拟网卡）
@@ -89,8 +92,8 @@ fn get_hardware_identifiers() -> String {
     // Windows 硬件信息（单次 PowerShell 调用）
     if cfg!(target_os = "windows") {
         let script = "$cpu=(Get-CimInstance Win32_Processor).ProcessorId; $disk=(Get-CimInstance Win32_DiskDrive | Select-Object -First 1).SerialNumber; $board=(Get-CimInstance Win32_BaseBoard).SerialNumber; $uuid=(Get-CimInstance Win32_ComputerSystemProduct).UUID; [Console]::OutputEncoding=[Text.Encoding]::UTF8; Write-Output \"$cpu|$disk|$board|$uuid\"";
-        for _attempt in 0..3 {
-            if let Ok(output) = run_powershell(script, 15) {
+        for _attempt in 0..2 {
+            if let Ok(output) = run_powershell(script, 8) {
                 let fields: Vec<&str> = output.trim().split('|').collect();
                 if fields.len() == 4
                     && fields.iter().all(|f| !f.trim().is_empty())
@@ -112,50 +115,46 @@ fn get_hardware_identifiers() -> String {
     }
 
     let result = parts.join("|");
-    *HARDWARE_CACHE.lock().unwrap() = Some(result.clone());
     result
 }
 
 /// 生成机器码（用户可见的短码）
 /// 取硬件指纹的 SHA-256 前 16 字节，Base36 编码，分 4 组展示
 pub fn get_machine_code() -> String {
-    if let Some(cached) = MACHINE_CODE_CACHE.lock().unwrap().clone() {
-        return cached;
-    }
-    let raw = get_hardware_identifiers();
-    let mut hasher = Sha256::new();
-    hasher.update(raw.as_bytes());
-    let hash = hasher.finalize();
-    // 取前 16 字节 → 32 hex 字符
-    let hex: String = hash.iter().take(16).map(|b| format!("{:02x}", b)).collect();
+    MACHINE_CODE_CACHE
+        .get_or_init(|| {
+            let raw = get_hardware_identifiers();
+            let mut hasher = Sha256::new();
+            hasher.update(raw.as_bytes());
+            let hash = hasher.finalize();
+            // 取前 16 字节 → 32 hex 字符
+            let hex: String = hash.iter().take(16).map(|b| format!("{:02x}", b)).collect();
 
-    // 转 Base36
-    let code = hex_to_base36(&hex);
-    let padded = format!("{:0>25}", code);
-    // 分 5 组，每组 5 字符
-    let grouped = padded
-        .as_bytes()
-        .chunks(5)
-        .map(|chunk| std::str::from_utf8(chunk).unwrap_or(""))
-        .collect::<Vec<_>>()
-        .join("-");
-
-    *MACHINE_CODE_CACHE.lock().unwrap() = Some(grouped.clone());
-    grouped
+            // 转 Base36
+            let code = hex_to_base36(&hex);
+            let padded = format!("{:0>25}", code);
+            // 分 5 组，每组 5 字符
+            padded
+                .as_bytes()
+                .chunks(5)
+                .map(|chunk| std::str::from_utf8(chunk).unwrap_or(""))
+                .collect::<Vec<_>>()
+                .join("-")
+        })
+        .clone()
 }
 
 /// 获取机器指纹完整哈希（内部使用）
 pub fn get_machine_fingerprint() -> String {
-    if let Some(cached) = MACHINE_FINGERPRINT_CACHE.lock().unwrap().clone() {
-        return cached;
-    }
-    let raw = get_hardware_identifiers();
-    let mut hasher = Sha256::new();
-    hasher.update(raw.as_bytes());
-    let hash = hasher.finalize();
-    let hex: String = hash.iter().map(|b| format!("{:02x}", b)).collect();
-    *MACHINE_FINGERPRINT_CACHE.lock().unwrap() = Some(hex.clone());
-    hex
+    MACHINE_FINGERPRINT_CACHE
+        .get_or_init(|| {
+            let raw = get_hardware_identifiers();
+            let mut hasher = Sha256::new();
+            hasher.update(raw.as_bytes());
+            let hash = hasher.finalize();
+            hash.iter().map(|b| format!("{:02x}", b)).collect::<String>()
+        })
+        .clone()
 }
 
 /// 计算回退指纹（仅 MAC + 主机名 + CPU 型号）
@@ -231,12 +230,7 @@ fn update_high_water_mark(data_root: &Path, current_time: u64) -> u64 {
 /// 系统安装时间（Windows 注册表交叉校验）
 /// 缓存：系统安装时间不变，PowerShell/WMI 查询较慢，首次结果缓存
 fn get_system_reference_time() -> u64 {
-    if let Some(cached) = SYSTEM_REF_TIME_CACHE.lock().unwrap().clone() {
-        return cached;
-    }
-    let result = compute_system_reference_time();
-    *SYSTEM_REF_TIME_CACHE.lock().unwrap() = Some(result);
-    result
+    *SYSTEM_REF_TIME_CACHE.get_or_init(compute_system_reference_time)
 }
 
 fn compute_system_reference_time() -> u64 {
