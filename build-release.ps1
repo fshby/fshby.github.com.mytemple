@@ -143,7 +143,8 @@ $pattern = '"version"\s*:\s*"[\d.]+"'
 $replacement = "`"version`": `"$Version`""
 $tauriConfNew = [regex]::Replace($tauriConf, $pattern, $replacement)
 if ($tauriConf -eq $tauriConfNew) {
-    Write-Warn2 "version field not found in tauri.conf.json"
+    if ($tauriConf -match $pattern) { Write-OK "tauri.conf.json version already $Version" }
+    else { Write-Warn2 "version field not found in tauri.conf.json" }
 } else {
     [System.IO.File]::WriteAllText($tauriConfFile, $tauriConfNew, [System.Text.UTF8Encoding]::new($false))
     Write-OK "tauri.conf.json version -> $Version"
@@ -156,7 +157,8 @@ $cargoPattern = '^version\s*=\s*"[^"]*"'
 $cargoReplacement = "version = `"$Version`""
 $cargoNew = [regex]::Replace($cargoContent, $cargoPattern, $cargoReplacement, [System.Text.RegularExpressions.RegexOptions]::Multiline)
 if ($cargoContent -eq $cargoNew) {
-    Write-Warn2 "version field not found in Cargo.toml"
+    if ($cargoContent -match $cargoPattern) { Write-OK "Cargo.toml version already $Version" }
+    else { Write-Warn2 "version field not found in Cargo.toml" }
 } else {
     [System.IO.File]::WriteAllText($cargoFile, $cargoNew, [System.Text.UTF8Encoding]::new($false))
     Write-OK "Cargo.toml version -> $Version"
@@ -171,7 +173,8 @@ if (Test-Path $pkgFile) {
     $pkgReplacement = "`"version`": `"$Version`""
     $pkgNew = [regex]::Replace($pkgContent, $pkgPattern, $pkgReplacement, [System.Text.RegularExpressions.RegexOptions]::Multiline)
     if ($pkgContent -eq $pkgNew) {
-        Write-Warn2 "version field not found in package.json"
+        if ($pkgContent -match $pkgPattern) { Write-OK "package.json version already $Version" }
+        else { Write-Warn2 "version field not found in package.json" }
     } else {
         [System.IO.File]::WriteAllText($pkgFile, $pkgNew, [System.Text.UTF8Encoding]::new($false))
         Write-OK "package.json version -> $Version"
@@ -200,6 +203,8 @@ if (-not $SkipPromoUpdate) {
         if ($html -ne $htmlNew) {
             [System.IO.File]::WriteAllText($indexHtmlFile, $htmlNew, [System.Text.UTF8Encoding]::new($false))
             Write-OK "promo/index.html version -> v$Version"
+        } elseif ($html -match [regex]::Escape("v$Version")) {
+            Write-OK "promo/index.html version already v$Version"
         } else {
             Write-Warn2 "promo/index.html: no current-version pattern matched"
         }

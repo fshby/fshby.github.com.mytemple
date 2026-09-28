@@ -24,7 +24,7 @@
         <a href="index.html#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.1.22</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.1.23</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -40,6 +40,7 @@
         <div class="changelog-toc reveal">
           <h3>版本索引</h3>
           <ul>
+            <li><a href="#v2.1.23">v2.1.23</a> — 修复冷启动授权校验超时被误判为「未授权」</li>
             <li><a href="#v2.1.22">v2.1.22</a> — 稳定性修复：导出截图资源崩溃 + 升级后启动失败（资源缓存）+ 高亮语言包补齐 + Agent 规则状态 404</li>
             <li><a href="#v2.1.21">v2.1.21</a> — 新功能：导出文档内本地截图资源 + 推广页 webp 背景图清理</li>
             <li><a href="#v2.1.16">v2.1.16</a> — 打包流程稳定化（build-release.ps1 一键脚本 + 启动自动检查更新 + 静默下载安装）</li>
@@ -81,6 +82,16 @@
             <li><a href="#v1.8.93">v1.8.93</a> — 界面与体验升级 + 性能优化</li>
           </ul>
         </div>
+
+        <article class="doc-section reveal" id="v2.1.23">
+          <h3>v2.1.23 · 授权校验健壮性修复</h3>
+          <ul>
+            <li><b>修复「冷启动授权校验超时被误判为未授权」</b>：部分机器上启动后会弹出全屏「软件未授权」授权窗（已授权用户也被挡）。原因是授权校验依赖硬件指纹，而该指纹的 WMI 查询会阻塞请求（单次数秒，最坏可达数十秒），超过前端 3 秒超时；前端又把这个「还没算完」直接当成「没授权」处理。</li>
+            <li><b>后端</b>：硬件相关缓存改为「只计算一次」语义，避免启动预热与首个校验请求重复拉起 WMI 查询；同时收紧查询超时，缩短最坏阻塞时间。</li>
+            <li><b>前端</b>：首次（冷启动）校验超时由 3 秒放宽到 12 秒；拿不到确定结论时不再判定为未授权，而是标记为「结论未知」并自动重试数次后才下判断；周期检查、403 复查、缓存后台复查三处入口同样排除该状态。</li>
+            <li><b>兼容</b>：新增内存级授权缓存兜底，当系统策略阻断浏览器存储（控制台出现 <code>Tracking Prevention blocked access to storage</code>）时，授权状态仍可正确缓存，不再每次都重新走一遍慢查询。</li>
+          </ul>
+        </article>
 
         <article class="doc-section reveal" id="v2.1.22">
           <h3>v2.1.22 · 稳定性修复版（启动失败 / 导出崩溃 / 高亮语言）</h3>

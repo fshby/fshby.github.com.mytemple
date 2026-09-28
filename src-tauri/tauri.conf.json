@@ -1,13 +1,13 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "MyTemple Knowledge",
-  "version": "2.1.22",
+  "version": "2.1.23",
   "identifier": "com.mytemple.knowledge",
   "build": {
     "frontendDist": "../public",
     "devUrl": "http://127.0.0.1:7321",
     "beforeDevCommand": "",
-    "beforeBuildCommand": "robocopy ..\\public resources\\public /MIR /NFL /NDL /NJH /NJS & exit 0"
+    "beforeBuildCommand": ""
   },
   "app": {
     "withGlobalTauri": true,

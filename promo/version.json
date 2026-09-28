@@ -1,7 +1,7 @@
 {
-    "version":  "2.1.22",
+    "version":  "2.1.23",
     "downloadUrl":  "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
-    "latestReleaseNotes":  "稳定性修复：导出截图资源崩溃、升级后启动失败（资源缓存）、代码高亮语言包补齐、Agent 规则状态 404",
-    "releaseNotes":  "v2.1.22 release. See changelog for details.",
+    "latestReleaseNotes":  "修复冷启动授权校验超时被误判为未授权；硬件指纹缓存改为只计算一次，首次校验超时放宽并自动重试",
+    "releaseNotes":  "v2.1.23 release. See changelog for details.",
     "releaseDate":  "2026-09-28"
 }
