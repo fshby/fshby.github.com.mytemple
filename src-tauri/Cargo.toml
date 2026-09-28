@@ -29,7 +29,7 @@ tokio = { version = "1", features = ["full"] }
 # HTTP 服务器 (嵌入式 axum：静态前端 + /api handler)
 axum = { version = "0.7", features = ["macros"] }
 tower = "0.5"
-tower-http = { version = "0.6", features = ["fs"] }
+tower-http = { version = "0.6", features = ["fs", "set-header", "util"] }
 
 # 正则表达式 (全文搜索/Markdown 解析)
 # 关闭 perf/unicode/perl 默认 features：项目里的 regex 用法只有

@@ -170,8 +170,19 @@ pub async fn run(
 
     let app = if has_index {
         // 正常路径：ServeDir public + not_found → index.html (SPA fallback)
-        let serve = ServeDir::new(&public_root)
-            .not_found_service(ServeFile::new(&index_path));
+        // 强制 no-cache：本地静态资源更新后（如升级安装），WebView2 不能再使用
+        // 磁盘缓存里的旧 app.js/styles.css（曾导致「escapeHtml already declared」
+        // 这类新旧文件混用故障）。本地回环服务无带宽压力，no-cache 代价可忽略。
+        let serve = tower::ServiceBuilder::new()
+            .layer(
+                tower_http::set_header::SetResponseHeaderLayer::overriding(
+                    axum::http::header::CACHE_CONTROL,
+                    axum::http::HeaderValue::from_static("no-cache"),
+                ),
+            )
+            .service(
+                ServeDir::new(&public_root).not_found_service(ServeFile::new(&index_path)),
+            );
         Router::new()
             .merge(crate::handlers::build_native_router(state))
             .fallback_service(serve)
