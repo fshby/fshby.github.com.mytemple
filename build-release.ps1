@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    # Target version (e.g. 2.1.16); if omitted, auto-increment last segment
+    # Target version (e.g. 2.1.17); if omitted, auto-increment last segment
     [string]$Version,
     # Skip tauri build, only sync resources and version files
     [switch]$SkipBuild,
@@ -122,7 +122,7 @@ Write-OK "version.json updated"
 Write-OK "promo/version.json updated"
 
 # ──────────────────────────────────────────────────────────────
-# 4. Update tauri.conf.json version
+# 4. Update tauri.conf.json + Cargo.toml version
 # ──────────────────────────────────────────────────────────────
 Write-Step "Update tauri.conf.json version"
 
@@ -135,6 +135,19 @@ if ($tauriConf -eq $tauriConfNew) {
 } else {
     [System.IO.File]::WriteAllText($tauriConfFile, $tauriConfNew, [System.Text.UTF8Encoding]::new($false))
     Write-OK "tauri.conf.json version -> $Version"
+}
+
+Write-Step "Update Cargo.toml version"
+$cargoFile = Join-Path $srcTauriDir "Cargo.toml"
+$cargoContent = Get-Content -LiteralPath $cargoFile -Raw -Encoding UTF8
+$cargoPattern = '^version\s*=\s*"[^"]*"'
+$cargoReplacement = "version = `"$Version`""
+$cargoNew = [regex]::Replace($cargoContent, $cargoPattern, $cargoReplacement, [System.Text.RegularExpressions.RegexOptions]::Multiline)
+if ($cargoContent -eq $cargoNew) {
+    Write-Warn2 "version field not found in Cargo.toml"
+} else {
+    [System.IO.File]::WriteAllText($cargoFile, $cargoNew, [System.Text.UTF8Encoding]::new($false))
+    Write-OK "Cargo.toml version -> $Version"
 }
 
 # ──────────────────────────────────────────────────────────────
@@ -182,6 +195,15 @@ if (Test-Path $resPublicDir) {
 # 7. Build
 # ──────────────────────────────────────────────────────────────
 if (-not $SkipBuild) {
+    Write-Step "Kill running mytemple-server (avoid file lock)"
+
+    Get-Process -Name "mytemple-server" -ErrorAction SilentlyContinue | ForEach-Object {
+        Write-Host "    Stopping PID $($_.Id) ($($_.Path))"
+        Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
+    }
+    Start-Sleep -Milliseconds 500
+    Write-OK "Process cleanup done"
+
     Write-Step "Tauri Release build (v$Version)"
 
     Push-Location $projectRoot
@@ -203,7 +225,7 @@ if (-not $SkipDeploy -and -not $SkipBuild) {
     Write-Step "Deploy installer"
 
     $bundleNsisDir = Join-Path $srcTauriDir "target\release\bundle\nsis"
-    $setupExe = Get-ChildItem -Path $bundleNsisDir -Filter "*x64-setup.exe" -File | Select-Object -First 1
+    $setupExe = Get-ChildItem -Path $bundleNsisDir -Filter "*x64-setup.exe" -File | Sort-Object LastWriteTime -Descending | Select-Object -First 1
 
     if (-not $setupExe) {
         throw "Build output not found: $bundleNsisDir\*x64-setup.exe"

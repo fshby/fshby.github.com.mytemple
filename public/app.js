@@ -3121,6 +3121,108 @@ async function buildWechatArticleHtml() {
   </section>`;
 }
 
+/**
+ * 导出当前文档中引用的所有本地图片资源到用户选择的文件夹。
+ * 解析 Markdown 中的 ![](url) 和 HTML <img src="url">，提取本地资源路径，
+ * fetch 获取 blob 转 base64，通过后端 /api/export/save-images 批量保存。
+ */
+async function exportDocImages() {
+  if (!state.currentPath && !state.currentContent) {
+    showToast("请先打开一个文档");
+    return;
+  }
+  const content = String(state.currentContent || els.editor.value || "");
+  if (!content) {
+    showToast("文档内容为空");
+    return;
+  }
+
+  // 1. 提取所有图片引用：Markdown ![](url) + HTML <img src="url">
+  const imgUrlSet = new Set();
+  // Markdown 图片语法
+  const mdImgRe = /!\[[^\]]*\]\(([^)]+)\)/g;
+  let m;
+  while ((m = mdImgRe.exec(content)) !== null) {
+    const url = m[1].trim().split(/\s+/)[0]; // 去掉 title 部分
+    if (url) imgUrlSet.add(url);
+  }
+  // HTML <img src="url">
+  const htmlImgRe = /<img[^>]+src=["']([^"']+)["']/gi;
+  while ((m = htmlImgRe.exec(content)) !== null) {
+    if (m[1]) imgUrlSet.add(m[1].trim());
+  }
+
+  // 2. 过滤：只保留本地资源（跳过 data: 和 http(s):// 外部链接）
+  const localUrls = [...urlSet].filter((url) => {
+    if (!url) return false;
+    if (url.startsWith("data:")) return false;
+    if (/^https?:\/\//i.test(url)) return false;
+    return true;
+  });
+
+  if (localUrls.length === 0) {
+    showToast("未找到本地图片资源");
+    return;
+  }
+
+  showToast(`正在提取 ${localUrls.length} 张图片资源...`);
+
+  // 3. fetch 每张图片 → base64
+  const images = [];
+  let failed = 0;
+  await Promise.all(localUrls.map(async (url) => {
+    try {
+      const r = await fetch(url, { credentials: "include" });
+      if (!r.ok) { failed++; return; }
+      const blob = await r.blob();
+      const dataUrl = await new Promise((resolve, reject) => {
+        const rd = new FileReader();
+        rd.onload = () => resolve(rd.result);
+        rd.onerror = reject;
+        rd.readAsDataURL(blob);
+      });
+      const base64 = String(dataUrl).replace(/^data:[^;]*;base64,/, "");
+      // 提取文件名：从 URL 最后一段取，去掉 query string
+      let name = url.split("?")[0].split("/").pop() || `image-${Date.now()}.png`;
+      // 确保文件名安全
+      name = name.replace(/[\\/:*?"<>|]/g, "_");
+      // 如果没有扩展名，根据 blob type 补全
+      if (!/\.\w{2,5}$/.test(name)) {
+        const ext = (blob.type.split("/")[1] || "png").split("+")[0];
+        name += `.${ext}`;
+      }
+      images.push({ name, dataBase64: base64 });
+    } catch (e) {
+      console.warn("[exportDocImages] fetch failed:", url, e);
+      failed++;
+    }
+  }));
+
+  if (images.length === 0) {
+    showToast({ title: "图片提取失败", message: "未能成功获取任何图片资源", kind: "error" });
+    return;
+  }
+
+  // 4. 调用后端批量保存
+  showToast("正在等待选择保存文件夹...");
+  try {
+    const result = await api.post("/api/export/save-images", { images });
+    if (result && result.path) {
+      const msg = `已导出 ${result.saved || images.length} 张图片到：${result.path}`;
+      if (failed > 0) {
+        showToast({ title: `导出完成（${failed} 张失败）`, message: msg, kind: "warn", duration: 6000 });
+      } else {
+        showToast({ title: "截图资源导出成功", message: msg, duration: 6000 });
+      }
+    } else {
+      // path 为 null = 用户取消了文件夹选择
+    }
+  } catch (e) {
+    console.error("[exportDocImages] save failed:", e);
+    showToast({ title: "导出失败", message: String(e?.message || e), kind: "error", duration: 4000 });
+  }
+}
+
 async function copyCurrentDocAsWechat() {
   if (!state.currentPath && !state.currentContent) {
     showToast("请先打开一个文档");
@@ -8847,13 +8949,7 @@ async function applySemanticTags() {
   }
 }
 
-// 转义 HTML 实体，防止 XSS（高亮前必须先转义）
-function escapeHtml(s) {
-  return String(s || "").replace(/[&<>"']/g, (c) => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-  })[c]);
-}
-
+// escapeHtml 已从 path-utils.js 导入，此处不再重复定义
 // 在文本中按 token 命中位置包裹 <mark>（先 escape 再高亮，安全）
 function highlightTokens(text, tokens) {
   const safe = escapeHtml(text);
@@ -13058,6 +13154,7 @@ if (els.workspaceBtn) {
     "export-txt": () => exportCurrentDoc("txt"),
     "export-md": () => exportCurrentDoc("md"),
     "export-wechat": () => copyCurrentDocAsWechat(),
+    "export-images": () => exportDocImages(),
     settings: () => openSettings(),
     "toggle-edit": () => state.currentPath && setMode("edit"),
     "toggle-reading": () => state.currentPath && setMode("view"),

@@ -181,6 +181,7 @@ pub fn build_native_router(state: Arc<ServerState>) -> Router {
         .route("/api/export", post(export_document))
         // 原生对话框导出（External URL 模式下替代 Tauri IPC）
         .route("/api/export/save-as", post(export_save_as_http).layer(DefaultBodyLimit::max(200 * 1024 * 1024)))
+        .route("/api/export/save-images", post(save_images_http).layer(DefaultBodyLimit::max(500 * 1024 * 1024)))
         .route("/api/export/open-file", post(export_open_file_http))
         .route("/api/export/reveal-folder", post(export_reveal_in_folder_http))
         // 语义标签
@@ -3066,6 +3067,84 @@ async fn export_save_as_http(
     }
 
     json_ok(SaveAsResponse { path: Some(path) })
+}
+
+// ── 批量导出图片资源 ──
+
+#[derive(Deserialize)]
+struct ImageData {
+    name: String,
+    #[serde(rename = "dataBase64")]
+    data_base64: String,
+}
+
+#[derive(Deserialize)]
+struct SaveImagesRequest {
+    images: Vec<ImageData>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SaveImagesResponse {
+    path: Option<String>,
+    saved: u32,
+}
+
+/// POST /api/export/save-images
+/// 弹出文件夹选择对话框，将所有图片批量保存到用户选择的文件夹。
+async fn save_images_http(
+    State(_state): State<Arc<ServerState>>,
+    Json(req): Json<SaveImagesRequest>,
+) -> impl IntoResponse {
+    use tauri_plugin_dialog::DialogExt;
+    use base64::Engine;
+
+    if req.images.is_empty() {
+        return json_err(StatusCode::BAD_REQUEST, "图片列表为空");
+    }
+
+    let app_handle = match crate::APP_HANDLE.get() {
+        Some(h) => h,
+        None => return json_err(StatusCode::INTERNAL_SERVER_ERROR, "AppHandle 未初始化"),
+    };
+
+    // 弹出选择文件夹对话框
+    let (tx, rx) = tokio::sync::oneshot::channel::<Option<String>>();
+    app_handle.dialog().file().pick_folder(move |p| {
+        let _ = tx.send(p.map(|x| x.to_string()));
+    });
+
+    let folder = match rx.await {
+        Ok(v) => v,
+        Err(_) => return json_err(StatusCode::INTERNAL_SERVER_ERROR, "对话框 channel 关闭"),
+    };
+
+    let Some(folder) = folder else {
+        // 用户取消
+        return (StatusCode::OK, Json(ApiResponse::success(SaveImagesResponse { path: None, saved: 0 }))).into_response();
+    };
+
+    // 批量写入图片
+    let mut saved: u32 = 0;
+    for img in &req.images {
+        let bytes = match base64::engine::general_purpose::STANDARD.decode(&img.data_base64) {
+            Ok(b) => b,
+            Err(e) => {
+                log::warn!("[save_images] base64 解码失败 name={}: {}", img.name, e);
+                continue;
+            }
+        };
+        // 文件名安全处理
+        let safe_name = img.name.replace(['\\', '/', ':', '*', '?', '"', '<', '>', '|'], "_");
+        let file_path = std::path::Path::new(&folder).join(&safe_name);
+        if let Err(e) = std::fs::write(&file_path, &bytes) {
+            log::warn!("[save_images] 写入失败 {}: {}", file_path.display(), e);
+            continue;
+        }
+        saved += 1;
+    }
+
+    json_ok(SaveImagesResponse { path: Some(folder), saved })
 }
 
 #[derive(Deserialize)]

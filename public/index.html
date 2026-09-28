@@ -1,37 +1,36 @@
 <!doctype html>
-<html lang="zh-CN">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-    <meta http-equiv="Pragma" content="no-cache" />
-    <meta http-equiv="Expires" content="0" />
-    <title>&#25991;&#26723;&#30693;&#35782;&#24211;</title>
-    <meta name="theme-color" content="#3d3830" />
-    <meta name="application-name" content="MyTemple Knowledge" />
-    <link rel="icon" href="/favicon.ico" type="image/x-icon" />
-    <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="preload" href="/logo.png" as="image" />
+<html lang="zh-CN"><head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>文档知识库</title>
+    <meta name="theme-color" content="#3d3830">
+    <meta name="application-name" content="MyTemple Knowledge">
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="preload" href="/logo.png" as="image">
     <style>html,body{margin:0;padding:0;background:#3d3830;}</style>
     <style>
       body.license-locked .app-shell { pointer-events: none; user-select: none; }
       body.license-locked #licenseModal,
       body.license-locked #settingsModal { pointer-events: auto; }
     </style>
-    <link rel="stylesheet" href="/styles.css?v=20260908-v6" />
-<link rel="modulepreload" href="/editor-core.js?v=20260822-v4" />
-<link rel="modulepreload" href="/app.js?v=20260908-v6" />
+    <link rel="stylesheet" href="/styles.css?v=20260924-v1">
+<link rel="modulepreload" href="/editor-core.js?v=20260822-v4">
+<link rel="modulepreload" href="/app.js?v=20260924-v1">
   </head>
   <body>
     <div id="appSplash" class="app-splash">
-      <img class="splash-bg" src="/boot.webp" alt="" />
+      <img class="splash-bg" src="/boot.webp" alt="">
       <div class="splash-progress-wrap">
         <div class="splash-progress-bar">
-          <div id="splashProgressFill" class="splash-progress-fill" style="width: 0%"></div>
+          <div id="splashProgressFill" class="splash-progress-fill" style="width: 100%; background: rgb(220, 38, 38);"></div>
         </div>
         <div class="splash-progress-info">
-          <span id="splashProgressText">正在初始化…</span>
-          <span id="splashProgressPct">0%</span>
+          <span id="splashProgressText" style="color: rgb(220, 38, 38);">启动失败：应用加载超时，正在自动刷新…</span>
+          <span id="splashProgressPct">!</span>
         </div>
       </div>
     </div>
@@ -39,7 +38,7 @@
     <div id="welcomeOverlay" class="welcome-overlay hidden">
       <div class="welcome-dialog">
         <div class="welcome-brand">
-          <img src="/logo.png" alt="" class="welcome-logo" width="56" height="56" />
+          <img src="/logo.png" alt="" class="welcome-logo" width="56" height="56">
           <h2>欢迎使用 文档知识库</h2>
           <p class="welcome-sub">企业级 Markdown 知识管理平台</p>
         </div>
@@ -125,7 +124,7 @@
           </div>
         </div>
         <div class="welcome-actions">
-          <label class="welcome-dont-show"><input type="checkbox" id="welcomeDontShow" /> 不再显示此欢迎页</label>
+          <label class="welcome-dont-show"><input type="checkbox" id="welcomeDontShow"> 不再显示此欢迎页</label>
           <button id="welcomeStartBtn" class="welcome-start-btn">开始使用</button>
         </div>
       </div>
@@ -133,24 +132,25 @@
     <div class="app-shell">
       <aside class="sidebar">
         <div class="brand">
-          <div class="brand-mark" aria-label="MyTemple Knowledge logo"><img src="/logo.png" alt="" width="42" height="42" decoding="async" /></div>
+          <div class="brand-mark" aria-label="MyTemple Knowledge logo"><img src="/logo.png" alt="" width="42" height="42" decoding="async"></div>
           <div class="brand-text">
-            <h1>&#25991;&#26723;&#30693;&#35782;&#24211;</h1>
-            <p id="docCount">&#27491;&#22312;&#25195;&#25551;</p>
+            <h1>文档知识库</h1>
+            <p id="docCount">正在扫描</p>
           </div>
-          <button id="sidebarHideBtn" class="icon-button sidebar-hide" title="&#38544;&#34255;&#30446;&#24405;" aria-label="&#38544;&#34255;&#30446;&#24405;">&lt;</button>
+          <button id="sidebarHideBtn" class="icon-button sidebar-hide" title="隐藏目录" aria-label="隐藏目录">&lt;</button>
         </div>
 
         <label class="search-box">
           <span aria-hidden="true">S</span>
-          <input id="searchInput" placeholder="&#20840;&#23616;&#26816;&#32034;&#20851;&#38190;&#23383;" autocomplete="off" />
+          <input id="searchInput" placeholder="全局检索关键字" autocomplete="off">
         </label>
+        <div id="searchHistoryDropdown" class="search-history-dropdown hidden"></div>
         <div id="workspaceSummary" class="workspace-summary"></div>
         <div id="searchResults" class="search-results hidden"></div>
         <nav id="tree" class="tree"></nav>
         <div id="sidebarStatusBar" class="status-bar sidebar-status-bar" role="status" aria-label="sidebar status bar">
           <span class="status-item" data-status-field="docCount" title="工作区文档数">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 12h18M3 17h18"/></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 12h18M3 17h18"></path></svg>
             <span data-status-field="docCountText">--</span>
           </span>
         </div>
@@ -166,55 +166,55 @@
             <button class="menu-item" data-menu="import" role="menuitem" aria-haspopup="true">导入<span class="menu-accel">I</span></button>
           </nav>
           <div class="doc-meta">
-            <strong id="docTitle">&#36873;&#25321;&#19968;&#31687; Markdown &#25991;&#26723;</strong>
+            <strong id="docTitle">选择一篇 Markdown 文档</strong>
             <span id="docPath">docs</span>
           </div>
           <div id="recentDocs" class="recent-docs" aria-label="最近打开文档"></div>
           <div class="toolbar" role="group" aria-label="document actions">
-            <button id="sidebarShowBtn" title="toggle catalog">&#30446;&#24405;</button>
+            <button id="sidebarShowBtn" title="toggle catalog">目录</button>
             <div class="view-mode-switch" role="group" aria-label="文档模式">
               <button id="modeToggleBtn" class="active" title="切换阅读/修改模式">修改</button>
             </div>
             <button id="graphBtn" title="图谱">图谱</button>
             <button id="aiBtn" title="本地知识库问答" aria-pressed="false">AI</button>
-            <button id="deleteBtn" class="danger" title="delete (Ctrl+D)">&#21024;&#38500;</button>
+            <button id="deleteBtn" class="danger" title="delete (Ctrl+D)">删除</button>
           </div>
         </header>
 
         <section id="readerPanel" class="reader-panel">
           <aside id="readerOutline" class="reader-outline hidden" aria-label="document outline"></aside>
           <article id="markdownView" class="markdown-body empty-state">
-            <h2>&#25171;&#24320;&#24038;&#20391;&#30446;&#24405;&#20013;&#30340;&#25991;&#26723;</h2>
-            <p>&#25903;&#25345;&#25991;&#20214;&#22841;&#20998;&#31867;&#12289;&#20840;&#25991;&#25628;&#32034;&#12289;&#25991;&#26723;&#20999;&#25442;&#12289;&#32534;&#36753;&#20445;&#23384;&#21644;&#20851;&#32852;&#22270;&#35889;&#27983;&#35272;&#12290;</p>
+            <h2>打开左侧目录中的文档</h2>
+            <p>支持文件夹分类、全文搜索、文档切换、编辑保存和关联图谱浏览。</p>
           </article>
           <div id="readerStatusBar" class="status-bar reader-status-bar" role="status" aria-label="reader status bar">
             <span class="status-item" data-status-field="docName" title="当前文档名称">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
               <span data-status-field="docNameText">未选择文档</span>
             </span>
             <span class="status-sep" aria-hidden="true">|</span>
             <span class="status-item" data-status-field="wordCount" title="字数">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"></path><path d="M9 20h6"></path><path d="M12 4v16"></path></svg>
               <span data-status-field="wordCountText">0 字</span>
             </span>
             <span class="status-sep" aria-hidden="true">|</span>
             <span class="status-item" data-status-field="lastSave" title="最新保存时间">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
               <span data-status-field="lastSaveText">未保存</span>
             </span>
             <span class="status-sep" aria-hidden="true">|</span>
             <span class="status-item" data-status-field="created" title="文档创建时间">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
               <span data-status-field="createdText">创建于 --</span>
             </span>
             <span class="status-sep" aria-hidden="true">|</span>
             <span class="status-item" data-status-field="systemTime" title="当前系统时间">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
               <span data-status-field="systemTimeText">--:--</span>
             </span>
             <span class="status-sep" aria-hidden="true">|</span>
             <span class="status-item status-pomodoro" data-status-field="pomodoro" data-action="toggle-pomodoro" title="番茄钟时间 (点击启动)">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2z"/><polyline points="12 6 12 12 16 14"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2z"></path><polyline points="12 6 12 12 16 14"></polyline></svg>
               <span data-status-field="pomodoroText">00:00</span>
             </span>
           </div>
@@ -223,7 +223,7 @@
         <section id="editorPanel" class="editor-panel hidden">
           <div id="editorToolbar" class="editor-toolbar" aria-label="editor tools">
             <select id="headingSelect" class="heading-select" title="标题级别 (Ctrl+1/Ctrl+2/Ctrl+3)">
-              <option value="" disabled selected>标题 ▾</option>
+              <option value="" disabled="" selected="">标题 ▾</option>
               <option value="h1">一级标题</option>
               <option value="h2">二级标题</option>
               <option value="h3">三级标题</option>
@@ -290,14 +290,14 @@
             <button data-format="link" title="链接 (Ctrl+K)">Link</button>
             <button data-format="table" title="插入 Markdown 表格">Table</button>
             <button type="button" id="insertVideoBtn" title="插入视频（压缩保存到 source/video）">▶ Video</button>
-            <input type="file" id="videoFileInput" accept="video/*" style="display:none;" />
+            <input type="file" id="videoFileInput" accept="video/*" style="display:none;">
             <button type="button" class="color-picker-btn" data-toolbar-dropdown="textColor" title="字体颜色">
               <span class="color-preview" id="textColorPreview" style="background:#0f766e;"></span>A
             </button>
             <div class="toolbar-dropdown-panel hidden" data-panel="textColor">
               <div class="color-row">
                 <strong>字体颜色</strong>
-                <input id="textColor" type="color" value="#0f766e" />
+                <input id="textColor" type="color" value="#0f766e">
               </div>
               <div class="color-preset-grid" data-color-type="textColor">
                 <div class="color-preset" data-color="#000000" style="background:#000000;" title="黑色"></div>
@@ -316,7 +316,7 @@
             <div class="toolbar-dropdown-panel hidden" data-panel="bgColor">
               <div class="color-row">
                 <strong>背景颜色</strong>
-                <input id="bgColor" type="color" value="#fff3a3" />
+                <input id="bgColor" type="color" value="#fff3a3">
               </div>
               <div class="color-preset-grid" data-color-type="bgColor">
                 <div class="color-preset" data-color="#ffffff" style="background:#ffffff;border:1px solid #e5e7eb;" title="白色"></div>
@@ -332,7 +332,7 @@
             <select id="fontSizeSelect" title="字号">
               <option value="12">12</option>
               <option value="14">14</option>
-              <option value="16" selected>16</option>
+              <option value="16" selected="">16</option>
               <option value="18">18</option>
               <option value="20">20</option>
               <option value="24">24</option>
@@ -346,7 +346,7 @@
             <button id="previewToggleBtn" title="切换实时预览" aria-pressed="true">隐藏预览</button>
             <span class="toolbar-separator" aria-hidden="true"></span>
             <button id="focusModeBtn" title="沉浸编辑 (Ctrl+Shift+F)" aria-pressed="false">沉浸</button>
-            <button id="saveBtn" class="primary hidden" title="save">&#20445;&#23384;</button>
+            <button id="saveBtn" class="primary hidden" title="save">保存</button>
           </div>
           <div class="editor-body">
             <aside id="editorOutline" class="editor-outline hidden" aria-label="editor outline"></aside>
@@ -356,20 +356,20 @@
               <span class="ai-inline-icon" aria-hidden="true">💬</span>
               <div class="ai-inline-hint">按 <kbd>↑</kbd> 查看历史输入，按 <kbd>ESC</kbd> 关闭</div>
               <div class="ai-inline-input-row">
-                <input id="editorAiDialogInput" class="ai-inline-input" type="text" placeholder="与 AI 对话，结果将直接插入文档…" autocomplete="off" />
+                <input id="editorAiDialogInput" class="ai-inline-input" type="text" placeholder="与 AI 对话，结果将直接插入文档…" autocomplete="off">
                 <button id="editorAiDialogSubmit" class="ai-inline-submit" type="submit" title="提交 (Enter)">↑</button>
               </div>
             </div>
             <div id="editorSearchPopup" class="editor-search-popup hidden" role="dialog" aria-label="编辑器关键字检索" aria-hidden="true">
               <div class="editor-search-header">
-                <svg class="editor-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-                <input id="editorSearchInput" type="text" placeholder="输入关键字检索行…" autocomplete="off" spellcheck="false" />
+                <svg class="editor-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
+                <input id="editorSearchInput" type="text" placeholder="输入关键字检索行…" autocomplete="off" spellcheck="false">
                 <span class="editor-search-count" id="editorSearchCount"></span>
                 <button id="editorSearchClose" class="editor-search-close" title="关闭 (Esc)">✕</button>
               </div>
               <div class="editor-search-replace-bar">
-                <svg class="editor-search-replace-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
-                <input id="editorSearchReplace" type="text" placeholder="替换为…" autocomplete="off" spellcheck="false" />
+                <svg class="editor-search-replace-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 1l4 4-4 4"></path><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><path d="M7 23l-4-4 4-4"></path><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>
+                <input id="editorSearchReplace" type="text" placeholder="替换为…" autocomplete="off" spellcheck="false">
                 <button id="editorSearchReplaceAll" class="editor-search-replace-btn" title="替换全部匹配项">替换全部</button>
               </div>
               <div id="editorSearchResults" class="editor-search-results"></div>
@@ -379,42 +379,42 @@
           </div>
           <div id="editorStatusBar" class="status-bar editor-status-bar" role="status" aria-label="editor status bar">
             <span class="status-item" id="statusDocName" data-status-field="docName" title="当前文档名称">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
               <span id="statusDocNameText" data-status-field="docNameText">未选择文档</span>
             </span>
             <span class="status-sep" aria-hidden="true">|</span>
             <span class="status-item" id="statusEncoding" data-status-field="encoding" title="文档编码格式">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
               <span id="statusEncodingText" data-status-field="encodingText">UTF-8</span>
             </span>
             <span class="status-sep" aria-hidden="true">|</span>
             <span class="status-item" id="statusWordCount" data-status-field="wordCount" title="字数">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"></path><path d="M9 20h6"></path><path d="M12 4v16"></path></svg>
               <span id="statusWordCountText" data-status-field="wordCountText">0 字</span>
             </span>
             <span class="status-sep" aria-hidden="true">|</span>
             <span class="status-item" id="statusCursor" data-status-field="cursor" title="光标所在行列">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"></path></svg>
               <span id="statusCursorText" data-status-field="cursorText">行 1, 列 1</span>
             </span>
             <span class="status-sep" aria-hidden="true">|</span>
             <span class="status-item" id="statusLastSave" data-status-field="lastSave" title="最新保存时间">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
               <span id="statusLastSaveText" data-status-field="lastSaveText">未保存</span>
             </span>
             <span class="status-sep" aria-hidden="true">|</span>
             <span class="status-item" id="statusCreated" data-status-field="created" title="文档创建时间">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
               <span id="statusCreatedText" data-status-field="createdText">创建于 --</span>
             </span>
             <span class="status-sep" aria-hidden="true">|</span>
             <span class="status-item" id="statusSystemTime" data-status-field="systemTime" title="当前系统时间">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
               <span id="statusSystemTimeText" data-status-field="systemTimeText">--:--</span>
             </span>
             <span class="status-sep" aria-hidden="true">|</span>
             <span class="status-item status-pomodoro" id="statusPomodoro" data-status-field="pomodoro" data-action="toggle-pomodoro" title="番茄钟时间 (点击启动)">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2z"/><polyline points="12 6 12 12 16 14"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2z"></path><polyline points="12 6 12 12 16 14"></polyline></svg>
               <span id="statusPomodoroText" data-status-field="pomodoroText">00:00</span>
             </span>
           </div>
@@ -429,23 +429,23 @@
             <div class="graph-controls" aria-label="图谱控制">
               <label class="graph-search" title="搜索并高亮节点">
                 <span aria-hidden="true">⌕</span>
-                <input id="graphSearchInput" placeholder="搜索节点" autocomplete="off" />
+                <input id="graphSearchInput" placeholder="搜索节点" autocomplete="off">
               </label>
               <select id="graphScope" title="图谱范围" aria-label="图谱范围">
                 <option value="global">全局图谱</option>
                 <option value="local">当前文档邻域</option>
               </select>
               <select id="graphDepth" title="图谱显示深度；选择具体层级将切换到当前文档邻域" aria-label="图谱显示深度">
-                <option value="all" selected>全部层级</option>
+                <option value="all" selected="">全部层级</option>
                 <option value="1">1 层</option>
                 <option value="2">2 层</option>
                 <option value="3">3 层</option>
               </select>
-              <label class="graph-toggle" title="仅识别 #标签或 frontmatter tags"><input id="graphShowTags" type="checkbox" checked /> 显式标签</label>
-              <label class="graph-toggle" title="根据全库词频自动提取语义概念"><input id="graphShowKeywords" type="checkbox" checked /> 语义概念</label>
-              <label class="graph-toggle" title="开启神经元弹性牵引与游离运动"><input id="graphDynamic" type="checkbox" checked /> 动态</label>
-              <label class="graph-toggle"><input id="graphShowOrphans" type="checkbox" /> 孤立</label>
-              <label class="graph-toggle"><input id="graphShowMissing" type="checkbox" checked /> 未创建</label>
+              <label class="graph-toggle" title="仅识别 #标签或 frontmatter tags"><input id="graphShowTags" type="checkbox" checked=""> 显式标签</label>
+              <label class="graph-toggle" title="根据全库词频自动提取语义概念"><input id="graphShowKeywords" type="checkbox" checked=""> 语义概念</label>
+              <label class="graph-toggle" title="开启神经元弹性牵引与游离运动"><input id="graphDynamic" type="checkbox" checked=""> 动态</label>
+              <label class="graph-toggle"><input id="graphShowOrphans" type="checkbox"> 孤立</label>
+              <label class="graph-toggle"><input id="graphShowMissing" type="checkbox" checked=""> 未创建</label>
               <div class="graph-zoom" role="group" aria-label="图谱缩放">
                 <button id="graphZoomOutBtn" type="button" title="缩小">−</button>
                 <button id="graphZoomInBtn" type="button" title="放大">＋</button>
@@ -475,7 +475,7 @@
           <span class="path-label">保存到</span>
           <div id="createWorkspaceChoices" class="create-workspace-choices"></div>
         </div>
-        <input id="createName" placeholder="输入名称" autocomplete="off" />
+        <input id="createName" placeholder="输入名称" autocomplete="off">
         <p class="create-template-hint">将自动写入 tags: 待分类 模板，可在正文中继续添加 #标签。</p>
         <div class="modal-actions">
           <button type="button" id="cancelCreateBtn">取消</button>
@@ -485,11 +485,11 @@
     </div>
     <div id="deleteModal" class="modal hidden" role="dialog" aria-modal="true">
       <div class="modal-dialog">
-        <h2>&#21024;&#38500;&#30830;&#35748;</h2>
+        <h2>删除确认</h2>
         <p id="deleteTarget">docs</p>
         <div class="modal-actions">
-          <button type="button" id="cancelDeleteBtn">&#21462;&#28040;</button>
-          <button type="button" id="confirmDeleteBtn" class="primary danger-action">&#21024;&#38500;</button>
+          <button type="button" id="cancelDeleteBtn">取消</button>
+          <button type="button" id="confirmDeleteBtn" class="primary danger-action">删除</button>
         </div>
       </div>
     </div>
@@ -589,7 +589,7 @@
                 </label>
                 <label class="setting-row">
                   <span>自定义背景</span>
-                  <input id="bgImageInput" type="file" accept="image/*" />
+                  <input id="bgImageInput" type="file" accept="image/*">
                 </label>
                 <label class="setting-row">
                   <span>图片主题文字明暗</span>
@@ -606,27 +606,27 @@
                 <strong>文字显示</strong>
                 <label class="setting-row">
                   <span>界面字号</span>
-                  <input id="globalFontSize" type="range" min="13" max="20" step="1" />
+                  <input id="globalFontSize" type="range" min="13" max="20" step="1">
                   <output id="globalFontSizeValue">16px</output>
                 </label>
                 <label class="setting-row">
                   <span>文档字号</span>
-                  <input id="docFontSize" type="range" min="14" max="24" step="1" />
+                  <input id="docFontSize" type="range" min="14" max="24" step="1">
                   <output id="docFontSizeValue">16px</output>
                 </label>
                 <label class="setting-row">
                   <span>界面缩放</span>
-                  <input id="windowZoom" type="range" min="80" max="120" step="5" />
+                  <input id="windowZoom" type="range" min="80" max="120" step="5">
                   <output id="windowZoomValue">100%</output>
                 </label>
                 <label class="setting-row">
                   <span>字体</span>
                   <select id="globalFontFamily">
-                    <option value='Inter, "Segoe UI", "Microsoft YaHei", Arial, sans-serif'>现代默认</option>
-                    <option value='"Microsoft YaHei", "Segoe UI", Arial, sans-serif'>雅黑</option>
-                    <option value='"SimSun", "Microsoft YaHei", serif'>宋体</option>
-                    <option value='"Cascadia Code", Consolas, "Microsoft YaHei", monospace'>等宽</option>
-                    <option value='"Source Han Serif SC", "Noto Serif SC", "Songti SC", "SimSun", "Segoe UI", serif'>纸张衬线</option>
+                    <option value="Inter, &quot;Segoe UI&quot;, &quot;Microsoft YaHei&quot;, Arial, sans-serif">现代默认</option>
+                    <option value="&quot;Microsoft YaHei&quot;, &quot;Segoe UI&quot;, Arial, sans-serif">雅黑</option>
+                    <option value="&quot;SimSun&quot;, &quot;Microsoft YaHei&quot;, serif">宋体</option>
+                    <option value="&quot;Cascadia Code&quot;, Consolas, &quot;Microsoft YaHei&quot;, monospace">等宽</option>
+                    <option value="&quot;Source Han Serif SC&quot;, &quot;Noto Serif SC&quot;, &quot;Songti SC&quot;, &quot;SimSun&quot;, &quot;Segoe UI&quot;, serif">纸张衬线</option>
                   </select>
                 </label>
               </section>
@@ -634,7 +634,7 @@
                 <strong>显示性能</strong>
                 <label class="setting-row">
                   <span>低显存模式（移除毛玻璃与大阴影，减少 GPU 合成层）</span>
-                  <input type="checkbox" id="lowGpuToggle" checked />
+                  <input type="checkbox" id="lowGpuToggle" checked="">
                 </label>
                 <p class="muted">默认开启以降低 GPU 占用；关闭后恢复完整毛玻璃与阴影效果。</p>
               </section>
@@ -642,12 +642,12 @@
                 <strong>Markdown 文字高亮</strong>
                 <p class="muted">调整标题、链接、代码、引用、表格和标签颜色，修改会立即生效并在重启后保留。</p>
                 <div class="markdown-color-grid">
-                  <label class="setting-row"><span>标题</span><input id="mdColorHeading" type="color" value="#1e1e1e" /></label>
-                  <label class="setting-row"><span>链接</span><input id="mdColorLink" type="color" value="#059669" /></label>
-                  <label class="setting-row"><span>代码</span><input id="mdColorCode" type="color" value="#3c3c3c" /></label>
-                  <label class="setting-row"><span>引用</span><input id="mdColorQuote" type="color" value="#3c3c3c" /></label>
-                  <label class="setting-row"><span>表格</span><input id="mdColorTable" type="color" value="#e9eef2" /></label>
-                  <label class="setting-row"><span>标签</span><input id="mdColorTag" type="color" value="#059669" /></label>
+                  <label class="setting-row"><span>标题</span><input id="mdColorHeading" type="color" value="#1e1e1e"></label>
+                  <label class="setting-row"><span>链接</span><input id="mdColorLink" type="color" value="#059669"></label>
+                  <label class="setting-row"><span>代码</span><input id="mdColorCode" type="color" value="#3c3c3c"></label>
+                  <label class="setting-row"><span>引用</span><input id="mdColorQuote" type="color" value="#3c3c3c"></label>
+                  <label class="setting-row"><span>表格</span><input id="mdColorTable" type="color" value="#e9eef2"></label>
+                  <label class="setting-row"><span>标签</span><input id="mdColorTag" type="color" value="#059669"></label>
                 </div>
               </section>
             </section>
@@ -662,7 +662,7 @@
                 <p class="muted">编辑模式提供目录大纲、三栏可拖拽布局、撤销/重做稳定性等企业级特性，相关按钮已集成在编辑器工具栏。</p>
                 <label class="setting-row">
                   <span>显示拼写纠错（Fmt 格式化后预览高亮错字）</span>
-                  <input type="checkbox" id="showSpellcheckToggle" />
+                  <input type="checkbox" id="showSpellcheckToggle">
                 </label>
                 <p class="muted">如需重置编辑器面板布局，可清除本地布局缓存：</p>
                 <div class="inline-actions">
@@ -681,18 +681,18 @@
                 <strong>代码语法高亮颜色</strong>
                 <p class="muted">调整代码块中各类语法元素的显示颜色。修改会立即预览并在重启后保留。</p>
                 <div class="markdown-color-grid code-highlight-grid">
-                  <label class="setting-row"><span>关键字</span><input id="hlColorKeyword" type="color" value="#c084fc" /></label>
-                  <label class="setting-row"><span>字符串</span><input id="hlColorString" type="color" value="#22c55e" /></label>
-                  <label class="setting-row"><span>注释</span><input id="hlColorComment" type="color" value="#94a3b8" /></label>
-                  <label class="setting-row"><span>数字</span><input id="hlColorNumber" type="color" value="#f97316" /></label>
-                  <label class="setting-row"><span>函数名</span><input id="hlColorTitle" type="color" value="#38bdf8" /></label>
-                  <label class="setting-row"><span>类型/类</span><input id="hlColorType" type="color" value="#fbbf24" /></label>
-                  <label class="setting-row"><span>内置</span><input id="hlColorBuiltin" type="color" value="#fb7185" /></label>
-                  <label class="setting-row"><span>变量</span><input id="hlColorVariable" type="color" value="#e2e8f0" /></label>
-                  <label class="setting-row"><span>属性</span><input id="hlColorAttr" type="color" value="#fbbf24" /></label>
-                  <label class="setting-row"><span>标签</span><input id="hlColorTag" type="color" value="#f472b6" /></label>
-                  <label class="setting-row"><span>运算符</span><input id="hlColorOperator" type="color" value="#94a3b8" /></label>
-                  <label class="setting-row"><span>元信息</span><input id="hlColorMeta" type="color" value="#94a3b8" /></label>
+                  <label class="setting-row"><span>关键字</span><input id="hlColorKeyword" type="color" value="#c084fc"></label>
+                  <label class="setting-row"><span>字符串</span><input id="hlColorString" type="color" value="#22c55e"></label>
+                  <label class="setting-row"><span>注释</span><input id="hlColorComment" type="color" value="#94a3b8"></label>
+                  <label class="setting-row"><span>数字</span><input id="hlColorNumber" type="color" value="#f97316"></label>
+                  <label class="setting-row"><span>函数名</span><input id="hlColorTitle" type="color" value="#38bdf8"></label>
+                  <label class="setting-row"><span>类型/类</span><input id="hlColorType" type="color" value="#fbbf24"></label>
+                  <label class="setting-row"><span>内置</span><input id="hlColorBuiltin" type="color" value="#fb7185"></label>
+                  <label class="setting-row"><span>变量</span><input id="hlColorVariable" type="color" value="#e2e8f0"></label>
+                  <label class="setting-row"><span>属性</span><input id="hlColorAttr" type="color" value="#fbbf24"></label>
+                  <label class="setting-row"><span>标签</span><input id="hlColorTag" type="color" value="#f472b6"></label>
+                  <label class="setting-row"><span>运算符</span><input id="hlColorOperator" type="color" value="#94a3b8"></label>
+                  <label class="setting-row"><span>元信息</span><input id="hlColorMeta" type="color" value="#94a3b8"></label>
                 </div>
                 <div class="inline-actions">
                   <button type="button" id="resetCodeHighlightBtn">恢复默认颜色</button>
@@ -722,27 +722,27 @@
                 <p class="muted">PDF 与幻灯片导出选项。导出时浏览器可能在页面底部显示 URL，可在打印对话框中取消「页眉与页脚」。为保护软件推广，PDF 与幻灯片导出会强制叠加轻度水印（不可关闭）。</p>
                 <label class="setting-row">
                   <span>显示导出时间</span>
-                  <input type="checkbox" id="pdfShowDate" checked />
+                  <input type="checkbox" id="pdfShowDate" checked="">
                 </label>
                 <label class="setting-row">
                   <span>显示作者署名</span>
-                  <input type="checkbox" id="pdfShowAuthor" checked />
+                  <input type="checkbox" id="pdfShowAuthor" checked="">
                 </label>
                 <label class="setting-field">
                   <span>作者署名文字</span>
-                  <input type="text" id="pdfAuthorText" maxlength="40" placeholder="郑堃逢" />
+                  <input type="text" id="pdfAuthorText" maxlength="40" placeholder="郑堃逢">
                 </label>
                 <label class="setting-row">
                   <span>显示页脚说明</span>
-                  <input type="checkbox" id="pdfShowFooter" checked />
+                  <input type="checkbox" id="pdfShowFooter" checked="">
                 </label>
                 <label class="setting-field">
                   <span>页脚说明文字</span>
-                  <input type="text" id="pdfFooterText" maxlength="60" placeholder="MyTemple Knowledge · 本地 Markdown 知识库" />
+                  <input type="text" id="pdfFooterText" maxlength="60" placeholder="MyTemple Knowledge · 本地 Markdown 知识库">
                 </label>
                 <label class="setting-field">
                   <span>导出水印文字</span>
-                  <input type="text" id="pdfWatermarkText" maxlength="30" placeholder="MyTemple Knowledge" />
+                  <input type="text" id="pdfWatermarkText" maxlength="30" placeholder="MyTemple Knowledge">
                 </label>
                 <p class="muted" id="pdfSettingsStatus">已保存</p>
               </section>
@@ -760,15 +760,15 @@
                   <button type="button" data-provider="ollama">本地 Ollama</button>
                   <button type="button" data-provider="deepseek">DeepSeek 云端</button>
                 </div>
-                <label class="setting-field"><span>本地服务地址</span><input id="aiBaseUrl" value="http://127.0.0.1:11434" /></label>
-                <label class="setting-field"><span>向量模型</span><input id="aiEmbeddingModel" list="aiModelChoices" placeholder="例如 qwen3-embedding（可留空使用关键词模式）" /></label>
+                <label class="setting-field"><span>本地服务地址</span><input id="aiBaseUrl" value="http://127.0.0.1:11434"></label>
+                <label class="setting-field"><span>向量模型</span><input id="aiEmbeddingModel" list="aiModelChoices" placeholder="例如 qwen3-embedding（可留空使用关键词模式）"></label>
                 <div class="ai-provider-fields" data-provider-fields="ollama">
-                  <label class="setting-field"><span>对话模型</span><input id="aiChatModel" list="aiModelChoices" placeholder="选择本机已有模型" /></label>
+                  <label class="setting-field"><span>对话模型</span><input id="aiChatModel" list="aiModelChoices" placeholder="选择本机已有模型"></label>
                 </div>
                 <div class="ai-provider-fields hidden" data-provider-fields="deepseek">
-                  <label class="setting-field"><span>API Key</span><input id="aiDeepseekApiKey" type="password" placeholder="sk-..." autocomplete="off" /><small class="muted">已配置时留空可保留原密钥；如需更换，请输入新密钥。</small></label>
-                  <label class="setting-field"><span>服务地址</span><input id="aiDeepseekBaseUrl" value="https://api.deepseek.com" /></label>
-                  <label class="setting-field"><span>对话模型</span><input id="aiDeepseekChatModel" placeholder="deepseek-chat" /></label>
+                  <label class="setting-field"><span>API Key</span><input id="aiDeepseekApiKey" type="password" placeholder="sk-..." autocomplete="off"><small class="muted">已配置时留空可保留原密钥；如需更换，请输入新密钥。</small></label>
+                  <label class="setting-field"><span>服务地址</span><input id="aiDeepseekBaseUrl" value="https://api.deepseek.com"></label>
+                  <label class="setting-field"><span>对话模型</span><input id="aiDeepseekChatModel" placeholder="deepseek-chat"></label>
                   <p class="muted">DeepSeek 不提供向量模型，语义索引仍使用上方本地向量模型（可留空进入关键词模式）。AI 处理选中、知识库问答均使用 DeepSeek 对话模型。</p>
                 </div>
                 <datalist id="aiModelChoices"></datalist>
@@ -801,11 +801,11 @@
                 <p class="muted">光标在段落上停留时，AI 自动分析并给出改写/注释/翻译建议。需要配置对话模型；关闭后不弹出提示卡。</p>
                 <label class="setting-row">
                   <span>启用智能编辑提示</span>
-                  <input type="checkbox" id="aiEditHintToggle" />
+                  <input type="checkbox" id="aiEditHintToggle">
                 </label>
                 <label class="setting-row">
                   <span>提示延迟（秒，最大 60）</span>
-                  <input type="number" id="aiEditHintDelay" min="1" max="60" step="0.5" value="2.5" />
+                  <input type="number" id="aiEditHintDelay" min="1" max="60" step="0.5" value="2.5">
                 </label>
               </section>
               <section class="settings-section ai-governance-section">
@@ -835,11 +835,11 @@
                 <p class="muted">长时间未浏览的文档可能被遗忘。设置温习周期，系统会列出需要回顾的文档。</p>
                 <label class="setting-row">
                   <span>温习周期（天）</span>
-                  <input id="kmReviewDays" type="number" min="7" max="365" step="1" value="30" />
+                  <input id="kmReviewDays" type="number" min="7" max="365" step="1" value="30">
                 </label>
                 <label class="setting-row">
                   <span>启用温习提醒</span>
-                  <input id="kmEnableReminder" type="checkbox" checked />
+                  <input id="kmEnableReminder" type="checkbox" checked="">
                 </label>
                 <div class="inline-actions">
                   <button type="button" id="kmRefreshBtn" class="primary">分析知识脉络</button>
@@ -852,12 +852,12 @@
                   <p class="muted">点击「分析知识脉络」查看健康度评分。</p>
                 </div>
                 <div class="km-stats" id="kmStats" aria-live="polite"></div>
-                <details class="km-group" open>
+                <details class="km-group" open="">
                   <summary>缺少标签的文档（<span id="kmMissingTagsCount">0</span>）</summary>
                   <p class="muted">为这些文档补充 #标签或 frontmatter tags，可被知识图谱与语义检索命中。</p>
                   <ul class="km-doc-list" id="kmMissingTagsList"></ul>
                 </details>
-                <details class="km-group" open>
+                <details class="km-group" open="">
                   <summary>缺少链接的文档（<span id="kmMissingLinksCount">0</span>）</summary>
                   <p class="muted">添加 [[双向链接]] 或相对路径链接，让孤岛文档融入知识网络。</p>
                   <ul class="km-doc-list" id="kmMissingLinksList"></ul>
@@ -883,22 +883,22 @@
                 <p class="muted">调节知识图谱的引力、排斥与动态行为；不查看图谱时不占用资源。</p>
                 <label class="setting-row">
                   <span>排斥强度（松散节点间距）</span>
-                  <input id="graphRepulsion" type="range" min="0.4" max="2.5" step="0.1" value="1.25" />
+                  <input id="graphRepulsion" type="range" min="0.4" max="2.5" step="0.1" value="1.25">
                   <span id="graphRepulsionValue" class="range-value">1.25</span>
                 </label>
                 <label class="setting-row">
                   <span>引力强度（紧密节点聚拢）</span>
-                  <input id="graphAttraction" type="range" min="0.3" max="2.0" step="0.1" value="1.0" />
+                  <input id="graphAttraction" type="range" min="0.3" max="2.0" step="0.1" value="1.0">
                   <span id="graphAttractionValue" class="range-value">1.0</span>
                 </label>
                 <label class="setting-row">
                   <span>呼吸幅度（游离动态）</span>
-                  <input id="graphBreathing" type="range" min="0" max="2.0" step="0.1" value="1.0" />
+                  <input id="graphBreathing" type="range" min="0" max="2.0" step="0.1" value="1.0">
                   <span id="graphBreathingValue" class="range-value">1.0</span>
                 </label>
                 <label class="setting-row">
                   <span>复原速度（拖拽后回弹）</span>
-                  <input id="graphRestore" type="range" min="0.3" max="2.5" step="0.1" value="1.0" />
+                  <input id="graphRestore" type="range" min="0.3" max="2.5" step="0.1" value="1.0">
                   <span id="graphRestoreValue" class="range-value">1.0</span>
                 </label>
                 <div class="inline-actions">
@@ -926,7 +926,7 @@
                 <h3>快捷键</h3>
                 <p class="muted">全局与编辑器快捷键一览。</p>
               </div>
-              <details class="settings-section shortcut-settings-section" open>
+              <details class="settings-section shortcut-settings-section" open="">
                 <summary><strong>全局快捷键</strong><span class="muted">任意位置可用</span></summary>
                 <div class="shortcut-grid">
                   <div><code>Alt + A</code><span>区域截图（标注 + OCR）</span></div>
@@ -990,11 +990,11 @@
                 <p class="muted">按下快捷键后将在全屏幕弹出框选遮罩，鼠标拖拽选定区域即可触发截图或录屏。系统任意位置均可触发，无需调起主程序界面。</p>
                 <label class="setting-row">
                   <span><code>Alt + A</code> 区域截图 → 标注编辑 → 复制到剪贴板 / 另存为 PNG</span>
-                  <input type="checkbox" id="enableCaptureShortcutToggle" />
+                  <input type="checkbox" id="enableCaptureShortcutToggle">
                 </label>
                 <label class="setting-row">
                   <span><code>Alt + M</code> 区域录屏 → 按 ESC 停止并另存为 WebM</span>
-                  <input type="checkbox" id="enableRecordShortcutToggle" />
+                  <input type="checkbox" id="enableRecordShortcutToggle">
                 </label>
               </section>
             </section>
@@ -1007,7 +1007,7 @@
               <section class="settings-section about-section">
                 <div class="about-inline-content">
                   <div class="about-inline-header">
-                    <div class="brand-mark" aria-label="MyTemple Knowledge logo"><img src="/logo.png" alt="" width="36" height="36" decoding="async" /></div>
+                    <div class="brand-mark" aria-label="MyTemple Knowledge logo"><img src="/logo.png" alt="" width="36" height="36" decoding="async"></div>
                     <div>
                       <strong>文档知识库</strong>
                       <div class="about-version">版本 <span id="aboutVersion">--</span></div>
@@ -1090,7 +1090,7 @@
                     <span>请使用 QQ 扫描二维码申请加入。</span>
                   </div>
                   <div class="community-qr-preview community-qr-static">
-                    <img src="/qqqun.webp" alt="MyTemple Knowledge QQ 沟通群二维码" />
+                    <img src="/qqqun.webp" alt="MyTemple Knowledge QQ 沟通群二维码">
                   </div>
                 </div>
               </section>
@@ -1109,18 +1109,18 @@
           <label class="path-input">
             <span class="path-label">新增路径</span>
             <div class="path-input-with-action">
-              <input id="workspacePath" placeholder="例如： C:\Users\name\Documents  或  D:\notes" autocomplete="off" />
+              <input id="workspacePath" placeholder="例如： C:\Users\name\Documents  或  D:\notes" autocomplete="off">
               <button type="button" id="browseFolderBtn" class="secondary" title="浏览本地文件夹">浏览</button>
             </div>
           </label>
           <label class="path-input path-input-inline">
             <span class="path-label">路径名称</span>
-            <input id="workspaceName" placeholder="自定义（可选，最多20字）" maxlength="20" autocomplete="off" spellcheck="false" />
+            <input id="workspaceName" placeholder="自定义（可选，最多20字）" maxlength="20" autocomplete="off" spellcheck="false">
           </label>
           <button type="submit" id="addWorkspaceBtn" class="primary full">+ 添加并显示</button>
         </section>
 
-        <section class="file-browser" id="fileBrowser" hidden>
+        <section class="file-browser" id="fileBrowser" hidden="">
           <div class="browser-toolbar">
             <div id="browserFullPath" class="browser-full-path"></div>
             <div class="breadcrumb-row">
@@ -1154,13 +1154,13 @@
         </section>
         <section class="workspace-section">
           <div class="section-title">
-            <strong>&#24050;&#27880;&#20876;&#36335;&#24452;</strong>
-            <span class="muted">&#28857;&#20987;&#26174;&#31034;/&#38544;&#34255;&#65292;&#26368;&#22810;&#21516;&#26102; 2 &#20010;</span>
+            <strong>已注册路径</strong>
+            <span class="muted">点击显示/隐藏，最多同时 2 个</span>
           </div>
           <div id="workspaceList" class="workspace-list"></div>
         </section>
         <div class="modal-actions">
-          <button type="button" id="cancelWorkspaceBtn">&#20851;&#38381;</button>
+          <button type="button" id="cancelWorkspaceBtn">关闭</button>
         </div>
       </form>
     </div>
@@ -1175,15 +1175,15 @@
         <div class="normalize-section">
           <div class="section-title"><strong>文件扩展名</strong><span class="muted">勾选后仅转换所选扩展名</span></div>
           <div id="normalizeExtensionChoices" class="extension-choices">
-            <label><input type="checkbox" value="*" checked /> <span>所有非 .md 文件</span></label>
-            <label><input type="checkbox" value="txt" /> <span>.txt</span></label>
-            <label><input type="checkbox" value="markdown" /> <span>.markdown</span></label>
-            <label><input type="checkbox" value="log" /> <span>.log</span></label>
-            <label><input type="checkbox" value="note" /> <span>.note</span></label>
-            <label><input type="checkbox" value="rtf" /> <span>.rtf</span></label>
-            <label><input type="checkbox" value="rst" /> <span>.rst</span></label>
-            <label><input type="checkbox" value="html" /> <span>.html</span></label>
-            <label><input type="checkbox" value="json" /> <span>.json</span></label>
+            <label><input type="checkbox" value="*" checked=""> <span>所有非 .md 文件</span></label>
+            <label><input type="checkbox" value="txt"> <span>.txt</span></label>
+            <label><input type="checkbox" value="markdown"> <span>.markdown</span></label>
+            <label><input type="checkbox" value="log"> <span>.log</span></label>
+            <label><input type="checkbox" value="note"> <span>.note</span></label>
+            <label><input type="checkbox" value="rtf"> <span>.rtf</span></label>
+            <label><input type="checkbox" value="rst"> <span>.rst</span></label>
+            <label><input type="checkbox" value="html"> <span>.html</span></label>
+            <label><input type="checkbox" value="json"> <span>.json</span></label>
           </div>
         </div>
         <div class="modal-actions">
@@ -1200,7 +1200,7 @@
           <div class="section-title"><strong>每篇最多新增</strong><span class="muted">建议保留少量高置信标签</span></div>
           <select id="semanticTagsMax" class="semantic-tags-max">
             <option value="2">2 个</option>
-            <option value="3" selected>3 个</option>
+            <option value="3" selected="">3 个</option>
             <option value="4">4 个</option>
             <option value="5">5 个</option>
           </select>
@@ -1208,7 +1208,7 @@
         <div id="semanticTagsPreview" class="semantic-tags-preview muted">正在分析文档语义...</div>
         <div class="modal-actions">
           <button type="button" id="cancelSemanticTagsBtn">取消</button>
-          <button type="button" id="applySemanticTagsBtn" class="primary" disabled>应用标签</button>
+          <button type="button" id="applySemanticTagsBtn" class="primary" disabled="">应用标签</button>
         </div>
       </div>
     </div>
@@ -1218,7 +1218,7 @@
           <strong>知识库问答</strong>
           <span id="aiStatusBadge" class="ai-status-badge">正在准备索引</span>
         </div>
-        <button type="button" id="aiCloseBtn" aria-label="关闭 AI 侧栏">&times;</button>
+        <button type="button" id="aiCloseBtn" aria-label="关闭 AI 侧栏">×</button>
       </header>
       <div class="ai-scope-row">
         <label><span>范围</span><select id="aiScope"><option value="all">全知识库</option><option value="current">当前文档</option></select></label>
@@ -1257,7 +1257,7 @@
         <p id="aiTransformSource" class="muted"></p>
         <label class="setting-field ai-transform-target-lang-field hidden" id="aiTransformTargetLangWrap">
           <span>目标语言（可自由输入）</span>
-          <input id="aiTransformTargetLang" type="text" placeholder="例如：英语 / 德语 / 日语 / 法语 / 俄语 / English / Deutsch …" maxlength="32" />
+          <input id="aiTransformTargetLang" type="text" placeholder="例如：英语 / 德语 / 日语 / 法语 / 俄语 / English / Deutsch …" maxlength="32">
         </label>
         <label class="setting-field ai-transform-instruction-field hidden" id="aiTransformInstructionWrap">
           <span>写作要求（代写模式必填）</span>
@@ -1269,7 +1269,7 @@
         </label>
         <label class="setting-field">
           <span>新建文档名称</span>
-          <input id="aiTransformDocName" maxlength="80" />
+          <input id="aiTransformDocName" maxlength="80">
         </label>
         <div class="modal-actions">
           <button type="button" id="aiTransformCancelBtn">取消</button>
@@ -1307,15 +1307,15 @@
           <div class="import-drop-zone" id="importDropZone">
             <div class="import-drop-icon">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="17 8 12 3 7 8"/>
-                <line x1="12" y1="3" x2="12" y2="15"/>
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
               </svg>
             </div>
             <p class="import-drop-title">选择要导入的文件</p>
             <p class="import-drop-hint">拖拽文件到此处；或使用下方「选择文件」/ 「系统文件对话框」</p>
             <p class="import-formats">DOCX/RTF/ODT 自动提取正文 · MD/TXT/HTML/JSON/CSV 原生支持 · PDF/PPTX/XLSX/EPUB 占位导入</p>
-            <input type="file" id="importFileInput" accept=".docx,.doc,.rtf,.odt,.md,.markdown,.txt,.html,.htm,.json,.csv,.pdf,.xlsx,.xls,.pptx,.ppt,.epub" multiple hidden />
+            <input type="file" id="importFileInput" accept=".docx,.doc,.rtf,.odt,.md,.markdown,.txt,.html,.htm,.json,.csv,.pdf,.xlsx,.xls,.pptx,.ppt,.epub" multiple="" hidden="">
           </div>
           <div class="import-file-list" id="importFileList"></div>
         </div>
@@ -1323,7 +1323,7 @@
           <button type="button" id="cancelImportBtn">取消</button>
           <button type="button" id="browseImportBtn" class="secondary">选择文件</button>
           <button type="button" id="sysPickImportBtn" class="secondary hidden">系统文件对话框</button>
-          <button type="button" id="confirmImportBtn" class="primary" disabled>导入</button>
+          <button type="button" id="confirmImportBtn" class="primary" disabled="">导入</button>
         </div>
       </div>
     </div>
@@ -1334,31 +1334,31 @@
         <span></span>
       </div>
       <svg viewBox="0 0 48 48" fill="none">
-        <path d="M12 16h24v24c0 2.2-1.8 4-4 4H16c-2.2 0-4-1.8-4-4V16z" fill="currentColor"/>
-        <path d="M14 20h20v18c0 1.1-.9 2-2 2H16c-1.1 0-2-.9-2-2V20z" fill="rgba(255,255,255,0.15)"/>
-        <ellipse cx="24" cy="14" rx="12" ry="4" fill="currentColor"/>
-        <ellipse cx="24" cy="12" rx="8" ry="2" fill="rgba(255,255,255,0.2)"/>
-        <path d="M8 16h4v-6c0-2.2 1.8-4 4-4h12c2.2 0 4 1.8 4 4v6h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-        <path d="M16 8h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-        <circle cx="20" cy="28" r="3" fill="rgba(255,255,255,0.3)"/>
-        <circle cx="28" cy="26" r="2" fill="rgba(255,255,255,0.2)"/>
-        <circle cx="24" cy="32" r="2.5" fill="rgba(255,255,255,0.25)"/>
+        <path d="M12 16h24v24c0 2.2-1.8 4-4 4H16c-2.2 0-4-1.8-4-4V16z" fill="currentColor"></path>
+        <path d="M14 20h20v18c0 1.1-.9 2-2 2H16c-1.1 0-2-.9-2-2V20z" fill="rgba(255,255,255,0.15)"></path>
+        <ellipse cx="24" cy="14" rx="12" ry="4" fill="currentColor"></ellipse>
+        <ellipse cx="24" cy="12" rx="8" ry="2" fill="rgba(255,255,255,0.2)"></ellipse>
+        <path d="M8 16h4v-6c0-2.2 1.8-4 4-4h12c2.2 0 4 1.8 4 4v6h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+        <path d="M16 8h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+        <circle cx="20" cy="28" r="3" fill="rgba(255,255,255,0.3)"></circle>
+        <circle cx="28" cy="26" r="2" fill="rgba(255,255,255,0.2)"></circle>
+        <circle cx="24" cy="32" r="2.5" fill="rgba(255,255,255,0.25)"></circle>
       </svg>
     </button>
     <div id="donationModal" class="modal hidden" role="dialog" aria-modal="true">
       <div class="modal-dialog donation-dialog">
         <button type="button" class="close-donation-btn" id="closeDonationBtn">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"/>
-            <line x1="6" y1="6" x2="18" y2="18"/>
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
           </svg>
         </button>
         <div class="donation-header">
           <div class="donation-icon-lg">
             <svg viewBox="0 0 48 48" fill="none">
-              <path d="M12 16h24v24c0 2.2-1.8 4-4 4H16c-2.2 0-4-1.8-4-4V16z" fill="currentColor"/>
-              <ellipse cx="24" cy="14" rx="12" ry="4" fill="currentColor"/>
-              <path d="M8 16h4v-6c0-2.2 1.8-4 4-4h12c2.2 0 4 1.8 4 4v6h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <path d="M12 16h24v24c0 2.2-1.8 4-4 4H16c-2.2 0-4-1.8-4-4V16z" fill="currentColor"></path>
+              <ellipse cx="24" cy="14" rx="12" ry="4" fill="currentColor"></ellipse>
+              <path d="M8 16h4v-6c0-2.2 1.8-4 4-4h12c2.2 0 4 1.8 4 4v6h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
             </svg>
           </div>
           <h2>请我喝杯咖啡</h2>
@@ -1368,23 +1368,23 @@
           <div class="donation-card-item" id="wechatDonation">
             <div class="donation-card-header">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/>
+                <path d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path>
               </svg>
               <span>微信支付</span>
             </div>
             <div class="qr-code">
-              <img src="/wechat-pay.webp" alt="微信支付二维码" />
+              <img src="/wechat-pay.webp" alt="微信支付二维码">
             </div>
           </div>
           <div class="donation-card-item" id="alipayDonation">
             <div class="donation-card-header">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>
               </svg>
               <span>支付宝</span>
             </div>
             <div class="qr-code">
-              <img src="/alipay.webp" alt="支付宝二维码" />
+              <img src="/alipay.webp" alt="支付宝二维码">
             </div>
           </div>
         </div>
@@ -1397,8 +1397,8 @@
               <!-- <span>dev@example.com</span> -->
               <button type="button" class="copy-btn" data-copy="dev@example.com">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
                 </svg>
               </button>
             </div>
@@ -1409,8 +1409,8 @@
               <span>zkffshby</span>
               <button type="button" class="copy-btn" data-copy="dev_wechat_id">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
                 </svg>
               </button>
             </div>
@@ -1423,8 +1423,8 @@
       <div class="modal-dialog update-dialog">
         <button type="button" class="close-donation-btn" id="closeUpdateBtn" aria-label="关闭">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"/>
-            <line x1="6" y1="6" x2="18" y2="18"/>
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
           </svg>
         </button>
         <div class="update-header">
@@ -1448,8 +1448,8 @@
     <div id="globalSearchOverlay" class="global-search-overlay hidden" role="dialog" aria-modal="true" aria-label="全局搜索">
       <div class="global-search-dialog">
         <div class="global-search-input-wrap">
-          <svg class="global-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-          <input id="globalSearchInput" type="text" placeholder="搜索全部文档内容…" autocomplete="off" spellcheck="false" />
+          <svg class="global-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
+          <input id="globalSearchInput" type="text" placeholder="搜索全部文档内容…" autocomplete="off" spellcheck="false">
           <kbd class="global-search-kbd">Esc 关闭</kbd>
         </div>
         <div id="globalSearchResults" class="global-search-results"></div>
@@ -1526,7 +1526,7 @@
     <script src="/vendor/highlight/langs/haskell.min.js?v=20260903"></script>
     <script src="/vendor/highlight/langs/elixir.min.js?v=20260903"></script>
     <script src="/vendor/highlight/langs/clojure.min.js?v=20260903"></script>
-    <script src="/app.js?v=20260908-v6" type="module"></script>
+    <script src="/app.js?v=20260924-v1" type="module"></script>
 
     <div class="menu-dropdowns" id="menuDropdowns">
       <div class="menu-dropdown hidden" data-dropdown="file" role="menu">
@@ -1543,6 +1543,7 @@
         <button class="menu-option" data-action="export-ppt"><span class="menu-option-icon">📽️</span>导出幻灯片 (PPT)</button>
         <button class="menu-option" data-action="export-txt"><span class="menu-option-icon">📄</span>导出纯文本 (TXT)</button>
         <button class="menu-option" data-action="export-md"><span class="menu-option-icon">📋</span>导出 Markdown (MD)</button>
+        <button class="menu-option" data-action="export-images"><span class="menu-option-icon">🖼️</span>导出截图资源</button>
         <button class="menu-option" data-action="export-wechat"><span class="menu-option-icon">📢</span>复制为公众号</button>
         <div class="menu-separator"></div>
         <button class="menu-option" data-action="settings"><span class="menu-option-icon">⚙️</span>设置<kbd>Ctrl+,</kbd></button>
@@ -1577,18 +1578,22 @@
     <div id="imagePreviewModal" class="image-preview-modal hidden" role="dialog" aria-modal="true" aria-label="图片预览">
       <div class="image-preview-backdrop"></div>
       <div class="image-preview-container">
-        <button type="button" class="image-preview-close" aria-label="关闭">&times;</button>
-        <img id="imagePreviewImg" class="image-preview-img" alt="" />
+        <button type="button" class="image-preview-close" aria-label="关闭">×</button>
+        <img id="imagePreviewImg" class="image-preview-img" alt="">
         <div class="image-preview-toolbar">
           <button type="button" class="image-preview-btn" data-action="zoom-in" aria-label="放大">＋</button>
           <button type="button" class="image-preview-btn" data-action="zoom-out" aria-label="缩小">−</button>
           <button type="button" class="image-preview-btn" data-action="zoom-reset" aria-label="重置">1:1</button>
           <button type="button" class="image-preview-btn" data-action="rotate-left" aria-label="左旋转">↺</button>
           <button type="button" class="image-preview-btn" data-action="rotate-right" aria-label="右旋转">↻</button>
-          <a id="imagePreviewDownload" class="image-preview-btn image-preview-download" download>⬇</a>
+          <a id="imagePreviewDownload" class="image-preview-btn image-preview-download" download="">⬇</a>
         </div>
       </div>
     </div>
-  </body>
-</html>
+  
+
+
+
+
+</body></html>
 

@@ -344,7 +344,8 @@ fn is_cjk_char(ch: char) -> bool {
 /// CJK 双字分词 + ASCII 单词分词（零依赖，参考 Lucene CJKAnalyzer）
 /// - 连续 CJK 字符按 N=2 滑动窗口切分："知识图谱" → "知识"、"识图"、"图谱"
 /// - 单个 CJK 字符直接作为 token
-/// - ASCII 字母/数字按连续单词切分（复用 TOKEN_RE 逻辑：[\p{L}\p{N}][\p{L}\p{N}_.\-]{1,}）
+/// - ASCII 字母/数字按连续单词切分（仅字母+数字+下划线，- 和 . 作为分隔符）
+///   "MR622-CK" → "mr622"、"ck"，搜索 "MR622" 可命中
 /// - 其他字符（空格、标点、符号）作为分隔符
 fn tokenize_cjk_terms(text: &str) -> Vec<String> {
     use std::collections::VecDeque;
@@ -371,7 +372,6 @@ fn tokenize_cjk_terms(text: &str) -> Vec<String> {
             if s.len() > 1 {
                 out.push(s.to_string());
             } else if s.len() == 1 {
-                // 单字符 ASCII 也保留（如数字、单字母），与 CJK 单字一致
                 out.push(s.to_string());
             }
             buf.clear();
@@ -382,11 +382,12 @@ fn tokenize_cjk_terms(text: &str) -> Vec<String> {
         if is_cjk_char(ch) {
             flush_ascii(&mut ascii_buffer, &mut tokens);
             cjk_buffer.push_back(ch);
-        } else if ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' || ch == '.' {
+        } else if ch.is_ascii_alphanumeric() || ch == '_' {
+            // 仅字母+数字+下划线作为续接，- 和 . 作为分隔符
             flush_cjk(&mut cjk_buffer, &mut tokens);
             ascii_buffer.push(ch);
         } else {
-            // 分隔符：先 flush 两边缓冲
+            // 分隔符（含 - 和 .）：先 flush 两边缓冲
             flush_cjk(&mut cjk_buffer, &mut tokens);
             flush_ascii(&mut ascii_buffer, &mut tokens);
         }
@@ -397,8 +398,9 @@ fn tokenize_cjk_terms(text: &str) -> Vec<String> {
 }
 
 /// 从文件列表构建倒排索引（refresh_cache 与懒扫描 hidden ws 共用）
-/// - CJK 双字分词 + 标题/正文字段词频统计
+/// - CJK 双字分词 + 标题/正文/路径字段词频统计
 /// - BM25 长度归一元数据（doc_metas / avg_*_len）
+/// - 文件路径 path 也参与分词（tf_title），确保文件名中的关键词可被检索
 fn build_search_index(files: &[FileEntry]) -> SearchIndex {
     let mut idx = SearchIndex::default();
     idx.total_docs = files.len() as u32;
@@ -406,15 +408,21 @@ fn build_search_index(files: &[FileEntry]) -> SearchIndex {
     let mut title_len_sum: u64 = 0;
     let mut body_len_sum: u64 = 0;
     for (i, file) in files.iter().enumerate() {
+        // 路径分词合并到 title 字段，确保文件名中的关键词可被检索
+        let path_tokens = tokenize_cjk_terms(&file.path);
         let title_tokens = tokenize_cjk_terms(&file.title);
         let body_tokens = tokenize_cjk_terms(&file.plain);
-        title_len_sum += title_tokens.len() as u64;
+        title_len_sum += (title_tokens.len() + path_tokens.len()) as u64;
         body_len_sum += body_tokens.len() as u64;
         idx.doc_metas.push(DocMeta {
-            title_len: title_tokens.len() as u32,
+            title_len: (title_tokens.len() + path_tokens.len()) as u32,
             body_len: body_tokens.len() as u32,
         });
         let mut tf_map: HashMap<u32, (u16, u16)> = HashMap::new();
+        for t in &path_tokens {
+            let id = hash_token_u32(t);
+            tf_map.entry(id).or_default().0 += 1;
+        }
         for t in &title_tokens {
             let id = hash_token_u32(t);
             tf_map.entry(id).or_default().0 += 1;
@@ -1728,6 +1736,60 @@ impl AppState {
             b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal)
                 .then_with(|| b.total_matches.cmp(&a.total_matches))
         });
+
+        // 6. 子串兜底：如果倒排索引候选不足（scored 为空或结果数 < 文件数的 5%），
+        //    对所有文件做 title/path/plain 的 contains 子串匹配，
+        //    确保即使分词不命中也能通过子串找到文件
+        if scored.is_empty() || (scored.len() < (files.len() / 20).max(1) && !query_trimmed.is_empty()) {
+            let q_lower = query_trimmed.to_lowercase();
+            let mut fallback: Vec<SearchResult> = Vec::new();
+            for (i, file) in files.iter().enumerate() {
+                let title_lower = file.title.to_lowercase();
+                let path_lower = file.path.to_lowercase();
+                let plain_lower = file.plain.to_lowercase();
+                let in_title = title_lower.contains(&q_lower);
+                let in_path = path_lower.contains(&q_lower);
+                let in_plain = plain_lower.contains(&q_lower);
+                if !in_title && !in_path && !in_plain {
+                    continue;
+                }
+                // 跳过已经通过倒排索引命中的文件
+                if scored.iter().any(|s| s.path == file.path) {
+                    continue;
+                }
+                // 子串兜底给较低分数，排在倒排索引结果之后
+                let mut fb_score = 0.1_f64;
+                if in_title { fb_score += 5.0; }
+                if in_path { fb_score += 3.0; }
+                if in_plain { fb_score += 1.0; }
+                let snippet = if in_title {
+                    file.title.clone()
+                } else {
+                    let first_pos = plain_lower.find(&q_lower).unwrap_or(0);
+                    let raw_start = first_pos.saturating_sub(40);
+                    let raw_end = (first_pos + q_lower.len() + 60).min(file.plain.len());
+                    let start = align_boundary(&file.plain, raw_start, true);
+                    let end = align_boundary(&file.plain, raw_end, false);
+                    if start >= end { String::new() } else {
+                        let context = &file.plain[start..end];
+                        if start > 0 { format!("...{}", context) } else { context.to_string() }
+                    }
+                };
+                fallback.push(SearchResult {
+                    path: file.path.clone(),
+                    title: file.title.clone(),
+                    snippet,
+                    score: fb_score,
+                    matched_tokens: vec![query_trimmed.to_string()],
+                    total_matches: 1,
+                    total_tokens: 1,
+                });
+                let _ = i; // suppress unused var warning
+            }
+            // 子串兜底结果追加到倒排索引结果之后
+            scored.extend(fallback);
+        }
+
         scored
     }
 
