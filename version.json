@@ -1,7 +1,7 @@
 {
-    "version":  "2.1.21",
+    "version":  "2.1.22",
     "downloadUrl":  "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
-    "latestReleaseNotes":  "- 用户打开含截图的文档 → 菜单点击`🖼️ 导出截图资源`- 前端解析 Markdown 中所有`![](url)` 和`\u003cimg src=url\u003e` 引用- 过滤掉`data:` 和`http(s)://` 外部链接，只保留本地资源- 逐个 fetch 图片 → 转 base64- 调用后端`/api/export/save-images` ，弹出文件夹选择对话框- 用户选择文件夹 → 批量写入所有图片文件- Toast 提示成功数量和路径",
-    "releaseNotes":  "v2.1.21 release. See changelog for details.",
-    "releaseDate":  "2026-09-24"
+    "latestReleaseNotes":  "稳定性修复：导出截图资源崩溃、升级后启动失败（资源缓存）、代码高亮语言包补齐、Agent 规则状态 404",
+    "releaseNotes":  "v2.1.22 release. See changelog for details.",
+    "releaseDate":  "2026-09-28"
 }

@@ -24,7 +24,7 @@
         <a href="index.html#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.1.21</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.1.22</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -40,6 +40,7 @@
         <div class="changelog-toc reveal">
           <h3>版本索引</h3>
           <ul>
+            <li><a href="#v2.1.22">v2.1.22</a> — 稳定性修复：导出截图资源崩溃 + 升级后启动失败（资源缓存）+ 高亮语言包补齐 + Agent 规则状态 404</li>
             <li><a href="#v2.1.21">v2.1.21</a> — 新功能：导出文档内本地截图资源 + 推广页 webp 背景图清理</li>
             <li><a href="#v2.1.16">v2.1.16</a> — 打包流程稳定化（build-release.ps1 一键脚本 + 启动自动检查更新 + 静默下载安装）</li>
             <li><a href="#v2.1.13">v2.1.13</a> — JSON 格式化全面修复（MD 代码块树形 + 模式切换不失效 + processJsonCodeBlocks 统一）</li>
@@ -80,6 +81,17 @@
             <li><a href="#v1.8.93">v1.8.93</a> — 界面与体验升级 + 性能优化</li>
           </ul>
         </div>
+
+        <article class="doc-section reveal" id="v2.1.22">
+          <h3>v2.1.22 · 稳定性修复版（启动失败 / 导出崩溃 / 高亮语言）</h3>
+          <ul>
+            <li><b>修复「升级后启动失败」</b>：旧版本前端曾同时存在 <code>import escapeHtml</code> 与顶层 <code>function escapeHtml</code> 声明（模块作用域重复声明属致命语法错误），且静态资源长期复用它旧 URL 参数、服务端也不返回缓存头，WebView2 会继续加载磁盘缓存的旧文件。本版为静态资源统一加 <code>Cache-Control: no-cache</code>，并递增资源版本参数，从此不再出现新旧文件混用。</li>
+            <li><b>修复「导出截图资源」点击即报错</b>：函数内声明的是 <code>imgUrlSet</code>，过滤时误用未声明的 <code>urlSet</code>，每次导出都会抛 ReferenceError 导致功能不可用。</li>
+            <li><b>修复代码块高亮缺语言</b>：白名单声称支持的语言里有 7 种没有实际语言包，控制台会报 <code>Could not find the language 'bat'</code> 并退化为无高亮。已补齐 bat/cmd、tex、scala、fortran、protobuf、handlebars 语言包，git 差异块改用 diff 语法渲染。</li>
+            <li><b>修复 Agent 规则状态读取失败（404）</b>：前端误把「工作区/文档」复合引用当作工作区 id 传给后端；现已前后端统一按工作区段解析，并修正状态文案判断依据。</li>
+            <li><b>工程质量</b>：清理仓库中历史遗留的旧 Node 后端与临时文件、历史大文件瘦身（.git 903MB → 52MB），CI 新增 Windows 端 Rust 编译与测试检查，前端测试增至 15 例（含高亮语言覆盖与本次崩溃的回归防护）。</li>
+          </ul>
+        </article>
 
         <article class="doc-section reveal" id="v2.1.21">
           <h3>v2.1.21 · 导出截图资源 + 推广页整理</h3>
