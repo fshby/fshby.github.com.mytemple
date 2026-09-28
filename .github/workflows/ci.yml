@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  js-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,7 +18,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
           cache: 'npm'
 
       - name: Install dependencies
@@ -26,19 +26,39 @@ jobs:
 
       - name: JavaScript syntax check
         run: |
-          node --check server.js
-          node --check server/rag.js
-          node --check server/frontmatter.js
-          node --check server/agent-policy.js
-          node --check server/license.js
-          node --check server/doc-views.js
-          node --check server/converter.js
-          node --check server/utils.js
           node --check public/app.js
           node --check public/graph-worker.js
           node --check public/markdown-worker.js
           node --check public/modules/paper-texture.js
           node --check public/modules/path-utils.js
+          node --check public/modules/export-utils.js
+          node --check public/modules/editor-utils.js
+          node --check public/modules/preview-utils.js
+          node --check frontend/editor-core.js
+
+      - name: Build editor bundle
+        run: npm run build:editor
 
       - name: Run tests
         run: npm test
+
+  rust-check:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: cargo check
+        working-directory: src-tauri
+        run: cargo check --all-targets
+
+      - name: cargo test
+        working-directory: src-tauri
+        run: cargo test

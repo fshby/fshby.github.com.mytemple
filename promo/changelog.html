@@ -24,7 +24,7 @@
         <a href="index.html#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.1.13</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.1.21</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -40,6 +40,8 @@
         <div class="changelog-toc reveal">
           <h3>版本索引</h3>
           <ul>
+            <li><a href="#v2.1.21">v2.1.21</a> — 新功能：导出文档内本地截图资源 + 推广页 webp 背景图清理</li>
+            <li><a href="#v2.1.16">v2.1.16</a> — 打包流程稳定化（build-release.ps1 一键脚本 + 启动自动检查更新 + 静默下载安装）</li>
             <li><a href="#v2.1.13">v2.1.13</a> — JSON 格式化全面修复（MD 代码块树形 + 模式切换不失效 + processJsonCodeBlocks 统一）</li>
             <li><a href="#v2.1.12">v2.1.12</a> — JSON 树形三处渲染路径统一 + setMode 跳过非 Markdown 渲染</li>
             <li><a href="#v2.1.11">v2.1.11</a> — 小文档 BOM 检测修复（BOM 移到 UTF-8 纯解码之前）</li>
@@ -78,6 +80,24 @@
             <li><a href="#v1.8.93">v1.8.93</a> — 界面与体验升级 + 性能优化</li>
           </ul>
         </div>
+
+        <article class="doc-section reveal" id="v2.1.21">
+          <h3>v2.1.21 · 导出截图资源 + 推广页整理</h3>
+          <ul>
+            <li><b>新功能「🖼️ 导出截图资源」</b>：打开含截图的文档 → 菜单点击「导出截图资源」，前端解析 Markdown 中所有 <code>![](url)</code> 和 <code>&lt;img src=url&gt;</code> 引用，过滤外部链接，只保留本地资源，逐个转 base64 后调用后端 <code>/api/export/save-images</code>，弹出文件夹选择对话框批量写入图片文件，Toast 提示成功数量和路径。</li>
+            <li><b>后端</b>：handlers.rs 新增 <code>/api/export/save-images</code> 路由与 <code>save_images_http</code>（文件夹对话框 + base64 批量写盘）。</li>
+            <li><b>推广页</b>：清理 52 张旧 webp 背景图与临时 webp.html 页面，整理版本展示。</li>
+          </ul>
+        </article>
+
+        <article class="doc-section reveal" id="v2.1.16">
+          <h3>v2.1.16 · 打包流程稳定化</h3>
+          <ul>
+            <li><b>一键打包脚本 build-release.ps1</b>：npx tauri build → NSIS → dist/ + promo/downloads/ 全链路自动化，自动同步 6 处版本号，图标以 packaging/logo.* 为唯一主源。</li>
+            <li><b>启动自动检查更新</b>：启动时读取 version.json 检查新版本，支持自动下载安装。</li>
+            <li><b>修复</b>：JSON toggle、长 URL 参数处理。</li>
+          </ul>
+        </article>
 
         <article class="doc-section reveal" id="v2.1.13">
           <h3>v2.1.13 · JSON 格式化全面修复</h3>

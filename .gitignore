@@ -36,3 +36,19 @@ desktop.ini
 *.tmp
 *.bak
 *~
+
+# 本会话/临时清理区
+.workbuddy/
+_to_delete/
+
+# 一次性脚本残留（历史遗留，勿再入库）
+*.b64
+build-log*
+c1.txt
+c2.txt
+p1.txt
+py_out.txt
+chunk.txt
+long_test.txt
+b64chunk.txt
+brace_test.txt

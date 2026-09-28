@@ -1,12 +1,11 @@
 {
   "name": "mytemple-knowledge",
-  "version": "2.0.4",
+  "version": "2.1.21",
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node server.js",
-    "test": "node --test tests/p0.test.js tests/p1.test.js",
-    "check": "node --check server.js && node --check public/app.js",
+    "test": "node --test tests/p0.test.js",
+    "check": "node --check public/app.js && node --check frontend/editor-core.js",
     "build:editor": "esbuild frontend/editor-core.js --bundle --format=esm --target=es2020 --minify --outfile=public/editor-core.js"
   },
   "engines": {
@@ -20,13 +19,7 @@
     "@codemirror/search": "^6.7.1",
     "@codemirror/state": "^6.7.1",
     "@codemirror/view": "^6.43.7",
-    "@lezer/highlight": "^1.2.3",
-    "html-to-docx": "^1.8.0",
-    "mammoth": "^1.12.1",
-    "marked": "^18.0.9",
-    "pdf-parse": "^2.4.5",
-    "turndown": "^7.2.4",
-    "xlsx": "^0.18.5"
+    "@lezer/highlight": "^1.2.3"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.11.4",

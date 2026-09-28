@@ -150,6 +150,22 @@ if ($cargoContent -eq $cargoNew) {
     Write-OK "Cargo.toml version -> $Version"
 }
 
+Write-Step "Update package.json version"
+$pkgFile = Join-Path $ProjectRoot "package.json"
+if (Test-Path $pkgFile) {
+    $pkgContent = Get-Content -LiteralPath $pkgFile -Raw -Encoding UTF8
+    $pkgPattern = '("version"\s*:\s*")[^"]*(")'
+    $pkgNew = [regex]::Replace($pkgContent, $pkgPattern, "`$1$Version`$2", [System.Text.RegularExpressions.RegexOptions]::Multiline)
+    if ($pkgContent -eq $pkgNew) {
+        Write-Warn2 "version field not found in package.json"
+    } else {
+        [System.IO.File]::WriteAllText($pkgFile, $pkgNew, [System.Text.UTF8Encoding]::new($false))
+        Write-OK "package.json version -> $Version"
+    }
+} else {
+    Write-Warn2 "package.json not found, skip"
+}
+
 # ──────────────────────────────────────────────────────────────
 # 5. Update promo/index.html version strings
 # ──────────────────────────────────────────────────────────────

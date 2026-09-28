@@ -193,7 +193,7 @@ pub async fn run(
             r#"<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>前端资源缺失</title></head>
 <body style="margin:0;padding:48px 24px;font-family:'PingFang SC','Microsoft YaHei',sans-serif;background:#1e293b;color:#f8fafc;">
 <div style="max-width:860px;margin:0 auto;">
-  <h2 style="color:#fbbf24;margin:0 0 12px 0;">启动失败：前端资源缺失（v1.8.104 完整候选）</h2>
+  <h2 style="color:#fbbf24;margin:0 0 12px 0;">启动失败：前端资源缺失（v{} 完整候选）</h2>
   <p>安装后 10 条候选目录下都没找到 <code style="background:#0f172a;padding:2px 6px;border-radius:4px;">index.html</code>。</p>
   <p>通常是：①<b>杀毒软件/实时防护把安装目录下的 public 文件删了</b>；②<b>NSIS 打包时 bundle.resources 映射路径错了</b>；③ 极少数情况下 C 盘权限不足。下方会列出 <b>全部尝试过的路径</b>，用户自己就能对比真实目录结构。</p>
   <div style="margin-top:20px;padding:16px;background:#0f172a;border:1px solid #334155;border-radius:8px;">
@@ -204,7 +204,7 @@ pub async fn run(
   <div style="margin-top:18px;">
     <b>解决方式（按推荐顺序）：</b>
     <ol>
-      <li>先 <b>卸载当前版本</b> → 关闭杀毒软件/企业杀软/Defender 实时防护 → 下载 <b>v1.8.104 或更新版</b> 再安装（v1.8.104 开始用对象映射强制写到 resources/public，不再歧义）。</li>
+      <li>先 <b>卸载当前版本</b> → 关闭杀毒软件/企业杀软/Defender 实时防护 → 下载 <b>v{} 或更新版</b> 再安装（安装包已用对象映射强制写到 resources/public，不再歧义）。</li>
       <li>临时救急：在其它电脑的相同安装目录 <code style="background:#0f172a;padding:2px 6px;border-radius:4px;">C:\Program Files\MyTemple Knowledge\</code> 下，手动把 <code>resources/public/</code>（含 index.html、app.js、styles.css）完整拷贝过去。</li>
       <li>临时救急：设置<b>用户环境变量</b> <code style="background:#0f172a;padding:2px 6px;border-radius:4px;">MYTEMPLE_PUBLIC_ROOT</code> = <code style="background:#0f172a;padding:2px 6px;border-radius:4px;">C:\Program Files\MyTemple Knowledge\resources\public</code>（或真实存在 index.html 的绝对路径），重启 MyTemple Knowledge。</li>
       <li>仍失败请把这张错误页 + 安装目录截图（Explorer 打开安装目录展开 resources/public）发给管理员/在群里反馈，我们会根据第 N 条缺失定位问题。</li>
@@ -212,7 +212,9 @@ pub async fn run(
   </div>
 </div></body></html>"#,
             candidates.len(),
-            candidates_display
+            candidates_display,
+            env!("CARGO_PKG_VERSION"),
+            env!("CARGO_PKG_VERSION")
         );
         Router::new()
             .merge(crate::handlers::build_native_router(state))
