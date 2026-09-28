@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     # Target version (e.g. 2.1.17); if omitted, auto-increment last segment
     [string]$Version,
@@ -102,8 +102,20 @@ foreach ($item in $logoSources) {
 Write-Step "Update version.json (v$Version)"
 
 $today = (Get-Date).ToString("yyyy-MM-dd")
-$shortNotes = if ($ReleaseNotes) { $ReleaseNotes } else { "v$Version release" }
-$longNotes = "v$Version release. See changelog for details."
+# 同版本重建时保留已有发布说明，避免不带 -ReleaseNotes 就把说明覆盖成通用文案
+$sameVersion = ($currentVersion -eq $Version)
+if ($ReleaseNotes) {
+    $shortNotes = $ReleaseNotes
+} elseif ($sameVersion -and $currentVersionJson.PSObject.Properties['latestReleaseNotes']) {
+    $shortNotes = [string]$currentVersionJson.latestReleaseNotes
+} else {
+    $shortNotes = "v$Version release"
+}
+if ($sameVersion -and $currentVersionJson.PSObject.Properties['releaseNotes']) {
+    $longNotes = [string]$currentVersionJson.releaseNotes
+} else {
+    $longNotes = "v$Version release. See changelog for details."
+}
 
 $versionObj = [PSCustomObject]@{
     version = $Version
@@ -154,8 +166,10 @@ Write-Step "Update package.json version"
 $pkgFile = Join-Path $ProjectRoot "package.json"
 if (Test-Path $pkgFile) {
     $pkgContent = Get-Content -LiteralPath $pkgFile -Raw -Encoding UTF8
-    $pkgPattern = '("version"\s*:\s*")[^"]*(")'
-    $pkgNew = [regex]::Replace($pkgContent, $pkgPattern, "`$1$Version`$2", [System.Text.RegularExpressions.RegexOptions]::Multiline)
+    # Do NOT use backreference tokens here: the shell mangles them. Replace the whole match instead.
+    $pkgPattern = '"version"\s*:\s*"[0-9.]+"'
+    $pkgReplacement = "`"version`": `"$Version`""
+    $pkgNew = [regex]::Replace($pkgContent, $pkgPattern, $pkgReplacement, [System.Text.RegularExpressions.RegexOptions]::Multiline)
     if ($pkgContent -eq $pkgNew) {
         Write-Warn2 "version field not found in package.json"
     } else {
