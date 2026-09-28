@@ -3153,7 +3153,7 @@ async function exportDocImages() {
   }
 
   // 2. 过滤：只保留本地资源（跳过 data: 和 http(s):// 外部链接）
-  const localUrls = [...urlSet].filter((url) => {
+  const localUrls = [...imgUrlSet].filter((url) => {
     if (!url) return false;
     if (url.startsWith("data:")) return false;
     if (/^https?:\/\//i.test(url)) return false;
@@ -3857,7 +3857,8 @@ const HLJS_SUPPORTED = new Set([
   "python","javascript","typescript","java","c","cpp","csharp","rust","go",
   "php","ruby","bash","shell","sql","html","css","scss","less","xml","json",
   "yaml","markdown","kotlin","swift","scala","lua","r","perl","fortran",
-  "ini","toml","makefile","tex","bat","diff","git","graphql","proto","handlebars",
+  "ini","toml","makefile","tex","bat","diff","graphql","proto","handlebars",
+  "scala","fortran",
   "jsx","tsx","js","ts","py","rb","rs","cs","sh","hbs",
   // langs/ 扩展语言包
   "powershell","dockerfile","cmake","groovy","dart","nginx","nsis","apache",
@@ -3875,6 +3876,7 @@ const HLJS_FALLBACK = {
   cof: "coffeescript",             // coffeescript
   elm: "elm",
   reasonml: "ocaml",
+  git: "diff",                     // hljs 无 git 语法，用 diff 近似
 };
 
 // ── JSON 树形视图渲染（bejson 风格：可折叠、类型标记、key-value 对齐） ──
@@ -7530,11 +7532,18 @@ function hideAiEditHintPopover() {
 async function loadAgentPolicyStatus() {
   if (!els.agentPolicyStatus) return;
   try {
-    const workspaceId = state.activeWorkspaceId || state.defaultWorkspaceId;
-    const policy = await api.get(`/api/agent/policy?workspaceId=${encodeURIComponent(workspaceId)}`);
-    els.agentPolicyStatus.textContent = policy.exists ? `规则已启用：${policy.writeMode}，最多 ${policy.maxFilesPerAction} 个文件/次` : "当前工作区尚未创建规则文件，将使用内置安全规则";
-    els.createAgentPolicyBtn.textContent = policy.exists ? "规则已存在" : "创建规则文件";
-    els.createAgentPolicyBtn.disabled = policy.exists;
+    // activeWorkspaceId 在部分流程里是 "ws_xxx/子路径" 形式的文档引用，
+    // 只取工作区段，否则后端按 id 找不到工作区会返回 404。
+    const rawRef = String(state.activeWorkspaceId || state.defaultWorkspaceId || "");
+    const workspaceId = rawRef.split("/")[0] || rawRef;
+    if (!workspaceId) return;
+    const resp = await api.get(`/api/agent/policy?workspaceId=${encodeURIComponent(workspaceId)}`);
+    // 后端返回 { ok, workspaceId, policy }，这里兼容裸 policy 结构
+    const policy = (resp && resp.policy) ? resp.policy : (resp || {});
+    const exists = policy.exists === true;
+    els.agentPolicyStatus.textContent = exists ? `规则已启用：${policy.writeMode}，最多 ${policy.maxFilesPerAction} 个文件/次` : "当前工作区尚未创建规则文件，将使用内置安全规则";
+    els.createAgentPolicyBtn.textContent = exists ? "规则已存在" : "创建规则文件";
+    els.createAgentPolicyBtn.disabled = exists;
   } catch (error) { els.agentPolicyStatus.textContent = error.message || "无法读取规则状态"; }
 }
 

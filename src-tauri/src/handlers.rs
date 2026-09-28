@@ -2314,7 +2314,9 @@ async fn get_agent_policy(
     State(state): State<Arc<ServerState>>,
     Query(params): Query<AgentPolicyQuery>,
 ) -> impl IntoResponse {
-    let ws_id = params.workspace_id.unwrap_or_else(|| "default".to_string());
+    // 兼容 "ws_xxx/相对路径" 形式的文档引用：只取第一段作为工作区 id
+    let ws_id_raw = params.workspace_id.unwrap_or_else(|| "default".to_string());
+    let ws_id = ws_id_raw.split('/').next().unwrap_or("").to_string();
     let workspaces = state.app.get_workspaces().await;
     let ws = workspaces.iter().find(|w| w.id == ws_id);
 

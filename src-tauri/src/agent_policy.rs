@@ -193,7 +193,11 @@ pub fn agent_policy_path(workspace_root: &Path) -> PathBuf {
 pub fn load_policy(workspace_root: &str) -> serde_json::Value {
     let policy_path = agent_policy_path_string(workspace_root);
     if let Ok(content) = std::fs::read_to_string(&policy_path) {
-        if let Ok(policy) = serde_json::from_str::<serde_json::Value>(&content) {
+        if let Ok(mut policy) = serde_json::from_str::<serde_json::Value>(&content) {
+            // 标记来源：文件已存在，前端据此显示「规则已启用」
+            if let Some(obj) = policy.as_object_mut() {
+                obj.insert("exists".to_string(), serde_json::Value::Bool(true));
+            }
             return policy;
         }
     }
@@ -226,6 +230,7 @@ fn agent_policy_path_string(workspace_root: &str) -> String {
 
 fn default_policy_json() -> serde_json::Value {
     serde_json::json!({
+        "exists": false,
         "writeMode": "safe",
         "maxFilesPerAction": 5,
         "allowedPaths": ["**/*.md"],
