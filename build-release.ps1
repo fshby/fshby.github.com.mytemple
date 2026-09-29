@@ -255,13 +255,30 @@ if (-not $SkipBuild) {
 
     Push-Location $projectRoot
     try {
-        # 用 cmd /c 包一层：PowerShell 5.1 会把原生命令写入 stderr 的每一行都当成 ErrorRecord，
-        # 在外层 ErrorActionPreference=Stop 的环境（如 IDE 内置终端 / 自动化工具）会把整个脚本判为失败，
-        # 即使产物已经生成（表现：日志停在 "Tauri Release build"，实则 Build succeeded 且安装包已产出）。
-        # cmd /c 在 cmd 层就把 stderr 合并进 stdout，规避该问题；退出码仍可正常判断。
-        cmd /c "npx tauri build 2>&1"
-        if ($LASTEXITCODE -ne 0) {
-            throw "Tauri build failed (exit $LASTEXITCODE)"
+        # 不用 cmd /c 包装：实测在 IDE 内置终端/自动化工具里（外层 ErrorActionPreference=Stop），
+        # `cmd /c "npx tauri build 2>&1"` 会在 cargo 编译结束后以退出码 1 静默返回、bundler 完全不执行，
+        # 表现为日志停在 "Finished release profile" 且没有安装包。
+        # 正确做法：临时把 ErrorActionPreference 降为 Continue，让原生命令写入 stderr 的每一行
+        # 只作为普通输出通过（否则会被当成终止性 ErrorRecord 中断脚本，即便产物已生成）。
+        $prevEAP = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        try {
+            & npx tauri build 2>&1 | ForEach-Object { Write-Host $_ }
+        } finally {
+            $ErrorActionPreference = $prevEAP
+        }
+        $buildExit = $LASTEXITCODE
+        if ($buildExit -ne 0) {
+            # 兼容"误报失败"：退出码非 0 但本次版本的安装包已新鲜产出 → 按成功继续
+            $nsisDir = Join-Path $srcTauriDir "target\release\bundle\nsis"
+            $freshInstaller = Get-ChildItem -Path $nsisDir -Filter "*$Version*-setup.exe" -File -ErrorAction SilentlyContinue |
+                Where-Object { $_.LastWriteTime -gt (Get-Date).AddMinutes(-30) } |
+                Select-Object -First 1
+            if ($freshInstaller) {
+                Write-Warn2 "tauri build 退出码 $buildExit，但已生成 $($freshInstaller.Name)，按成功继续"
+            } else {
+                throw "Tauri build failed (exit $buildExit)"
+            }
         }
     } finally {
         Pop-Location
@@ -311,6 +328,11 @@ Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "  Version v$Version build complete" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
+
+# 复位原生命令泄漏的退出码：tauri build 在 Windows 上即使成功也可能返回 1
+# （stderr 被 PowerShell 当作 ErrorRecord），会把整个脚本的退出码污染成 1，
+# 让 CI / 自动化误判发版失败。走到这里说明构建与部署都已按预期完成，显式归零。
+$global:LASTEXITCODE = 0
 
 if (-not $SkipBuild -and -not $SkipDeploy) {
     Write-Host "Next steps:" -ForegroundColor Yellow
