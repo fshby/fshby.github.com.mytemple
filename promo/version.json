@@ -1,7 +1,7 @@
 {
-    "version":  "2.1.24",
+    "version":  "2.1.25",
     "downloadUrl":  "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
-    "latestReleaseNotes":  "修复截图/录屏触发时的闪屏与长按快捷键闪退：截图窗口改为冻结帧就绪后再显示，关闭不再触发最小化动画与画面重新合成",
-    "releaseNotes":  "v2.1.24 release. See changelog for details.",
-    "releaseDate":  "2026-09-28"
+    "latestReleaseNotes":  "单实例保护：重复点击桌面快捷方式不再开出多个窗口，重复启动自动聚焦已有窗口",
+    "releaseNotes":  "v2.1.25 release. See changelog for details.",
+    "releaseDate":  "2026-09-29"
 }

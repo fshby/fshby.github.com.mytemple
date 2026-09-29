@@ -24,7 +24,7 @@
         <a href="index.html#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.1.24</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.1.25</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -40,6 +40,7 @@
         <div class="changelog-toc reveal">
           <h3>版本索引</h3>
           <ul>
+            <li><a href="#v2.1.25">v2.1.25</a> — 单实例保护：重复点击快捷方式不再开出多个窗口</li>
             <li><a href="#v2.1.24">v2.1.24</a> — 截图/录屏「闪屏」彻底修复 + 长按快捷键闪退</li>
             <li><a href="#v2.1.23">v2.1.23</a> — 修复冷启动授权校验超时被误判为「未授权」</li>
             <li><a href="#v2.1.22">v2.1.22</a> — 稳定性修复：导出截图资源崩溃 + 升级后启动失败（资源缓存）+ 高亮语言包补齐 + Agent 规则状态 404</li>
@@ -83,6 +84,13 @@
             <li><a href="#v1.8.93">v1.8.93</a> — 界面与体验升级 + 性能优化</li>
           </ul>
         </div>
+
+        <article class="doc-section reveal" id="v2.1.25">
+          <h3>v2.1.25 · 单实例保护</h3>
+          <ul>
+            <li><b>修复「点击桌面快捷方式开出多个窗口」</b>：应用此前没有单实例保护，冷启动耗时较长时连点快捷方式会拉起多个完整实例（多个窗口同时抢同一份数据目录，存在配置竞写风险）。现在<strong>第二个实例启动时会立即退出，并自动把已有窗口还原聚焦到前台</strong>——重复点击快捷方式的效果变成「把应用调回来」，和主流桌面软件行为一致。</li>
+          </ul>
+        </article>
 
         <article class="doc-section reveal" id="v2.1.24">
           <h3>v2.1.24 · 截图/录屏「闪屏」修复</h3>

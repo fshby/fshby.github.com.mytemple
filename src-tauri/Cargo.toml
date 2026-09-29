@@ -1,6 +1,6 @@
 [package]
 name = "mytemple-server"
-version = "2.1.24"
+version = "2.1.25"
 edition = "2021"
 description = "MyTemple Knowledge - Rust 原生后端 (Phase 5 纯原生架构)"
 
@@ -83,6 +83,9 @@ encoding_rs = "0.8"
 # 向量 mmap 只读映射（避免大向量表全量堆拷贝）
 memmap2 = "0.9"
 tauri-plugin-global-shortcut = "2.3.2"
+# 单实例保护：第二次启动进程时立即退出，并把已有主窗口调到前台。
+# 没有它，连点桌面快捷方式会开出多个窗口，且多实例共享同一数据目录会竞写 workspaces.json。
+tauri-plugin-single-instance = "2"
 xcap = "0.9.8"
 
 # PNG 编码（屏幕截图输出）— 关 default-features 只开 png，省体积

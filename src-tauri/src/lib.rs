@@ -104,6 +104,18 @@ pub fn run() {
     let data_root_for_init = data_root.clone();
 
     tauri::Builder::default()
+        // ── 单实例保护：必须是第一个注册的插件 ──
+        // 第二次启动进程时该回调在【新进程】里执行，new 之后应立即退出（插件内部处理），
+        // 这里负责把已有实例的主窗口调到前台，实现"重复点快捷方式 = 聚焦已有窗口"。
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            use tauri::Manager as _;
+            if let Some(win) = app.get_webview_window("main") {
+                let _ = win.unminimize();
+                let _ = win.show();
+                let _ = win.set_focus();
+            }
+            log::info!("[single-instance] 检测到重复启动，已聚焦已有主窗口");
+        }))
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
