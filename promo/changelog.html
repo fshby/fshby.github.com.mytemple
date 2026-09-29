@@ -24,7 +24,7 @@
         <a href="index.html#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.1.25</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.1.26</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -40,6 +40,7 @@
         <div class="changelog-toc reveal">
           <h3>版本索引</h3>
           <ul>
+            <li><a href="#v2.1.26">v2.1.26</a> — 托盘图标 + 关窗可唤回（点快捷方式/托盘图标重新打开主界面）</li>
             <li><a href="#v2.1.25">v2.1.25</a> — 单实例保护：重复点击快捷方式不再开出多个窗口</li>
             <li><a href="#v2.1.24">v2.1.24</a> — 截图/录屏「闪屏」彻底修复 + 长按快捷键闪退</li>
             <li><a href="#v2.1.23">v2.1.23</a> — 修复冷启动授权校验超时被误判为「未授权」</li>
@@ -84,6 +85,16 @@
             <li><a href="#v1.8.93">v1.8.93</a> — 界面与体验升级 + 性能优化</li>
           </ul>
         </div>
+
+        <article class="doc-section reveal" id="v2.1.26">
+          <h3>v2.1.26 · 托盘图标与关窗唤回</h3>
+          <ul>
+            <li><b>修复「关掉主窗口后再点桌面快捷方式没反应」</b>：应用为保证截图/录屏能做到「无感触发」，会一直预创建相关窗口，进程因此不会随主窗口关闭而退出；但旧逻辑在唤回时只去找已存在的主窗口，找不到就静默放弃，于是表现为「点了快捷方式毫无反应」。现在<strong>主窗口不存在时会自动重建并显示</strong>，点快捷方式即可把应用重新打开。</li>
+            <li><b>新增托盘图标</b>：在任务栏通知区域常驻一个托盘图标，<strong>单击图标即可唤回主界面</strong>（窗口已关闭则重新打开、还在则聚焦到前台）。同时提供右键菜单：显示主界面、区域截图（Alt+A）、区域录屏（Alt+M）、退出 MyTemple Knowledge。</li>
+            <li><b>关闭窗口不再退出应用</b>：点右上角「×」只是隐藏主窗口，应用继续在后台待命，快捷键截图/录屏照常可用，需要彻底退出时用托盘菜单的「退出」。</li>
+            <li><b>稳定性</b>：托盘创建失败时不影响应用正常启动，只丢弃托盘能力（此时关闭窗口即退出）；单实例唤回、托盘唤回统一走同一套「存在则聚焦、不存在则重建」逻辑，行为一致。</li>
+          </ul>
+        </article>
 
         <article class="doc-section reveal" id="v2.1.25">
           <h3>v2.1.25 · 单实例保护</h3>

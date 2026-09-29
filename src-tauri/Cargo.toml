@@ -1,6 +1,6 @@
 [package]
 name = "mytemple-server"
-version = "2.1.25"
+version = "2.1.26"
 edition = "2021"
 description = "MyTemple Knowledge - Rust 原生后端 (Phase 5 纯原生架构)"
 
@@ -64,7 +64,8 @@ thiserror = "1"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 
 # Tauri 应用外壳（窗口/打包）
-tauri = { version = "2", features = ["devtools"] }
+# tray-icon：系统托盘（给「关闭主窗口后仍在后台常驻」的进程一个正规 UI 出口）
+tauri = { version = "2", features = ["devtools", "tray-icon"] }
 tauri-plugin-shell = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"

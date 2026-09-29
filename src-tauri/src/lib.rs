@@ -21,6 +21,7 @@ pub mod utils;
 use serde::{Deserialize, Serialize};
 use std::fs as stdfs;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 use tauri::{Emitter, Listener, Manager};
 
@@ -33,6 +34,169 @@ use std::os::windows::process::CommandExt;
 // 用 OnceLock 在 Tauri setup 时注入一次，此后全进程可安全获取。
 pub static APP_HANDLE: OnceLock<tauri::AppHandle> = OnceLock::new();
 pub static SERVER_PORT: OnceLock<u16> = OnceLock::new();
+
+/// 托盘图标是否创建成功。
+/// 只有它为 true 时才拦截「所有窗口关闭 → 退出进程」：避免托盘创建失败（例如无 shell 环境）
+/// 时应用既没有托盘也没有窗口，用户完全无法退出。
+static TRAY_READY: AtomicBool = AtomicBool::new(false);
+
+// ── 主窗口创建 / 重建 ─────────────────────────────────────
+/// 创建主窗口（冷启动与「关闭后重开」共用同一套窗口参数，避免两处走样）。
+/// 一律以 visible(false) 创建：显示时机由调用方决定（冷启动等 splash DOM ready；
+/// 重开等页面 on_page_load），避免先露出白底一帧。
+fn create_main_window(
+    app: &tauri::AppHandle,
+    url: tauri::WebviewUrl,
+    show_on_page_load: bool,
+) -> tauri::Result<tauri::WebviewWindow> {
+    let mut builder = tauri::WebviewWindowBuilder::new(app, "main", url)
+        .title("MyTemple Knowledge")
+        .inner_size(1280.0, 820.0)
+        .min_inner_size(960.0, 640.0)
+        .maximized(true)
+        .resizable(true)
+        .center()
+        .visible(false);
+    if show_on_page_load {
+        builder = builder.on_page_load(|window, _payload| {
+            let _ = window.show();
+            let _ = window.set_focus();
+        });
+    }
+    builder.build()
+}
+
+/// 主窗口已被关闭（销毁）后重新打开。
+///
+/// 为什么需要它：主窗口关闭后**进程不会退出**——启动时预创建的隐藏截图/录屏窗口仍在，
+/// 不算 Tauri 的「所有窗口已关闭」（且没有托盘图标可供唤回）。此时用户点桌面快捷方式，
+/// 单实例保护会让新进程立即退出，回调里若只做 `get_webview_window("main")` 的 show，
+/// 拿到的是 None，结果就是「点了完全没反应」。因此这里负责重建主窗口。
+///
+/// 重开时 axum 与 AppState 都已就绪，直接加载应用首页（index.html 自带启动遮罩，不会白屏）。
+fn reopen_main_window(app: &tauri::AppHandle) {
+    use tauri::Manager as _;
+    if app.get_webview_window("main").is_some() {
+        return;
+    }
+    let port = crate::SERVER_PORT.get().copied().unwrap_or(7321);
+    let url = match url::Url::parse(&format!("http://127.0.0.1:{}/?skipSplash=1", port)) {
+        Ok(u) => u,
+        Err(e) => {
+            log::error!("[single-instance] 主窗口 URL 解析失败: {}", e);
+            return;
+        }
+    };
+    match create_main_window(app, tauri::WebviewUrl::External(url), true) {
+        Ok(win) => {
+            log::info!("[single-instance] 主窗口已被关闭，重新创建并等待页面就绪后显示");
+            // 兜底：若 on_page_load 因异常未触发，1.5 秒后强制显示，绝不出现「点了没反应」
+            let win_fallback = win.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(1500));
+                if !win_fallback.is_visible().unwrap_or(false) {
+                    log::warn!("[single-instance] on_page_load 未触发，兜底显示主窗口");
+                    if let Err(e) = win_fallback.show() {
+                        log::error!("[single-instance] 兜底显示失败（窗口可能已被销毁）: {}", e);
+                    }
+                    let _ = win_fallback.set_focus();
+                }
+            });
+        }
+        Err(e) => log::error!("[single-instance] 主窗口重建失败: {}", e),
+    }
+}
+
+/// 把主窗口唤回到前台：窗口还在就还原+聚焦，已被关闭则重建。
+///
+/// 单实例回调与托盘「显示主界面」共用这一条路径，保证任何唤回入口行为一致。
+fn show_or_reopen_main(app: &tauri::AppHandle) {
+    use tauri::Manager as _;
+    match app.get_webview_window("main") {
+        Some(win) => {
+            let _ = win.unminimize();
+            let _ = win.show();
+            let _ = win.set_focus();
+            log::info!("[main-window] 主窗口已存在，还原并聚焦到前台");
+        }
+        None => reopen_main_window(app),
+    }
+}
+
+// ── 系统托盘 ──────────────────────────────────────────────
+/// 创建托盘图标。
+///
+/// 为什么需要：关闭主窗口后进程仍要常驻后台（全局快捷键 Alt+A/Alt+M 保持可用），
+/// 而此前没有任何 UI 出口——只能靠任务管理器结束进程。托盘补上这个出口：
+///   · 左键单击 → 唤回主界面（窗口在则聚焦，已关闭则重建）
+///   · 右键菜单 → 显示主界面 / 区域截图 / 区域录屏 / 退出
+///
+/// 配套：成功后置 TRAY_READY，`run()` 的回调据此在「所有窗口已关闭」时 prevent_exit，
+/// 让常驻真正成立（否则预创建的隐藏窗口被回收后整个进程会跟着退出、托盘一起消失）。
+fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
+    use tauri::menu::{Menu, MenuItemBuilder, PredefinedMenuItem};
+    use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+
+    let show_item = MenuItemBuilder::with_id("tray_show", "显示主界面").build(app)?;
+    let shot_item = MenuItemBuilder::with_id("tray_screenshot", "区域截图（Alt+A）").build(app)?;
+    let record_item = MenuItemBuilder::with_id("tray_record", "区域录屏（Alt+M）").build(app)?;
+    let separator = PredefinedMenuItem::separator(app)?;
+    let quit_item = MenuItemBuilder::with_id("tray_quit", "退出 MyTemple Knowledge").build(app)?;
+    let menu = Menu::with_items(
+        app,
+        &[&show_item, &shot_item, &record_item, &separator, &quit_item],
+    )?;
+
+    let mut builder = TrayIconBuilder::with_id("main-tray")
+        .menu(&menu)
+        .tooltip("MyTemple Knowledge")
+        // 左键留给「唤回主界面」，菜单走右键（Windows 习惯）
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            "tray_show" => {
+                log::info!("[tray] 菜单：显示主界面");
+                show_or_reopen_main(app);
+            }
+            "tray_screenshot" => {
+                let app_clone = app.clone();
+                tauri::async_runtime::spawn_blocking(move || {
+                    crate::global_capture::trigger_screenshot(app_clone);
+                });
+            }
+            "tray_record" => {
+                let app_clone = app.clone();
+                tauri::async_runtime::spawn_blocking(move || {
+                    crate::global_capture::trigger_record(app_clone);
+                });
+            }
+            "tray_quit" => {
+                log::info!("[tray] 菜单：退出应用");
+                app.exit(0);
+            }
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                show_or_reopen_main(tray.app_handle());
+            }
+        });
+
+    // 复用窗口图标：tauri.conf.json 的 icon[0] 已由 tauri-build 编进二进制，
+    // 无需额外打包资源（app 图标缺失时托盘退化为无图标项，不影响其余功能）
+    if let Some(icon) = app.default_window_icon() {
+        builder = builder.icon(icon.clone());
+    }
+
+    builder.build(app)?;
+    TRAY_READY.store(true, Ordering::SeqCst);
+    log::info!("[tray] 托盘图标已创建");
+    Ok(())
+}
 
 // ── Tauri 应用入口 ────────────────────────────────────────
 /// 启动 Tauri 应用（Phase 5 纯原生模式）：
@@ -108,13 +272,11 @@ pub fn run() {
         // 第二次启动进程时该回调在【新进程】里执行，new 之后应立即退出（插件内部处理），
         // 这里负责把已有实例的主窗口调到前台，实现"重复点快捷方式 = 聚焦已有窗口"。
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            use tauri::Manager as _;
-            if let Some(win) = app.get_webview_window("main") {
-                let _ = win.unminimize();
-                let _ = win.show();
-                let _ = win.set_focus();
-            }
-            log::info!("[single-instance] 检测到重复启动，已聚焦已有主窗口");
+            // 主窗口被用户关闭过（进程因预创建的隐藏窗口仍在后台存活）时必须重建，
+            // 否则第二次启动的进程直接退出、老进程又没有窗口，表现为「点快捷方式没反应」。
+            // show_or_reopen_main 内部已区分「窗口还在 → 聚焦」与「已关闭 → 重建」。
+            log::info!("[single-instance] 检测到重复启动，唤回主窗口");
+            show_or_reopen_main(app);
         }))
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
@@ -316,21 +478,19 @@ pub fn run() {
                 }
             });
 
-            let window = tauri::WebviewWindowBuilder::new(
-                app,
-                "main",
-                // 通过 External 直接指向 splash.html URL，axum 起来后就可以立刻加载 boot.webp 背景 + 进度条
-                // 先设置 about:blank 作为 fallback（避免 Tauri 的 App URL 用资源协议 404 导致绿屏）
+            // 主窗口：先 about:blank 作为 fallback（避免 Tauri 的 App URL 用资源协议 404 导致绿屏），
+            // 等 axum 起来后再 navigate 到 splash.html（参数见 create_main_window）
+            let window = create_main_window(
+                app.handle(),
                 tauri::WebviewUrl::External(url::Url::parse("about:blank").unwrap()),
-            )
-                .title("MyTemple Knowledge")
-                .inner_size(1280.0, 820.0)
-                .min_inner_size(960.0, 640.0)
-                .maximized(true)
-                .resizable(true)
-                .center()
-                .visible(false)
-                .build()?;
+                false,
+            )?;
+
+            // ── 系统托盘：给「关闭主窗口后仍在后台常驻」的进程一个 UI 出口 ──
+            // 失败只降级打日志，绝不影响应用启动；TRAY_READY 决定是否拦截「窗口全关即退出」。
+            if let Err(e) = setup_tray(app.handle()) {
+                log::warn!("[tray] 托盘图标创建失败: {}（应用继续运行；无托盘时关闭窗口即退出）", e);
+            }
 
             // 启动后台任务（async，可 .await）：先等真实端口，再轮询 axum → 注入 splash →
             // init AppState (进度更新) → 加载 RAG (进度更新) → navigate 到 /
@@ -519,8 +679,20 @@ pub fn run() {
 
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("启动 Tauri 应用失败");
+        .build(tauri::generate_context!())
+        .expect("启动 Tauri 应用失败")
+        .run(|_app_handle, event| {
+            // 主窗口关掉后，预创建的截图/录屏隐藏窗口迟早会被回收，
+            // 那时 Tauri 会以「所有窗口已关闭」请求退出（code == None）→ 进程连同托盘一起消失。
+            // 有托盘时把这次退出拦下来，让应用在托盘常驻（全局快捷键 Alt+A/Alt+M 继续可用）；
+            // 真正退出只走托盘菜单「退出」与更新安装流程里的 app.exit(0)（code == Some(_)，不拦）。
+            if let tauri::RunEvent::ExitRequested { code, api, .. } = event {
+                if code.is_none() && TRAY_READY.load(Ordering::SeqCst) {
+                    log::info!("[exit] 所有窗口已关闭：托盘常驻模式保持运行（托盘菜单可退出）");
+                    api.prevent_exit();
+                }
+            }
+        });
 }
 
 // ── Tauri Commands ────────────────────────────────────────

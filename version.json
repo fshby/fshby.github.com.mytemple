@@ -1,7 +1,7 @@
 {
-    "version":  "2.1.25",
+    "version":  "2.1.26",
     "downloadUrl":  "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
-    "latestReleaseNotes":  "单实例保护：重复点击桌面快捷方式不再开出多个窗口，重复启动自动聚焦已有窗口",
-    "releaseNotes":  "v2.1.25 release. See changelog for details.",
+    "latestReleaseNotes":  "托盘图标 + 关窗可唤回：点快捷方式或托盘图标重新打开主界面",
+    "releaseNotes":  "v2.1.26 release. See changelog for details.",
     "releaseDate":  "2026-09-29"
 }
