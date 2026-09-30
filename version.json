@@ -1,7 +1,7 @@
 {
-    "version":  "2.1.26",
+    "version":  "2.1.27",
     "downloadUrl":  "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
-    "latestReleaseNotes":  "托盘图标 + 关窗可唤回：点快捷方式或托盘图标重新打开主界面",
-    "releaseNotes":  "v2.1.26 release. See changelog for details.",
-    "releaseDate":  "2026-09-29"
+    "latestReleaseNotes":  "录屏画面修复（不再静止/卡顿、启动不再误弹遮罩）+ 知识脉络分析恢复 + 文档标准与 AI 规则、知识标签适配修复",
+    "releaseNotes":  "v2.1.27 release. See changelog for details.",
+    "releaseDate":  "2026-09-30"
 }

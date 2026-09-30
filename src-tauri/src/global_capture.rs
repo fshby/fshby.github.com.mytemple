@@ -505,7 +505,7 @@ pub fn precreate_windows(app: &AppHandle, port: u16) {
 
     // 预创建录屏窗口
     if app.get_webview_window("recorder").is_none() {
-        let url = format!("http://127.0.0.1:{}/recorder.html", port);
+        let url = format!("http://127.0.0.1:{}/recorder.html?v=20260930-v1", port);
         if let Ok(url_parsed) = url::Url::parse(&url) {
             match tauri::WebviewWindowBuilder::new(
                 app,
@@ -1043,7 +1043,7 @@ fn prepare_recorder_window(app: &AppHandle) {
         }
         _ => (1920.0, 1080.0),
     };
-    let url = format!("http://127.0.0.1:{}/recorder.html", port);
+    let url = format!("http://127.0.0.1:{}/recorder.html?v=20260930-v1", port);
     let url_parsed = match url::Url::parse(&url) {
         Ok(u) => u,
         Err(e) => {
