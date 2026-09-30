@@ -25,6 +25,50 @@ fn record_state() -> &'static Mutex<Option<RecordState>> {
     RECORD_STATE.get_or_init(|| Mutex::new(None))
 }
 
+/// 录屏选区（物理像素）：由前端在 start 前下发，后端只编码这一块，
+/// 避免「全屏 RGBA → 全屏 PNG → 数 MB IPC」的带宽瓶颈（选区通常只有全屏的 1/4~1/10）。
+#[derive(Clone, Copy)]
+struct RecordRegion {
+    x: u32,
+    y: u32,
+    w: u32,
+    h: u32,
+}
+
+static RECORD_REGION: std::sync::OnceLock<Mutex<Option<RecordRegion>>> = std::sync::OnceLock::new();
+
+fn record_region() -> &'static Mutex<Option<RecordRegion>> {
+    RECORD_REGION.get_or_init(|| Mutex::new(None))
+}
+
+/// 设置录屏选区。入参为 CSS 像素 + 设备像素比，内部换算成物理像素。
+pub fn set_record_region(x: f64, y: f64, w: f64, h: f64, dpr: f64) {
+    let d = if dpr.is_finite() && dpr > 0.0 { dpr } else { 1.0 };
+    let region = RecordRegion {
+        x: (x * d).round().max(0.0) as u32,
+        y: (y * d).round().max(0.0) as u32,
+        w: (w * d).round().max(1.0) as u32,
+        h: (h * d).round().max(1.0) as u32,
+    };
+    match record_region().lock() {
+        Ok(mut guard) => {
+            *guard = Some(region);
+            log::info!(
+                "[record-region] 选区已设置（物理像素）: {}x{}+{}+{} (dpr={})",
+                region.w, region.h, region.x, region.y, d
+            );
+        }
+        Err(e) => log::warn!("[record-region] 选区锁获取失败: {}", e),
+    }
+}
+
+/// 清除录屏选区（关闭录屏窗口时调用，避免残留影响下次未下发选区的场景）
+pub fn clear_record_region() {
+    if let Ok(mut guard) = record_region().lock() {
+        *guard = None;
+    }
+}
+
 // ── 原子锁：防止并发截图/录屏操作（比时间戳节流更可靠） ──
 static SCREENSHOT_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 static RECORD_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
@@ -1106,6 +1150,7 @@ pub fn close_recorder_window(app: &AppHandle) {
     // 这里作为兜底，确保任何关闭路径都释放原生录屏状态。
     let _ = stop_native_record();
     release_record_lock();
+    clear_record_region();
     // 清理临时文件
     if let Ok(mut guard) = pending_record_bg().lock() {
         if let Some(bg) = guard.take() {
@@ -1328,18 +1373,18 @@ fn stream_frames_to_frontend(app: AppHandle) {
 
             let w = frame.width;
             let h = frame.height;
-            // 把 raw RGBA bytes 编码成 PNG（直接用 image crate 的 RgbaImage）
-            match encode_rgba_to_png(&frame.raw, w, h) {
-                Ok(png) => {
-                    let b64 = base64_encode(&png);
+            // 只编码选区（无选区则整帧）+ JPEG：避免全屏 PNG 每帧数百 ms + 数 MB IPC 的瓶颈
+            match encode_region_jpeg(&frame.raw, w, h) {
+                Ok((jpeg, out_w, out_h)) => {
+                    let b64 = base64_encode(&jpeg);
                     // 优先发送到录屏窗口，如果不存在则全局 emit（兼容主窗口降级）
                     let _ = app.emit_to(
                         "recorder",
                         "native-record-frame",
                         serde_json::json!({
-                            "dataUrl": format!("data:image/png;base64,{}", b64),
-                            "width": w,
-                            "height": h,
+                            "dataUrl": format!("data:image/jpeg;base64,{}", b64),
+                            "width": out_w,
+                            "height": out_h,
                         }),
                     );
                 }
@@ -1409,17 +1454,54 @@ fn capture_primary_display_png() -> Result<(Vec<u8>, u32, u32), String> {
 }
 
 /// 把 raw RGBA bytes 编码成 PNG（用 image crate 的 RgbaImage）
-fn encode_rgba_to_png(raw: &[u8], width: u32, height: u32) -> Result<Vec<u8>, String> {
+/// 把全屏 raw RGBA 帧按录屏选区裁剪，并编码为 JPEG（质量 80）。
+/// 返回 (jpeg_bytes, out_w, out_h)。
+///
+/// 为什么不再用全屏 PNG：全屏 RGBA（2560x1440 约 14.7MB）每帧 PNG 编码需 100~500ms，
+/// base64 后再涨 33%，经 IPC 传给前端每帧数 MB —— 这是录屏「画面几乎不动」的根因之一。
+/// 裁到选区 + JPEG 后单帧通常只有几十 KB，链路成本从数百 ms 降到几十 ms。
+fn encode_region_jpeg(raw: &[u8], frame_w: u32, frame_h: u32) -> Result<(Vec<u8>, u32, u32), String> {
     use image::ImageEncoder;
 
-    let mut out: Vec<u8> = Vec::with_capacity((width * height * 4) as usize);
-    {
-        let encoder = image::codecs::png::PngEncoder::new(&mut out);
-        encoder
-            .write_image(raw, width, height, image::ExtendedColorType::Rgba8)
-            .map_err(|e| format!("PNG 编码失败: {}", e))?;
+    let expected = (frame_w as usize) * (frame_h as usize) * 4;
+    if raw.len() < expected {
+        return Err(format!("帧数据长度不足: {} < {}", raw.len(), expected));
     }
-    Ok(out)
+
+    // 读取选区并夹到帧边界内（无选区时退化为整帧）
+    let (x, y, w, h) = match record_region().lock().ok().and_then(|g| *g) {
+        Some(r) => {
+            let x = r.x.min(frame_w.saturating_sub(1));
+            let y = r.y.min(frame_h.saturating_sub(1));
+            let w = r.w.min(frame_w - x).max(1);
+            let h = r.h.min(frame_h - y).max(1);
+            (x, y, w, h)
+        }
+        None => (0, 0, frame_w, frame_h),
+    };
+
+    let mut out: Vec<u8> = Vec::with_capacity((w * h / 2) as usize + 1024);
+    {
+        let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, 80);
+        if x == 0 && y == 0 && w == frame_w && h == frame_h {
+            // 整帧直通，避免无谓拷贝
+            encoder
+                .write_image(raw, frame_w, frame_h, image::ExtendedColorType::Rgba8)
+                .map_err(|e| format!("JPEG 编码失败: {}", e))?;
+        } else {
+            // 逐行拷贝选区（避免整帧 clone 带来的 14MB+ 内存搬运）
+            let row_bytes = (w * 4) as usize;
+            let mut cropped: Vec<u8> = Vec::with_capacity((w * h * 4) as usize);
+            for row in 0..h {
+                let start = (((y + row) as usize) * frame_w as usize + x as usize) * 4;
+                cropped.extend_from_slice(&raw[start..start + row_bytes]);
+            }
+            encoder
+                .write_image(&cropped, w, h, image::ExtendedColorType::Rgba8)
+                .map_err(|e| format!("JPEG 编码失败: {}", e))?;
+        }
+    }
+    Ok((out, w, h))
 }
 
 fn base64_encode(bytes: &[u8]) -> String {

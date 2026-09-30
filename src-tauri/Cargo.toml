@@ -90,7 +90,7 @@ tauri-plugin-single-instance = "2"
 xcap = "0.9.8"
 
 # PNG 编码（屏幕截图输出）— 关 default-features 只开 png，省体积
-image = { version = "0.25", default-features = false, features = ["png"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

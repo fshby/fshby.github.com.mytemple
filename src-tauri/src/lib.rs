@@ -1847,8 +1847,30 @@ pub async fn api_license_deactivate(s: Srv<'_>) -> Result<serde_json::Value, Str
 
 // ── 原生录屏（xcap DXGI Desktop Duplication，零弹窗） ──
 #[tauri::command]
-pub async fn api_start_native_record(app_handle: tauri::AppHandle) -> Result<(), String> {
+pub async fn api_start_native_record(
+    app_handle: tauri::AppHandle,
+    region: Option<RecordRegionArg>,
+) -> Result<(), String> {
+    // 选区（CSS 像素 + dpr）→ 后端换算成物理像素，只编码这一块发给前端
+    if let Some(r) = region {
+        crate::global_capture::set_record_region(r.x, r.y, r.w, r.h, r.dpr);
+    }
     crate::global_capture::start_native_record(app_handle)
+}
+
+/// 录屏选区参数（前端 recorder.html 在开始录制时下发）
+#[derive(serde::Deserialize)]
+pub struct RecordRegionArg {
+    pub x: f64,
+    pub y: f64,
+    pub w: f64,
+    pub h: f64,
+    #[serde(default = "default_dpr")]
+    pub dpr: f64,
+}
+
+fn default_dpr() -> f64 {
+    1.0
 }
 #[tauri::command]
 pub async fn api_stop_native_record() -> Result<(), String> {

@@ -249,6 +249,11 @@ function _startNativeRecord(region, dpr) {
   const canvas = document.createElement("canvas");
   canvas.width = Math.min(3840, sw);
   canvas.height = Math.min(2160, sh);
+  // captureStream 需要 canvas 处于「视口内 + 可见」才会持续产帧：
+  // 未入 DOM / 完全离屏（left:-99999px）/ opacity:0 都会被判定为不可见而停帧 → 录像静止。
+  // 因此入 DOM、留在视口内，用 1px + opacity:0.01（非 0）保证参与合成，肉眼不可见。
+  canvas.style.cssText = "position:fixed;left:0;top:0;width:1px;height:1px;opacity:0.01;pointer-events:none;z-index:-1;";
+  document.body.appendChild(canvas);
   const ctx = canvas.getContext("2d");
   const img = new Image();
   img.crossOrigin = "anonymous";
@@ -12337,9 +12342,12 @@ async function startRegionRecording(useNative) {
       const region = await captureRegion();
       if (!region) { showToast("已取消"); state.captureActive = false; return; }
 
-      // 通知 Rust 开始原生录屏（DXGI Desktop Duplication）
+      // 通知 Rust 开始原生录屏（DXGI Desktop Duplication），并下发选区：
+      // 后端只编码选区（物理像素），避免全屏帧每次数 MB 的 IPC 开销导致帧率崩溃
       try {
-        await window.__TAURI__.core.invoke("api_start_native_record");
+        await window.__TAURI__.core.invoke("api_start_native_record", {
+          region: { x: region.x, y: region.y, w: region.w, h: region.h, dpr },
+        });
       } catch (e) {
         showToast("原生录屏启动失败，降级弹窗模式：" + (e?.message || String(e)));
         state.captureActive = false;
@@ -12692,10 +12700,17 @@ if (window.__TAURI__?.event) {
       rec.img.onload = () => {
         if (!_nativeRec?.active) return;
         const r = _nativeRec;
-        r.ctx.drawImage(r.img,
-          r.srcX, r.srcY, r.srcW, r.srcH, // 物理像素裁剪
-          0, 0, r.canvas.width, r.canvas.height
-        );
+        const fw = r.img.naturalWidth, fh = r.img.naturalHeight;
+        if (fw <= r.canvas.width + 2 && fh <= r.canvas.height + 2) {
+          // 后端已按选区裁剪（jpeg）：帧本身就是输出画面，直接铺满
+          r.ctx.drawImage(r.img, 0, 0, r.canvas.width, r.canvas.height);
+        } else {
+          // 兜底：后端未收到选区（退化整帧）时按物理像素裁剪
+          r.ctx.drawImage(r.img,
+            r.srcX, r.srcY, r.srcW, r.srcH,
+            0, 0, r.canvas.width, r.canvas.height
+          );
+        }
       };
       rec.img.src = dataUrl;
     });
