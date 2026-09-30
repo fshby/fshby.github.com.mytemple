@@ -244,11 +244,19 @@ async fn health() -> impl IntoResponse {
     crate::ipc::ok_response(crate::ipc::health().await)
 }
 
-/// GET /api/knowledge/health
+#[derive(Deserialize)]
+struct KnowledgeHealthQuery {
+    days: Option<u32>,
+}
+
+/// GET /api/knowledge/health?days=N
+/// days = 温习周期（天），缺省 30；后端会夹到 1..365
 async fn knowledge_health(
     State(state): State<Arc<ServerState>>,
+    Query(params): Query<KnowledgeHealthQuery>,
 ) -> impl IntoResponse {
-    crate::ipc::ok_response(crate::ipc::knowledge_health(&state).await)
+    let days = params.days.unwrap_or(30);
+    crate::ipc::ok_response(crate::ipc::knowledge_health(&state, days).await)
 }
 
 /// GET /api/version

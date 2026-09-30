@@ -276,6 +276,9 @@ pub struct AppState {
 
     pub token_dict: Arc<TokenDictionary>,
 
+    /// 文档浏览记录（温习提醒 / 知识脉络「待温习」维度的数据源）
+    pub doc_views: Arc<crate::doc_views::DocViewStore>,
+
 }
 
 
@@ -492,6 +495,10 @@ impl AppState {
 
     pub fn new(data_root: PathBuf) -> Self {
 
+        // 浏览记录存储在 data_root 下（doc-views.json）。必须在此处先构造，
+        // 因为 data_root 随后会被 move 进 Self。与 RagService::new(&data_root) 同一约定。
+        let doc_views = Arc::new(crate::doc_views::DocViewStore::new(&data_root));
+
         Self {
 
             data_root,
@@ -507,6 +514,8 @@ impl AppState {
             search_index: Arc::new(RwLock::new(SearchIndex::default())),
 
             token_dict: Arc::new(TokenDictionary::new()),
+
+            doc_views,
 
         }
 

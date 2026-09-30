@@ -718,7 +718,9 @@ const IPC_ROUTE_MAP = (() => {
   const M = { GET: Object.create(null), POST: Object.create(null) };
   function add(method, p, cmd, argF) { M[method][p] = { cmd, argF }; }
   add("GET",  "/api/health",                "api_health",               () => ({}));
-  add("GET",  "/api/knowledge/health",      "api_knowledge_health",     () => ({}));
+  // days 在 query 里是字符串；Tauri IPC 按 JSON 反序列化 Option<u32>，字符串会报类型错误，
+  // 故此处显式转数字（NaN 会被 JSON.stringify 写成 null → 后端取 None → 默认 30）。
+  add("GET",  "/api/knowledge/health",      "api_knowledge_health",     q => ({ days: q.days ? Number(q.days) : undefined }));
   add("GET",  "/api/version",               "api_get_version",          q => ({ refresh: q.refresh }));
   add("GET",  "/api/system-paths",          "api_get_system_paths",     () => ({}));
   add("GET",  "/api/workspaces",            "api_get_workspaces",       () => ({}));

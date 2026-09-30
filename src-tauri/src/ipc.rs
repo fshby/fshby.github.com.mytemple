@@ -20,7 +20,147 @@ fn bool_flag(s: &str) -> bool { s == "1" || s.eq_ignore_ascii_case("true") }
 
 // 1. Health / meta
 pub async fn health() -> serde_json::Value { serde_json::json!({ "status": "ok" }) }
-pub async fn knowledge_health(s: &ServerState) -> serde_json::Value { s.app.health_check().await }
+
+/// 知识脉络健康度分析（GET /api/knowledge/health?days=N）
+///
+/// 语义对齐旧 Node 实现（server.js:2332-2410，2026-09-28 大清理时随 Node 后端一并删除）：
+///   - missingTags  文档没有标签，或仅有占位标签「待分类」
+///   - missingLinks 文档没有任何真实链接（`link` 边，即 [[wiki]] / 相对路径 .md）的出链或入链
+///   - staleDocs    超过 `days` 天未浏览；没有任何浏览记录视为“从未浏览”
+///   - 概念关联     文档未与任何语义关键词（`keyword` 边）相连
+/// 评分满分 100：链接 40 / 标签 30 / 活跃 20 / 概念 10，各维度比率 = (总数 - 命中数) / 总数。
+///
+/// 注意：`tag` / `missing` / `keyword` 边都参与节点度计算，所以不能用图谱的 `orphan`
+/// 字段代替“缺链接”——必须单独统计 `link` 边度数（与旧实现 outgoingLinks/backlinks 一致）。
+pub async fn knowledge_health(s: &ServerState, days: u32) -> serde_json::Value {
+    let days = days.clamp(1, 365);
+    let now = chrono::Utc::now().timestamp_millis() as u64;
+    let cutoff = now.saturating_sub(days as u64 * 86_400_000);
+
+    let files = s.app.get_files().await;
+    let gf = to_graph_files(s, &files).await;
+    let graph = crate::utils::build_graph(&gf);
+
+    let mut link_degree: std::collections::HashMap<&str, u32> = std::collections::HashMap::new();
+    let mut concept_degree: std::collections::HashMap<&str, u32> = std::collections::HashMap::new();
+    for e in &graph.edges {
+        let bucket = match e.edge_type.as_str() {
+            "link" => &mut link_degree,
+            "keyword" => &mut concept_degree,
+            _ => continue,
+        };
+        *bucket.entry(e.source.as_str()).or_insert(0) += 1;
+        *bucket.entry(e.target.as_str()).or_insert(0) += 1;
+    }
+
+    s.app.doc_views.ensure_loaded().await.ok();
+    let views = s.app.doc_views.snapshot();
+
+    let mut missing_tags: Vec<serde_json::Value> = Vec::new();
+    let mut missing_links: Vec<serde_json::Value> = Vec::new();
+    let mut stale_docs: Vec<serde_json::Value> = Vec::new();
+    let mut docs_no_concepts: usize = 0;
+
+    for f in &files {
+        let tags = s.app.token_dict.lookup_many(&f.tags);
+        let only_pending = tags.len() == 1 && tags[0] == "待分类";
+        if tags.is_empty() || only_pending {
+            missing_tags.push(doc_ref(f));
+        }
+        if link_degree.get(f.path.as_str()).copied().unwrap_or(0) == 0 {
+            missing_links.push(doc_ref(f));
+        }
+        if concept_degree.get(f.path.as_str()).copied().unwrap_or(0) == 0 {
+            docs_no_concepts += 1;
+        }
+        let viewed_at = views.get(&f.path).map(|v| v.viewed_at).unwrap_or(0);
+        if viewed_at == 0 || viewed_at < cutoff {
+            let mut item = doc_ref(f);
+            item["viewedAt"] = serde_json::json!(viewed_at);
+            item["daysSince"] = serde_json::json!(if viewed_at == 0 {
+                -1i64
+            } else {
+                ((now.saturating_sub(viewed_at)) / 86_400_000) as i64
+            });
+            stale_docs.push(item);
+        }
+    }
+    // 最久未浏览的排最前（与旧实现一致：从未浏览 viewedAt=0 会排最前）
+    stale_docs.sort_by_key(|d| d.get("viewedAt").and_then(|v| v.as_u64()).unwrap_or(0));
+
+    let total = files.len();
+    let ratio = |count: usize| -> f64 {
+        if total == 0 { 0.0 } else { ((total as f64 - count as f64) / total as f64).clamp(0.0, 1.0) }
+    };
+    let link_score = (ratio(missing_links.len()) * 40.0).round() as i64;
+    let tag_score = (ratio(missing_tags.len()) * 30.0).round() as i64;
+    let fresh_score = (ratio(stale_docs.len()) * 20.0).round() as i64;
+    let concept_score = (ratio(docs_no_concepts) * 10.0).round() as i64;
+    let health_score = (link_score + tag_score + fresh_score + concept_score).clamp(0, 100);
+
+    serde_json::json!({
+        "days": days,
+        "generatedAt": chrono::Utc::now().to_rfc3339(),
+        "stats": {
+            "documents": total,
+            "missingTags": missing_tags.len(),
+            "missingLinks": missing_links.len(),
+            "staleDocs": stale_docs.len(),
+            "healthScore": health_score,
+            "scoreBreakdown": {
+                "link": { "score": link_score, "max": 40, "label": "链接密度" },
+                "tag": { "score": tag_score, "max": 30, "label": "标签覆盖" },
+                "fresh": { "score": fresh_score, "max": 20, "label": "知识活跃" },
+                "concept": { "score": concept_score, "max": 10, "label": "概念关联" },
+            },
+        },
+        "missingTags": missing_tags.into_iter().take(200).collect::<Vec<_>>(),
+        "missingLinks": missing_links.into_iter().take(200).collect::<Vec<_>>(),
+        "staleDocs": stale_docs.into_iter().take(200).collect::<Vec<_>>(),
+    })
+}
+
+/// 文档条目（知识脉络列表项）
+fn doc_ref(f: &crate::app::FileEntry) -> serde_json::Value {
+    serde_json::json!({
+        "path": f.path,
+        "title": f.title,
+        "workspace": f.workspace_name,
+    })
+}
+
+/// FileEntry → GraphFile（图谱与知识脉络共用的输入转换）
+///
+/// `FileEntry.content` 是懒加载的（scan_workspace 时为 None），而解析 `[[wikilink]]`
+/// 必须要有真实正文，否则所有文档都会因为没有边而被算成“缺链接”。因此对 content 为
+/// None 的文件触发 `read_file_force` 磁盘读取（成功会回填缓存，后续调用即命中内存），
+/// 失败则用空字符串兜底，不影响其他文档。
+async fn to_graph_files(s: &ServerState, files: &[crate::app::FileEntry]) -> Vec<crate::utils::GraphFile> {
+    let mut out: Vec<crate::utils::GraphFile> = Vec::with_capacity(files.len());
+    for x in files.iter() {
+        let content = match x.content.as_deref() {
+            Some(c) => c.to_string(),
+            None => match s.app.read_file_force(&x.path).await {
+                Ok(e) => e.content.clone().unwrap_or_default(),
+                Err(_) => String::new(),
+            },
+        };
+        let terms = s.app.token_dict.lookup_many(&x.terms)
+            .into_iter().map(|t| crate::utils::TermCount { term: t, count: 1 }).collect();
+        out.push(crate::utils::GraphFile {
+            path: x.path.clone(),
+            relative: x.path.clone(),
+            title: x.title.clone(),
+            content,
+            tags: s.app.token_dict.lookup_many(&x.tags),
+            terms,
+            workspace_id: x.workspace_id.clone(),
+            workspace_name: Some(x.workspace_name.clone()),
+            modified: x.modified,
+        });
+    }
+    out
+}
 pub async fn get_version(refresh: &str) -> serde_json::Value {
     use super::handlers::fetch_remote_version_pub;
     if bool_flag(refresh) { if let Ok(r) = fetch_remote_version_pub().await { return r; } }
@@ -131,6 +271,9 @@ pub async fn delete_file(s: &ServerState, path: String) -> Result<serde_json::Va
 pub async fn get_doc(s: &ServerState, path: String, force: Option<String>) -> Result<serde_json::Value, String> {
     let fr = force.as_deref().map(|x| bool_flag(x)).unwrap_or(false);
     let e = (if fr { s.app.read_file_force(&path).await } else { s.app.read_file(&path).await }).map_err(|e| err(e.to_string()))?;
+    // 记录浏览时间：知识脉络「待温习」维度的唯一数据源（沿用旧 server.js 在 /api/doc 里
+    // docViews.record() 的时机）。持久化失败不影响阅读主流程，故忽略错误。
+    s.app.doc_views.record(&e.path).await.ok();
     Ok(serde_json::json!({"path":e.path,"title":e.title,"content":e.content.unwrap_or_default(),"tags":s.app.token_dict.lookup_many(&e.tags),"terms":s.app.token_dict.lookup_many(&e.terms),"encoding":e.encoding,"contentSha256":e.content_sha256,"created":e.created,"modified":e.modified}))
 }
 pub async fn check_doc(s: &ServerState, path: String) -> Result<serde_json::Value, String> {
@@ -182,32 +325,8 @@ pub async fn search(s: &ServerState, q: String, offset: usize, limit: usize) -> 
 }
 pub async fn get_graph(s: &ServerState) -> serde_json::Value {
     let f = s.app.get_files().await;
-    // FileEntry.content 采用懒加载（scan_workspace 时为 None），图谱构建需要真实正文
-    // 解析 [[wikilink]] 产生 link 边；否则所有 doc 节点都会因为无边且默认
-    // showOrphans=false 被前端过滤，导致图谱界面没有任何文档节点显示。
-    // 对 content 为 None 的文件触发 read_file_force 磁盘读取并回填缓存，
-    // 失败则用空字符串兜底（不影响其他文件的图谱构建）。
-    let gf: Vec<crate::utils::GraphFile> = {
-        let mut out: Vec<crate::utils::GraphFile> = Vec::with_capacity(f.len());
-        for x in f.iter() {
-            let content = match x.content.as_deref() {
-                Some(c) => c.to_string(),
-                None => match s.app.read_file_force(&x.path).await {
-                    Ok(e) => e.content.clone().unwrap_or_default(),
-                    Err(_) => String::new(),
-                },
-            };
-            let terms = s.app.token_dict.lookup_many(&x.terms)
-                .into_iter().map(|t| crate::utils::TermCount { term: t, count: 1 }).collect();
-            out.push(crate::utils::GraphFile {
-                path: x.path.clone(), relative: x.path.clone(), title: x.title.clone(),
-                content, tags: s.app.token_dict.lookup_many(&x.tags),
-                terms,
-                workspace_id: x.workspace_id.clone(), workspace_name: Some(x.workspace_name.clone()), modified: x.modified,
-            });
-        }
-        out
-    };
+    // 图谱构建需要真实正文（解析 [[wikilink]] 产生 link 边），转换逻辑见 to_graph_files
+    let gf = to_graph_files(s, &f).await;
     serde_json::to_value(crate::utils::build_graph(&gf)).unwrap_or(serde_json::json!({"nodes":[],"edges":[]}))
 }
 

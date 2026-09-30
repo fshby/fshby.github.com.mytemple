@@ -1670,8 +1670,8 @@ pub async fn api_health() -> Result<serde_json::Value, String> {
     Ok(crate::ipc::health().await)
 }
 #[tauri::command]
-pub async fn api_knowledge_health(s: Srv<'_>) -> Result<serde_json::Value, String> {
-    Ok(crate::ipc::knowledge_health(&s).await)
+pub async fn api_knowledge_health(s: Srv<'_>, days: Option<u32>) -> Result<serde_json::Value, String> {
+    Ok(crate::ipc::knowledge_health(&s, days.unwrap_or(30)).await)
 }
 #[tauri::command]
 pub async fn api_get_version(refresh: Option<String>) -> Result<serde_json::Value, String> {
