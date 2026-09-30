@@ -29,7 +29,10 @@ pub fn default_policy() -> AgentPolicy {
 }
 
 /// AI 代理策略
+/// 序列化为 camelCase —— 前端 loadAgentPolicyStatus 读 writeMode / maxFilesPerAction / exists，
+/// 与旧 server/agent-policy.js 的返回结构保持一致。
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AgentPolicy {
     pub schema: String,
     pub write_mode: String, // readonly | confirm | trusted
@@ -189,54 +192,22 @@ pub fn agent_policy_path(workspace_root: &Path) -> PathBuf {
     workspace_root.join(".mytemple").join("AGENTS.md")
 }
 
-/// 加载工作区的代理策略（同步版本，返回 JSON 便于在 API 层直接返回）
-pub fn load_policy(workspace_root: &str) -> serde_json::Value {
-    let policy_path = agent_policy_path_string(workspace_root);
-    if let Ok(content) = std::fs::read_to_string(&policy_path) {
-        if let Ok(mut policy) = serde_json::from_str::<serde_json::Value>(&content) {
-            // 标记来源：文件已存在，前端据此显示「规则已启用」
-            if let Some(obj) = policy.as_object_mut() {
-                obj.insert("exists".to_string(), serde_json::Value::Bool(true));
-            }
-            return policy;
-        }
+/// 在工作区创建默认 AGENTS.md 规则文件（.mytemple/AGENTS.md，YAML frontmatter 格式）。
+/// 与旧 server/agent-policy.js 的 create 行为一致：文件已存在则报错，绝不覆盖用户规则。
+pub async fn create_agent_policy_file(workspace_root: &Path) -> Result<AgentPolicy, String> {
+    let policy_path = agent_policy_path(workspace_root);
+    if policy_path.exists() {
+        return Err("规则文件已经存在".to_string());
     }
-    // 返回默认策略
-    default_policy_json()
-}
-
-/// 创建默认代理策略文件（同步版本）
-pub fn create_policy(workspace_root: &str) -> Result<serde_json::Value, String> {
-    let policy_path = agent_policy_path_string(workspace_root);
-    if std::path::Path::new(&policy_path).exists() {
-        return Err("Policy file already exists".to_string());
+    if let Some(parent) = policy_path.parent() {
+        tokio::fs::create_dir_all(parent)
+            .await
+            .map_err(|e| format!("创建 .mytemple 目录失败: {}", e))?;
     }
-    if let Some(parent) = std::path::Path::new(&policy_path).parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    let policy = default_policy_json();
-    let policy_json = serde_json::to_string_pretty(&policy).map_err(|e| e.to_string())?;
-    std::fs::write(&policy_path, policy_json).map_err(|e| e.to_string())?;
-    Ok(policy)
-}
-
-fn agent_policy_path_string(workspace_root: &str) -> String {
-    std::path::Path::new(workspace_root)
-        .join(".mytemple")
-        .join("agent-policy.json")
-        .to_string_lossy()
-        .to_string()
-}
-
-fn default_policy_json() -> serde_json::Value {
-    serde_json::json!({
-        "exists": false,
-        "writeMode": "safe",
-        "maxFilesPerAction": 5,
-        "allowedPaths": ["**/*.md"],
-        "blockedPaths": ["**/node_modules/**", "**/.git/**"],
-        "rules": [],
-    })
+    tokio::fs::write(&policy_path, default_agent_rules())
+        .await
+        .map_err(|e| format!("写入规则文件失败: {}", e))?;
+    Ok(load_agent_policy(workspace_root).await)
 }
 
 /// 默认 AGENTS.md 模板

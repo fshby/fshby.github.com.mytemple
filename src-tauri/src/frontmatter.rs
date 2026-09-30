@@ -224,6 +224,18 @@ pub fn split_frontmatter(markdown: &str) -> FrontmatterParse {
     }
 }
 
+/// 提取 frontmatter 块原文（含首尾 `---`，不含块后的换行）；无 frontmatter 返回 None。
+/// 供「标准化预览」展示「修改前 / 修改后」用，语义对齐旧 server/frontmatter.js 的块匹配。
+pub fn frontmatter_block(markdown: &str) -> Option<String> {
+    FRONTMATTER_RE.captures(markdown).map(|caps| {
+        caps.get(0)
+            .unwrap()
+            .as_str()
+            .trim_end_matches(|c| c == '\n' || c == '\r')
+            .to_string()
+    })
+}
+
 /// 保留非 OWNED_FIELDS 的未知字段行
 fn preserve_unknown_blocks(raw: &str) -> Vec<String> {
     let lines: Vec<&str> = raw.lines().collect();
@@ -499,6 +511,17 @@ mod tests {
         let parsed = split_frontmatter(md);
         assert!(!parsed.exists);
         assert_eq!(parsed.body, md);
+    }
+
+    #[test]
+    fn test_frontmatter_block() {
+        let md = "---\ntitle: Hello\n---\n\n# Hello";
+        assert_eq!(
+            frontmatter_block(md).unwrap(),
+            "---\ntitle: Hello\n---",
+            "块文本应含首尾 --- 且不带块后换行"
+        );
+        assert!(frontmatter_block("# 无元数据\n正文").is_none());
     }
 
     #[test]

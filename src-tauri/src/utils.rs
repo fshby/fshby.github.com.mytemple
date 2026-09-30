@@ -716,9 +716,314 @@ pub fn extract_semantic_tags(text: &str) -> Vec<String> {
     tags
 }
 
+// ── 全库语义标签建议（对应旧 server.js::suggestSemanticTags）─────
+
+static FM_TAG_BLOCK_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?s)^---\s*\r?\n(.*?)\r?\n---\s*").unwrap());
+
+static FM_TAG_LIST_ITEM_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^\s+-\s+").unwrap());
+
+/// 参与语义标签分析的文档
+#[derive(Debug, Clone)]
+pub struct SemanticTagFile {
+    pub path: String,
+    pub title: String,
+    pub plain: String,
+    pub tags: Vec<String>,
+    pub content: String,
+}
+
+/// 单篇文档的标签适配建议
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SemanticTagChange {
+    pub path: String,
+    pub title: String,
+    pub before: Vec<String>,
+    pub after: Vec<String>,
+    pub content: String,
+}
+
+/// 判断字符是否属于汉字区（对应 JS 的 /\p{Script=Han}/u）
+fn is_han_char(ch: char) -> bool {
+    matches!(ch as u32,
+        0x3400..=0x4DBF | 0x4E00..=0x9FFF | 0xF900..=0xFAFF | 0x20000..=0x2FA1F)
+}
+
+/// 规范化建议标签（对齐旧 server.js 的 cleanSuggestedTag）
+pub fn clean_suggested_tag(value: &str) -> String {
+    let without_hash = value.trim().trim_start_matches('#');
+    let mut replaced = String::with_capacity(without_hash.len());
+    let mut last_sep = false;
+    for ch in without_hash.chars() {
+        let is_sep = ch.is_whitespace() || matches!(ch, '#' | ',' | ':' | ';' | '，' | '；' | '：');
+        if is_sep {
+            if !last_sep {
+                replaced.push('-');
+                last_sep = true;
+            }
+        } else {
+            replaced.push(ch);
+            last_sep = false;
+        }
+    }
+    replaced
+        .trim_matches('-')
+        .chars()
+        .take(32)
+        .collect::<String>()
+        .to_lowercase()
+}
+
+/// 只替换 frontmatter 里的 tags，保留其它字段与正文（对齐旧 server.js 的 replaceFrontmatterTags）
+pub fn replace_frontmatter_tags(content: &str, tags: &[String]) -> String {
+    let mut normalized: Vec<String> = Vec::new();
+    for tag in tags {
+        let cleaned = clean_suggested_tag(tag);
+        if cleaned.is_empty() || cleaned == "待分类" {
+            continue;
+        }
+        if !normalized.contains(&cleaned) {
+            normalized.push(cleaned);
+        }
+        if normalized.len() >= 5 {
+            break;
+        }
+    }
+    let mut tag_lines: Vec<String> = Vec::new();
+    if normalized.is_empty() {
+        tag_lines.push("tags: []".to_string());
+    } else {
+        tag_lines.push("tags:".to_string());
+        for tag in &normalized {
+            tag_lines.push(format!("  - {}", tag));
+        }
+    }
+
+    let caps = match FM_TAG_BLOCK_RE.captures(content) {
+        Some(c) => c,
+        None => {
+            return format!(
+                "---\n{}\n---\n\n{}",
+                tag_lines.join("\n"),
+                content.trim_start()
+            )
+        }
+    };
+
+    let body = caps.get(1).unwrap().as_str();
+    let mut body_lines: Vec<String> = body
+        .split('\n')
+        .map(|line| line.trim_end_matches('\r').to_string())
+        .collect();
+
+    let tag_index = body_lines.iter().position(|line| {
+        let head = line.trim().to_lowercase();
+        head.starts_with("tags:") || head.starts_with("tag:")
+    });
+
+    match tag_index {
+        Some(index) => {
+            let mut end = index + 1;
+            while end < body_lines.len() && FM_TAG_LIST_ITEM_RE.is_match(&body_lines[end]) {
+                end += 1;
+            }
+            body_lines.splice(index..end, tag_lines);
+        }
+        None => body_lines.extend(tag_lines),
+    }
+
+    let suffix = &content[caps.get(0).unwrap().end()..];
+    format!(
+        "---\n{}\n---\n\n{}",
+        body_lines.join("\n"),
+        suffix.trim_start()
+    )
+}
+
+/// 全库语义标签建议（对齐旧 server.js::suggestSemanticTags）。
+/// 返回需要更新标签的文档列表，`content` 为替换 tags 之后的新正文。
+pub fn suggest_semantic_tags(files: &[SemanticTagFile], max_tags: usize) -> Vec<SemanticTagChange> {
+    const SEMANTIC_STOP: &[&str] = &[
+        "文件", "命令", "视频", "地址", "密码", "测试", "版本", "属性", "桌面", "网络", "设备",
+        "服务", "名称", "内容",
+    ];
+
+    // 1. 建立 term → (文档下标, 词频) 命中表；同时记录标题词集合用于加权
+    let mut term_docs: HashMap<String, Vec<(usize, u32)>> = HashMap::new();
+    let mut title_terms: Vec<HashSet<String>> = Vec::with_capacity(files.len());
+    for (idx, file) in files.iter().enumerate() {
+        title_terms.push(
+            crate::app::tokenize_cjk_terms(&file.title)
+                .into_iter()
+                .map(|t| clean_suggested_tag(&t))
+                .filter(|t| !t.is_empty())
+                .collect(),
+        );
+
+        let mut counts: HashMap<String, u32> = HashMap::new();
+        for token in crate::app::tokenize_cjk_terms(&file.plain) {
+            let term = clean_suggested_tag(&token);
+            if term.chars().count() < 2 || term.chars().all(|c| c.is_ascii_digit()) {
+                continue;
+            }
+            *counts.entry(term).or_insert(0) += 1;
+        }
+        for (term, count) in counts {
+            term_docs.entry(term).or_default().push((idx, count));
+        }
+    }
+
+    // 2. 候选词筛选：文档频率区间 + 必须含汉字 + 停用词 + 长度上限
+    let total = files.len().max(1);
+    let min_df = if total < 10 { 2 } else { 3 };
+    let max_df = ((total as f64) * 0.5).ceil().max(3.0) as usize;
+    let mut ranked: Vec<(String, f64, f64, Vec<(usize, u32)>)> = Vec::new();
+    for (term, hits) in term_docs.iter() {
+        if hits.len() < min_df || hits.len() > max_df {
+            continue;
+        }
+        if !term.chars().any(is_han_char) {
+            continue;
+        }
+        if SEMANTIC_STOP.contains(&term.as_str()) || term.chars().count() > 6 {
+            continue;
+        }
+        let idf = ((total as f64 + 1.0) / (hits.len() as f64 + 1.0)).ln() + 1.0;
+        let global_score = idf
+            * hits
+                .iter()
+                .map(|(_, count)| (1.0 + *count as f64).log2())
+                .sum::<f64>();
+        ranked.push((term.clone(), idf, global_score, hits.clone()));
+    }
+    ranked.sort_by(|a, b| {
+        b.2.partial_cmp(&a.2)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.0.cmp(&b.0))
+    });
+    let candidate_limit = ((total as f64).sqrt() * 2.2).ceil().clamp(10.0, 28.0) as usize;
+    ranked.truncate(candidate_limit);
+
+    // 3. 逐文档打分并生成标签变更
+    let max_additions = max_tags.clamp(1, 5);
+    let mut changes: Vec<SemanticTagChange> = Vec::new();
+    for (idx, file) in files.iter().enumerate() {
+        let mut existing: Vec<String> = Vec::new();
+        for tag in file.tags.iter() {
+            let cleaned = clean_suggested_tag(tag);
+            if !existing.contains(&cleaned) {
+                existing.push(cleaned);
+            }
+        }
+
+        let mut scored: Vec<(String, f64)> = Vec::new();
+        for (term, idf, _, hits) in ranked.iter() {
+            let count = match hits.iter().find(|(i, _)| *i == idx) {
+                Some((_, c)) => *c,
+                None => continue,
+            };
+            let title_boost = if title_terms[idx].contains(term) {
+                3.2
+            } else {
+                0.0
+            };
+            let score = (1.0 + count as f64).log2() * idf + title_boost;
+            if score >= 5.5 {
+                scored.push((term.clone(), score));
+            }
+        }
+        scored.sort_by(|a, b| {
+            b.1.partial_cmp(&a.1)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| a.0.cmp(&b.0))
+        });
+
+        let additions: Vec<String> = scored
+            .iter()
+            .map(|(term, _)| term.clone())
+            .filter(|term| !existing.contains(term))
+            .take(max_additions)
+            .collect();
+
+        let kept_existing: Vec<String> = existing
+            .iter()
+            .filter(|tag| tag.as_str() != "待分类")
+            .cloned()
+            .collect();
+        let mut next_tags = kept_existing.clone();
+        for addition in additions.iter() {
+            if !next_tags.contains(addition) {
+                next_tags.push(addition.clone());
+            }
+        }
+
+        if additions.is_empty() || next_tags.join("|") == kept_existing.join("|") {
+            continue;
+        }
+
+        changes.push(SemanticTagChange {
+            path: file.path.clone(),
+            title: file.title.clone(),
+            before: existing.into_iter().filter(|t| !t.is_empty()).collect(),
+            after: next_tags.clone(),
+            content: replace_frontmatter_tags(&file.content, &next_tags),
+        });
+    }
+
+    changes
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_clean_suggested_tag() {
+        assert_eq!(clean_suggested_tag("#知识 管理"), "知识-管理");
+        assert_eq!(clean_suggested_tag("  Rust "), "rust");
+        assert_eq!(clean_suggested_tag("a, b: c"), "a-b-c");
+        assert_eq!(clean_suggested_tag("---"), "");
+    }
+
+    #[test]
+    fn test_replace_frontmatter_tags_preserves_other_fields() {
+        let md = "---\ntitle: 测试\nstatus: active\ntags:\n  - 旧标签\n---\n\n正文内容";
+        let out = replace_frontmatter_tags(md, &["新标签".to_string(), "待分类".to_string()]);
+        assert!(out.contains("title: 测试"), "应保留其它 frontmatter 字段");
+        assert!(out.contains("status: active"), "应保留其它 frontmatter 字段");
+        assert!(out.contains("- 新标签"), "应写入新标签");
+        assert!(!out.contains("旧标签"), "应替换旧标签而不是追加");
+        assert!(!out.contains("待分类"), "应移除占位标签「待分类」");
+        assert!(out.contains("正文内容"), "应保留正文");
+    }
+
+    #[test]
+    fn test_replace_frontmatter_tags_without_frontmatter() {
+        let out = replace_frontmatter_tags("# 标题\n正文", &["标签A".to_string()]);
+        assert!(out.starts_with("---\n"), "无 frontmatter 时应新建");
+        assert!(out.contains("- 标签a"), "标签应规范化为小写");
+        assert!(out.contains("# 标题"), "应保留原正文");
+    }
+
+    #[test]
+    fn test_suggest_semantic_tags_empty_input() {
+        assert!(suggest_semantic_tags(&[], 3).is_empty());
+    }
+
+    #[test]
+    fn test_suggest_semantic_tags_respects_min_document_frequency() {
+        // 库里只有 1 篇文档时 min_df = 2，任何词都凑不满文档频率 → 不产出建议
+        let files = vec![SemanticTagFile {
+            path: "ws/a.md".to_string(),
+            title: "知识图谱".to_string(),
+            plain: "知识图谱 知识图谱 知识图谱".to_string(),
+            tags: vec![],
+            content: "# 知识图谱\n\n知识图谱".to_string(),
+        }];
+        assert!(suggest_semantic_tags(&files, 3).is_empty());
+    }
 
     #[test]
     fn test_format_file_size() {

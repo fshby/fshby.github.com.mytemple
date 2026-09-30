@@ -2283,17 +2283,98 @@ fn escape_html_attr(s: &str) -> String {
 
 #[derive(Deserialize)]
 struct SemanticTagsRequest {
-    text: String,
+    /// 单文档模式：直接对给定文本抽取标签（兼容旧契约）
+    text: Option<String>,
+    #[serde(rename = "maxTags")]
+    max_tags: Option<u32>,
+    #[serde(rename = "workspaceIds")]
+    workspace_ids: Option<Vec<String>>,
+    apply: Option<bool>,
 }
 
 async fn semantic_tags(
+    State(state): State<Arc<ServerState>>,
     Json(req): Json<SemanticTagsRequest>,
 ) -> impl IntoResponse {
-    // Extract tags from text using basic NLP heuristics
-    let tags = crate::utils::extract_semantic_tags(&req.text);
+    // 单文档模式：保持 {ok, tags} 契约不变
+    if let Some(text) = req.text.as_deref() {
+        if req.max_tags.is_none() && req.apply.is_none() {
+            let tags = crate::utils::extract_semantic_tags(text);
+            return raw_json(serde_json::json!({ "ok": true, "tags": tags }));
+        }
+    }
+
+    // 全库模式：按语义权重为旧文档补标签，保留已有标签并移除「待分类」
+    let max_tags = req.max_tags.unwrap_or(3).clamp(1, 5) as usize;
+    let files = state.app.get_files().await;
+    let selected: Vec<&crate::app::FileEntry> = match req.workspace_ids.as_ref() {
+        Some(ids) if !ids.is_empty() => files
+            .iter()
+            .filter(|file| ids.iter().any(|id| id == &file.workspace_id))
+            .collect(),
+        _ => files.iter().collect(),
+    };
+
+    let mut inputs: Vec<crate::utils::SemanticTagFile> = Vec::with_capacity(selected.len());
+    for entry in &selected {
+        // 正文懒加载：图谱/标签分析都需要真实正文，缺失时回填一次
+        let content = match entry.content.as_deref() {
+            Some(c) => c.to_string(),
+            None => match state.app.read_file_force(&entry.path).await {
+                Ok(loaded) => loaded.content.unwrap_or_default(),
+                Err(_) => String::new(),
+            },
+        };
+        inputs.push(crate::utils::SemanticTagFile {
+            path: entry.path.clone(),
+            title: entry.title.clone(),
+            plain: entry.plain.clone(),
+            tags: state.app.token_dict.lookup_many(&entry.tags),
+            content,
+        });
+    }
+
+    let changes = crate::utils::suggest_semantic_tags(&inputs, max_tags);
+
+    if req.apply == Some(true) {
+        let mut applied = 0usize;
+        for change in &changes {
+            if state
+                .app
+                .save_file(&change.path, &change.content, None)
+                .await
+                .is_ok()
+            {
+                applied += 1;
+            }
+        }
+        let _ = state.app.refresh_cache().await;
+        return raw_json(serde_json::json!({
+            "ok": true,
+            "applied": applied,
+            "changed": changes.len(),
+            "total": selected.len(),
+        }));
+    }
+
+    let preview: Vec<serde_json::Value> = changes
+        .iter()
+        .take(60)
+        .map(|change| {
+            serde_json::json!({
+                "path": change.path,
+                "title": change.title,
+                "before": change.before,
+                "after": change.after,
+            })
+        })
+        .collect();
+
     raw_json(serde_json::json!({
         "ok": true,
-        "tags": tags,
+        "total": selected.len(),
+        "changed": changes.len(),
+        "changes": preview,
     }))
 }
 
@@ -2334,7 +2415,9 @@ async fn get_agent_policy(
 
     match ws {
         Some(workspace) => {
-            let policy = crate::agent_policy::load_policy(&workspace.root);
+            // 规则文件是 <workspace>/.mytemple/AGENTS.md（YAML frontmatter），
+            // 由 agent_policy::load_agent_policy 解析；不存在时返回内置默认策略。
+            let policy = crate::agent_policy::load_agent_policy(std::path::Path::new(&workspace.root)).await;
             raw_json(serde_json::json!({
                 "ok": true,
                 "workspaceId": ws_id,
@@ -2365,7 +2448,7 @@ async fn create_agent_policy(
 
     match ws {
         Some(workspace) => {
-            match crate::agent_policy::create_policy(&workspace.root) {
+            match crate::agent_policy::create_agent_policy_file(std::path::Path::new(&workspace.root)).await {
                 Ok(policy) => raw_json(serde_json::json!({
                     "ok": true,
                     "workspaceId": req.workspace_id,
@@ -2847,9 +2930,17 @@ async fn agent_action_preview(
     let workspaces = state.app.get_workspaces().await;
     let ws = workspaces.iter().find(|w| w.id == req.workspace_id);
     
-    let _policy = match ws {
-        Some(workspace) => crate::agent_policy::load_policy(&workspace.root),
+    // 载入工作区规则（.mytemple/AGENTS.md）并真正用它判定目标路径是否允许 ——
+    // 此前只加载不使用（`_policy`），使「规则文件约束 AI 的读写范围」形同虚设。
+    let policy = match ws {
+        Some(workspace) => crate::agent_policy::load_agent_policy(std::path::Path::new(&workspace.root)).await,
         None => return json_err(StatusCode::NOT_FOUND, "Workspace not found"),
+    };
+    let target_path = req.target_path.clone().unwrap_or_default();
+    let path_allowed = if target_path.is_empty() {
+        None
+    } else {
+        Some(crate::agent_policy::policy_allows(&policy, &target_path))
     };
     
     // For now, return a generic preview based on the action
@@ -2858,7 +2949,7 @@ async fn agent_action_preview(
             "action": "create",
             "description": "Would create a new file or directory",
             "targetPath": req.target_path,
-            "safe": true,
+            "safe": path_allowed.unwrap_or(true),
         }),
         "delete" => serde_json::json!({
             "action": "delete",
@@ -2871,7 +2962,7 @@ async fn agent_action_preview(
             "action": "move",
             "description": "Would move a file or directory to a new location",
             "targetPath": req.target_path,
-            "safe": true,
+            "safe": path_allowed.unwrap_or(true),
         }),
         _ => serde_json::json!({
             "action": req.action,
@@ -2883,7 +2974,12 @@ async fn agent_action_preview(
     raw_json(serde_json::json!({
         "ok": true,
         "preview": preview,
-        "policy": "active",
+        "policy": {
+            "exists": policy.exists,
+            "writeMode": policy.write_mode,
+            "maxFilesPerAction": policy.max_files_per_action,
+            "pathAllowed": path_allowed,
+        },
     }))
 }
 

@@ -350,7 +350,8 @@ fn is_cjk_char(ch: char) -> bool {
 /// - ASCII 字母/数字按连续单词切分（仅字母+数字+下划线，- 和 . 作为分隔符）
 ///   "MR622-CK" → "mr622"、"ck"，搜索 "MR622" 可命中
 /// - 其他字符（空格、标点、符号）作为分隔符
-fn tokenize_cjk_terms(text: &str) -> Vec<String> {
+/// CJK 双字 + ASCII 词的分词器（搜索索引与语义标签建议共用）
+pub fn tokenize_cjk_terms(text: &str) -> Vec<String> {
     use std::collections::VecDeque;
     let normalized = text.to_lowercase();
     let mut tokens: Vec<String> = Vec::new();
@@ -2162,76 +2163,112 @@ impl AppState {
     }
 
 
-    /// Get frontmatter keys and values from a markdown file
+    /// 读取文档 frontmatter 的键值对（值可能是字符串、字符串列表或空）
     pub async fn get_frontmatter(&self, path: &str) -> anyhow::Result<serde_json::Value> {
         let doc = self.read_file(path).await?;
         let content = doc.content.as_deref().unwrap_or("");
-        let (_, after) = extract_frontmatter_block(content);
-        let map = normalize_frontmatter(after);
-        serde_json::to_value(map).map_err(|e| anyhow::anyhow!(e))
+        let parsed = crate::frontmatter::split_frontmatter(content);
+        let mut map = serde_json::Map::new();
+        for (key, value) in parsed.data.iter() {
+            let json_value = match value {
+                crate::frontmatter::YamlValue::Text(s) => serde_json::Value::String(s.clone()),
+                crate::frontmatter::YamlValue::List(list) => serde_json::json!(list),
+                crate::frontmatter::YamlValue::Null => serde_json::Value::Null,
+            };
+            map.insert(key.clone(), json_value);
+        }
+        Ok(serde_json::Value::Object(map))
     }
 
-    /// Get a preview of frontmatter with optional metadata applied
+    /// 预览 frontmatter 标准化结果。
+    /// 前端「文档标准」弹窗依赖 {path, baseHash, changed, before, after, summary} 六个字段
+    /// （before/after 为含 `---` 的 frontmatter 块文本），与旧 server.js 的响应结构一致。
     pub async fn preview_frontmatter(&self, path: &str, metadata: &serde_json::Value) -> anyhow::Result<serde_json::Value> {
         let doc = self.read_file(path).await?;
         let content = doc.content.as_deref().unwrap_or("");
-        let (fm, _) = extract_frontmatter_block(content);
-        let mut map = normalize_frontmatter(fm);
-
-        // Apply metadata overrides
-        if let Some(obj) = metadata.as_object() {
-            for (key, val) in obj {
-                match val {
-                    serde_json::Value::String(s) => { map.insert(key.clone(), s.clone()); }
-                    serde_json::Value::Number(n) => { map.insert(key.clone(), n.to_string()); }
-                    serde_json::Value::Bool(b) => { map.insert(key.clone(), b.to_string()); }
-                    serde_json::Value::Null => { map.remove(key); }
-                    _ => { map.insert(key.clone(), val.to_string()); }
-                }
-            }
-        }
-
-        serde_json::to_value(map).map_err(|e| anyhow::anyhow!(e))
+        let options = metadata_options_from_json(metadata);
+        let normalized = crate::frontmatter::normalize_frontmatter(content, &options);
+        let before = crate::frontmatter::frontmatter_block(content)
+            .unwrap_or_else(|| "（当前文档没有 Frontmatter）".to_string());
+        let after = crate::frontmatter::frontmatter_block(&normalized).unwrap_or_default();
+        let summary = crate::frontmatter::frontmatter_summary(&normalized);
+        Ok(serde_json::json!({
+            "path": doc.path,
+            "baseHash": doc.content_sha256,
+            "changed": normalized != content,
+            "before": before,
+            "after": after,
+            "summary": summary,
+        }))
     }
 
-    /// Replace frontmatter in a markdown file with new values
+    /// 应用 frontmatter 标准化：写盘前先把原文备份到 data_root/backups/YYYY-MM-DD/，
+    /// 完成后追加审计记录（与旧 server.js 的 frontmatter.normalize 行为一致）。
     pub async fn apply_frontmatter(&self, path: &str, metadata: &serde_json::Value, base_hash: &str) -> anyhow::Result<serde_json::Value> {
         let doc = self.read_file(path).await?;
 
-        // Verify base_hash matches
+        // 冲突保护：预览时的内容哈希与当前磁盘内容不一致 → 拒绝，提示重新预览
         if !base_hash.is_empty() && doc.content_sha256 != base_hash {
-            anyhow::bail!("Content hash mismatch, file may have been modified");
+            anyhow::bail!("文档已发生变化，请重新预览后再应用");
         }
 
         let content = doc.content.as_deref().unwrap_or("");
-        let (_, body) = extract_frontmatter_block(content);
-        let mut lines: Vec<String> = Vec::new();
-        lines.push("---".to_string());
-        if let Some(obj) = metadata.as_object() {
-            for (key, val) in obj {
-                let line = match val {
-                    serde_json::Value::String(s) => format!("{}: {}", key, s),
-                    serde_json::Value::Number(n) => format!("{}: {}", key, n),
-                    serde_json::Value::Bool(b) => format!("{}: {}", key, b),
-                    serde_json::Value::Array(arr) => {
-                        let items: Vec<String> = arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect();
-                        format!("{}: {}", key, items.join(", "))
-                    }
-                    _ => format!("{}: {}", key, val),
-                };
-                lines.push(line);
-            }
+        let options = metadata_options_from_json(metadata);
+        let normalized = crate::frontmatter::normalize_frontmatter(content, &options);
+
+        // 无变化则不写盘、不备份（保证幂等）
+        if normalized == content {
+            return Ok(serde_json::json!({"ok": true, "changed": false, "path": doc.path}));
         }
-        lines.push("---".to_string());
-        lines.push("".to_string());
-        let mut new_content = lines.join("\n");
-        new_content.push_str(body);
-        let hash = self.save_file(path, &new_content, None).await?;
+
+        let backup_path = self.backup_document(&doc.path, content);
+        let guard = if base_hash.is_empty() { None } else { Some(base_hash) };
+        let hash = self.save_file(path, &normalized, guard).await?;
+
+        let record = serde_json::json!({
+            "action": "frontmatter.normalize",
+            "path": doc.path,
+            "beforeHash": doc.content_sha256,
+            "afterHash": hash.clone(),
+            "backupPath": backup_path,
+        });
+        if let Err(e) = crate::agent_policy::append_audit_record(&self.data_root, &record).await {
+            log::warn!("[frontmatter] 审计记录写入失败: {}", e);
+        }
+
         Ok(serde_json::json!({
             "ok": true,
-            "path": path,
+            "changed": true,
+            "path": doc.path,
             "contentSha256": hash,
+            "backupPath": backup_path,
         }))
+    }
+
+    /// 把文档原文备份到 data_root/backups/YYYY-MM-DD/<毫秒时间戳>-<文件名>.bak，返回备份绝对路径
+    fn backup_document(&self, doc_ref: &str, content: &str) -> Option<String> {
+        let date = chrono::Utc::now().format("%Y-%m-%d").to_string();
+        let dir = self.data_root.join("backups").join(date);
+        if let Err(e) = std::fs::create_dir_all(&dir) {
+            log::warn!("[frontmatter] 备份目录创建失败: {}", e);
+            return None;
+        }
+        let file_name = Path::new(&doc_ref.replace('\\', "/"))
+            .file_name()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_else(|| "document.md".to_string());
+        let target = dir.join(format!(
+            "{}-{}.bak",
+            chrono::Utc::now().timestamp_millis(),
+            file_name
+        ));
+        match std::fs::write(&target, content) {
+            Ok(_) => Some(target.to_string_lossy().to_string()),
+            Err(e) => {
+                log::warn!("[frontmatter] 原文备份失败: {}", e);
+                None
+            }
+        }
     }
 
 
@@ -2298,61 +2335,30 @@ fn copy_dir_all(src: &str, dst: &str) -> anyhow::Result<()> {
 }
 
 
-/// Extract YAML frontmatter block from markdown content.
-/// Returns (frontmatter_body, remaining_content).
-fn extract_frontmatter_block(content: &str) -> (&str, &str) {
-    let bytes = content.as_bytes();
-    if bytes.len() < 8 {
-        return ("", content);
+/// 把前端传来的 metadata 覆盖对象转换为 frontmatter 规范化选项。
+/// 与旧 server.js 的 `normalizeFrontmatter(content, payload.metadata || {})` 语义一致：
+/// 只认识 title / tags / domain / created / updated / status / aliases / today，其余键忽略。
+fn metadata_options_from_json(value: &serde_json::Value) -> crate::frontmatter::MetadataOptions {
+    let as_text = |key: &str| -> Option<String> {
+        value.get(key).and_then(|v| v.as_str()).map(|s| s.to_string())
+    };
+    let as_list = |key: &str| -> Option<Vec<String>> {
+        value.get(key).and_then(|v| v.as_array()).map(|arr| {
+            arr.iter()
+                .filter_map(|item| item.as_str().map(|s| s.to_string()))
+                .collect::<Vec<String>>()
+        })
+    };
+    crate::frontmatter::MetadataOptions {
+        today: as_text("today"),
+        title: as_text("title"),
+        tags: as_list("tags"),
+        domain: as_text("domain"),
+        created: as_text("created"),
+        updated: as_text("updated"),
+        status: as_text("status"),
+        aliases: as_list("aliases"),
     }
-    // Check for opening ---
-    if !bytes.starts_with(b"---") {
-        return ("", content);
-    }
-    // Find closing ---
-    let after_open = &content[3..];
-    let close_idx = after_open.find("\n---").or_else(|| after_open.find("---"));
-    match close_idx {
-        Some(idx) => {
-            let fm = after_open[..idx].trim();
-            let rest_start = idx + 3;
-            let rest = after_open[rest_start..].trim_start_matches("\n").trim_start_matches("\r").trim_start_matches("\n");
-            (fm, rest)
-        }
-        None => ("", content)
-    }
-}
-
-/// Parse frontmatter body into a simple map of key -> string
-fn normalize_frontmatter(fm_body: &str) -> std::collections::BTreeMap<String, String> {
-    let mut map = std::collections::BTreeMap::new();
-    for line in fm_body.lines() {
-        let l = line.trim();
-        if l.is_empty() || l.starts_with("#") {
-            continue;
-        }
-        if let Some(colon) = l.find(":") {
-            let key = l[..colon].trim().trim_matches(|c| c == '\'' || c == '"');
-            let val = l[colon+1..].trim().trim_matches(|c| c == '\'' || c == '"');
-            if !key.is_empty() {
-                map.insert(key.to_string(), val.to_string());
-            }
-        }
-    }
-    map
-}
-
-/// Build a small summary (title, date, tags) from markdown content
-fn frontmatter_summary(content: &str) -> std::collections::BTreeMap<String, String> {
-    let (fm, _) = extract_frontmatter_block(content);
-    let map = normalize_frontmatter(fm);
-    let mut summary = std::collections::BTreeMap::new();
-    for key in ["title", "date", "tags"] {
-        if let Some(v) = map.get(key) {
-            summary.insert(key.to_string(), v.clone());
-        }
-    }
-    summary
 }
 
 
