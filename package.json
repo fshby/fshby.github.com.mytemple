@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test tests/p0.test.js tests/highlight-langs.test.js",
+    "test": "node --test tests/p0.test.js tests/highlight-langs.test.js tests/recorder-ready-guard.test.js",
     "check": "node --check public/app.js && node --check frontend/editor-core.js",
     "build:editor": "esbuild frontend/editor-core.js --bundle --format=esm --target=es2020 --minify --outfile=public/editor-core.js"
   },

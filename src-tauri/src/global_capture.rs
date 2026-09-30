@@ -701,6 +701,27 @@ pub fn get_pending_screenshot_bytes() -> Option<Vec<u8>> {
     }
 }
 
+/// HTTP GET /api/recorder/bg 调用：读取录屏背景帧临时文件返回 PNG 字节（只读，不消费）
+/// 前端 init 时 fetch 此端点区分两种情况：
+///   · 有数据（真实触发流程：trigger_record 已写入 pending_record_bg）→ 加载背景 + 发 ready
+///   · 404（预创建窗口的页面自检）→ 静默待命，不发 ready（否则后端守卫前的旧逻辑会误弹窗）
+pub fn get_pending_record_bg_bytes() -> Option<Vec<u8>> {
+    let path = {
+        match pending_record_bg().lock() {
+            Ok(guard) => guard.as_ref().map(|p| p.file_path.clone()),
+            Err(_) => None,
+        }
+    };
+    let path = path?;
+    match std::fs::read(&path) {
+        Ok(bytes) => Some(bytes),
+        Err(e) => {
+            log::warn!("[recorder] 读取背景帧临时文件失败: {} — {}", path, e);
+            None
+        }
+    }
+}
+
 /// HTTP 轮询降级：获取 pending_screenshot 数据（只读，不消费）
 pub fn try_get_pending_screenshot() -> Option<serde_json::Value> {
     if let Ok(guard) = pending_screenshot().lock() {
@@ -1054,38 +1075,19 @@ fn prepare_recorder_window(app: &AppHandle) {
 /// 录屏窗口已就绪，发送背景帧并显示窗口
 pub fn on_recorder_window_ready(app: &AppHandle) {
     use tauri::Manager as _;
+    // 安全检查：只有 trigger_record 流程已写入背景帧时才允许显示窗口。
+    // 预创建的 recorder 页面 init() 会自动请求背景帧并发 ready，若无 pending 数据说明
+    // 不是真实触发（冷启动自检），直接 return —— 否则启动时会误弹全屏录屏遮罩。
+    // 与 on_screenshot_window_ready 的守卫同构（v2.1.24 引入 ready 出口时此处漏抄守卫）。
+    let has_pending_bg = match pending_record_bg().lock() {
+        Ok(guard) => guard.is_some(),
+        Err(_) => false,
+    };
+    if !has_pending_bg {
+        log::info!("[recorder] ready 信号但无待处理背景帧（预创建页面自检），不显示窗口");
+        return;
+    }
     if let Some(win) = app.get_webview_window("recorder") {
-        let app_clone = app.clone();
-        std::thread::spawn(move || {
-            std::thread::sleep(std::time::Duration::from_millis(50));
-
-            let (file_path, width, height) = {
-                match pending_record_bg().lock() {
-                    Ok(guard) => {
-                        if let Some(bg) = guard.as_ref() {
-                            (bg.file_path.clone(), bg.width, bg.height)
-                        } else {
-                            log::warn!("[recorder] pending_record_bg 为空");
-                            return;
-                        }
-                    }
-                    Err(e) => {
-                        log::error!("[recorder] pending_record_bg 锁获取失败: {}", e);
-                        return;
-                    }
-                }
-            };
-
-            if let Some(w) = app_clone.get_webview_window("recorder") {
-                let _ = w.emit("record-bg-data", serde_json::json!({
-                    "filePath": file_path,
-                    "width": width,
-                    "height": height,
-                }));
-                log::info!("[recorder] 已发送轻量通知: filePath={}x{}", width, height);
-            }
-        });
-
         let _ = win.set_always_on_top(true);
         apply_window_geometry(&win, app, recorder_rect());
         let _ = win.unminimize();

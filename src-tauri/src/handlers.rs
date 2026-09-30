@@ -212,6 +212,8 @@ pub fn build_native_router(state: Arc<ServerState>) -> Router {
         .route("/api/screenshot/trigger", post(screenshot_trigger))
         // 截图背景图：GET 返回 PNG 二进制（最可靠方案，不依赖 IPC）
         .route("/api/screenshot/bg", get(screenshot_bg_http))
+        // 录屏背景帧（前端 init 时 fetch：404 = 预创建自检不发 ready；有数据 = 真实触发流程）
+        .route("/api/recorder/bg", get(recorder_bg_http))
         // 截图版本号：前端轮询检测是否有新截图
         .route("/api/screenshot/version", get(screenshot_version_http))
         // 截图心跳：前端每 2 秒发送，后端检测卡死
@@ -3322,6 +3324,24 @@ async fn screenshot_bg_http() -> impl IntoResponse {
             (axum::http::StatusCode::OK, headers, Body::from(bytes)).into_response()
         }
         None => json_err(StatusCode::NOT_FOUND, "截图数据不存在"),
+    }
+}
+
+/// GET /api/recorder/bg
+/// 直接返回录屏背景帧 PNG 二进制（Content-Type: image/png），只读不消费。
+/// 供 recorder.html init 时判断当前是否处于真实触发流程（trigger_record 已写入背景帧）：
+/// 预创建窗口的页面自检会拿到 404，此时前端必须静默待命、不得发送 ready。
+async fn recorder_bg_http() -> impl IntoResponse {
+    match crate::global_capture::get_pending_record_bg_bytes() {
+        Some(bytes) => {
+            use axum::body::Body;
+            use axum::http::header;
+            let mut headers = axum::http::HeaderMap::new();
+            headers.insert(header::CONTENT_TYPE, "image/png".parse().unwrap());
+            headers.insert(header::CACHE_CONTROL, "no-store".parse().unwrap());
+            (axum::http::StatusCode::OK, headers, Body::from(bytes)).into_response()
+        }
+        None => json_err(StatusCode::NOT_FOUND, "录屏背景帧不存在"),
     }
 }
 

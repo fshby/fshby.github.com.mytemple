@@ -249,8 +249,12 @@ function init() {
 }
 
 async function loadBackgroundFrame() {
+  // 背景帧来自真实触发流程：trigger_record 先抓屏写入 pending_record_bg，再 reload 本页面。
+  // fetch 404 = 预创建窗口的页面自检（冷启动时无 pending 数据）：
+  // 此时必须静默待命、不得发送 ready —— 否则后端会显示窗口，冷启动就误弹全屏录屏遮罩。
+  // （v2.1.24 引入 ready 出口时漏掉了该守卫，v2.1.27 修复；截图窗口靠 version 轮询规避了同类问题）
   try {
-    const res = await fetch('/api/screenshot/bg', { cache: 'no-store' });
+    const res = await fetch('/api/recorder/bg', { cache: 'no-store' });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
@@ -268,9 +272,9 @@ async function loadBackgroundFrame() {
     };
     bgImg.src = url;
   } catch (err) {
-    document.getElementById('loadingTip').style.display = 'none';
-    startRegionSelection();
-    httpPost('/api/recorder/ready').catch(() => {});
+    // 无待处理背景帧 = 预创建自检，静默待命。
+    // 真实触发（Alt+M / 托盘菜单）时后端会 reload 本页面并重新走 loadBackgroundFrame。
+    console.warn('[recorder] 无待处理背景帧（预创建自检），跳过 ready：', err);
   }
 }
 
