@@ -2042,6 +2042,7 @@ async function materializePrintArtifacts(container) {
               // 修复 SVG 缩放：移除固定 width/height，让 CSS 控制
               const svgEl = containerDiv.querySelector("svg");
               if (svgEl) {
+                fixMermaidViewBox(svgEl);
                 svgEl.removeAttribute("width");
                 svgEl.removeAttribute("height");
                 svgEl.style.width = "100%";
@@ -7931,7 +7932,9 @@ function loadMermaidAsync() {
   if (_mermaidLoadingPromise) return _mermaidLoadingPromise;
   _mermaidLoadingPromise = new Promise((resolve, reject) => {
     const script = document.createElement("script");
-    script.src = "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js";
+    // 锁定精确版本 + query 缓存破坏：@10 这类范围 URL 永不变，WebView2 磁盘缓存会
+    // 永远持有远古版本（早期 10.x 有 flowchart 底部裁切 bug），且 10.x 不支持 architecture-beta。
+    script.src = "https://cdn.jsdelivr.net/npm/mermaid@11.12.2/dist/mermaid.min.js?v=20261003";
     script.onload = () => resolve(window.mermaid);
     script.onerror = () => {
       _mermaidLoadingPromise = null;
@@ -7941,6 +7944,27 @@ function loadMermaidAsync() {
     document.head.appendChild(script);
   });
   return _mermaidLoadingPromise;
+}
+// 渲染后按内容真实边界外扩 viewBox：个别 mermaid 版本/字体环境下，计算的 viewBox 偏小
+// 会导致图表底部节点被裁切。只扩不缩；内容 bbox 异常巨大时跳过（gantt 的 getBBox 会含
+// 数万像素的隐藏内容，不能照单全收）。
+function fixMermaidViewBox(svgEl) {
+  try {
+    if (!svgEl) return;
+    const vb = (svgEl.getAttribute("viewBox") || "").split(/[\s,]+/).map(Number);
+    if (vb.length !== 4 || !(vb[2] > 0) || !(vb[3] > 0)) return;
+    const b = svgEl.getBBox();
+    if (!isFinite(b.x) || !(b.width > 0) || !(b.height > 0)) return;
+    if (b.width > vb[2] * 20 || b.height > vb[3] * 20) return; // 防呆：内容异常巨大
+    const pad = 8;
+    const x1 = Math.min(vb[0], b.x - pad);
+    const y1 = Math.min(vb[1], b.y - pad);
+    const x2 = Math.max(vb[0] + vb[2], b.x + b.width + pad);
+    const y2 = Math.max(vb[1] + vb[3], b.y + b.height + pad);
+    if (x2 - x1 > vb[2] + 0.5 || y2 - y1 > vb[3] + 0.5) {
+      svgEl.setAttribute("viewBox", `${x1} ${y1} ${x2 - x1} ${y2 - y1}`);
+    }
+  } catch (_) {}
 }
 async function renderChartsInPreview(container) {
   if (!container) return;
@@ -7973,6 +7997,8 @@ async function renderChartsInPreview(container) {
           const { svg } = await mermaid.render(id, rawDef);
           if (seq === _mermaidRenderSeq) {
             containerDiv.innerHTML = svg;
+            const _svgForFix = containerDiv.querySelector("svg");
+            if (_svgForFix) fixMermaidViewBox(_svgForFix);
             // 添加点击放大提示
             if (!block.querySelector(".chart-zoom-hint")) {
               const hint = document.createElement("div");
@@ -8031,6 +8057,13 @@ async function renderChartsInPreview(container) {
                   // 去掉页面内联样式（width:100%/height:auto/max-width 等），保证独立完整
                   clone.removeAttribute("style");
                   clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+                  // Mermaid SVG 背景透明：预览弹窗是黑色底，透明会透出黑色导致图表难以辨认，
+                  // 序列化时铺一层白色背景（图表本身是浅色主题）。
+                  const bgRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+                  bgRect.setAttribute("width", "100%");
+                  bgRect.setAttribute("height", "100%");
+                  bgRect.setAttribute("fill", "#ffffff");
+                  clone.insertBefore(bgRect, clone.firstChild);
                   const raw = new XMLSerializer().serializeToString(clone);
                   const dataUrl = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(raw);
                   openImagePreview(dataUrl, "Mermaid 图表");
@@ -11467,7 +11500,9 @@ function applyFormat(format) {
       journey: `journey\n    title 我的工作日\n    section 早晨\n      起床: 5: 用户\n      早餐: 4: 用户\n    section 工作\n      开会: 3: 用户\n      写代码: 5: 用户`,
       gitGraph: `gitGraph\n    commit id: "初始提交"\n    branch develop\n    checkout develop\n    commit id: "开发功能"\n    checkout main\n    merge develop\n    commit id: "合并发布"`,
       mindmap: `mindmap\n  root((思维导图))\n    核心功能\n      功能一\n      功能二\n    技术架构\n      前端\n      后端`,
-      "architecture-beta": `architecture-beta\n    root(应用)\n    group 前端\n      direction TB\n      A[UI组件] --> B[状态管理]\n    end\n    group 后端\n      direction TB\n      C[API服务] --> D[数据存储]\n    end\n    A --> C`,
+      // architecture-beta 的 lexer 不支持中文标签（[中文]/(中文) 都会 lexer error），
+      // 服务名只能用英文；%% 注释可用，圆柱形 [(DB)] 不支持。已用 mermaid@11.12.2 实测。
+      "architecture-beta": `architecture-beta\n    %% 架构图暂不支持中文标签，服务名请用英文\n    group front\n    service ui[UI]\n    service state[State]\n    ui:R --> L:state\n    group back\n    service api[API]\n    service db[DB]\n    api:R --> L:db\n    ui:T --> B:api`,
     };
     // Excalidraw：打开轻量绘图编辑器，用户画完后生成 JSON 代码块插入。
     // 不再只是插入空模板 —— 让用户真正能用鼠标拖拽画图。
@@ -16599,7 +16634,7 @@ function startPeriodicLicenseCheck() {
 }
 
 // —— 图片预览系统 ——
-const imagePreviewState = { scale: 1, rotation: 0, src: "", alt: "" };
+const imagePreviewState = { scale: 1, rotation: 0, src: "", alt: "", tx: 0, ty: 0 };
 
 function openImagePreview(src, alt) {
   const modal = document.getElementById("imagePreviewModal");
@@ -16608,6 +16643,8 @@ function openImagePreview(src, alt) {
   if (!modal || !img) return;
   imagePreviewState.scale = 1;
   imagePreviewState.rotation = 0;
+  imagePreviewState.tx = 0;
+  imagePreviewState.ty = 0;
   imagePreviewState.src = src;
   imagePreviewState.alt = alt || "";
   img.src = src;
@@ -16640,6 +16677,8 @@ function closeImagePreview() {
   document.body.style.overflow = "";
   imagePreviewState.scale = 1;
   imagePreviewState.rotation = 0;
+  imagePreviewState.tx = 0;
+  imagePreviewState.ty = 0;
   const img = document.getElementById("imagePreviewImg");
   if (img) {
     img.style.transform = "";
@@ -16653,25 +16692,26 @@ function closeImagePreview() {
 function applyImagePreviewTransform() {
   const img = document.getElementById("imagePreviewImg");
   if (!img) return;
-  const { scale, rotation } = imagePreviewState;
+  const { scale, rotation, tx, ty } = imagePreviewState;
   // 矢量图（SVG data URL）放大时改布局宽度而非 transform: scale：
   // transform 只拉伸首次光栅化的纹理（放大即糊），改 width 会让浏览器按目标尺寸重新光栅化，保持矢量清晰。
   // 缩小（scale <= 1）不会损失细节，仍走 transform 保持 CSS 自适应与过渡动画。
   const isVector = (imagePreviewState.src || "").startsWith("data:image/svg+xml");
+  const pan = (tx || ty) ? ` translate(${tx}px, ${ty}px)` : "";
   if (isVector && scale > 1 && img.naturalWidth > 0) {
     img.style.width = Math.round(img.naturalWidth * scale) + "px";
     img.style.maxWidth = "none";
     img.style.height = "auto";
-    img.style.transform = rotation ? `rotate(${rotation}deg)` : "";
+    img.style.transform = `${pan}${rotation ? ` rotate(${rotation}deg)` : ""}`.trim() || "none";
   } else {
     if (isVector) {
       img.style.width = "";
       img.style.maxWidth = "";
       img.style.height = "";
     }
-    img.style.transform = `scale(${scale}) rotate(${rotation}deg)`;
+    img.style.transform = `${pan} scale(${scale}) rotate(${rotation}deg)`;
   }
-  img.style.cursor = scale > 1 ? "zoom-out" : "zoom-in";
+  img.style.cursor = scale > 1 ? "grab" : "zoom-in";
 }
 
 document.addEventListener("keydown", (event) => {
@@ -16692,6 +16732,8 @@ document.addEventListener("keydown", (event) => {
     event.preventDefault();
     imagePreviewState.scale = 1;
     imagePreviewState.rotation = 0;
+    imagePreviewState.tx = 0;
+    imagePreviewState.ty = 0;
     applyImagePreviewTransform();
   }
 });
@@ -16706,14 +16748,38 @@ ipClose?.addEventListener("click", closeImagePreview);
 ipBackdrop?.addEventListener("click", closeImagePreview);
 
 ipImg?.addEventListener("click", () => {
-  if (imagePreviewState.scale > 1) {
-    imagePreviewState.scale = 1;
-    imagePreviewState.rotation = 0;
-  } else {
+  if (imagePreviewState.scale <= 1) {
     imagePreviewState.scale = 2;
+    applyImagePreviewTransform();
   }
+  // 放大状态下单击不再重置：缩放由滚轮/工具栏/ESC 控制，鼠标拖动用于平移
+});
+
+// 放大后拖拽平移（transform translate，不与矢量 width 缩放冲突）
+let ipDrag = null;
+ipImg?.addEventListener("pointerdown", (event) => {
+  if (imagePreviewState.scale <= 1) return;
+  ipDrag = { x: event.clientX, y: event.clientY, tx: imagePreviewState.tx, ty: imagePreviewState.ty, moved: false };
+  ipImg.setPointerCapture(event.pointerId);
+  ipImg.style.cursor = "grabbing";
+});
+ipImg?.addEventListener("pointermove", (event) => {
+  if (!ipDrag) return;
+  const dx = event.clientX - ipDrag.x;
+  const dy = event.clientY - ipDrag.y;
+  if (Math.abs(dx) + Math.abs(dy) > 2) ipDrag.moved = true;
+  imagePreviewState.tx = ipDrag.tx + dx;
+  imagePreviewState.ty = ipDrag.ty + dy;
   applyImagePreviewTransform();
 });
+const ipDragEnd = (event) => {
+  if (!ipDrag) return;
+  try { ipImg.releasePointerCapture(event.pointerId); } catch (_) {}
+  ipDrag = null;
+  ipImg.style.cursor = imagePreviewState.scale > 1 ? "grab" : "zoom-in";
+};
+ipImg?.addEventListener("pointerup", ipDragEnd);
+ipImg?.addEventListener("pointercancel", ipDragEnd);
 
 ipImg?.addEventListener("wheel", (event) => {
   event.preventDefault();
@@ -16738,6 +16804,8 @@ ipToolbar?.addEventListener("click", (event) => {
     case "zoom-reset":
       imagePreviewState.scale = 1;
       imagePreviewState.rotation = 0;
+      imagePreviewState.tx = 0;
+      imagePreviewState.ty = 0;
       break;
     case "rotate-left":
       imagePreviewState.rotation -= 90;

@@ -24,7 +24,7 @@
         <a href="index.html#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.1.28</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.1.29</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -40,6 +40,7 @@
         <div class="changelog-toc reveal">
           <h3>版本索引</h3>
           <ul>
+            <li><a href="#v2.1.29">v2.1.29</a> — 图表三连修复：锁定升级 Mermaid 11（架构图可用）+ 渲染后按内容自动外扩（底部不再被裁）+ 预览白底与拖拽平移</li>
             <li><a href="#v2.1.28">v2.1.28</a> — AI 规则首次接入写入链路（越权写入可拦截）+ 知识库问答检索修复（重建索引不再落空、中文提问可召回、首次使用自动建索引）+ 图表放大预览修复</li>
             <li><a href="#v2.1.27">v2.1.27</a> — 录屏画面修复（不再静止/卡顿、启动不再误弹遮罩）+ 知识脉络分析恢复 + 文档标准与 AI 规则、知识标签适配修复</li>
             <li><a href="#v2.1.26">v2.1.26</a> — 托盘图标 + 关窗可唤回（点快捷方式/托盘图标重新打开主界面）</li>
@@ -87,6 +88,29 @@
             <li><a href="#v1.8.93">v1.8.93</a> — 界面与体验升级 + 性能优化</li>
           </ul>
         </div>
+
+        <article class="doc-section reveal" id="v2.1.29">
+          <h3>v2.1.29 · Mermaid 图表渲染彻底修复</h3>
+          <p>上一版（v2.1.28）修复了图表放大预览的两处缺陷，但部分用户反馈问题依旧。经真实浏览器逐项排查，本次找到并根治了底层原因。</p>
+
+          <h4>流程图 / 图表底部被裁切</h4>
+          <ul>
+            <li><b>根因</b>：应用内的 Mermaid 图表库是运行时从公共 CDN 的「滚动版本」地址（<code>mermaid@10</code>）加载的——这个地址永远不会变化，浏览器磁盘缓存里存住的是什么版本就会一直用什么版本。早期 10.x 版本存在「图表底部被裁掉」的已知缺陷，命中旧缓存的机器上无论怎么升级应用都不会好转。</li>
+            <li><b>修复</b>：改为<strong>锁定精确版本 Mermaid 11.12.2 并附带缓存破坏参数</strong>，所有用户从此加载到确定的最新代码；同时新增渲染后兜底——<strong>按图表内容的真实边界自动外扩可视区域</strong>，即使某个版本的库计算出的边界偏小，底部节点也不会再被裁掉。</li>
+          </ul>
+
+          <h4>架构图无法加载</h4>
+          <ul>
+            <li><b>根因</b>：三重叠加——工具栏「架构图」生成的是 <code>architecture-beta</code> 类型，但该类型 <strong>Mermaid 10 根本不支持</strong>（11 才内置），所以必然报「渲染失败」；旧模板的连线语法本身也不合法；且该图类型的解析器<strong>完全不接受中文标签</strong>（连 <code>[中文名]</code> 都会报错）。</li>
+            <li><b>修复</b>：升级到 Mermaid 11 后该类型可用，模板已替换为经真实浏览器逐行验证的合法语法。注意：<strong>架构图（architecture-beta）暂不支持中文标签</strong>，模板使用英文服务名并附中文注释说明，这是 Mermaid 解析器的硬限制。</li>
+          </ul>
+
+          <h4>放大预览背景发黑、超出窗口无法查看</h4>
+          <ul>
+            <li><b>白底卡片</b>：Mermaid 输出的图表背景是透明的，此前放大后透出的是预览窗口的纯黑底色，浅色图表浮在黑底上难以辨认。现在导出预览图时<strong>自动铺一层白色背景</strong>，任何主题下都是清晰的白底卡片。</li>
+            <li><b>拖拽平移</b>：放大超过窗口大小后，此前看不到的部分没有任何办法查看。现在<strong>按住鼠标即可拖拽平移</strong>（配合矢量缩放，放大到多大都保持线条锐利）。</li>
+          </ul>
+        </article>
 
         <article class="doc-section reveal" id="v2.1.28">
           <h3>v2.1.28 · AI 写入约束、知识库问答检索与图表预览修复</h3>

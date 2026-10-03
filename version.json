@@ -1,7 +1,7 @@
 {
-    "version":  "2.1.28",
+    "version":  "2.1.29",
     "downloadUrl":  "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
-    "latestReleaseNotes":  "AI 规则接入写入链路（越权写入可拦截）+ 知识库问答检索修复（重建索引不再落空、中文提问可召回、首次使用自动建索引）+ 图表放大预览修复",
-    "releaseNotes":  "v2.1.28 release. See changelog for details.",
+    "latestReleaseNotes":  "图表渲染三连修复：锁定升级 Mermaid 11（架构图可用）+ 渲染后按内容自动外扩视口（底部不再被裁）+ 放大预览白底与拖拽平移",
+    "releaseNotes":  "v2.1.29 release. See changelog for details.",
     "releaseDate":  "2026-10-03"
 }

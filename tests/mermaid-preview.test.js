@@ -60,8 +60,8 @@ test("图片预览缩放：矢量图放大走布局宽度分支", () => {
   );
   assert.match(body, /img\.style\.width = /, "矢量放大应改布局宽度以重新光栅化");
   assert.match(body, /img\.style\.maxWidth = "none"/, "放大时应解除 CSS 宽度上限");
-  // 缩小/复位仍走 transform（缩小不损失细节）
-  assert.match(body, /transform = `scale\(\$\{scale\}\) rotate\(\$\{rotation\}deg\)`/);
+  // 缩小/复位仍走 transform（缩小不损失细节）；pan 平移在最前
+  assert.match(body, /transform = `\$\{pan\} scale\(\$\{scale\}\) rotate\(\$\{rotation\}deg\)`/);
 });
 
 test("图片预览：打开与关闭都重置矢量缩放残留样式", () => {
@@ -72,4 +72,63 @@ test("图片预览：打开与关闭都重置矢量缩放残留样式", () => {
     assert.match(body, /img\.style\.maxWidth = ""/, `${name}ImagePreview 应重置 maxWidth`);
     assert.match(body, /img\.style\.height = ""/, `${name}ImagePreview 应重置 height`);
   }
+});
+
+test("mermaid CDN：锁定精确版本并带缓存破坏参数", () => {
+  // 范围 URL（mermaid@10）永不变化 → WebView2 磁盘缓存会长期持有旧版本，
+  // 早期 10.x 有 flowchart 底部裁切 bug，且 10.x 不支持 architecture-beta。
+  assert.doesNotMatch(appSrc, /mermaid@10\//, "不得使用 mermaid@10 范围 URL");
+  assert.doesNotMatch(appSrc, /mermaid@11\/dist/, "不得使用 mermaid@11 范围 URL（同样有缓存问题）");
+  assert.match(appSrc, /mermaid@11\.\d+\.\d+\/dist\/mermaid\.min\.js\?v=/, "应锁定精确版本并带 ?v= 缓存破坏");
+});
+
+test("mermaid 渲染后：viewBox 按内容边界自动外扩", () => {
+  const body = fnBody(appSrc, "function fixMermaidViewBox(");
+  assert.match(body, /getBBox\(\)/, "应读取内容真实边界");
+  assert.match(body, /setAttribute\("viewBox"/, "应写回 viewBox");
+  // 防呆：内容异常巨大时跳过（gantt 的 getBBox 含数万像素隐藏内容）
+  assert.match(body, /vb\[2\] \* 20 \|\| b\.height > vb\[3\] \* 20/, "应有 20 倍防呆上限");
+  // 两处渲染路径（预览 + 打印）都要接入
+  const previewFn = fnBody(appSrc, "async function renderChartsInPreview(");
+  const printFn = fnBody(appSrc, "async function materializePrintArtifacts(");
+  const previewCall = /fixMermaidViewBox\(/.test(previewFn) || appSrc.includes("fixMermaidViewBox(_svgForFix)");
+  const printCall = /fixMermaidViewBox\(svgEl\)/.test(printFn);
+  assert.ok(previewCall, "预览路径应调用 fixMermaidViewBox");
+  assert.ok(printCall, "打印路径应调用 fixMermaidViewBox");
+});
+
+test("预览序列化：SVG 铺白色背景（弹窗黑底不透出）", () => {
+  const body = fnBody(appSrc, 'svgEl.addEventListener("click", (e) => {');
+  assert.match(body, /createElementNS\("http:\/\/www\.w3\.org\/2000\/svg", "rect"\)/, "应创建背景 rect");
+  assert.match(body, /setAttribute\("fill", "#ffffff"\)/, "背景应为白色");
+  assert.match(body, /insertBefore\(bgRect/, "背景应插在首个子节点");
+});
+
+test("预览弹窗：放大后支持拖拽平移", () => {
+  assert.match(appSrc, /pointerdown/, "应有 pointerdown 拖拽起始");
+  assert.match(appSrc, /pointermove/, "应有 pointermove 拖拽更新");
+  assert.match(appSrc, /imagePreviewState\.tx/, "平移状态 tx 应存在");
+  assert.match(appSrc, /translate\(\$\{tx\}px, \$\{ty\}px\)/, "transform 应包含平移");
+  // 打开/关闭/重置都要清零平移
+  for (const marker of ["function openImagePreview(", "function closeImagePreview("]) {
+    const body = fnBody(appSrc, marker);
+    assert.match(body, /imagePreviewState\.tx = 0/, `${marker} 应重置平移`);
+  }
+});
+
+test("架构图模板：使用 mermaid@11 实测通过的合法语法", () => {
+  const m = appSrc.match(/"architecture-beta": `([^`]+)`/);
+  assert.ok(m, "应存在 architecture-beta 模板");
+  const tpl = m[1];
+  // 旧模板的错误语法不得回归：flowchart 式 group...end 与 A[X] --> B[Y] 边
+  assert.doesNotMatch(tpl, /-->\s*\w+\[/, "不得使用 flowchart 式边语法（architecture lexer 不认）");
+  assert.doesNotMatch(
+    tpl.replace(/^.*%%.*$/gm, ""), // %% 注释行允许中文说明
+    /[\u4e00-\u9fff]/,
+    "architecture-beta 不支持中文标签，模板正文不得含中文"
+  );
+  assert.match(tpl, /service \w+\[\w+\]/, "应使用 service 声明");
+  assert.match(tpl, /\w+:[RLTB]\s*-->\s*[RLTB]:\w+/, "应使用 architecture 方向式边语法");
+  assert.match(tpl, /%%/, "应保留中文说明注释（lexer 允许 %% 注释）");
+  assert.doesNotMatch(tpl, /\[\(/, "圆柱形 [(DB)] 语法 architecture-beta 不支持");
 });
