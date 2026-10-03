@@ -93,26 +93,102 @@ fn glob_to_regex(pattern: &str) -> Regex {
     Regex::new(&format!("(?i)^{}$", source)).unwrap_or_else(|_| Regex::new("^$").unwrap())
 }
 
-/// 检查路径是否被策略允许
-pub fn policy_allows(policy: &AgentPolicy, relative_path: &str) -> bool {
-    let normalized = relative_path
+/// 归一化相对路径（统一分隔符、去掉开头斜杠），供所有 glob 匹配复用
+fn normalize_relative(relative_path: &str) -> String {
+    relative_path
         .replace('\\', "/")
         .trim_start_matches('/')
-        .to_string();
+        .to_string()
+}
+
+/// 返回第一个命中的 glob 模式（用于生成可读的拒绝原因）
+fn first_match(patterns: &[String], normalized: &str) -> Option<String> {
+    patterns
+        .iter()
+        .find(|p| glob_to_regex(p).is_match(normalized))
+        .cloned()
+}
+
+/// 检查路径是否被策略允许
+pub fn policy_allows(policy: &AgentPolicy, relative_path: &str) -> bool {
+    let normalized = normalize_relative(relative_path);
     // denied 优先
-    for pattern in &policy.denied_paths {
-        let re = glob_to_regex(pattern);
-        if re.is_match(&normalized) {
-            return false;
-        }
+    if first_match(&policy.denied_paths, &normalized).is_some() {
+        return false;
     }
-    for pattern in &policy.allowed_paths {
-        let re = glob_to_regex(pattern);
-        if re.is_match(&normalized) {
-            return true;
-        }
+    first_match(&policy.allowed_paths, &normalized).is_some()
+}
+
+/// AI 写入守卫结论
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WriteGuard {
+    /// 是否放行
+    pub allowed: bool,
+    /// 工作区是否存在规则文件（AGENTS.md）
+    pub policy_exists: bool,
+    /// 生效的写入模式
+    pub write_mode: String,
+    /// 路径不在 allowedPaths 内（仅留痕，不阻断；见下方说明）
+    pub outside_allowed_paths: bool,
+    /// 拒绝原因（allowed == false 时必有值）
+    pub reason: Option<String>,
+}
+
+/// 判定一次「AI 发起的写入」是否符合工作区规则。
+///
+/// 设计原则：**只对显式标注为 AI 来源的写入生效，且绝不改变既有行为**。
+///   1. 规则文件不存在（policy.exists == false）→ 一律放行。
+///      与「该功能从未生效」时逐字节一致，未创建 AGENTS.md 的用户零感知。
+///   2. deniedPaths 命中 → 拒绝。这是用户显式标注的禁区（.git / .env / 密钥），
+///      优先级最高，任何 writeMode 下都不允许 AI 写入。
+///   3. writeMode == "readonly" → 拒绝（AI 只读）。
+///   4. writeMode == "confirm" / "trusted" → 放行。
+///      confirm 的「确认」动作由前端弹窗在调用写入前完成，此处不重复拦截，
+///      否则会把一次交互变成两次；trusted 本就代表完全信任。
+///
+/// 关于 allowedPaths：它不在此处阻断，仅通过 `outside_allowed_paths` 留痕。
+/// 原因同上——allowedPaths 默认只含 `**/*.md`，若在此阻断，用户在编辑器里
+/// 让 AI 改写一个 .txt 文档就会突然失败，属于破坏既有功能；禁区与只读已经
+/// 覆盖了用户表达「禁止写入」的全部明确意图。
+pub fn guard_ai_write(policy: &AgentPolicy, relative_path: &str) -> WriteGuard {
+    let normalized = normalize_relative(relative_path);
+    let base = WriteGuard {
+        allowed: true,
+        policy_exists: policy.exists,
+        write_mode: policy.write_mode.clone(),
+        outside_allowed_paths: false,
+        reason: None,
+    };
+
+    // 1) 未创建规则文件 → 放行（保持既有行为）
+    if !policy.exists {
+        return base;
     }
-    false
+
+    // 2) deniedPaths 优先
+    if let Some(pattern) = first_match(&policy.denied_paths, &normalized) {
+        return WriteGuard {
+            allowed: false,
+            reason: Some(format!("路径命中禁止规则 `{}`", pattern)),
+            ..base
+        };
+    }
+
+    // 3) 只读模式
+    if policy.write_mode.eq_ignore_ascii_case("readonly") {
+        return WriteGuard {
+            allowed: false,
+            reason: Some(
+                "当前工作区规则为只读模式（writeMode: readonly），AI 不允许写入文档".to_string(),
+            ),
+            ..base
+        };
+    }
+
+    // 4) confirm / trusted → 放行；不在 allowedPaths 内仅留痕
+    let outside = first_match(&policy.allowed_paths, &normalized).is_none();
+    WriteGuard { outside_allowed_paths: outside, ..base }
 }
 
 /// 从工作区加载 AGENTS.md 策略文件
@@ -291,5 +367,67 @@ mod tests {
         let re = glob_to_regex("file?.md");
         assert!(re.is_match("file1.md"));
         assert!(!re.is_match("file12.md"));
+    }
+
+    #[test]
+    fn test_guard_skips_when_policy_absent() {
+        // 未创建规则文件 → 一律放行（保证既有功能零变化）
+        let policy = default_policy();
+        assert!(!policy.exists);
+        for p in ["a.md", "a.txt", "sub/dir/x.bin"] {
+            let g = guard_ai_write(&policy, p);
+            assert!(g.allowed, "{} should be allowed when policy absent", p);
+            assert!(!g.policy_exists);
+            assert!(g.reason.is_none());
+        }
+    }
+
+    #[test]
+    fn test_guard_denies_denied_paths() {
+        let mut policy = default_policy();
+        policy.exists = true;
+        for p in [".git/config", "secret.key", ".env", "a/b/token.pem"] {
+            let g = guard_ai_write(&policy, p);
+            assert!(!g.allowed, "{} should be denied", p);
+            assert!(g.reason.is_some());
+        }
+    }
+
+    #[test]
+    fn test_guard_denies_readonly_mode() {
+        let mut policy = default_policy();
+        policy.exists = true;
+        policy.write_mode = "readonly".to_string();
+        let g = guard_ai_write(&policy, "docs/a.md");
+        assert!(!g.allowed);
+        assert!(g.reason.unwrap().contains("readonly"));
+    }
+
+    #[test]
+    fn test_guard_allows_confirm_and_trusted() {
+        for mode in ["confirm", "trusted"] {
+            let mut policy = default_policy();
+            policy.exists = true;
+            policy.write_mode = mode.to_string();
+            let g = guard_ai_write(&policy, "docs/a.md");
+            assert!(g.allowed, "mode {} should allow .md", mode);
+            assert!(!g.outside_allowed_paths);
+
+            // allowedPaths 之外的路径仍放行，但会被标记留痕
+            let g2 = guard_ai_write(&policy, "notes.txt");
+            assert!(g2.allowed, "mode {} should not block non-md", mode);
+            assert!(g2.outside_allowed_paths);
+        }
+    }
+
+    #[test]
+    fn test_guard_normalizes_separators() {
+        let mut policy = default_policy();
+        policy.exists = true;
+        // 反斜杠路径也要命中 deniedPaths
+        let g = guard_ai_write(&policy, "sub\\..\\secret.key");
+        assert!(!g.allowed);
+        let g2 = guard_ai_write(&policy, "/docs/a.md");
+        assert!(g2.allowed);
     }
 }

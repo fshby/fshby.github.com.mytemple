@@ -734,11 +734,13 @@ const IPC_ROUTE_MAP = (() => {
   add("POST", "/api/refresh-cache",         "api_refresh_cache",        () => ({}));
   add("GET",  "/api/files",                 "api_list_files",           () => ({}));
   add("POST", "/api/file/read",             "api_read_file",            p => ({ path: String(p.path) }));
-  add("POST", "/api/file/save",             "api_save_file",            p => ({ path: String(p.path), content: String(p.content) }));
+  add("POST", "/api/file/save",             "api_save_file",            p => ({ path: String(p.path), content: String(p.content), origin: p.origin }));
   add("POST", "/api/file/delete",           "api_delete_file",          p => ({ path: String(p.path) }));
   add("GET",  "/api/doc",                   "api_get_doc",              q => ({ path: String(q.path||""), force: q.force }));
   add("GET",  "/api/doc-check",             "api_check_doc",            q => ({ path: String(q.path||"") }));
-  add("POST", "/api/save",                  "api_save_doc",             p => ({ path: String(p.path), content: String(p.content), baseHash: p.baseHash }));
+  // origin 缺省时 JSON.stringify 会丢掉该键 → 后端 Option<String> 取 None（人类编辑路径不受影响）。
+  // 仅当 origin === "ai"（AI 生成内容后写盘）才触发工作区规则（.mytemple/AGENTS.md）校验。
+  add("POST", "/api/save",                  "api_save_doc",             p => ({ path: String(p.path), content: String(p.content), baseHash: p.baseHash, origin: p.origin }));
   add("POST", "/api/delete",                "api_delete_docs",          p => ({ path: p.path }));
   add("POST", "/api/create-folder",         "api_create_folder",        p => ({ parent: String(p.parent), name: String(p.name) }));
   add("POST", "/api/create-doc",            "api_create_document",      p => ({ parent: String(p.parent), name: String(p.name) }));
@@ -6519,7 +6521,29 @@ function toggleAiDrawer(open = !state.ai.open) {
   els.aiBtn?.classList.toggle("active", open);
   if (open) {
     loadAiStatus();
+    ensureAiIndexReady();
     els.aiQuestion?.focus();
+  }
+}
+
+// 首次使用自动建立检索索引：rag 索引为空时关键词检索必然 0 段，知识库问答会永远
+// 回答「检索到的文档中未包含相关内容」，而 UI 只有「关键词模式 · 0 段」徽标，用户无从得知
+// 需要先到设置里点「重建索引」。重建是纯本地分块（不依赖 AI 配置）、幂等，
+// 因此在打开问答面板这个明确意图动作上补建一次；会话内只尝试一次，不做后台轮询。
+async function ensureAiIndexReady() {
+  if (state.ai.autoIndexAttempted) return;
+  state.ai.autoIndexAttempted = true;
+  try {
+    const status = await api.get("/api/ai/status");
+    if (!status || status.indexing || Number(status.chunkCount || 0) > 0) return;
+    showToast("首次使用，正在为本机文档建立检索索引，请稍候…");
+    const result = await api.post("/api/ai/reindex", {});
+    if (result && result.ok !== false) {
+      showToast(`检索索引已就绪：${result.chunkCount} 段，可以继续提问`);
+      loadAiStatus();
+    }
+  } catch (error) {
+    console.warn("[AI] 自动建立检索索引失败:", error);
   }
 }
 
@@ -7307,7 +7331,8 @@ async function createAiTransformDocument() {
   try {
     const created = await api.post("/api/create-doc", { parent, name });
     const body = `# ${name}\n\n> 来源：${transform.path}\n> 处理方式：${AI_TRANSFORM_LABELS[transform.mode] || "AI"}\n\n${content}\n`;
-    await api.post("/api/save", { path: created.path, content: body });
+    // origin: "ai" —— 正文由 AI 生成，写盘前需过工作区规则
+    await api.post("/api/save", { path: created.path, content: body, origin: "ai" });
     closeAiTransformModal();
     await bootstrap(true);
     await openDoc(created.path);
@@ -7987,8 +8012,26 @@ async function renderChartsInPreview(container) {
                 e.preventDefault();
                 e.stopPropagation();
                 try {
-                  svgEl.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-                  const raw = new XMLSerializer().serializeToString(svgEl);
+                  // 序列化前克隆并恢复固有尺寸：页面内的 SVG 已被移除 width/height（交由 CSS 自适应），
+                  // 直接序列化会得到无固有尺寸的 SVG，独立加载时按默认 300×150 渲染导致图表被裁切。
+                  const clone = svgEl.cloneNode(true);
+                  const vb = (clone.getAttribute("viewBox") || "").split(/[\s,]+/).map(Number);
+                  if (vb.length === 4 && vb[2] > 0 && vb[3] > 0) {
+                    clone.setAttribute("width", String(Math.ceil(vb[2])));
+                    clone.setAttribute("height", String(Math.ceil(vb[3])));
+                  } else {
+                    try {
+                      const bbox = svgEl.getBBox();
+                      if (bbox.width > 0 && bbox.height > 0) {
+                        clone.setAttribute("width", String(Math.ceil(bbox.width)));
+                        clone.setAttribute("height", String(Math.ceil(bbox.height)));
+                      }
+                    } catch (_) {}
+                  }
+                  // 去掉页面内联样式（width:100%/height:auto/max-width 等），保证独立完整
+                  clone.removeAttribute("style");
+                  clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+                  const raw = new XMLSerializer().serializeToString(clone);
                   const dataUrl = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(raw);
                   openImagePreview(dataUrl, "Mermaid 图表");
                 } catch (err) {
@@ -8527,7 +8570,7 @@ function setImmersiveEditing(enabled) {
   }
 }
 
-async function saveCurrentDoc({ refreshTree = false, keepEditorState = true, renderAfterSave = true } = {}) {
+async function saveCurrentDoc({ refreshTree = false, keepEditorState = true, renderAfterSave = true, origin = undefined } = {}) {
   if (!state.currentPath) return false;
   const content = els.editor.value;
   if (!refreshTree && content === state.lastSavedContent) return true;
@@ -8539,7 +8582,7 @@ async function saveCurrentDoc({ refreshTree = false, keepEditorState = true, ren
   const seq = ++state.saveSeq;
   setSaveStatus("\u4fdd\u5b58\u4e2d", true);
   try {
-    const result = await api.post("/api/save", { path: state.currentPath, content, baseHash: state.currentVersion || "" });
+    const result = await api.post("/api/save", { path: state.currentPath, content, baseHash: state.currentVersion || "", origin });
     // currentVersion 更新必须在 seq 检查之后：连续保存时旧请求晚返回会用旧 hash 覆盖新 hash，
     // 导致后续保存的 baseHash 不对，可能引发冲突或覆盖他人修改。
     if (seq !== state.saveSeq) return true;
@@ -8551,7 +8594,7 @@ async function saveCurrentDoc({ refreshTree = false, keepEditorState = true, ren
       );
       if (choice) {
         // 强制保存：不带 baseHash 跳过冲突检测
-        const forceResult = await api.post("/api/save", { path: state.currentPath, content, baseHash: "" });
+        const forceResult = await api.post("/api/save", { path: state.currentPath, content, baseHash: "", origin });
         if (seq !== state.saveSeq) return true;
         if (forceResult && typeof forceResult.contentSha256 === "string" && forceResult.contentSha256) {
           state.currentVersion = forceResult.contentSha256;
@@ -10711,7 +10754,10 @@ async function replaceEditorRange(value, start, end, selectionMode = "end") {
   });
   els.editor.dispatchEvent(new Event("input", { bubbles: true }));
   // AI actions are explicit user decisions, so persist them immediately.
-  return saveCurrentDoc({ keepEditorState: true, renderAfterSave: false });
+  // origin: "ai" —— 本函数的全部调用点（AI 回答插入、Ctrl+I 流式插入、AI 改写/注释、
+  // 智能提示采纳）都是「AI 生成内容后写盘」，因此统一标注来源，让后端按工作区规则
+  // （.mytemple/AGENTS.md）校验。人类编辑走其它保存入口，origin 缺省、不受影响。
+  return saveCurrentDoc({ keepEditorState: true, renderAfterSave: false, origin: "ai" });
 }
 
 function insertAtCursor(value) {
@@ -16567,6 +16613,10 @@ function openImagePreview(src, alt) {
   img.src = src;
   img.alt = alt || "";
   img.style.transform = "";
+  // 重置矢量缩放残留（applyImagePreviewTransform 的矢量分支会写 width/maxWidth/height）
+  img.style.width = "";
+  img.style.maxWidth = "";
+  img.style.height = "";
   img.style.cursor = "zoom-in";
   if (download) {
     try {
@@ -16591,14 +16641,36 @@ function closeImagePreview() {
   imagePreviewState.scale = 1;
   imagePreviewState.rotation = 0;
   const img = document.getElementById("imagePreviewImg");
-  if (img) { img.style.transform = ""; img.style.cursor = "zoom-in"; }
+  if (img) {
+    img.style.transform = "";
+    img.style.width = "";
+    img.style.maxWidth = "";
+    img.style.height = "";
+    img.style.cursor = "zoom-in";
+  }
 }
 
 function applyImagePreviewTransform() {
   const img = document.getElementById("imagePreviewImg");
   if (!img) return;
   const { scale, rotation } = imagePreviewState;
-  img.style.transform = `scale(${scale}) rotate(${rotation}deg)`;
+  // 矢量图（SVG data URL）放大时改布局宽度而非 transform: scale：
+  // transform 只拉伸首次光栅化的纹理（放大即糊），改 width 会让浏览器按目标尺寸重新光栅化，保持矢量清晰。
+  // 缩小（scale <= 1）不会损失细节，仍走 transform 保持 CSS 自适应与过渡动画。
+  const isVector = (imagePreviewState.src || "").startsWith("data:image/svg+xml");
+  if (isVector && scale > 1 && img.naturalWidth > 0) {
+    img.style.width = Math.round(img.naturalWidth * scale) + "px";
+    img.style.maxWidth = "none";
+    img.style.height = "auto";
+    img.style.transform = rotation ? `rotate(${rotation}deg)` : "";
+  } else {
+    if (isVector) {
+      img.style.width = "";
+      img.style.maxWidth = "";
+      img.style.height = "";
+    }
+    img.style.transform = `scale(${scale}) rotate(${rotation}deg)`;
+  }
   img.style.cursor = scale > 1 ? "zoom-out" : "zoom-in";
 }
 

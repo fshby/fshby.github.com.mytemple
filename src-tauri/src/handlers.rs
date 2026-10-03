@@ -439,13 +439,17 @@ async fn read_file(
 struct SaveFileRequest {
     path: String,
     content: String,
+    /// 写入来源标记：`"ai"` 表示由 AI 生成内容后写入，需先过工作区规则校验。
+    /// 缺省（人类编辑、导入等）不触发任何校验，行为与既有版本完全一致。
+    #[serde(default)]
+    origin: Option<String>,
 }
 
 async fn save_file(
     State(state): State<Arc<ServerState>>,
     Json(req): Json<SaveFileRequest>,
 ) -> impl IntoResponse {
-    crate::ipc::to_response(crate::ipc::save_file_raw(&state, req.path, req.content).await)
+    crate::ipc::to_response(crate::ipc::save_file_raw(&state, req.path, req.content, req.origin).await)
 }
 
 async fn delete_file(
@@ -494,6 +498,9 @@ struct SaveDocRequest {
     content: String,
     #[serde(rename = "baseHash", default)]
     base_hash: Option<String>,
+    /// 写入来源标记；`"ai"` = AI 生成内容写入，先过工作区规则（.mytemple/AGENTS.md）。
+    #[serde(default)]
+    origin: Option<String>,
 }
 
 async fn save_doc(
@@ -502,7 +509,7 @@ async fn save_doc(
 ) -> impl IntoResponse {
     // ipc::save_doc 内部处理 __CONFLICT__: 前缀 → 返回 {ok:false,conflict:true,...}（200）
     // 其它错误仍按约定转为 BAD_REQUEST
-    match crate::ipc::save_doc(&state, req.path, req.content, req.base_hash).await {
+    match crate::ipc::save_doc(&state, req.path, req.content, req.base_hash, req.origin).await {
         Ok(v) => (StatusCode::OK, Json(v)).into_response(),
         Err(msg) => json_err(StatusCode::BAD_REQUEST, msg),
     }
@@ -1148,23 +1155,22 @@ async fn ai_reindex(
         }
     }
 
-    // 更新状态：用 std::mem::take 避免 clone 全量 chunks（万级 chunk 时省几十 MB 堆拷贝）
+    // chunk_count 必须在分块数组仍完整时先算好（下方写盘与 Manifest 都要用）
     let chunk_count = all_chunks.len();
-    {
-        let mut chunks_ref = rag.chunks.lock().unwrap();
-        *chunks_ref = std::mem::take(&mut all_chunks);
-    }
     // 更新进度为完成
     *rag.progress.lock().unwrap() = (total_files, total_files);
 
     // Build manifest
+    // ⚠️ chunk_count 必须用局部变量：all_chunks 在下方写盘后才被 move 进 rag.chunks。
+    // 此前这里写的是 all_chunks.len()，而 std::mem::take 已把它清空 → manifest.chunk_count
+    // 恒为 0、chunks.ndjson 写出空文件（v2.1.1 起「重建索引」落盘的一直是空索引）。
     let manifest = crate::rag::Manifest {
         schema_version: crate::rag::SCHEMA_VERSION,
         knowledge_version: format!("k{}", Utc::now().timestamp_millis()),
         embedding_model: String::new(),
         requested_embedding_model: String::new(),
         dimension: 0,
-        chunk_count: all_chunks.len(),
+        chunk_count,
         vector_count: 0,
         indexed_at: Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string(),
         documents: manifest_docs,
@@ -1203,6 +1209,12 @@ async fn ai_reindex(
     // Save manifest
     let _ = std::fs::write(&rag.manifest_path, serde_json::to_string_pretty(&manifest).unwrap_or_default());
 
+    // 移交索引到内存（必须放在写盘之后：上面的 chunks.ndjson 循环还要遍历 all_chunks）。
+    // 直接 move，不 clone（万级 chunk 时省几十 MB 堆拷贝）。
+    {
+        let mut chunks_ref = rag.chunks.lock().unwrap();
+        *chunks_ref = all_chunks;
+    }
     raw_json(serde_json::json!({
         "ok": true,
         "chunkCount": chunk_count,
@@ -3003,45 +3015,91 @@ async fn agent_action_apply(
     if !req.confirmed {
         return json_err(StatusCode::BAD_REQUEST, "Action not confirmed");
     }
-    
+
     let workspaces = state.app.get_workspaces().await;
-    let ws = workspaces.iter().find(|w| w.id == req.workspace_id);
-    
-    if ws.is_none() {
-        return json_err(StatusCode::NOT_FOUND, "Workspace not found");
+    let ws = match workspaces.iter().find(|w| w.id == req.workspace_id) {
+        Some(w) => w,
+        None => return json_err(StatusCode::NOT_FOUND, "Workspace not found"),
+    };
+
+    // 本端点即「AI 代理操作」入口，写入/删除前先过工作区规则
+    // （.mytemple/AGENTS.md）。规则文件不存在时 guard 一律放行，
+    // 未创建规则的用户行为与既有版本完全一致。
+    let policy = crate::agent_policy::load_agent_policy(std::path::Path::new(&ws.root)).await;
+    let target = req.target_path.clone().unwrap_or_default();
+    let guard = crate::agent_policy::guard_ai_write(&policy, &target);
+    if !guard.allowed {
+        return json_err(
+            StatusCode::FORBIDDEN,
+            format!(
+                "工作区规则不允许该操作：{}",
+                guard.reason.clone().unwrap_or_else(|| "未通过校验".to_string())
+            ),
+        );
     }
-    
+    // 删除不可逆：规则文件存在时额外要求命中 allowedPaths
+    if req.action == "delete"
+        && policy.exists
+        && !crate::agent_policy::policy_allows(&policy, &target)
+    {
+        return json_err(StatusCode::FORBIDDEN, "工作区规则不允许删除该路径");
+    }
+
     // Apply the action (simplified implementation)
-    match req.action.as_str() {
+    let outcome: Result<serde_json::Value, (StatusCode, String)> = match req.action.as_str() {
         "delete" => {
             if let Some(path) = &req.target_path {
                 match state.app.delete_file(path).await {
-                    Ok(_) => raw_json(serde_json::json!({
+                    Ok(_) => Ok(serde_json::json!({
                         "ok": true,
                         "action": "delete",
                         "path": path,
                     })),
-                    Err(e) => json_err(StatusCode::BAD_REQUEST, e.to_string()),
+                    Err(e) => Err((StatusCode::BAD_REQUEST, e.to_string())),
                 }
             } else {
-                json_err(StatusCode::BAD_REQUEST, "targetPath required for delete")
+                Err((StatusCode::BAD_REQUEST, "targetPath required for delete".to_string()))
             }
         }
         "create" => {
             if let Some(path) = &req.target_path {
                 match state.app.save_file(path, "", None).await {
-                    Ok(_) => raw_json(serde_json::json!({
+                    Ok(_) => Ok(serde_json::json!({
                         "ok": true,
                         "action": "create",
                         "path": path,
                     })),
-                    Err(e) => json_err(StatusCode::BAD_REQUEST, e.to_string()),
+                    Err(e) => Err((StatusCode::BAD_REQUEST, e.to_string())),
                 }
             } else {
-                json_err(StatusCode::BAD_REQUEST, "targetPath required for create")
+                Err((StatusCode::BAD_REQUEST, "targetPath required for create".to_string()))
             }
         }
-        _ => json_err(StatusCode::BAD_REQUEST, format!("Unknown action: {}", req.action)),
+        _ => Err((StatusCode::BAD_REQUEST, format!("Unknown action: {}", req.action))),
+    };
+
+    match outcome {
+        Ok(v) => {
+            // 规则文件存在时留痕：AI 代理的每一次写入/删除都可追溯
+            if policy.exists {
+                let record = serde_json::json!({
+                    "action": format!("agent.{}", req.action),
+                    "actor": "ai",
+                    "path": target,
+                    "workspaceId": req.workspace_id,
+                    "writeMode": policy.write_mode,
+                    "policyPath": policy.path.to_string_lossy(),
+                    "outsideAllowedPaths": guard.outside_allowed_paths,
+                });
+                if let Err(e) =
+                    crate::agent_policy::append_audit_record(&state.app.data_root, &record).await
+                {
+                    log::warn!("[audit] 写入代理操作记录失败: {}", e);
+                }
+            }
+            raw_json(v)
+        }
+        Err((code, msg)) => json_err(code, msg),
     }
 }
 

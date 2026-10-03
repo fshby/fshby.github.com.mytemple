@@ -42,7 +42,8 @@ test("AI edit hint acceptance writes the suggested markdown back to its original
   assert.match(appSource, /preserveInstruction: true/);
   assert.match(appSource, /result\.answerMode === "local-fallback"/);
   assert.match(appSource, /AI 没有生成不同内容/);
-  assert.match(appSource, /return saveCurrentDoc\(\{ keepEditorState: true, renderAfterSave: false \}\)/);
+  // AI 采纳必须立刻回写原段落；origin: "ai" 让后端按工作区规则（.mytemple/AGENTS.md）校验
+  assert.match(appSource, /return saveCurrentDoc\(\{ keepEditorState: true, renderAfterSave: false, origin: "ai" \}\)/);
 });
 
 /* ── path-utils.js ── */

@@ -229,6 +229,23 @@ fn tokenize(text: &str) -> Vec<String> {
         .collect()
 }
 
+/// token 是否包含 CJK 表意文字（中文没有分词器，长查询词需要 bigram 扩展提升召回）
+fn is_cjk_token(s: &str) -> bool {
+    s.chars().any(|c| ('\u{4E00}'..='\u{9FFF}').contains(&c))
+}
+
+/// 对长 CJK token 做 N=2 滑动窗口切分（与知识图谱 tokenize_cjk_terms 同思路）。
+/// ≤2 字的 token 无需再切；纯 Latin/数字 token 不生成（避免英文被拆成无意义字母对）。
+fn cjk_bigrams(token: &str) -> Vec<String> {
+    let chars: Vec<char> = token.chars().collect();
+    if chars.len() < 3 {
+        return Vec::new();
+    }
+    (0..=chars.len() - 2)
+        .map(|i| chars[i..i + 2].iter().collect::<String>())
+        .collect()
+}
+
 /// 选择句
 fn selection_sentences(text: &str) -> Vec<String> {
     let text = FRONTMATTER_RE.replace_all(text, "");
@@ -683,7 +700,29 @@ impl RagService {
     /// 避免在 O( chunks × tokens ) 循环中反复 to_lowercase 分配新 String。
     pub fn lexical_search(&self, question: &str, scope_path: &str) -> Vec<(usize, f64)> {
         let query_tokens: Vec<String> = tokenize(question);
-        let unique_tokens: HashSet<&String> = query_tokens.iter().collect();
+        let mut unique_tokens: HashSet<String> = query_tokens.iter().cloned().collect();
+        // 中文查询词扩展：TOKEN_RE 把连续汉字当作一整个 token（如「剑魔伤害高」），
+        // 与 chunk.tokens 精确相等的概率几乎为零，contains 匹配又要求整词逐字出现
+        // → 中文整句提问召回极低（症状：知识库问答恒为「0 段」）。
+        // 对 CJK token 做 bigram 扩展后，「剑魔」这类短片段也能命中。
+        // 只扩展查询侧（chunk 侧不变），且限制数量防止超长提问拖慢 O(chunks × tokens) 扫描。
+        let mut added = 0usize;
+        for token in query_tokens.iter().take(32) {
+            if added >= 64 {
+                break;
+            }
+            if !is_cjk_token(token) {
+                continue;
+            }
+            for bigram in cjk_bigrams(token) {
+                if added >= 64 {
+                    break;
+                }
+                if unique_tokens.insert(bigram) {
+                    added += 1;
+                }
+            }
+        }
         if unique_tokens.is_empty() {
             return vec![];
         }
@@ -1106,6 +1145,40 @@ use std::collections::HashSet;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_cjk_bigrams() {
+        assert!(cjk_bigrams("剑魔").is_empty(), "≤2 字无需切分");
+        assert_eq!(cjk_bigrams("剑魔伤害"), vec!["剑魔", "魔伤", "伤害"]);
+        assert!(cjk_bigrams("docker").is_empty(), "纯 Latin 不切分");
+        assert!(is_cjk_token("剑魔伤害"));
+        assert!(!is_cjk_token("docker"));
+    }
+
+    #[test]
+    fn test_lexical_search_cjk_bigram_hit() {
+        // 中文整句提问必须能命中仅包含片段词的段落（回归：恒为 0 段）
+        let service = RagService::new(std::path::Path::new(
+            std::env::temp_dir().join("mtk-rag-test-cjk").to_str().unwrap(),
+        ));
+        *service.chunks.lock().unwrap() = vec![Chunk {
+            id: "c1".into(),
+            path: "a.md".into(),
+            workspace_id: "ws".into(),
+            title: "角色设定".into(),
+            heading: "剑魔".into(),
+            ordinal: 0,
+            start_line: 1,
+            end_line: 3,
+            text: "剑魔的爆发伤害很高，但身板脆弱。".into(),
+            text_hash: "h".into(),
+            tokens: tokenize("角色设定 剑魔 剑魔的爆发伤害很高，但身板脆弱。"),
+        }];
+        let hits = service.lexical_search("剑魔伤害高", "");
+        assert!(!hits.is_empty(), "「剑魔伤害高」应能命中含「剑魔」的段落");
+        let hits_docker = service.lexical_search("docker", "");
+        assert!(hits_docker.is_empty(), "不相关词不应命中");
+    }
 
     #[test]
     fn test_chunk_markdown() {

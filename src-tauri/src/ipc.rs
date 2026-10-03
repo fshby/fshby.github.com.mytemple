@@ -260,8 +260,94 @@ pub async fn list_files(s: &ServerState) -> serde_json::Value { success(s.app.ge
 pub async fn read_file(s: &ServerState, path: String) -> Result<serde_json::Value, String> {
     Ok(success(s.app.read_file(&path).await.map_err(|e| err(e.to_string()))?))
 }
-pub async fn save_file_raw(s: &ServerState, path: String, content: String) -> Result<serde_json::Value, String> {
+
+/// AI 写入守卫上下文：仅当请求显式标注 `origin: "ai"` 且工作区存在规则文件时产生。
+struct AiWriteContext {
+    workspace_id: String,
+    policy_path: String,
+    write_mode: String,
+    relative_path: String,
+    outside_allowed_paths: bool,
+}
+
+/// 拆分前端引用 `workspaceId/相对路径`。
+/// 解析不出来时返回 None —— 此时无法定位工作区，一律按「非 AI 写入」放行。
+fn split_workspace_ref(path: &str) -> Option<(String, String)> {
+    let (ws, rel) = path.split_once('/')?;
+    if ws.is_empty() || rel.is_empty() {
+        return None;
+    }
+    Some((ws.to_string(), rel.to_string()))
+}
+
+/// 判定一次写入是否为「AI 发起」并校验工作区规则（`.mytemple/AGENTS.md`）。
+///
+/// 只有在请求显式携带 `origin: "ai"` 时才会走规则校验：
+///   - 未携带（人类编辑、导入、任务勾选等既有路径）→ `Ok(None)`，完全不受影响；
+///   - 路径解析不出工作区 → `Ok(None)`；
+///   - 工作区未创建规则文件 → `Ok(None)`（与功能未启用时一致）；
+///   - 规则拒绝 → `Err(消息)`，调用方应据此中止写入；
+///   - 规则通过 → `Ok(Some(上下文))`，调用方在**写盘成功后**补审计记录。
+async fn check_ai_write(
+    s: &ServerState,
+    path: &str,
+    origin: Option<&str>,
+) -> Result<Option<AiWriteContext>, String> {
+    if origin != Some("ai") {
+        return Ok(None);
+    }
+    let Some((ws_id, relative)) = split_workspace_ref(path) else {
+        return Ok(None);
+    };
+    let workspaces = s.app.get_workspaces().await;
+    let Some(ws) = workspaces.iter().find(|w| w.id == ws_id) else {
+        return Ok(None);
+    };
+    let policy =
+        crate::agent_policy::load_agent_policy(std::path::Path::new(&ws.root)).await;
+    if !policy.exists {
+        return Ok(None);
+    }
+    let guard = crate::agent_policy::guard_ai_write(&policy, &relative);
+    if !guard.allowed {
+        return Err(format!(
+            "工作区规则（.mytemple/AGENTS.md）不允许 AI 写入该文件：{}",
+            guard.reason.unwrap_or_else(|| "未通过校验".to_string())
+        ));
+    }
+    Ok(Some(AiWriteContext {
+        workspace_id: ws_id,
+        policy_path: policy.path.to_string_lossy().to_string(),
+        write_mode: guard.write_mode,
+        relative_path: relative,
+        outside_allowed_paths: guard.outside_allowed_paths,
+    }))
+}
+
+/// 写盘成功后补审计记录（audit/operations.ndjson）。
+/// 审计失败不影响写入结果，仅告警。
+async fn record_ai_write(s: &ServerState, ctx: AiWriteContext, action: &str, sha256: Option<&str>) {
+    let record = serde_json::json!({
+        "action": action,
+        "actor": "ai",
+        "path": format!("{}/{}", ctx.workspace_id, ctx.relative_path),
+        "workspaceId": ctx.workspace_id,
+        "writeMode": ctx.write_mode,
+        "policyPath": ctx.policy_path,
+        "outsideAllowedPaths": ctx.outside_allowed_paths,
+        "sha256": sha256.unwrap_or(""),
+    });
+    if let Err(e) = crate::agent_policy::append_audit_record(&s.app.data_root, &record).await {
+        log::warn!("[audit] 写入 AI 操作记录失败: {}", e);
+    }
+}
+
+pub async fn save_file_raw(s: &ServerState, path: String, content: String, origin: Option<String>) -> Result<serde_json::Value, String> {
+    let guard = check_ai_write(s, &path, origin.as_deref()).await?;
     let h = s.app.save_file(&path, &content, None).await.map_err(|e| err(e.to_string()))?;
+    if let Some(ctx) = guard {
+        record_ai_write(s, ctx, "ai.file.save", Some(&h)).await;
+    }
     Ok(success(serde_json::json!({"sha256": h})))
 }
 pub async fn delete_file(s: &ServerState, path: String) -> Result<serde_json::Value, String> {
@@ -280,9 +366,16 @@ pub async fn check_doc(s: &ServerState, path: String) -> Result<serde_json::Valu
     let (h,m) = s.app.check_file(&path).await.map_err(|e| err(e.to_string()))?;
     Ok(serde_json::json!({"path":path,"sha256":h,"modified":m}))
 }
-pub async fn save_doc(s: &ServerState, path: String, content: String, base_hash: Option<String>) -> Result<serde_json::Value, String> {
+pub async fn save_doc(s: &ServerState, path: String, content: String, base_hash: Option<String>, origin: Option<String>) -> Result<serde_json::Value, String> {
+    // AI 来源的写入须先过工作区规则；非 AI 写入（origin 缺失）行为完全不变
+    let guard = check_ai_write(s, &path, origin.as_deref()).await?;
     match s.app.save_file(&path, &content, base_hash.as_deref()).await {
-        Ok(h) => Ok(serde_json::json!({"ok":true,"path":path,"contentSha256":h})),
+        Ok(h) => {
+            if let Some(ctx) = guard {
+                record_ai_write(s, ctx, "ai.doc.save", Some(&h)).await;
+            }
+            Ok(serde_json::json!({"ok":true,"path":path,"contentSha256":h}))
+        }
         Err(e) => {
             let m = e.to_string();
             if m.starts_with("__CONFLICT__:") {

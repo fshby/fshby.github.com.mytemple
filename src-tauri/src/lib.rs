@@ -1732,8 +1732,8 @@ pub async fn api_read_file(s: Srv<'_>, path: String) -> Result<serde_json::Value
     crate::ipc::read_file(&s, path).await
 }
 #[tauri::command]
-pub async fn api_save_file(s: Srv<'_>, path: String, content: String) -> Result<serde_json::Value, String> {
-    crate::ipc::save_file_raw(&s, path, content).await
+pub async fn api_save_file(s: Srv<'_>, path: String, content: String, origin: Option<String>) -> Result<serde_json::Value, String> {
+    crate::ipc::save_file_raw(&s, path, content, origin).await
 }
 #[tauri::command]
 pub async fn api_delete_file(s: Srv<'_>, path: String) -> Result<serde_json::Value, String> {
@@ -1751,9 +1751,9 @@ pub async fn api_check_doc(s: Srv<'_>, path: String) -> Result<serde_json::Value
 }
 #[tauri::command]
 pub async fn api_save_doc(
-    s: Srv<'_>, path: String, content: String, base_hash: Option<String>,
+    s: Srv<'_>, path: String, content: String, base_hash: Option<String>, origin: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    crate::ipc::save_doc(&s, path, content, base_hash).await
+    crate::ipc::save_doc(&s, path, content, base_hash, origin).await
 }
 #[tauri::command]
 pub async fn api_delete_docs(s: Srv<'_>, path: serde_json::Value) -> Result<serde_json::Value, String> {

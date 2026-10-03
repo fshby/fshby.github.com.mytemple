@@ -10759,7 +10759,7 @@ html body .print-body.print-body .callout.callout.callout-example.callout-exampl
   object-fit: contain;
   border-radius: 6px;
   box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
-  transition: transform 0.2s ease;
+  transition: transform 0.2s ease, width 0.2s ease;
   cursor: zoom-in;
   user-select: none;
   -webkit-user-drag: none;

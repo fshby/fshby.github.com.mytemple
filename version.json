@@ -1,7 +1,7 @@
 {
-    "version":  "2.1.27",
+    "version":  "2.1.28",
     "downloadUrl":  "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
-    "latestReleaseNotes":  "录屏画面修复（不再静止/卡顿、启动不再误弹遮罩）+ 知识脉络分析恢复 + 文档标准与 AI 规则、知识标签适配修复",
-    "releaseNotes":  "v2.1.27 release. See changelog for details.",
-    "releaseDate":  "2026-09-30"
+    "latestReleaseNotes":  "AI 规则接入写入链路（越权写入可拦截）+ 知识库问答检索修复（重建索引不再落空、中文提问可召回、首次使用自动建索引）+ 图表放大预览修复",
+    "releaseNotes":  "v2.1.28 release. See changelog for details.",
+    "releaseDate":  "2026-10-03"
 }
