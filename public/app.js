@@ -1,4 +1,4 @@
-import { createMarkdownEditor } from "/editor-core.js?v=20261008-v4";
+import { createMarkdownEditor } from "/editor-core.js?v=20261008-v6";
 import { createPeriodicPerlin, generateSeamlessPaperTextureDataUrl, generateLargePaperTextureDataUrl, getPaperBackgroundUrl } from "./modules/paper-texture.js";
 import { escapeHtml, displayName, displayRelativePath, splitPathRef, joinPathRef, parentPathRef, compactName, splitWorkspaceRef, plainText, headingId } from "./modules/path-utils.js";
 import { extractOutline, addCnEnSpaces } from "./modules/editor-utils.js";
@@ -2055,6 +2055,7 @@ async function materializePrintArtifacts(container) {
               // 修复 SVG 缩放：移除固定 width/height，让 CSS 控制
               const svgEl = containerDiv.querySelector("svg");
               if (svgEl) {
+                markRawViewBox(svgEl);
                 fixMermaidViewBox(svgEl);
                 svgEl.removeAttribute("width");
                 svgEl.removeAttribute("height");
@@ -7958,26 +7959,105 @@ function loadMermaidAsync() {
   });
   return _mermaidLoadingPromise;
 }
-// 渲染后按内容真实边界外扩 viewBox：个别 mermaid 版本/字体环境下，计算的 viewBox 偏小
-// 会导致图表底部节点被裁切。只扩不缩；内容 bbox 异常巨大时跳过（gantt 的 getBBox 会含
-// 数万像素的隐藏内容，不能照单全收）。
-function fixMermaidViewBox(svgEl) {
+// 渲染后修正 viewBox：既要补足被裁切的内容，也必须夹住异常膨胀，否则图表会被
+// 钉在一张巨大的空白画布里（点击放大后图钉在角落、怎么放大都放不大）。
+//
+// 旧实现「只扩不缩」有三个致命点：
+//   ① x1=min(vb[0], b.x-pad) / x2=max(...)：只要有一个元素落在负坐标或远处，
+//      viewBox 就被撑大且永不收回；
+//   ② 防呆阈值 20 倍过于宽松，6 倍这种程度的膨胀完全放行——而那已经足以毁掉预览；
+//   ③ 只处理「内容 > viewBox」（裁切方向），完全不管「内容 < viewBox」（膨胀方向）。
+// 现在改为双向夹紧：内容包围盒是唯一权威，raw 只作裁切方向的夹紧上限。
+const MERMAID_MAX_GROW = 1.35;  // 相比原始 viewBox 最多外扩 35%（仅用于补裁切时的上限）
+function rawViewBoxOf(svgEl) {
   try {
-    if (!svgEl) return;
-    const vb = (svgEl.getAttribute("viewBox") || "").split(/[\s,]+/).map(Number);
-    if (vb.length !== 4 || !(vb[2] > 0) || !(vb[3] > 0)) return;
-    const b = svgEl.getBBox();
-    if (!isFinite(b.x) || !(b.width > 0) || !(b.height > 0)) return;
-    if (b.width > vb[2] * 20 || b.height > vb[3] * 20) return; // 防呆：内容异常巨大
-    const pad = 8;
-    const x1 = Math.min(vb[0], b.x - pad);
-    const y1 = Math.min(vb[1], b.y - pad);
-    const x2 = Math.max(vb[0] + vb[2], b.x + b.width + pad);
-    const y2 = Math.max(vb[1] + vb[3], b.y + b.height + pad);
-    if (x2 - x1 > vb[2] + 0.5 || y2 - y1 > vb[3] + 0.5) {
-      svgEl.setAttribute("viewBox", `${x1} ${y1} ${x2 - x1} ${y2 - y1}`);
+    const raw = svgEl.getAttribute("data-mt-raw-viewbox") || svgEl.getAttribute("viewBox") || "";
+    const vb = raw.split(/[\s,]+/).map(Number);
+    if (vb.length === 4 && vb.every((n) => isFinite(n)) && vb[2] > 0 && vb[3] > 0) return vb;
+  } catch (_) {}
+  return null;
+}
+// 渲染完成后立刻调用：留存 mermaid 自己算出的 viewBox，供后续修正与序列化对照。
+// 必须紧跟在插入 DOM 之后（在 fixMermaidViewBox 改写之前）执行一次。
+function markRawViewBox(svgEl) {
+  try {
+    if (!svgEl || svgEl.getAttribute("data-mt-raw-viewbox")) return;
+    const raw = svgEl.getAttribute("viewBox") || "";
+    const vb = raw.split(/[\s,]+/).map(Number);
+    if (vb.length === 4 && vb.every((n) => isFinite(n)) && vb[2] > 0 && vb[3] > 0) {
+      svgEl.setAttribute("data-mt-raw-viewbox", raw);
     }
   } catch (_) {}
+}
+// 可见内容包围盒：排除 .chart-zoom-hint 之类的非图形兄弟节点，只量 svg 内的图形。
+// getBBox 只统计已渲染的图形元素，display:none 的隐藏内容（gantt 会塞数万像素）不计入。
+function visibleBBoxOf(svgEl) {
+  try {
+    const b = svgEl.getBBox();
+    if (isFinite(b.x) && isFinite(b.y) && b.width > 0 && b.height > 0) return b;
+  } catch (_) {}
+  return null;
+}
+// 计算「紧扣内容」的 viewBox —— 本函数是修复「图钉在角落 / 放大后放不大」的核心。
+//
+// 三条设计铁律（旧实现全部违反）：
+//   ① 内容包围盒是唯一权威。raw（mermaid 原始 viewBox）只作为「裁切方向的夹紧上限」，
+//      绝不能与内容取并集——否则 raw 一旦被异常撑大，并集会把它原样带回（越修越大）。
+//   ② 结果必须紧紧包住内容（留白有界），保证点开预览时图占满画布、真正可放大。
+//   ③ 非有限值/零面积/坐标越界一律拒绝，退回原状，绝不产生 NaN viewBox。
+function fitViewBoxToContent(svgEl) {
+  const content = visibleBBoxOf(svgEl);
+  if (!content) return null;
+  const cx1 = content.x;
+  const cy1 = content.y;
+  const cx2 = content.x + content.width;
+  const cy2 = content.y + content.height;
+  if (![cx1, cy1, cx2, cy2].every((n) => isFinite(n))) return null;
+  const contentW = cx2 - cx1;
+  const contentH = cy2 - cy1;
+  if (!(contentW > 0) || !(contentH > 0)) return null;
+
+  // 留白：只按内容尺寸取比例（不再设固定像素下限，避免小图被撑出大块空白）。
+  // 上限 12px 防止大图拿到夸张边距；比例 3%。
+  const pad = Math.min(12, Math.min(contentW, contentH) * 0.03);
+  let fx1 = cx1 - pad;
+  let fy1 = cy1 - pad;
+  let fw = contentW + pad * 2;
+  let fh = contentH + pad * 2;
+
+  // 裁切方向的安全上限：与原始 viewBox 相比最多外扩 MERMAID_MAX_GROW 倍。
+  // 内容只是略微溢出时正常补边；一旦触发上限，说明 getBBox 很可能不可信
+  // （gantt 的隐藏内容会报出数万像素），此时放弃「贴合内容」，直接沿用
+  // mermaid 原始 viewBox —— 它至少是已知可用的，绝不会把图推到空白区域。
+  const raw = rawViewBoxOf(svgEl);
+  if (raw) {
+    const maxW = raw[2] * MERMAID_MAX_GROW;
+    const maxH = raw[3] * MERMAID_MAX_GROW;
+    const overW = fw > maxW;
+    const overH = fh > maxH;
+    if (overW || overH) {
+      return `${raw[0]} ${raw[1]} ${raw[2]} ${raw[3]}`;
+    }
+  }
+  if (!(fw > 0) || !(fh > 0) || ![fx1, fy1].every((n) => isFinite(n))) return null;
+  return `${fx1} ${fy1} ${fw} ${fh}`;
+}
+function fixMermaidViewBox(svgEl) {
+  try {
+    if (!svgEl || !svgEl.getBBox) return;
+    const fitted = fitViewBoxToContent(svgEl);
+    if (!fitted) return;
+    if (svgEl.getAttribute("viewBox") !== fitted) svgEl.setAttribute("viewBox", fitted);
+  } catch (_) {}
+}
+// 序列化前用「紧扣内容」的 viewBox，确保放大预览的固有尺寸 = 图表本体尺寸，
+// 而不是被异常撑大的画布尺寸（这是“图钉在角落 / 放大后仍放不大”的直接原因）。
+function tightViewBoxForSerialize(svgEl) {
+  const fitted = fitViewBoxToContent(svgEl);
+  if (fitted) return fitted.split(/[\s,]+/).map(Number);
+  const b = visibleBBoxOf(svgEl);
+  if (b) return [b.x, b.y, b.width, b.height];
+  return rawViewBoxOf(svgEl);
 }
 async function renderChartsInPreview(container) {
   if (!container) return;
@@ -7998,6 +8078,11 @@ async function renderChartsInPreview(container) {
         mermaid.initialize({ startOnLoad: false, theme: "default", securityLevel: "loose" });
         _mermaidInitialized = true;
       }
+      // 等字体就绪再渲染：mermaid 对中文标签的自测量依赖实际字体度量，
+      // 字体未加载完就渲染会得到明显偏大/偏小的 viewBox（同一张图两次渲染结果不一致的根源）。
+      try {
+        if (document.fonts && document.fonts.ready) await document.fonts.ready;
+      } catch (_) {}
       const seq = ++_mermaidRenderSeq;
       for (let i = 0; i < mermaidBlocks.length; i++) {
         const block = mermaidBlocks[i];
@@ -8011,6 +8096,8 @@ async function renderChartsInPreview(container) {
           if (seq === _mermaidRenderSeq) {
             containerDiv.innerHTML = svg;
             const _svgForFix = containerDiv.querySelector("svg");
+            // 先留存 mermaid 原始 viewBox（供夹紧与序列化对照），再做修正
+            if (_svgForFix) markRawViewBox(_svgForFix);
             if (_svgForFix) fixMermaidViewBox(_svgForFix);
             // 添加点击放大提示
             if (!block.querySelector(".chart-zoom-hint")) {
@@ -8054,8 +8141,12 @@ async function renderChartsInPreview(container) {
                   // 序列化前克隆并恢复固有尺寸：页面内的 SVG 已被移除 width/height（交由 CSS 自适应），
                   // 直接序列化会得到无固有尺寸的 SVG，独立加载时按默认 300×150 渲染导致图表被裁切。
                   const clone = svgEl.cloneNode(true);
-                  const vb = (clone.getAttribute("viewBox") || "").split(/[\s,]+/).map(Number);
-                  if (vb.length === 4 && vb[2] > 0 && vb[3] > 0) {
+                  // 关键：不能盲信当前 viewBox。运行时若被异常 getBBox 撑大（mermaid 中文标签
+                  // 自测量不稳定），宽高就会变成「一张大白纸」的尺寸——放大后图钉在角落、
+                  // 怎么放大都放不大。这里改用「紧扣可见内容」的 viewBox 作为固有尺寸。
+                  const vb = tightViewBoxForSerialize(svgEl);
+                  if (vb && vb.length === 4 && vb[2] > 0 && vb[3] > 0) {
+                    clone.setAttribute("viewBox", `${vb[0]} ${vb[1]} ${vb[2]} ${vb[3]}`);
                     clone.setAttribute("width", String(Math.ceil(vb[2])));
                     clone.setAttribute("height", String(Math.ceil(vb[3])));
                   } else {
@@ -8069,6 +8160,7 @@ async function renderChartsInPreview(container) {
                   }
                   // 去掉页面内联样式（width:100%/height:auto/max-width 等），保证独立完整
                   clone.removeAttribute("style");
+                  clone.removeAttribute("data-mt-raw-viewbox");
                   clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
                   // Mermaid SVG 背景透明：预览弹窗是黑色底，透明会透出黑色导致图表难以辨认，
                   // 序列化时铺一层白色背景（图表本身是浅色主题）。

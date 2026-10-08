@@ -1,7 +1,7 @@
 {
-    "version":  "2.1.32",
+    "version":  "2.1.33",
     "downloadUrl":  "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
-    "latestReleaseNotes":  "沉浸模式排版对齐预览栏：图片限宽限高、表格/代码块/引用/链接恢复正常样式，主题适配全面生效",
-    "releaseNotes":  "v2.1.32 release. See changelog for details.",
+    "latestReleaseNotes":  "行内样式在裸段落中恢复显示（颜色/背景色/字号不再漏出源码），修复图表不居中与放大不清晰",
+    "releaseNotes":  "v2.1.33 release. See changelog for details.",
     "releaseDate":  "2026-10-08"
 }

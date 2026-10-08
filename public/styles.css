@@ -8594,8 +8594,10 @@ body.immersive-editing {
    该容器里是渲染后的真实 DOM，其颜色/背景/字号/加粗等属于「文档内容本身的语义」，
    而不是编辑器语法高亮；若一并清除，沉浸模式下字体颜色、背景色会全部失效。
    用 :not(.mt-md-wysiwyg) 过滤容器本身，再排除容器下的所有后代 ——
-   渲染结果的裸 span（如 {color:#dc2626|红字}）正是靠内联 style 生效，必须放行。 */
-body.lightweight-editor .cm-line span:not(.mt-md-wysiwyg):not(.mt-md-wysiwyg *),
+   渲染结果的裸 span（如 {color:#dc2626|红字}）正是靠内联 style 生效，必须放行。
+   .mt-md-inline-style 同理：普通段落里 {bg:…}/{color:…}/{size:…} 标记的
+   行内渲染容器（不参与块替换），其内部 span 同样靠内联 style 生效。 */
+body.lightweight-editor .cm-line span:not(.mt-md-wysiwyg):not(.mt-md-wysiwyg *):not(.mt-md-inline-style):not(.mt-md-inline-style *),
 body.lightweight-editor .cm-line .cm-heading,
 body.lightweight-editor .cm-line .cm-link,
 body.lightweight-editor .cm-line .cm-url,

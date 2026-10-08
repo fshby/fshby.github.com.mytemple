@@ -16,17 +16,62 @@ const appSrc = readFileSync(new URL("../public/app.js", import.meta.url), "utf8"
 const cssSrc = readFileSync(new URL("../public/styles.css", import.meta.url), "utf8");
 const htmlSrc = readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
 
+// 朴素花括号计数会被字符串/模板字符串/正则里的花括号骗到
+// （如 `<span style="color:${value}">` 与 /^\{(\d+)\}|/），这里按 JS 词法跳过这些区段。
 function fnBody(src, marker) {
   const start = src.indexOf(marker);
   assert.ok(start >= 0, `找不到 ${marker}`);
   const bodyStart = src.indexOf("{", start);
+
+  // 判断某个 "/" 是正则字面量起始还是除号：看上一个有效字符能否结束表达式
+  const canEndExpr = (ch) => /[A-Za-z0-9_$)\]}>"'`]/.test(ch || "");
+
   let depth = 0;
+  let prev = "";
   for (let i = bodyStart; i < src.length; i++) {
-    if (src[i] === "{") depth++;
-    else if (src[i] === "}") {
+    const ch = src[i];
+    if (ch === "/" && src[i + 1] === "/") {
+      const nl = src.indexOf("\n", i);
+      i = nl === -1 ? src.length : nl;
+      continue;
+    }
+    if (ch === "/" && src[i + 1] === "*") {
+      const end = src.indexOf("*/", i);
+      i = end === -1 ? src.length : end + 1;
+      continue;
+    }
+    if (ch === "/" && !canEndExpr(prev)) {
+      // 正则字面量：跳过字符类与转义
+      let j = i + 1;
+      let inClass = false;
+      for (; j < src.length; j++) {
+        const c = src[j];
+        if (c === "\\") { j++; continue; }
+        if (c === "[") { inClass = true; continue; }
+        if (c === "]") { inClass = false; continue; }
+        if (c === "/" && !inClass) break;
+        if (c === "\n") break;
+      }
+      if (j < src.length && src[j] === "/") {
+        i = j;
+        prev = "/";
+        continue;
+      }
+    }
+    if (ch === '"' || ch === "'" || ch === "`") {
+      for (let j = i + 1; j < src.length; j++) {
+        if (src[j] === "\\") { j++; continue; }
+        if (src[j] === ch) { i = j; break; }
+      }
+      prev = ch;
+      continue;
+    }
+    if (ch === "{") depth++;
+    else if (ch === "}") {
       depth--;
       if (depth === 0) return src.slice(bodyStart, i + 1);
     }
+    if (!/\s/.test(ch)) prev = ch;
   }
   throw new Error(`${marker} 花括号不配对`);
 }
@@ -78,6 +123,58 @@ test("渲染范围覆盖各类块，但普通段落不动", () => {
     body,
     /^\s*if \(text\.trim\(\)\) \{/m,
     "不得把普通段落纳入块级替换（会影响行高与光标落点）",
+  );
+});
+
+test("普通段落的行内样式标记走独立装饰（不参与块替换）", () => {
+  // 背景：{bg:…}/{color:…}/{size:…} 出现在裸段落时永远显示源码（块渲染只覆盖 5 类块），
+  // 用户看到「沉浸模式字体和背景没生效」。解法是 Decoration.replace 只替换标记字符范围，
+  // 段落本身保持普通段落 —— 光标落点不受影响。
+  const body = fnBody(coreSrc, "compute(view) {");
+  assert.match(body, /InlineStyleWidget/, "应有行内样式 widget");
+  assert.match(body, /scanInlineStyleTokens\(/, "应扫描行内样式标记");
+  assert.match(body, /blockedLines/, "应避开已被块级渲染接管的行（防双重渲染）");
+  // 行内装饰同样遵守「光标所在行保持源码」
+  assert.match(body, /cursorLines\.has\(n\)\) continue;/, "光标所在行不得施加行内装饰");
+  // 嵌套必须由花括号配对处理：简单正则 [^{}]* 只认最内层，外层 {size:18|…} 会泄漏成源码
+  const scanner = fnBody(coreSrc, "function renderInlineStyleHtml(text)");
+  assert.match(scanner, /depth \+= 1/, "应做花括号深度配对");
+  assert.match(scanner, /close === -1/, "未闭合的半截标记应保持源码");
+  assert.match(scanner, /escapeHtml\(/, "内容必须转义后才能拼进 HTML");
+  // widget 与 app.js 的 styleToken 输出一致：color / bg / size 三类
+  const widget = fnBody(coreSrc, "class InlineStyleWidget extends WidgetType");
+  assert.match(widget, /mt-md-inline-style/, "widget 应携带行内样式容器类");
+  assert.match(coreSrc, /"color:\$\{value\}"/, "color 标记输出内联颜色");
+  assert.match(coreSrc, /background-color:\$\{value\}/, "bg 标记输出内联背景");
+  assert.match(coreSrc, /font-size:\$\{value\}px/, "size 标记输出内联字号");
+});
+
+test("轻量模式的语法清零规则必须放行渲染容器", () => {
+  // 背景：沉浸模式复用 lightweight-editor（复用其关闭语法高亮的规则），
+  // 但那条规则原为「源码显示」设计，会把渲染结果里靠内联 style 生效的
+  // 字体颜色/背景色一并 !important 清掉。必须在选择器层排除 .mt-md-wysiwyg。
+  const resetBlock = cssSrc.slice(cssSrc.indexOf("body.lightweight-editor .cm-line span"));
+  const selector = resetBlock.slice(0, resetBlock.indexOf("{"));
+  assert.match(
+    selector,
+    /:not\(\.mt-md-wysiwyg\)/,
+    "清零选择器必须排除 .mt-md-wysiwyg 容器，否则沉浸模式下颜色/背景色失效",
+  );
+  assert.match(
+    selector,
+    /:not\(\.mt-md-wysiwyg \*\)/,
+    "还须排除容器内的所有后代，渲染结果的裸 span 靠内联 style 生效",
+  );
+  // 行内样式标记的容器同理（裸段落里 {bg:…} 的渲染结果也靠内联 style）
+  assert.match(
+    selector,
+    /:not\(\.mt-md-inline-style\)/,
+    "清零选择器必须排除 .mt-md-inline-style 容器",
+  );
+  assert.match(
+    selector,
+    /:not\(\.mt-md-inline-style \*\)/,
+    "还须排除行内样式容器的所有后代",
   );
 });
 
@@ -175,24 +272,6 @@ test("沉浸模式不得重复定义 .markdown-body 已提供的元素级排版"
       `不应再手写 .mt-md-wysiwyg ${el} 的规则，请交给 .markdown-body`,
     );
   }
-});
-
-test("轻量模式的语法清零规则必须放行渲染容器", () => {
-  // 背景：沉浸模式复用 lightweight-editor（复用其关闭语法高亮的规则），
-  // 但那条规则原为「源码显示」设计，会把渲染结果里靠内联 style 生效的
-  // 字体颜色/背景色一并 !important 清掉。必须在选择器层排除 .mt-md-wysiwyg。
-  const resetBlock = cssSrc.slice(cssSrc.indexOf("body.lightweight-editor .cm-line span"));
-  const selector = resetBlock.slice(0, resetBlock.indexOf("{"));
-  assert.match(
-    selector,
-    /:not\(\.mt-md-wysiwyg\)/,
-    "清零选择器必须排除 .mt-md-wysiwyg 容器，否则沉浸模式下颜色/背景色失效",
-  );
-  assert.match(
-    selector,
-    /:not\(\.mt-md-wysiwyg \*\)/,
-    "还须排除容器内的所有后代，渲染结果的裸 span 靠内联 style 生效",
-  );
 });
 
 test("渲染容器内必须用 revert 还原语义样式，且不得写死具体值", () => {

@@ -2826,7 +2826,7 @@ dependencies = [
 
 [[package]]
 name = "mytemple-server"
-version = "2.1.32"
+version = "2.1.33"
 dependencies = [
  "anyhow",
  "axum",

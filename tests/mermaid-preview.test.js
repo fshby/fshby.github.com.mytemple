@@ -28,16 +28,20 @@ function fnBody(src, marker) {
   throw new Error(`${marker} 花括号不配对`);
 }
 
-test("mermaid 点击预览：克隆 SVG 并从 viewBox 恢复固有尺寸", () => {
+test("mermaid 点击预览：克隆 SVG 并按「紧扣内容」的 viewBox 恢复固有尺寸", () => {
   const body = fnBody(appSrc, 'svgEl.addEventListener("click", (e) => {');
   // 必须克隆而不是直接序列化页面内 SVG
   assert.match(body, /cloneNode\(true\)/, "应克隆 SVG 节点");
-  // 必须从 viewBox 恢复 width/height
-  assert.match(body, /getAttribute\("viewBox"\)/, "应读取 viewBox");
+  // 必须经由 tightViewBoxForSerialize 取得固有尺寸：
+  // 运行时 viewBox 可能被异常 getBBox 撑大（图钉在画布角落、放大放不大的根因），
+  // 盲信当前 viewBox 会把「大白纸」尺寸带进预览；盲信 data-mt-raw-viewbox 同样可能被污染。
+  assert.match(body, /tightViewBoxForSerialize\(svgEl\)/, "应使用紧致 viewBox 计算固有尺寸");
   assert.match(body, /setAttribute\("width"/, "应设置 width 属性");
   assert.match(body, /setAttribute\("height"/, "应设置 height 属性");
   // 必须移除页面内联样式（width:100% 等对独立图片无意义且可能干扰）
   assert.match(body, /removeAttribute\("style"\)/, "应移除内联 style");
+  // 快照标记不得流入序列化产物
+  assert.match(body, /removeAttribute\("data-mt-raw-viewbox"\)/, "应移除 raw viewBox 标记");
   // 序列化的必须是克隆节点
   assert.match(body, /serializeToString\(clone\)/, "应序列化克隆节点");
   // 不允许再直接序列化原 svgEl
@@ -82,12 +86,22 @@ test("mermaid CDN：锁定精确版本并带缓存破坏参数", () => {
   assert.match(appSrc, /mermaid@11\.\d+\.\d+\/dist\/mermaid\.min\.js\?v=/, "应锁定精确版本并带 ?v= 缓存破坏");
 });
 
-test("mermaid 渲染后：viewBox 按内容边界自动外扩", () => {
-  const body = fnBody(appSrc, "function fixMermaidViewBox(");
-  assert.match(body, /getBBox\(\)/, "应读取内容真实边界");
-  assert.match(body, /setAttribute\("viewBox"/, "应写回 viewBox");
-  // 防呆：内容异常巨大时跳过（gantt 的 getBBox 含数万像素隐藏内容）
-  assert.match(body, /vb\[2\] \* 20 \|\| b\.height > vb\[3\] \* 20/, "应有 20 倍防呆上限");
+test("mermaid 渲染后：viewBox 双向夹紧（贴合内容且不被异常 bbox 撑大）", () => {
+  const fitBody = fnBody(appSrc, "function fitViewBoxToContent(");
+  const fixBody = fnBody(appSrc, "function fixMermaidViewBox(");
+  const bboxBody = fnBody(appSrc, "function visibleBBoxOf(");
+  assert.match(fixBody, /fitViewBoxToContent\(svgEl\)/, "fix 应委托给内容贴合计算");
+  assert.match(bboxBody, /getBBox\(\)/, "内容边界应来自 getBBox");
+  assert.match(fitBody, /visibleBBoxOf\(svgEl\)/, "贴合计算应使用可见内容边界");
+  assert.match(fitBody, /MERMAID_MAX_GROW/, "应有外扩上限常量（防异常 bbox）");
+  assert.match(fixBody, /setAttribute\("viewBox"/, "应写回 viewBox");
+  // 关键语义：内容包围盒远超原始 viewBox（getBBox 不可信，如 gantt 隐藏内容）时
+  // 必须回退 mermaid 原始 viewBox，而不是照单全收
+  assert.match(fitBody, /return `\$\{raw\[0\]\} \$\{raw\[1\]\} \$\{raw\[2\]\} \$\{raw\[3\]\}`/, "超限时应回退原始 viewBox");
+  // 渲染时必须先留存 mermaid 原始 viewBox 快照（供夹紧与序列化对照）
+  assert.match(appSrc, /function markRawViewBox\(/, "应存在原始 viewBox 快照函数");
+  assert.match(appSrc, /markRawViewBox\(_svgForFix\)/, "预览路径应先打快照再修正");
+  assert.match(appSrc, /markRawViewBox\(svgEl\)/, "打印路径应先打快照再修正");
   // 两处渲染路径（预览 + 打印）都要接入
   const previewFn = fnBody(appSrc, "async function renderChartsInPreview(");
   const printFn = fnBody(appSrc, "async function materializePrintArtifacts(");
@@ -95,6 +109,17 @@ test("mermaid 渲染后：viewBox 按内容边界自动外扩", () => {
   const printCall = /fixMermaidViewBox\(svgEl\)/.test(printFn);
   assert.ok(previewCall, "预览路径应调用 fixMermaidViewBox");
   assert.ok(printCall, "打印路径应调用 fixMermaidViewBox");
+  // 渲染前等字体就绪（mermaid 对中文标签的自测量随字体时序漂移的根源）
+  assert.match(previewFn, /document\.fonts\.ready/, "渲染前应等待字体就绪");
+});
+
+test("mermaid 序列化：viewBox 计算为纯函数并优先贴合内容", () => {
+  const body = fnBody(appSrc, "function tightViewBoxForSerialize(");
+  const bboxBody = fnBody(appSrc, "function visibleBBoxOf(");
+  assert.match(body, /fitViewBoxToContent\(svgEl\)/, "优先用内容贴合结果");
+  assert.match(bboxBody, /getBBox\(\)/, "兜底可见内容边界仍来自 getBBox");
+  assert.match(body, /visibleBBoxOf\(svgEl\)/, "贴合不可用时兜底可见内容边界");
+  assert.match(body, /rawViewBoxOf\(svgEl\)/, "最后才回退原始 viewBox");
 });
 
 test("预览序列化：SVG 铺白色背景（弹窗黑底不透出）", () => {

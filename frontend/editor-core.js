@@ -129,6 +129,129 @@ const editorTheme = EditorView.theme({
  */
 const markdownBlockMark = Decoration.line({ class: "mt-md-block" });
 
+/**
+ * 行内样式标记 `{color|bg|size:值|内容}` 的「只读渲染」装饰。
+ *
+ * 背景：`{bg:#fee2e2|文字}` 这类自定义标记由 app.js 的 inlineMarkdown 转成
+ * 带内联样式的 <span>。但沉浸模式的块级渲染只覆盖 5 类块（代码/公式/引用/表格/列表/标题），
+ * **普通段落从不进入块替换**（块替换会干扰光标落点，是刻意的收窄）。
+ * 于是裸段落里的标记永远显示源码 —— 用户看到的「字体和背景没生效」。
+ *
+ * 解法：不改块结构，改用 Decoration.mark 把「标记本身的字符范围」包一层，
+ * 并把它**同时**标记为 atomic + 隐藏。CodeMirror 对 atomicRanges 内被
+ * `display:none` 隐藏的文本，不会把光标停在中间 —— 编辑器自身就是这么实现
+ * 「隐藏 Markdown 标记符」的（hideMarkup 装饰 与 atomicRanges 成对使用）。
+ * 因此这里不会出现「光标卡在标记里」的问题，段落也依旧是普通段落。
+ */
+class InlineStyleWidget extends WidgetType {
+  constructor(html) {
+    super();
+    this.html = html;
+  }
+  // 内容相同才复用，避免每次重渲染都替换 DOM 节点
+  eq(other) {
+    return other instanceof InlineStyleWidget && other.html === this.html;
+  }
+  toDOM() {
+    const span = document.createElement("span");
+    span.className = "mt-md-inline-style";
+    span.innerHTML = this.html || "";
+    return span;
+  }
+  ignoreEvent() {
+    // 点击渲染结果仍把事件交给编辑器，保证可定位光标
+    return false;
+  }
+}
+
+// 标记语法：{color:#rrggbb|内容} / {bg:#rrggbb|内容} / {size:1-2位数字|内容}
+// 值域与 app.js::inlineMarkdown 的 styleToken 完全一致，避免两处解析分叉。
+const INLINE_STYLE_TOKEN = /\{(color|bg|size):(#[0-9a-fA-F]{6}|\d{1,2})\|/g;
+
+// editor-core 不依赖 app.js 的工具链，本地实现最小转义（与 path-utils.escapeHtml 逐字符一致）
+function escapeHtmlLocal(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+const escapeHtml = escapeHtmlLocal;
+
+/**
+ * 把一段文本里的自定义样式标记递归转成 HTML（与 inlineMarkdown 的输出一致）。
+ * 用「花括号配对」扫描而不是单个正则替换，这样才能正确处理嵌套：
+ *   {size:18|{color:#16a34a|文字}} —— 简单正则只认得最内层，外层 {size:18|…} 会泄漏成源码。
+ * 未闭合的标记（用户正在输入）整段跳过、保持源码 —— 输入过程不会被半截语法打断。
+ */
+function renderInlineStyleHtml(text) {
+  let out = "";
+  let i = 0;
+  while (i < text.length) {
+    INLINE_STYLE_TOKEN.lastIndex = i;
+    const m = INLINE_STYLE_TOKEN.exec(text);
+    if (!m) {
+      out += escapeHtml(text.slice(i));
+      break;
+    }
+    out += escapeHtml(text.slice(i, m.index));
+    // 花括号配对找匹配的闭括号（内容里允许嵌套一层或多层标记）
+    let depth = 0;
+    let close = -1;
+    for (let k = m.index + 1; k < text.length; k += 1) {
+      if (text[k] === "{") depth += 1;
+      else if (text[k] === "}") {
+        if (depth === 0) { close = k; break; }
+        depth -= 1;
+      }
+    }
+    if (close === -1) {
+      // 未闭合：原样保留（正则可能吃到后面的嵌套，所以只保留到「{」前已输出的部分，
+      // 从「{」开始逐字符原样输出，等待下一次输入事件重新扫描）
+      out += escapeHtml(text.slice(m.index));
+      break;
+    }
+    const type = m[1];
+    const value = m[2];
+    const inner = text.slice(m.index + m[0].length, close);
+    const innerHtml = renderInlineStyleHtml(inner);
+    if (type === "color") out += `<span style="color:${value}">${innerHtml}</span>`;
+    else if (type === "bg") out += `<span style="background-color:${value};padding:0 3px;border-radius:3px">${innerHtml}</span>`;
+    else out += `<span style="font-size:${value}px">${innerHtml}</span>`;
+    i = close + 1;
+  }
+  return out;
+}
+
+/**
+ * 扫描一行文本里的自定义样式标记（最外层），返回「整段标记」的渲染结果与字符范围。
+ * 嵌套由 renderInlineStyleHtml 递归处理；这里只负责给最外层标记定位。
+ */
+function scanInlineStyleTokens(text) {
+  const out = [];
+  INLINE_STYLE_TOKEN.lastIndex = 0;
+  let m;
+  while ((m = INLINE_STYLE_TOKEN.exec(text)) !== null) {
+    let depth = 0;
+    let close = -1;
+    for (let k = m.index + 1; k < text.length; k += 1) {
+      if (text[k] === "{") depth += 1;
+      else if (text[k] === "}") {
+        if (depth === 0) { close = k; break; }
+        depth -= 1;
+      }
+    }
+    if (close === -1) break; // 未闭合的半截标记：后面不再扫（保持源码）
+    out.push({
+      from: m.index,
+      to: close + 1,
+      html: renderInlineStyleHtml(text.slice(m.index, close + 1)),
+    });
+    INLINE_STYLE_TOKEN.lastIndex = close + 1;
+  }
+  return out;
+}
+
 class MarkdownPreviewWidget extends WidgetType {
   constructor(html, signature, onMount) {
     super();
@@ -297,7 +420,13 @@ function buildMarkdownWysiwygExtension(getRenderer, isEnabled, onWidgetMount) {
           : doc.lines;
         const margin = Math.max(20, visTo - visFrom);
         const builder = [];
-        for (const block of collectMdBlockRanges(doc)) {
+        const blockRanges = collectMdBlockRanges(doc);
+        // 被块级渲染覆盖的行号，行内样式标记要避开，避免同一段文本被渲染两次。
+        const blockedLines = new Set();
+        for (const block of blockRanges) {
+          for (let n = block.startLine; n <= block.endLine; n += 1) blockedLines.add(n);
+        }
+        for (const block of blockRanges) {
           if (block.endLine < visFrom - margin || block.startLine > visTo + margin) continue;
           let hasCursor = false;
           for (let n = block.startLine; n <= block.endLine; n += 1) {
@@ -340,6 +469,26 @@ function buildMarkdownWysiwygExtension(getRenderer, isEnabled, onWidgetMount) {
                 Decoration.replace({ widget: new MarkdownBlankWidget(), block: false }).range(l.from, l.to),
               );
             }
+          }
+        }
+
+        // ── 行内样式标记的只读渲染（{color|bg|size:值|内容}）─────────────────
+        // 普通段落不参与上面的块替换（保护光标落点），但段落里的自定义标记
+        // 必须在沉浸模式下可见，否则用户会看到「字体和背景没生效」。
+        // 这里只把「标记字符范围」替换成渲染结果，段落本身仍是普通段落。
+        for (let n = 1; n <= doc.lines; n += 1) {
+          if (blockedLines.has(n)) continue;   // 已由块级渲染接管
+          if (cursorLines.has(n)) continue;    // 光标所在行保持源码可编辑
+          const line = doc.line(n);
+          if (!line.text || line.text.indexOf("{") === -1) continue; // 快速跳过
+          for (const tok of scanInlineStyleTokens(line.text)) {
+            if (tok.from === tok.to) continue;
+            builder.push(
+              Decoration.replace({
+                widget: new InlineStyleWidget(tok.html),
+                block: false,
+              }).range(line.from + tok.from, line.from + tok.to),
+            );
           }
         }
         return Decoration.set(builder, true);

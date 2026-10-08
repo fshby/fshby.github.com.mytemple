@@ -24,7 +24,7 @@
         <a href="index.html#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.1.32</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.1.33</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -40,6 +40,7 @@
         <div class="changelog-toc reveal">
           <h3>版本索引</h3>
           <ul>
+            <li><a href="#v2.1.33">v2.1.33</a> — 行内颜色 / 背景 / 字号在裸段落中恢复显示，图表居中与放大清晰度修复</li>
             <li><a href="#v2.1.32">v2.1.32</a> — 沉浸模式排版对齐预览栏：图片不再过大，表格 / 代码块 / 引用 / 链接恢复正常样式</li>
             <li><a href="#v2.1.31">v2.1.31</a> — 沉浸模式显示补全：公式 / 表格 / 提示块 / 图片 / 字体颜色 / 背景色 / 高亮全部正常呈现</li>
             <li><a href="#v2.1.30">v2.1.30</a> — 沉浸模式重构为所见即所得：进入沉浸后正文按最终效果渲染，光标所在段落保留源码可直接编辑，退出即完整还原，不影响其它功能</li>
@@ -91,6 +92,33 @@
             <li><a href="#v1.8.93">v1.8.93</a> — 界面与体验升级 + 性能优化</li>
           </ul>
         </div>
+
+        <article class="doc-section reveal" id="v2.1.33">
+          <h3>v2.1.33 · 行内样式在裸段落中生效 + 图表居中放大修复</h3>
+          <p>v2.1.32 让沉浸模式的块级排版对齐了预览栏，但仍有一类内容遗漏：写在<strong>普通段落</strong>里的颜色 / 背景色 / 字号标记不显示效果，而是把 <code>{color:#dc2626|文字}</code> 这样的源码原样露出来。同时修复了状态图等图表不居中、放大后依然模糊的问题。</p>
+
+          <h4>行内样式在裸段落中恢复显示</h4>
+          <ul>
+            <li><b>问题所在</b>：沉浸模式的渲染只接管 5 类"块"（代码块、引用块、表格、列表、标题与图片行）。出于"不影响光标落点"的考虑，普通段落刻意不参与渲染——因此直接写在段落里的样式标记永远显示源码。</li>
+            <li><b>本次解法</b>：改为<strong>只把标记字符本身</strong>替换成渲染结果，段落依旧是普通段落，行高与光标落点完全不受影响。既补上了效果，又不动已然稳定的块级渲染。</li>
+            <li><b>嵌套也正确</b>：<code>{size:18|{color:#16a34a|文字}}</code> 这类多层嵌套按花括号配对逐层渲染，不会因为只认最内层而把外层标记泄漏成源码。</li>
+            <li><b>编辑体验不变</b>：光标所在的段落仍整体显示源码，方便直接修改；光标<strong>无法停在标记语法内部</strong>（标记范围是原子的），不会被半截花括号卡住。</li>
+          </ul>
+
+          <h4>图表居中与放大清晰度</h4>
+          <ul>
+            <li><b>不再偏在右上角</b>：此前图表画布的 viewBox 只会向外扩张、从不回收，只要有一个元素坐标偏出集群，整个画布就被永久撑大，图表被挤到角落只剩一小块。现在改为<strong>以内容实际包围盒为准，双向夹紧</strong>，图表默认占满画布。</li>
+            <li><b>放大后真正变清晰</b>：点击放大时按"紧扣内容"的 viewBox 生成图片固有尺寸，不再得到一个巨大的近正方形空白画布；放大是对矢量重新光栅化而非拉伸位图，因此边缘清晰。</li>
+            <li><b>异常数据有兜底</b>：甘特图等内容会报告超大（数万像素）的包围盒，此时自动回退到图表自身声明的 viewBox，避免过度裁剪。</li>
+            <li><b>字体就绪后再测量</b>：渲染前等待字体加载完成，避免用回退字体的包围盒做测量导致偏移。</li>
+          </ul>
+
+          <h4>影响范围</h4>
+          <ul>
+            <li><b>普通编辑态零影响</b>：本次改动只作用于沉浸模式的渲染扩展与图表渲染后处理；退出沉浸后编辑器行为与上一版逐字节一致。</li>
+            <li><b>回归验证</b>：73 项自动化测试全部通过，含"普通段落不得纳入块级替换"的既有约束；另以真实编辑器实例做了端到端验证——标记全部渲染、无花括号泄漏、颜色 / 背景 / 字号逐层命中，107 个光标停留点无一卡在标记语法内。</li>
+          </ul>
+        </article>
 
         <article class="doc-section reveal" id="v2.1.32">
           <h3>v2.1.32 · 沉浸模式排版对齐预览栏</h3>
