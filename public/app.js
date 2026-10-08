@@ -1,4 +1,4 @@
-import { createMarkdownEditor } from "/editor-core.js?v=20260814-v1";
+import { createMarkdownEditor } from "/editor-core.js?v=20261008-v1";
 import { createPeriodicPerlin, generateSeamlessPaperTextureDataUrl, generateLargePaperTextureDataUrl, getPaperBackgroundUrl } from "./modules/paper-texture.js";
 import { escapeHtml, displayName, displayRelativePath, splitPathRef, joinPathRef, parentPathRef, compactName, splitWorkspaceRef, plainText, headingId } from "./modules/path-utils.js";
 import { extractOutline, addCnEnSpaces } from "./modules/editor-utils.js";
@@ -595,6 +595,11 @@ const els = {
 };
 
 els.editor = createMarkdownEditor(els.editor);
+// 沉浸式渲染（所见即所得）：把已有的纯函数 renderMarkdown 作为渲染器注入编辑器核心。
+// 编辑器默认不启用该渲染，仅当进入沉浸模式时才热开启，退出即关闭，其它功能不受影响。
+try {
+  els.editor.injectRenderer?.((source) => renderMarkdown(String(source ?? "")));
+} catch (_) {}
 
 if (els.graphDynamic) els.graphDynamic.checked = state.graphView.dynamic;
 
@@ -8566,7 +8571,7 @@ function setImmersiveEditing(enabled) {
   els.appShell.classList.toggle("immersive", state.immersive);
   document.body.classList.toggle("immersive-editing", state.immersive);
   document.body.classList.toggle("lightweight-editor", state.lightweight);
-  els.focusModeBtn.textContent = state.immersive ? "退出沉浸 (轻量)" : "⚡ 沉浸";
+  els.focusModeBtn.textContent = state.immersive ? "退出沉浸" : "⚡ 沉浸";
   els.focusModeBtn.setAttribute("aria-pressed", String(state.immersive));
   if (state.immersive) {
     if (!wasImmersive) {
@@ -8589,9 +8594,12 @@ function setImmersiveEditing(enabled) {
       clearTimeout(state.previewTimer);
       state.previewTimer = 0;
     }
+    // 开启所见即所得渲染：光标所在块保持源码，其余块渲染为最终效果。
+    try { els.editor.setWysiwygEnabled?.(true); } catch (_) {}
     requestAnimationFrame(() => els.editor.focus());
   } else if (wasImmersive) {
-    // 退出沉浸：恢复完整功能
+    // 退出沉浸：先关掉所见即所得渲染，再恢复完整功能。
+    try { els.editor.setWysiwygEnabled?.(false); } catch (_) {}
     setEditorOutlineVisible(true);
     setPreviewVisible(true);
     // 重建 Markdown Worker 并刷新预览

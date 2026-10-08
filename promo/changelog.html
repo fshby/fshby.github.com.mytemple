@@ -24,7 +24,7 @@
         <a href="index.html#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.1.29</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.1.30</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -40,6 +40,7 @@
         <div class="changelog-toc reveal">
           <h3>版本索引</h3>
           <ul>
+            <li><a href="#v2.1.30">v2.1.30</a> — 沉浸模式重构为所见即所得：进入沉浸后正文按最终效果渲染，光标所在段落保留源码可直接编辑，退出即完整还原，不影响其它功能</li>
             <li><a href="#v2.1.29">v2.1.29</a> — 图表三连修复：锁定升级 Mermaid 11（架构图可用）+ 渲染后按内容自动外扩（底部不再被裁）+ 预览白底与拖拽平移</li>
             <li><a href="#v2.1.28">v2.1.28</a> — AI 规则首次接入写入链路（越权写入可拦截）+ 知识库问答检索修复（重建索引不再落空、中文提问可召回、首次使用自动建索引）+ 图表放大预览修复</li>
             <li><a href="#v2.1.27">v2.1.27</a> — 录屏画面修复（不再静止/卡顿、启动不再误弹遮罩）+ 知识脉络分析恢复 + 文档标准与 AI 规则、知识标签适配修复</li>
@@ -109,6 +110,31 @@
           <ul>
             <li><b>白底卡片</b>：Mermaid 输出的图表背景是透明的，此前放大后透出的是预览窗口的纯黑底色，浅色图表浮在黑底上难以辨认。现在导出预览图时<strong>自动铺一层白色背景</strong>，任何主题下都是清晰的白底卡片。</li>
             <li><b>拖拽平移</b>：放大超过窗口大小后，此前看不到的部分没有任何办法查看。现在<strong>按住鼠标即可拖拽平移</strong>（配合矢量缩放，放大到多大都保持线条锐利）。</li>
+          </ul>
+        </article>
+
+        <article class="doc-section reveal" id="v2.1.30">
+          <h3>v2.1.30 · 沉浸模式重构为所见即所得</h3>
+          <p>此前的「沉浸模式」本质上是「精简外壳」：隐藏侧边栏、关闭预览，正文仍然是 Markdown 源码。本次按所见即所得的思路重构，让沉浸模式下直接看到排版后的效果。</p>
+
+          <h4>沉浸模式：正文按最终效果呈现</h4>
+          <ul>
+            <li><b>块级所见即所得</b>：进入沉浸模式后，标题、分隔线、代码块会<strong>按最终排版效果直接显示</strong>（标题就是标题的字号与粗细，代码块就是带底色的代码卡片），不用再在脑海里把 <code>#</code>、<code>```</code> 换算成样子。</li>
+            <li><b>光标所在段落保留源码</b>：光标落在哪一块，哪一块就<strong>自动回显 Markdown 源码</strong>，可以直接编辑，改完移开光标即恢复渲染效果——既能所见即所得，又不影响精确编辑。</li>
+            <li><b>其它部分一切照旧</b>：普通段落不做任何转换，工具栏、快捷键、AI 改写、保存、大纲等全部功能保持不变。</li>
+          </ul>
+
+          <h4>不影响其它功能的实现方式</h4>
+          <ul>
+            <li><b>热插拔设计</b>：所见即所得是一个<strong>默认关闭、可随时开关的编辑器扩展</strong>，仅在你主动进入沉浸模式时启用。关闭状态下编辑器行为与旧版完全一致，撤销历史、光标位置、滚动位置全程不丢失。</li>
+            <li><b>绝不重建编辑器</b>：开关过程只切换渲染层，不做任何编辑器重建，因此不会出现「切个模式就丢历史 / 光标跳回开头」这类问题。</li>
+            <li><b>按需渲染</b>：只渲染当前视口附近的区块，长文档打开沉浸模式也不会卡顿。</li>
+          </ul>
+
+          <h4>沉浸模式使用提示</h4>
+          <ul>
+            <li>进入 / 退出：点击工具栏「⚡ 沉浸」按钮，或按 <code>Ctrl/Cmd + Shift + F</code>（快捷键 <code>Alt + O</code> 亦可切换）；<code>Esc</code> 退出。</li>
+            <li>建议在沉浸模式下配合「隐藏预览」使用，正文区域更宽，专注写作体验更好。</li>
           </ul>
         </article>
 

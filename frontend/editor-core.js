@@ -1,4 +1,4 @@
-import { EditorState, EditorSelection, Transaction } from "@codemirror/state";
+import { EditorState, EditorSelection, Transaction, Compartment } from "@codemirror/state";
 import {
   EditorView,
   ViewPlugin,
@@ -10,6 +10,8 @@ import {
   keymap,
   lineNumbers,
   rectangularSelection,
+  Decoration,
+  WidgetType,
 } from "@codemirror/view";
 import { defaultKeymap, deleteLine, history, undo, redo } from "@codemirror/commands";
 import {
@@ -115,6 +117,174 @@ const editorTheme = EditorView.theme({
     boxShadow: "0 0 0 2px var(--accent-strong)",
   },
 });
+
+/**
+ * 沉浸式渲染（所见即所得）扩展。
+ *
+ * 设计原则：**默认关闭，可运行时热切换，关闭时编辑器行为与旧版逐字节一致**。
+ * - 通过 Compartment + 空扩展实现动态开关，不重建 EditorView（不丢历史/选区/滚动）。
+ * - Markdown 渲染函数由外部注入（injectRenderer），核心不依赖 app.js 的 renderMarkdown。
+ * - 只对「光标不在其中的块」施加行级装饰，光标所在块保持源码可编辑 —— 与参考站
+ *   MarkdownAssistant 的「编辑 / 沉浸」双模式交互一致。
+ */
+const markdownBlockMark = Decoration.line({ class: "mt-md-block" });
+
+class MarkdownPreviewWidget extends WidgetType {
+  constructor(html, signature) {
+    super();
+    this.html = html;
+    this.signature = signature;
+  }
+  eq(other) {
+    return other instanceof MarkdownPreviewWidget && other.signature === this.signature;
+  }
+  toDOM() {
+    const wrap = document.createElement("div");
+    wrap.className = "mt-md-wysiwyg";
+    wrap.innerHTML = this.html || "";
+    return wrap;
+  }
+  ignoreEvent() {
+    // 点击预览内容时仍把光标交给编辑器处理，避免「点不进正文」。
+    return false;
+  }
+}
+
+/**
+ * 空占位：替换多行块除首行外的内容。
+ * CodeMirror 的 ViewPlugin 不允许提供「替换换行符」的装饰，因此跨行块只能
+ * 逐行处理——首行放渲染结果，其余行清空占位（保留换行符，不破坏行结构）。
+ */
+class MarkdownBlankWidget extends WidgetType {
+  toDOM() {
+    const span = document.createElement("span");
+    span.className = "mt-md-blank";
+    span.setAttribute("aria-hidden", "true");
+    return span;
+  }
+  eq() {
+    return true;
+  }
+  ignoreEvent() {
+    return false;
+  }
+}
+
+/**
+ * 计算需要渲染的「块」范围。
+ * 只处理标题 / 列表 / 引用 / 分隔线 / 围栏代码块这五类，段落保持原样——
+ * 因为块级替换会影响行高与光标落点，收窄类型是保证零回归的关键。
+ */
+function collectMdBlockRanges(doc) {
+  const ranges = [];
+  let i = 1;
+  while (i <= doc.lines) {
+    const line = doc.line(i);
+    const text = line.text;
+    if (/^\s*```/.test(text)) {
+      const fence = text.match(/^\s*(`{3,})/)[1];
+      let j = i + 1;
+      while (j <= doc.lines) {
+        if (new RegExp("^\\s*" + fence).test(doc.line(j).text)) break;
+        j += 1;
+      }
+      const end = Math.min(j, doc.lines);
+      ranges.push({ from: doc.line(i).from, to: doc.line(end).to, startLine: i, endLine: end });
+      i = end + 1;
+      continue;
+    }
+    if (/^\s{0,3}(#{1,6})\s+/.test(text) || /^\s{0,3}([-*_])(\s*\1){2,}\s*$/.test(text)) {
+      ranges.push({ from: line.from, to: line.to, startLine: i, endLine: i });
+    }
+    i += 1;
+  }
+  return ranges;
+}
+
+function buildMarkdownWysiwygExtension(getRenderer, isEnabled) {
+  return ViewPlugin.fromClass(
+    class {
+      constructor(view) {
+        this.decorations = this.compute(view);
+      }
+      update(update) {
+        if (!update.docChanged && !update.selectionSet && !update.viewportChanged) return;
+        this.decorations = this.compute(update.view);
+      }
+      compute(view) {
+        if (!isEnabled()) return Decoration.none;
+        const renderer = getRenderer();
+        if (typeof renderer !== "function") return Decoration.none;
+        const doc = view.state.doc;
+        const cursorLines = new Set();
+        for (const range of view.state.selection.ranges) {
+          const fromLine = doc.lineAt(range.from).number;
+          const toLine = doc.lineAt(range.to).number;
+          for (let n = fromLine; n <= toLine; n += 1) cursorLines.add(n);
+        }
+        // 只渲染视口附近的块（上下各预留一屏），避免大文档每次按键全量重渲染。
+        const visible = view.visibleRanges;
+        const visFrom = visible.length ? doc.lineAt(Math.max(0, visible[0].from - 1)).number : 1;
+        const visTo = visible.length
+          ? doc.lineAt(Math.min(doc.length, visible[visible.length - 1].to + 1)).number
+          : doc.lines;
+        const margin = Math.max(20, visTo - visFrom);
+        const builder = [];
+        for (const block of collectMdBlockRanges(doc)) {
+          if (block.endLine < visFrom - margin || block.startLine > visTo + margin) continue;
+          let hasCursor = false;
+          for (let n = block.startLine; n <= block.endLine; n += 1) {
+            if (cursorLines.has(n)) { hasCursor = true; break; }
+          }
+          // 光标所在块保持源码，便于直接编辑；其余块渲染为最终效果。
+          if (hasCursor) continue;
+          const source = doc.sliceString(block.from, block.to);
+          let html;
+          try {
+            html = renderer(source);
+          } catch (_) {
+            continue;
+          }
+          if (!html) continue;
+          const signature = `${block.from}:${block.to}:${source.length}`;
+          builder.push(markdownBlockMark.range(block.from));
+          // 逐行装饰，避免跨行 replace（CodeMirror 禁止 plugin 提供吞换行符的装饰）：
+          // 首行整行替换为渲染结果；其余行内容替换为空占位，换行符保留。
+          // 注意：widget 必须在 Decoration.replace(spec) 创建时传入，range() 无第三参数。
+          if (block.startLine === block.endLine) {
+            builder.push(
+              Decoration.replace({
+                widget: new MarkdownPreviewWidget(html, signature),
+                block: false,
+              }).range(block.from, block.to),
+            );
+          } else {
+            const first = doc.line(block.startLine);
+            builder.push(
+              Decoration.replace({
+                widget: new MarkdownPreviewWidget(html, signature),
+                block: false,
+              }).range(first.from, first.to),
+            );
+            for (let n = block.startLine + 1; n <= block.endLine; n += 1) {
+              const l = doc.line(n);
+              if (l.from === l.to) continue;
+              builder.push(
+                Decoration.replace({ widget: new MarkdownBlankWidget(), block: false }).range(l.from, l.to),
+              );
+            }
+          }
+        }
+        return Decoration.set(builder, true);
+      }
+    },
+    {
+      decorations: (plugin) => plugin.decorations,
+      provide: (plugin) =>
+        EditorView.atomicRanges.of((view) => view.plugin(plugin)?.decorations || Decoration.none),
+    },
+  );
+}
 
 const professionalKeymap = [
   {
@@ -247,6 +417,14 @@ class MarkdownEditorAdapter {
     this.host = host;
     this.events = new EventTarget();
     this.lastSelection = "0:0";
+    // 沉浸渲染：默认关闭（wysiwygEnabled=false），渲染器为空，行为与旧版完全一致。
+    this.wysiwygEnabled = false;
+    this.wysiwygRenderer = null;
+    this.wysiwygCompartment = new Compartment();
+    this.wysiwygExtension = buildMarkdownWysiwygExtension(
+      () => this.wysiwygRenderer,
+      () => this.wysiwygEnabled,
+    );
     this.view = new EditorView({
       parent: host,
       state: EditorState.create({
@@ -273,6 +451,8 @@ class MarkdownEditorAdapter {
           keymap.of(professionalKeymap),
           EditorView.lineWrapping,
           editorTheme,
+          // 默认空扩展：不产生任何装饰，渲染/编辑行为与旧版逐字节一致。
+          this.wysiwygCompartment.of([]),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) this.events.dispatchEvent(new Event("input"));
             if (update.selectionSet) {
@@ -403,6 +583,33 @@ class MarkdownEditorAdapter {
 
   focus() {
     this.view.focus();
+  }
+
+  /**
+   * 注入 Markdown → HTML 渲染器（由宿主提供，核心不硬编码）。
+   * 签名：renderer(source: string) => string
+   */
+  injectRenderer(renderer) {
+    this.wysiwygRenderer = typeof renderer === "function" ? renderer : null;
+    return this;
+  }
+
+  /**
+   * 开/关沉浸式渲染（所见即所得）。通过 Compartment 热切换，不重建 EditorView，
+   * 因此不会丢失撤销历史、选区与滚动位置；关闭后编辑器恢复原始源码显示。
+   */
+  setWysiwygEnabled(enabled) {
+    const next = Boolean(enabled);
+    if (next === this.wysiwygEnabled) return this.wysiwygEnabled;
+    this.wysiwygEnabled = next;
+    this.view.dispatch({
+      effects: this.wysiwygCompartment.reconfigure(next ? this.wysiwygExtension : []),
+    });
+    return this.wysiwygEnabled;
+  }
+
+  get wysiwygActive() {
+    return this.wysiwygEnabled;
   }
 
   contains(node) {
