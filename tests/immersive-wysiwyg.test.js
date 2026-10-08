@@ -119,6 +119,40 @@ test("沉浸排版样式限定在 .app-shell.immersive 作用域内", () => {
   assert.equal(bare, null, "存在未限定作用域的 .mt-md-wysiwyg 规则，会影响普通编辑态");
 });
 
+test("轻量模式的语法清零规则必须放行渲染容器", () => {
+  // 背景：沉浸模式复用 lightweight-editor（复用其关闭语法高亮的规则），
+  // 但那条规则原为「源码显示」设计，会把渲染结果里靠内联 style 生效的
+  // 字体颜色/背景色一并 !important 清掉。必须在选择器层排除 .mt-md-wysiwyg。
+  const resetBlock = cssSrc.slice(cssSrc.indexOf("body.lightweight-editor .cm-line span"));
+  const selector = resetBlock.slice(0, resetBlock.indexOf("{"));
+  assert.match(
+    selector,
+    /:not\(\.mt-md-wysiwyg\)/,
+    "清零选择器必须排除 .mt-md-wysiwyg 容器，否则沉浸模式下颜色/背景色失效",
+  );
+  assert.match(
+    selector,
+    /:not\(\.mt-md-wysiwyg \*\)/,
+    "还须排除容器内的所有后代，渲染结果的裸 span 靠内联 style 生效",
+  );
+});
+
+test("渲染容器内必须用 revert 还原语义样式，且不得写死具体值", () => {
+  const idx = cssSrc.indexOf("body.lightweight-editor .cm-line .mt-md-wysiwyg,");
+  assert.ok(idx >= 0, "必须存在渲染容器的还原规则");
+  const block = cssSrc.slice(idx, cssSrc.indexOf("}", idx) + 1);
+  assert.match(block, /color: revert/, "颜色应交回内联 style / UA 默认");
+  assert.match(block, /font-weight: revert/, "字重应还原为标签语义（strong 加粗）");
+  assert.match(block, /text-decoration: revert/, "下划线/删除线应还原为标签语义");
+  // 关键回归点：写死具体值会盖掉 <mark> 的 UA 默认黄底
+  assert.doesNotMatch(
+    block,
+    /background-color:\s*(transparent|inherit)\s*;/,
+    "不得写死 background-color，否则会盖掉 <mark> 的默认高亮底色",
+  );
+  assert.match(block, /background-color: revert/, "背景色必须退回到 UA 默认 / 内联样式");
+});
+
 test("静态资源缓存版本已同步递增", () => {
   const coreVersion = htmlSrc.match(/editor-core\.js\?v=([\w-]+)/)?.[1];
   const appVersion = htmlSrc.match(/app\.js\?v=([\w-]+)/)?.[1];
