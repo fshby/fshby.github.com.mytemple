@@ -65,15 +65,45 @@ test("光标所在块保持源码：仅对非光标块施加装饰", () => {
   assert.match(body, /if \(hasCursor\) continue;/, "光标所在块必须跳过渲染，保持可编辑");
 });
 
-test("渲染范围收窄为标题/分隔线/围栏代码块，段落不动", () => {
+test("渲染范围覆盖各类块，但普通段落不动", () => {
   const body = fnBody(coreSrc, "collectMdBlockRanges(doc)");
   assert.match(body, /#\{1,6\}/, "应识别标题");
-  assert.match(body, /```/, "应识别围栏代码块");
+  assert.match(body, /`\{3,\}|~\{3,\}/, "应识别围栏代码块（``` 与 ~~~）");
+  assert.match(body, /isMathFence/, "应识别多行数学公式块 $$...$$");
+  assert.match(body, /isTableRow/, "应识别表格");
+  assert.match(body, /isQuote/, "应识别引用 / 提示块（callout）");
+  assert.match(body, /isListItem/, "应识别列表");
+  assert.match(body, /isImageOnly/, "应识别独立图片行");
   assert.doesNotMatch(
     body,
     /^\s*if \(text\.trim\(\)\) \{/m,
     "不得把普通段落纳入块级替换（会影响行高与光标落点）",
   );
+});
+
+test("卡片渲染须走挂载后处理（KaTeX / Mermaid / 高亮）", () => {
+  // 渲染结果为 HTML 字符串，公式与图表必须挂载到真实 DOM 后才能异步渲染。
+  assert.match(coreSrc, /injectWidgetMountHook/, "核心须提供挂载后处理钩子");
+  assert.match(coreSrc, /queueMicrotask/, "钩子须在 DOM 挂载后异步触发");
+  const appInject = appSrc.slice(appSrc.indexOf("injectWidgetMountHook"));
+  const snippet = appInject.slice(0, 700);
+  assert.match(snippet, /renderMathInPreview/, "必须接入公式渲染");
+  assert.match(snippet, /renderChartsInPreview/, "必须接入图表渲染");
+  assert.match(snippet, /highlightCodeBlocks/, "必须接入代码高亮");
+  assert.match(snippet, /processJsonCodeBlocks/, "必须接入 JSON 代码块树形视图");
+  // 四条链路的顺序须与预览栏 swapPreviewHtml 保持一致，避免两套渲染分叉
+  assert(
+    snippet.indexOf("renderChartsInPreview") < snippet.indexOf("renderMathInPreview"),
+    "图表渲染应先于公式渲染（与预览栏一致）",
+  );
+});
+
+test("挂载钩子必须逐卡片注入，而非全局共享单例", () => {
+  // 每个 widget 各自持有 mount 回调，避免多个卡片复用时丢钩子
+  const body = fnBody(coreSrc, "compute(view) {");
+  assert.match(body, /new MarkdownPreviewWidget\(html, signature, mount\(\)\)/, "widget 应带 mount 回调");
+  const ext = fnBody(coreSrc, "buildMarkdownWysiwygExtension(getRenderer, isEnabled, onWidgetMount)");
+  assert.match(ext, /const mount = \(\) =>/, "应由 onWidgetMount 派生 mount 工厂");
 });
 
 test("退出沉浸必须关闭所见即所得渲染", () => {

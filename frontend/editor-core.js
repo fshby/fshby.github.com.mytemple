@@ -130,10 +130,11 @@ const editorTheme = EditorView.theme({
 const markdownBlockMark = Decoration.line({ class: "mt-md-block" });
 
 class MarkdownPreviewWidget extends WidgetType {
-  constructor(html, signature) {
+  constructor(html, signature, onMount) {
     super();
     this.html = html;
     this.signature = signature;
+    this.onMount = onMount || null;
   }
   eq(other) {
     return other instanceof MarkdownPreviewWidget && other.signature === this.signature;
@@ -142,6 +143,16 @@ class MarkdownPreviewWidget extends WidgetType {
     const wrap = document.createElement("div");
     wrap.className = "mt-md-wysiwyg";
     wrap.innerHTML = this.html || "";
+    // 挂载后交给宿主做二次渲染（KaTeX 公式 / Mermaid 图表 / 代码高亮等）。
+    // 这些渲染是异步且依赖 DOM 已存在的，必须在挂载后触发。
+    if (typeof this.onMount === "function") {
+      const cb = this.onMount;
+      queueMicrotask(() => {
+        try {
+          cb(wrap);
+        } catch (_) {}
+      });
+    }
     return wrap;
   }
   ignoreEvent() {
@@ -172,28 +183,76 @@ class MarkdownBlankWidget extends WidgetType {
 
 /**
  * 计算需要渲染的「块」范围。
- * 只处理标题 / 列表 / 引用 / 分隔线 / 围栏代码块这五类，段落保持原样——
- * 因为块级替换会影响行高与光标落点，收窄类型是保证零回归的关键。
+ * 覆盖：围栏代码块、数学公式块、标题 / 分隔线 / 独立图片行、
+ *       表格、引用与提示块（callout）、列表。
+ * 普通段落不处理——块级替换会影响光标落点，收窄类型是控制风险的关键。
  */
 function collectMdBlockRanges(doc) {
   const ranges = [];
+  const isFence = (t) => /^\s*(`{3,}|~{3,})/.test(t);
+  const isMathFence = (t) => /^\s*\$\$\s*$/.test(t);
+  const isQuote = (t) => /^\s*>/.test(t);
+  const isTableRow = (t) => /^\s*\|.*\|\s*$/.test(t);
+  const isListItem = (t) => /^\s*(?:[-*+]|\d+[.)])\s+/.test(t);
+  const isImageOnly = (t) => /^\s*(?:!\[[^\]]*\]\([^)]*\)\s*)+$/.test(t);
+  const isIndented = (t) => /^(?:\s{2,}|\t)/.test(t) && t.trim() !== "";
   let i = 1;
   while (i <= doc.lines) {
     const line = doc.line(i);
     const text = line.text;
-    if (/^\s*```/.test(text)) {
-      const fence = text.match(/^\s*(`{3,})/)[1];
+
+    // 1) 围栏代码块 / 数学公式块：按同种围栏配对
+    if (isFence(text) || isMathFence(text)) {
+      const matcher = isMathFence(text) ? isMathFence : isFence;
       let j = i + 1;
-      while (j <= doc.lines) {
-        if (new RegExp("^\\s*" + fence).test(doc.line(j).text)) break;
-        j += 1;
-      }
+      while (j <= doc.lines && !matcher(doc.line(j).text)) j += 1;
       const end = Math.min(j, doc.lines);
       ranges.push({ from: doc.line(i).from, to: doc.line(end).to, startLine: i, endLine: end });
       i = end + 1;
       continue;
     }
-    if (/^\s{0,3}(#{1,6})\s+/.test(text) || /^\s{0,3}([-*_])(\s*\1){2,}\s*$/.test(text)) {
+
+    // 2) 引用 / 提示块：连续的 > 行
+    if (isQuote(text)) {
+      let j = i;
+      while (j <= doc.lines && isQuote(doc.line(j).text)) j += 1;
+      const end = j - 1;
+      ranges.push({ from: doc.line(i).from, to: doc.line(end).to, startLine: i, endLine: end });
+      i = end + 1;
+      continue;
+    }
+
+    // 3) 表格：连续的 | ... | 行（含分隔行）
+    if (isTableRow(text)) {
+      let j = i;
+      while (j <= doc.lines && isTableRow(doc.line(j).text)) j += 1;
+      const end = j - 1;
+      ranges.push({ from: doc.line(i).from, to: doc.line(end).to, startLine: i, endLine: end });
+      i = end + 1;
+      continue;
+    }
+
+    // 4) 列表：从列表项开始，吞掉其缩进续行
+    if (isListItem(text)) {
+      let j = i;
+      while (
+        j + 1 <= doc.lines &&
+        (isListItem(doc.line(j + 1).text) || isIndented(doc.line(j + 1).text))
+      ) {
+        j += 1;
+      }
+      const end = j;
+      ranges.push({ from: line.from, to: doc.line(end).to, startLine: i, endLine: end });
+      i = end + 1;
+      continue;
+    }
+
+    // 5) 标题 / 分隔线 / 独立图片行 / 含图片的段落（图片常在段落内单独一行）
+    if (
+      /^\s{0,3}(#{1,6})\s+/.test(text) ||
+      /^\s{0,3}([-*_])(\s*\1){2,}\s*$/.test(text) ||
+      isImageOnly(text)
+    ) {
       ranges.push({ from: line.from, to: line.to, startLine: i, endLine: i });
     }
     i += 1;
@@ -201,7 +260,8 @@ function collectMdBlockRanges(doc) {
   return ranges;
 }
 
-function buildMarkdownWysiwygExtension(getRenderer, isEnabled) {
+function buildMarkdownWysiwygExtension(getRenderer, isEnabled, onWidgetMount) {
+  const mount = () => (typeof onWidgetMount === "function" ? onWidgetMount() : null);
   return ViewPlugin.fromClass(
     class {
       constructor(view) {
@@ -254,7 +314,7 @@ function buildMarkdownWysiwygExtension(getRenderer, isEnabled) {
           if (block.startLine === block.endLine) {
             builder.push(
               Decoration.replace({
-                widget: new MarkdownPreviewWidget(html, signature),
+                widget: new MarkdownPreviewWidget(html, signature, mount()),
                 block: false,
               }).range(block.from, block.to),
             );
@@ -262,7 +322,7 @@ function buildMarkdownWysiwygExtension(getRenderer, isEnabled) {
             const first = doc.line(block.startLine);
             builder.push(
               Decoration.replace({
-                widget: new MarkdownPreviewWidget(html, signature),
+                widget: new MarkdownPreviewWidget(html, signature, mount()),
                 block: false,
               }).range(first.from, first.to),
             );
@@ -421,9 +481,14 @@ class MarkdownEditorAdapter {
     this.wysiwygEnabled = false;
     this.wysiwygRenderer = null;
     this.wysiwygCompartment = new Compartment();
+    this.wysiwygMountHook = null;
     this.wysiwygExtension = buildMarkdownWysiwygExtension(
       () => this.wysiwygRenderer,
       () => this.wysiwygEnabled,
+      () => {
+        const hook = this.wysiwygMountHook;
+        return hook ? (el) => hook(el) : null;
+      },
     );
     this.view = new EditorView({
       parent: host,
@@ -591,6 +656,15 @@ class MarkdownEditorAdapter {
    */
   injectRenderer(renderer) {
     this.wysiwygRenderer = typeof renderer === "function" ? renderer : null;
+    return this;
+  }
+
+  /**
+   * 注入「挂载后处理」钩子：接收渲染结果容器，用于 KaTeX 公式 / Mermaid 图表 /
+   * 代码高亮等必须依赖真实 DOM 且异步完成的二次渲染。
+   */
+  injectWidgetMountHook(hook) {
+    this.wysiwygMountHook = typeof hook === "function" ? hook : null;
     return this;
   }
 

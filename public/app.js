@@ -1,4 +1,4 @@
-import { createMarkdownEditor } from "/editor-core.js?v=20261008-v1";
+import { createMarkdownEditor } from "/editor-core.js?v=20261008-v2";
 import { createPeriodicPerlin, generateSeamlessPaperTextureDataUrl, generateLargePaperTextureDataUrl, getPaperBackgroundUrl } from "./modules/paper-texture.js";
 import { escapeHtml, displayName, displayRelativePath, splitPathRef, joinPathRef, parentPathRef, compactName, splitWorkspaceRef, plainText, headingId } from "./modules/path-utils.js";
 import { extractOutline, addCnEnSpaces } from "./modules/editor-utils.js";
@@ -599,6 +599,14 @@ els.editor = createMarkdownEditor(els.editor);
 // 编辑器默认不启用该渲染，仅当进入沉浸模式时才热开启，退出即关闭，其它功能不受影响。
 try {
   els.editor.injectRenderer?.((source) => renderMarkdown(String(source ?? "")));
+  // 渲染结果为 HTML 字符串，KaTeX 公式 / Mermaid 图表 / 代码高亮必须在真实 DOM
+  // 挂载后异步完成 —— 复用与预览完全相同的后处理链路，避免两套渲染逻辑分叉。
+  els.editor.injectWidgetMountHook?.((container) => {
+    try { renderChartsInPreview(container); } catch (_) {}
+    try { renderMathInPreview(container); } catch (_) {}
+    try { processJsonCodeBlocks(container); } catch (_) {}
+    try { highlightCodeBlocks(container); } catch (_) {}
+  });
 } catch (_) {}
 
 if (els.graphDynamic) els.graphDynamic.checked = state.graphView.dynamic;
