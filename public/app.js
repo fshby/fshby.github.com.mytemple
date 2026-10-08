@@ -1,4 +1,4 @@
-import { createMarkdownEditor } from "/editor-core.js?v=20261008-v3";
+import { createMarkdownEditor } from "/editor-core.js?v=20261008-v4";
 import { createPeriodicPerlin, generateSeamlessPaperTextureDataUrl, generateLargePaperTextureDataUrl, getPaperBackgroundUrl } from "./modules/paper-texture.js";
 import { escapeHtml, displayName, displayRelativePath, splitPathRef, joinPathRef, parentPathRef, compactName, splitWorkspaceRef, plainText, headingId } from "./modules/path-utils.js";
 import { extractOutline, addCnEnSpaces } from "./modules/editor-utils.js";

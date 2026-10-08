@@ -141,7 +141,14 @@ class MarkdownPreviewWidget extends WidgetType {
   }
   toDOM() {
     const wrap = document.createElement("div");
-    wrap.className = "mt-md-wysiwyg";
+    // 必须同时携带 markdown-body：
+    // 预览面板（#preview / #markdownView）用的是 .markdown-body，其排版规则有 400+ 条
+    // （图片限宽限高、表格边框与内边距、代码块底色、引用缩进、链接取主题色、按主题微调…）。
+    // 沉浸容器若只叫 .mt-md-wysiwyg，这些规则一条都匹配不上，
+    // 会导致图片按原始像素硬渲染、表格塌成细条、行高退回 normal、链接变成 UA 蓝。
+    // 容器级属性（width/margin/padding/font-size/line-height）由 styles.css 里的
+    // `.app-shell.immersive .cm-line .mt-md-wysiwyg.markdown-body` 规则中和掉。
+    wrap.className = "mt-md-wysiwyg markdown-body";
     wrap.innerHTML = this.html || "";
     // 挂载后交给宿主做二次渲染（KaTeX 公式 / Mermaid 图表 / 代码高亮等）。
     // 这些渲染是异步且依赖 DOM 已存在的，必须在挂载后触发。

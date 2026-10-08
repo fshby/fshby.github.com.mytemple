@@ -8528,18 +8528,41 @@ body.immersive-editing {
    沉浸式渲染（所见即所得）
    仅作用于沉浸模式下由编辑器渲染出的块级预览，普通编辑态完全不受影响。
    .mt-md-block 为被替换为预览的块行，.mt-md-wysiwyg 为注入的渲染结果容器。
+
+   渲染容器同时携带 markdown-body 类，直接复用预览面板那套 400+ 条排版规则
+   （图片限宽限高、表格边框、代码块底色、引用缩进、链接取主题色、按主题微调…），
+   不再维护一份追不上的手写副本。
+   下面的「容器级属性中和」把 .markdown-body 自带的容器级属性（限宽/居中/内边距/
+   字号/行高）还原成继承值——沉浸模式的宽度与留白由外层 .cm-content 控制。
    --------------------------------------------------------------------------- */
+
+.app-shell.immersive .cm-line .mt-md-wysiwyg.markdown-body {
+  width: auto;
+  min-width: 0;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  font-size: inherit;
+  /* 行高不继承编辑器（#editor: 1.76 为源码可读性调过），
+     沿用文档正文比例 1.82 —— 与预览面板 .markdown-body 完全一致。 */
+  line-height: 1.82;
+}
 
 .app-shell.immersive .cm-line.mt-md-block {
   padding-left: 0;
   padding-right: 0;
 }
 
+/* 下面只保留 .markdown-body 那套规则「没有覆盖到」的部分：
+   —— 容器基座（颜色/字体）与首末子元素的边距归零。
+   其余元素级排版（h1~h6、p、ul/ol、li、blockquote、hr、strong、code、pre、
+   table、th/td）已全部由 .markdown-body 提供，不再重复定义。
+   历史教训：此前这里手写了 10 种元素的规则，其中 pre 背景、table collapse、
+   th/td padding 等声明因被轻量模式的 revert 规则反制而从未生效，属于无效功。 */
 .app-shell.immersive .mt-md-wysiwyg {
   --mt-wysiwyg-ink: var(--text);
   color: var(--mt-wysiwyg-ink);
   font-family: var(--font-sans, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif);
-  line-height: 1.75;
   letter-spacing: .005em;
 }
 
@@ -8549,101 +8572,6 @@ body.immersive-editing {
 
 .app-shell.immersive .mt-md-wysiwyg > *:last-child {
   margin-bottom: 0;
-}
-
-.app-shell.immersive .mt-md-wysiwyg h1,
-.app-shell.immersive .mt-md-wysiwyg h2,
-.app-shell.immersive .mt-md-wysiwyg h3,
-.app-shell.immersive .mt-md-wysiwyg h4,
-.app-shell.immersive .mt-md-wysiwyg h5,
-.app-shell.immersive .mt-md-wysiwyg h6 {
-  margin: .9em 0 .45em;
-  line-height: 1.32;
-  font-weight: 600;
-  color: var(--mt-wysiwyg-ink);
-}
-
-.app-shell.immersive .mt-md-wysiwyg h1 {
-  font-size: 1.72em;
-  letter-spacing: -.01em;
-}
-
-.app-shell.immersive .mt-md-wysiwyg h2 {
-  font-size: 1.42em;
-}
-
-.app-shell.immersive .mt-md-wysiwyg h3 {
-  font-size: 1.2em;
-}
-
-.app-shell.immersive .mt-md-wysiwyg h4,
-.app-shell.immersive .mt-md-wysiwyg h5,
-.app-shell.immersive .mt-md-wysiwyg h6 {
-  font-size: 1.05em;
-}
-
-.app-shell.immersive .mt-md-wysiwyg p {
-  margin: .5em 0;
-}
-
-.app-shell.immersive .mt-md-wysiwyg ul,
-.app-shell.immersive .mt-md-wysiwyg ol {
-  margin: .5em 0;
-  padding-left: 1.5em;
-}
-
-.app-shell.immersive .mt-md-wysiwyg li {
-  margin: .2em 0;
-}
-
-.app-shell.immersive .mt-md-wysiwyg blockquote {
-  margin: .6em 0;
-  padding: .1em 0 .1em 1em;
-  border-left: 3px solid color-mix(in srgb, var(--accent) 45%, transparent);
-  color: var(--muted);
-}
-
-.app-shell.immersive .mt-md-wysiwyg hr {
-  margin: 1.2em 0;
-  border: 0;
-  border-top: 1px solid var(--hairline);
-}
-
-.app-shell.immersive .mt-md-wysiwyg pre {
-  margin: .7em 0;
-  padding: 12px 14px;
-  overflow: auto;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--surface-2) 88%, transparent);
-  font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
-  font-size: .92em;
-  line-height: 1.6;
-}
-
-.app-shell.immersive .mt-md-wysiwyg code {
-  font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
-  font-size: .92em;
-}
-
-.app-shell.immersive .mt-md-wysiwyg :not(pre) > code {
-  padding: .1em .35em;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--surface-2) 85%, transparent);
-}
-
-.app-shell.immersive .mt-md-wysiwyg table {
-  margin: .7em 0;
-  border-collapse: collapse;
-}
-
-.app-shell.immersive .mt-md-wysiwyg th,
-.app-shell.immersive .mt-md-wysiwyg td {
-  padding: 6px 10px;
-  border: 1px solid var(--hairline);
-}
-
-.app-shell.immersive .mt-md-wysiwyg strong {
-  font-weight: 600;
 }
 
 @media (max-width: 720px) {

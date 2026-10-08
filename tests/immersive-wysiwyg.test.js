@@ -119,6 +119,64 @@ test("沉浸排版样式限定在 .app-shell.immersive 作用域内", () => {
   assert.equal(bare, null, "存在未限定作用域的 .mt-md-wysiwyg 规则，会影响普通编辑态");
 });
 
+test("沉浸渲染容器必须携带 markdown-body 类以复用预览排版", () => {
+  // 背景：预览面板（#preview / #markdownView）的排版规则 400+ 条全部以 .markdown-body 开头
+  // （图片限宽限高、表格边框与内边距、代码块底色、引用缩进、链接取主题色、按主题微调…）。
+  // 沉浸容器若只叫 .mt-md-wysiwyg，这些规则一条都匹配不上：
+  //   img  -> max-width:none / max-height:none / display:inline（图片按原始像素硬渲染）
+  //   table-> border-collapse:separate 且宽度塌成细条；th/td -> padding:1px / border:0
+  //   pre  -> 背景透明、padding:0、圆角:0；a -> UA 默认蓝 rgb(0,0,238)
+  //   p/li -> line-height 退回 normal
+  // 实测：加类前 19/19 项与预览不一致，加类后 0/19。
+  assert.match(
+    coreSrc,
+    /wrap\.className\s*=\s*"mt-md-wysiwyg markdown-body"/,
+    "渲染容器必须同时带 mt-md-wysiwyg 与 markdown-body 两个类",
+  );
+});
+
+test("沉浸容器级属性必须被中和，避免 markdown-body 的限宽/居中影响沉浸布局", () => {
+  // .markdown-body 自带 width:min(920px,…) / margin:0 auto / padding / font-size / line-height，
+  // 这些是「容器级」属性，加到 widget 上会把沉浸正文挤窄、产生额外留白。
+  // 必须有一条更高优先级的规则把它们还原成继承值。
+  const idx = cssSrc.indexOf(".app-shell.immersive .cm-line .mt-md-wysiwyg.markdown-body");
+  assert.ok(idx >= 0, "必须存在沉浸容器的容器级属性中和规则");
+  const block = cssSrc.slice(idx, cssSrc.indexOf("}", idx) + 1);
+  for (const decl of [
+    /width:\s*auto/,
+    /max-width:\s*none/,
+    /margin:\s*0/,
+    /padding:\s*0/,
+    /font-size:\s*inherit/,
+    // 行高必须固定为文档正文比例 1.82（与预览面板 .markdown-body 一致），
+    // 不能 inherit —— 编辑器 #editor 是 1.76（为源码可读性调过），
+    // 继承会让沉浸正文行高比预览低 3.3%，实测可得 29.952px vs 29.12px。
+    /line-height:\s*1\.82/,
+  ]) {
+    assert.match(block, decl, `容器级属性未中和：${decl}`);
+  }
+  // 中和规则必须比 .markdown-body 更晚出现（同权重下后者覆盖前者）
+  assert.ok(
+    idx > cssSrc.indexOf(".markdown-body {\n  width: min(860px"),
+    "中和规则必须位于 .markdown-body 容器级规则之后，否则会被覆盖",
+  );
+});
+
+test("沉浸模式不得重复定义 .markdown-body 已提供的元素级排版", () => {
+  // 历史教训：此前手写过 h1~h6 / p / ul / li / blockquote / pre / code / table / th / td
+  // 共 10 类元素的规则，其中 pre 背景、table collapse、th/td padding 等声明
+  // 因被轻量模式的 revert 规则反制而从未生效（写了等于没写），属于无效功。
+  // 现在统一由 .markdown-body 提供，禁止再出现这些重复定义。
+  for (const el of ["pre", "table", "blockquote", "code"]) {
+    const re = new RegExp(`^\\s*\\.app-shell\\.immersive \\.mt-md-wysiwyg ${el}\\s*[,{]`, "m");
+    assert.doesNotMatch(
+      cssSrc,
+      re,
+      `不应再手写 .mt-md-wysiwyg ${el} 的规则，请交给 .markdown-body`,
+    );
+  }
+});
+
 test("轻量模式的语法清零规则必须放行渲染容器", () => {
   // 背景：沉浸模式复用 lightweight-editor（复用其关闭语法高亮的规则），
   // 但那条规则原为「源码显示」设计，会把渲染结果里靠内联 style 生效的
