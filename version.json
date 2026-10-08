@@ -1,7 +1,7 @@
 {
-    "version":  "2.1.30",
+    "version":  "2.1.31",
     "downloadUrl":  "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
-    "latestReleaseNotes":  "沉浸模式重构为所见即所得：标题/代码块/分隔线按最终排版呈现，光标所在段落保留源码可直接编辑；实现为默认关闭、可热插拔的编辑器扩展，退出即完整还原，其它功能不受影响",
-    "releaseNotes":  "v2.1.30 release. See changelog for details.",
+    "latestReleaseNotes":  "沉浸模式显示补全：公式/表格/提示块/图片按最终效果渲染，字体颜色/背景色/高亮恢复显示",
+    "releaseNotes":  "v2.1.31 release. See changelog for details.",
     "releaseDate":  "2026-10-08"
 }
