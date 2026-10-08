@@ -24,7 +24,7 @@
         <a href="index.html#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.1.31</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.1.32</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -40,6 +40,7 @@
         <div class="changelog-toc reveal">
           <h3>版本索引</h3>
           <ul>
+            <li><a href="#v2.1.32">v2.1.32</a> — 沉浸模式排版对齐预览栏：图片不再过大，表格 / 代码块 / 引用 / 链接恢复正常样式</li>
             <li><a href="#v2.1.31">v2.1.31</a> — 沉浸模式显示补全：公式 / 表格 / 提示块 / 图片 / 字体颜色 / 背景色 / 高亮全部正常呈现</li>
             <li><a href="#v2.1.30">v2.1.30</a> — 沉浸模式重构为所见即所得：进入沉浸后正文按最终效果渲染，光标所在段落保留源码可直接编辑，退出即完整还原，不影响其它功能</li>
             <li><a href="#v2.1.29">v2.1.29</a> — 图表三连修复：锁定升级 Mermaid 11（架构图可用）+ 渲染后按内容自动外扩（底部不再被裁）+ 预览白底与拖拽平移</li>
@@ -90,6 +91,38 @@
             <li><a href="#v1.8.93">v1.8.93</a> — 界面与体验升级 + 性能优化</li>
           </ul>
         </div>
+
+        <article class="doc-section reveal" id="v2.1.32">
+          <h3>v2.1.32 · 沉浸模式排版对齐预览栏</h3>
+          <p>v2.1.31 解决了沉浸模式"内容不显示"的问题，但显示出来的排版与预览栏并不一致：图片按原始像素撑满页面、表格被压成细条、代码块没有底色、链接变成浏览器默认蓝。本次让沉浸模式<strong>直接复用预览栏的整套排版规则</strong>，两边效果彻底统一。</p>
+
+          <h4>图片不再过大</h4>
+          <ul>
+            <li><b>图片恢复限宽限高</b>：此前的图片约束规则只对预览栏生效，沉浸模式下图片会<strong>按原图尺寸硬渲染</strong>——一张高分屏截图就能撑爆整个页面、横向溢出。现在沉浸模式下图片自动限制在<strong>容器宽度以内、最高 600px</strong>，并恢复圆角与居中摆放。</li>
+            <li><b>视频同样受限</b>：嵌入的视频也一并恢复宽度与高度约束，不会再撑破版面。</li>
+          </ul>
+
+          <h4>排版恢复整洁</h4>
+          <ul>
+            <li><b>表格</b>：恢复单元格边框与 8px×10px 内边距，表格重新撑满可用宽度，不再塌成一根细条。</li>
+            <li><b>代码块</b>：恢复深色底、内边距与圆角，长代码行恢复横向滚动，不再与正文糊成一片。</li>
+            <li><b>引用块</b>：恢复左侧竖线与 18px 缩进，引用内容重新有清晰的视觉标识。</li>
+            <li><b>行高与间距</b>：段落、列表行高恢复为文档正文字号比例，标题上边距恢复，章节层次重新拉开。</li>
+          </ul>
+
+          <h4>配色跟随主题</h4>
+          <ul>
+            <li><b>链接恢复主题色</b>：此前沉浸模式下链接退回浏览器默认蓝，与整体配色脱节。现在链接使用与预览栏一致的主题强调色。</li>
+            <li><b>主题适配全面生效</b>：护眼、辉光、图片等主题此前在沉浸模式下<strong>整体不响应</strong>，现在与预览栏一样跟随主题切换。</li>
+          </ul>
+
+          <h4>实现方式与影响范围</h4>
+          <ul>
+            <li><b>不再维护两份样式</b>：改为让沉浸模式直接复用预览栏那套已被验证的排版规则，从根本上消除"两边逐步分叉"的问题——以后新增任何排版样式，沉浸模式会自动同步，不会再掉队。</li>
+            <li><b>正文宽度与留白不变</b>：沉浸模式的页面宽度、上下留白仍由编辑器自身控制，观感与之前一致，只是内容排版变整齐了。</li>
+            <li><b>其它功能零影响</b>：普通编辑态、语法着色、颜色 / 背景色 / 高亮、加粗斜体删除线下划线等均已逐一回归验证，行为与上一版完全一致。</li>
+          </ul>
+        </article>
 
         <article class="doc-section reveal" id="v2.1.31">
           <h3>v2.1.31 · 沉浸模式显示补全</h3>
