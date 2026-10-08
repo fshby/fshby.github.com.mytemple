@@ -979,6 +979,7 @@ textarea {
 
 .site-footer {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 28px;
@@ -1009,6 +1010,30 @@ textarea {
   flex-wrap: wrap;
   gap: 18px;
   color: var(--text-2);
+}
+
+/* 友情链接：单独占一行，靠右对齐，与版权行区分开。
+   flex-basis:100% 保证它不参与上面两栏的横向分配。 */
+.footer-friend-links {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  font-size: 0.9rem;
+}
+
+.footer-friend-label {
+  color: var(--text-2);
+}
+
+.footer-friend-links a {
+  text-decoration: none;
+}
+
+.footer-friend-links a:hover {
+  text-decoration: underline;
 }
 
 .reveal {
