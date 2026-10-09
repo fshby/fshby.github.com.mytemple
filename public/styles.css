@@ -8540,6 +8540,22 @@ body.immersive-editing {
   line-height: var(--mt-immersive-blank-line);
 }
 
+/* 多行块（围栏代码 / 表格 / 列表 / 引用 / $$ 公式）由 collectMdBlockRanges 整块接管：
+   首行放渲染结果，其余行用 MarkdownBlankWidget 占位。占位行产出的是 <span class="mt-md-blank">
+   而不是 <br>，上面那条 :has(> br:only-child) 命中不了 —— 一个 5 行的围栏代码块会在
+   图表/代码下方拖出 4 整行（约 130px）的纯空白。这里把占位行一并收缩。 */
+.app-shell.immersive #editor .cm-line:has(> .mt-md-blank) {
+  line-height: var(--mt-immersive-blank-line);
+}
+
+/* 图表渲染失败时，mermaid 的报错文本可能有几十行（例如 architecture-beta 不支持中文标签，
+   解析器会把整段英文诊断吐出来），塞进 70vh 容器就变成一整屏红色错误区。
+   沉浸模式下限高并允许内部滚动，避免报错把文档版式冲掉。 */
+.app-shell.immersive .mt-md-wysiwyg .chart-error {
+  max-height: 180px;
+  overflow: auto;
+}
+
 .app-shell.immersive .cm-editor .cm-line {
   padding-left: 0;
 }
@@ -8625,8 +8641,10 @@ body.immersive-editing {
    用 :not(.mt-md-wysiwyg) 过滤容器本身，再排除容器下的所有后代 ——
    渲染结果的裸 span（如 {color:#dc2626|红字}）正是靠内联 style 生效，必须放行。
    .mt-md-inline-style 同理：普通段落里 {bg:…}/{color:…}/{size:…} 标记的
-   行内渲染容器（不参与块替换），其内部 span 同样靠内联 style 生效。 */
-body.lightweight-editor .cm-line span:not(.mt-md-wysiwyg):not(.mt-md-wysiwyg *):not(.mt-md-inline-style):not(.mt-md-inline-style *),
+   行内渲染容器（不参与块替换），其内部 span 同样靠内联 style 生效。
+   .mt-md-inline-math 同理：普通段落里 $…$ 的 KaTeX 渲染容器，其内部 span 靠
+   KaTeX 的字体族/字重样式呈现数学字形（变量斜体、\mathbf 加粗），清零会毁掉它们。 */
+body.lightweight-editor .cm-line span:not(.mt-md-wysiwyg):not(.mt-md-wysiwyg *):not(.mt-md-inline-style):not(.mt-md-inline-style *):not(.mt-md-inline-math):not(.mt-md-inline-math *),
 body.lightweight-editor .cm-line .cm-heading,
 body.lightweight-editor .cm-line .cm-link,
 body.lightweight-editor .cm-line .cm-url,
@@ -8662,6 +8680,13 @@ body.lightweight-editor .cm-line .mt-md-wysiwyg * {
   font-style: revert;
   text-decoration: revert;
   background-color: revert;
+}
+
+/* 段落内行内公式（$…$ / $$…$$，不参与块替换）：它不在 .markdown-body 作用域内，
+   拿不到预览的 .math-inline { display:inline-block } 规则。inline-block 让
+   高公式（分式/矩阵）按自身高度撑开行盒，而不是与上下行重叠。 */
+.app-shell.immersive .cm-line .mt-md-inline-math {
+  display: inline-block;
 }
 
 body.lightweight-editor .cm-activeLine,

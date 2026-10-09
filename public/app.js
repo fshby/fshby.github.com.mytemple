@@ -1,4 +1,4 @@
-import { createMarkdownEditor } from "/editor-core.js?v=20261009-v1";
+import { createMarkdownEditor } from "/editor-core.js?v=20261009-v2";
 import { getPaperBackgroundUrl } from "./modules/paper-texture.js";
 import { escapeHtml, displayName, displayRelativePath, splitPathRef, joinPathRef, parentPathRef, compactName, splitWorkspaceRef, plainText, headingId } from "./modules/path-utils.js";
 import { extractOutline, addCnEnSpaces } from "./modules/editor-utils.js";
@@ -41,7 +41,7 @@ const LARGE_PREVIEW_DELAY = 700;
 const CHUNKED_RENDER_BYTES = 500 * 1024;
 const CHUNK_RENDER_SLICE_BYTES = 150 * 1024;
 const GRAPH_WORKER_URL = "/graph-worker.js?v=20260810-graph-1";
-const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20260829-v18102-fix-install-static-port-4";
+const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20261009-v2";
 // Markdown 渲染缓存版本戳：解析器或 CSS 规则升级时递增，确保旧缓存不被复用。
 // 2026-08-29 v1.8.102：安装包 resources 包含 public/ 前端静态文件、端口回滚；修正其他电脑安装后 404 白屏。
 const MARKDOWN_RENDER_VERSION = "20260829-v18102-install-static-bundle-port-scan";
@@ -2049,17 +2049,19 @@ async function materializePrintArtifacts(container) {
           try { mermaid.initialize({ startOnLoad: false, theme: "default", securityLevel: "loose" }); } catch(_) {}
           _mermaidInitialized = true;
         }
-        const seq = ++_mermaidRenderSeq;
+        const seq = (_chartRenderSeqs.get(container) || 0) + 1;
+        _chartRenderSeqs.set(container, seq);
+        const isCurrent = () => _chartRenderSeqs.get(container) === seq;
         for (let i = 0; i < mermaidBlocks.length; i++) {
           const block = mermaidBlocks[i];
           const sourcePre = block.querySelector(".mermaid-source");
           const containerDiv = block.querySelector(".mermaid-container");
           if (!sourcePre || !containerDiv) continue;
           const rawDef = sourcePre.textContent || "";
-          const id = `print-mermaid-${Date.now()}-${i}-${seq}`;
+          const id = `print-mermaid-${++_mermaidRenderUid}`;
           try {
-            const { svg } = await mermaid.render(id, rawDef);
-            if (seq === _mermaidRenderSeq) {
+            const { svg } = await renderMermaidSerialized(mermaid, id, rawDef);
+            if (isCurrent()) {
               containerDiv.innerHTML = svg;
               // 修复 SVG 缩放：移除固定 width/height，让 CSS 控制
               const svgEl = containerDiv.querySelector("svg");
@@ -2068,15 +2070,19 @@ async function materializePrintArtifacts(container) {
                 fixMermaidViewBox(svgEl);
                 svgEl.removeAttribute("width");
                 svgEl.removeAttribute("height");
+                // 与预览路径一致：以自然尺寸为上限，不把图表拉伸到页宽。
+                const naturalW = naturalSvgWidth(svgEl);
                 svgEl.style.width = "100%";
+                if (naturalW > 0) svgEl.style.maxWidth = `${Math.round(naturalW)}px`;
                 svgEl.style.height = "auto";
                 svgEl.style.display = "block";
+                svgEl.style.margin = "0 auto";
               }
             }
           } catch (err) {
             // 渲染失败：保留源码（等宽 pre 显示），不阻断整个 PDF 导出
             console.warn("PDF Mermaid 图表渲染降级为源码显示", err);
-            if (seq === _mermaidRenderSeq) {
+            if (isCurrent()) {
               sourcePre.style.display = "block";
               sourcePre.style.whiteSpace = "pre-wrap";
               sourcePre.style.fontSize = "12px";
@@ -7911,16 +7917,29 @@ function loadKatexAsync() {
   return _katexLoadingPromise;
 }
 
-let _mathRenderSeq = 0;
+// 渲染序号按「容器」维度记账（WeakMap）。
+// 沉浸模式下每个块各自调用本函数一次（预览栏是整栏一次），同帧会有 N 个块并发。
+// 旧实现用全局序号做守卫，`seq !== _mathRenderSeq` 会把前 N-1 个块的渲染全部丢弃 ——
+// 那些块里的公式永久空白，且 signature 未变时 CodeMirror 复用 DOM、挂载钩子不再触发，
+// 永远不自愈。按容器记账后各块互不干扰，同一容器内的重复调用仍能正确丢弃过期结果。
+const _mathRenderSeqs = new WeakMap();
 async function renderMathInPreview(container) {
   if (!container) return;
-  const mathElements = container.querySelectorAll(".math-block[data-math], .math-inline[data-math]");
+  const selector = ".math-block[data-math], .math-inline[data-math]";
+  // querySelectorAll 不包含容器自身：段落内行内公式的挂载钩子拿到的就是这个
+  // `.math-inline[data-math]` 元素本身，必须一并纳入，否则它永远渲染不出来。
+  const mathElements = [
+    ...(typeof container.matches === "function" && container.matches(selector) ? [container] : []),
+    ...container.querySelectorAll(selector),
+  ];
   if (!mathElements.length) return;
-  const seq = ++_mathRenderSeq;
+  const seq = (_mathRenderSeqs.get(container) || 0) + 1;
+  _mathRenderSeqs.set(container, seq);
+  const stale = () => _mathRenderSeqs.get(container) !== seq;
   try {
     const katex = await loadKatexAsync();
+    if (stale()) return;
     if (!katex) throw new Error("KaTeX 库不可用");
-    if (seq !== _mathRenderSeq) return;
     mathElements.forEach((el) => {
       const math = el.getAttribute("data-math") || "";
       const isBlock = el.classList.contains("math-block");
@@ -7936,6 +7955,7 @@ async function renderMathInPreview(container) {
       }
     });
   } catch (err) {
+    if (stale()) return;
     // KaTeX 加载失败，降级显示原始 LaTeX 源码
     mathElements.forEach((el) => {
       const math = el.getAttribute("data-math") || "";
@@ -7947,7 +7967,46 @@ async function renderMathInPreview(container) {
 }
 
 // 需求12：Mermaid / Excalidraw 图表渲染
-let _mermaidRenderSeq = 0;
+// 与公式渲染同理：渲染序号按容器记账，让沉浸模式下同帧并发的多个图表块各自生效。
+// 旧实现用全局序号，四个图表同批挂载只出最后一个，其余永久停在「正在加载…」占位。
+const _chartRenderSeqs = new WeakMap();
+
+// mermaid 会把它生成的根 <svg> 的 id 设成调用时传入的 id，并在每次 render 结束时
+// 按 `#id` 把「该 id 的元素」从文档里删掉（清理自己的临时容器）。
+// 因此 id 一旦重复，后一次渲染就会把前一次已经写进正文的图表**从 DOM 里删掉** ——
+// 表现正是「同批渲染的多个图表只剩最后一个，其余容器被清空」。
+// 旧 id 是 `mermaid-svg-${Date.now()}-${i}-${seq}`：沉浸模式每个容器各自调用（i、seq 恒为 0/1），
+// 同帧并发的调用会落在同一毫秒 → id 完全相同。改成全局自增，彻底避免碰撞。
+let _mermaidRenderUid = 0;
+
+// mermaid.render 本身**不是并发安全的**：它往 document.body 临时插一个带 id 的容器做测量，
+// 并发调用时互相踩。实测 4 张图同帧渲染的后果是：1 张永久悬挂在「正在加载…」占位，
+// 1 张量出 2412×512 的失真 viewBox（同一份 flowchart 正常应是 282×334）。
+// 沉浸模式每个块各自触发渲染、天然并发，因此这里用一条全局串行链把真正的 render 排成队。
+let _mermaidRenderChain = Promise.resolve();
+function renderMermaidSerialized(mermaid, id, rawDef, timeoutMs = 12000) {
+  const task = _mermaidRenderChain.then(
+    () =>
+      new Promise((resolve, reject) => {
+        let settled = false;
+        // 兜底超时：万一张图卡死，也不能把后面的图永久堵在队里
+        const timer = setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          reject(new Error("Mermaid 渲染超时"));
+        }, timeoutMs);
+        Promise.resolve()
+          .then(() => mermaid.render(id, rawDef))
+          .then(
+            (r) => { if (!settled) { settled = true; clearTimeout(timer); resolve(r); } },
+            (e) => { if (!settled) { settled = true; clearTimeout(timer); reject(e); } },
+          );
+      }),
+  );
+  // 成败都要让链条继续，否则一次失败会永久堵死后续所有渲染
+  _mermaidRenderChain = task.then(() => {}, () => {});
+  return task;
+}
 let _mermaidInitialized = false;
 let _mermaidLoadingPromise = null;
 function loadMermaidAsync() {
@@ -8059,6 +8118,21 @@ function fixMermaidViewBox(svgEl) {
     if (svgEl.getAttribute("viewBox") !== fitted) svgEl.setAttribute("viewBox", fitted);
   } catch (_) {}
 }
+// 图表的「自然呈现宽度」= 修正后 viewBox 的宽度（紧贴内容、已双向夹紧）。
+//
+// 为什么需要它：mermaid 会给自己算一个 max-width，但那是失真的自测量 ——
+// 中文 4 节点流程图实测自报 ~2078px，真实内容只有 266px。页面 CSS 直接把 SVG
+// 拉到 width:100%（版心 922px）后，图被放大 3.27×，标签字号相当于正文的 3 倍，
+// 再被 70vh 容器截断 → 一块图占掉大半屏，彻底破坏文档版式。
+// 现在以自然宽度为 max-width 上限：图小于版心就按原尺寸居中呈现（不放大），
+// 图宽于版心才等比收缩（不横向溢出）。
+function naturalSvgWidth(svgEl) {
+  try {
+    const vb = String(svgEl.getAttribute("viewBox") || "").split(/[\s,]+/).map(Number);
+    if (vb.length === 4 && vb.every((n) => isFinite(n)) && vb[2] > 0) return vb[2];
+  } catch (_) {}
+  return 0;
+}
 // 序列化前用「紧扣内容」的 viewBox，确保放大预览的固有尺寸 = 图表本体尺寸，
 // 而不是被异常撑大的画布尺寸（这是“图钉在角落 / 放大后仍放不大”的直接原因）。
 function tightViewBoxForSerialize(svgEl) {
@@ -8092,17 +8166,19 @@ async function renderChartsInPreview(container) {
       try {
         if (document.fonts && document.fonts.ready) await document.fonts.ready;
       } catch (_) {}
-      const seq = ++_mermaidRenderSeq;
+      const seq = (_chartRenderSeqs.get(container) || 0) + 1;
+      _chartRenderSeqs.set(container, seq);
+      const isCurrent = () => _chartRenderSeqs.get(container) === seq;
       for (let i = 0; i < mermaidBlocks.length; i++) {
         const block = mermaidBlocks[i];
         const sourcePre = block.querySelector(".mermaid-source");
         const containerDiv = block.querySelector(".mermaid-container");
         if (!sourcePre || !containerDiv) continue;
         const rawDef = sourcePre.textContent || "";
-        const id = `mermaid-svg-${Date.now()}-${i}-${seq}`;
+        const id = `mermaid-svg-${++_mermaidRenderUid}`;
         try {
-          const { svg } = await mermaid.render(id, rawDef);
-          if (seq === _mermaidRenderSeq) {
+          const { svg } = await renderMermaidSerialized(mermaid, id, rawDef);
+          if (isCurrent()) {
             containerDiv.innerHTML = svg;
             const _svgForFix = containerDiv.querySelector("svg");
             // 先留存 mermaid 原始 viewBox（供夹紧与序列化对照），再做修正
@@ -8123,9 +8199,14 @@ async function renderChartsInPreview(container) {
               // （集显上 SVG 的 getBBox 可能返回不正确的值，导致图表溢出）
               svgEl.removeAttribute("width");
               svgEl.removeAttribute("height");
+              // 以自然尺寸（修正后 viewBox 宽）为上限，不再无脑拉满版心 ——
+              // 小图放大到 3 倍既失真又截断，是「图表过大影响排版」的直接原因。
+              const naturalW = naturalSvgWidth(svgEl);
               svgEl.style.width = "100%";
+              if (naturalW > 0) svgEl.style.maxWidth = `${Math.round(naturalW)}px`;
               svgEl.style.height = "auto";
               svgEl.style.display = "block";
+              svgEl.style.margin = "0 auto";
 
               // 检测是否需要滚动提示
               requestAnimationFrame(() => {
@@ -8188,7 +8269,7 @@ async function renderChartsInPreview(container) {
             }
           }
         } catch (err) {
-          if (seq === _mermaidRenderSeq) {
+          if (isCurrent()) {
             containerDiv.innerHTML = `<div class="chart-error">Mermaid 渲染失败: ${escapeHtml(err?.message || String(err))}</div>`;
           }
         }

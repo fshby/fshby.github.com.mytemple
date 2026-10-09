@@ -361,3 +361,122 @@ test("窄屏下沉浸正文只保留贴边可读宽度", () => {
   const block = mq.slice(mq.indexOf(".app-shell.immersive #editor .cm-content"));
   assert.match(block, /padding-inline:\s*14px/, "窄屏应使用 14px 贴边留白");
 });
+
+// ── 公式渲染（沉浸不渲染的两个根因） ────────────────────────────────────────
+// 背景：沉浸模式里公式完全不显示，实测有四块含公式的段落只有最后一块渲染出 KaTeX，
+// 其余三块的 <span> 子元素数为 0（完全空白），且移动光标后仍不自愈。
+// 两个独立根因：① 渲染序号是全局变量，同帧并发的块互相顶掉；
+//              ② 普通段落里的 $…$ 从不进入渲染管线（块级渲染刻意不收普通段落）。
+
+test("公式渲染序号按容器记账，沉浸多块并发不再互相顶掉", () => {
+  assert.doesNotMatch(appSrc, /let _mathRenderSeq\b/, "不得再使用全局渲染序号");
+  const body = fnBody(appSrc, "async function renderMathInPreview(container)");
+  assert.match(body, /_mathRenderSeqs/, "应按容器维度记账（WeakMap）");
+  assert.match(body, /const seq = \(_mathRenderSeqs\.get\(container\) \|\| 0\) \+ 1/, "序号应从容器自身累加");
+  assert.match(body, /_mathRenderSeqs\.set\(container, seq\)/, "新序号应写回容器");
+  assert.match(body, /const stale = \(\) => _mathRenderSeqs\.get\(container\) !== seq/, "过期判定只比对本容器");
+  assert.doesNotMatch(body, /seq !== _mathRenderSeq\b/, "不得再与全局序号比较");
+  // querySelectorAll 不含容器自身：段落内行内公式的挂载钩子收到的就是该元素本身
+  assert.match(body, /container\.matches\(selector\)/, "待渲染集合必须包含容器自身，否则行内公式永远渲染不出来");
+});
+
+test("普通段落里的行内公式走独立装饰（不参与块替换）", () => {
+  assert.match(coreSrc, /class InlineMathWidget extends WidgetType/, "应有行内公式 widget");
+  assert.match(coreSrc, /function scanInlineMathTokens\(/, "应有行内公式扫描器");
+  const body = fnBody(coreSrc, "compute(view) {");
+  assert.match(body, /scanInlineMathTokens\(/, "应扫描行内公式");
+  assert.match(body, /new InlineMathWidget\(/, "应产出行内公式装饰");
+  // 同一段文本上的替换装饰重叠会让 CodeMirror 直接抛错
+  assert.match(body, /claimed\.some\(/, "样式标记与公式标记范围重叠时必须让路");
+
+  const widget = fnBody(coreSrc, "class InlineMathWidget extends WidgetType");
+  assert.match(widget, /math-inline mt-md-inline-math/, "widget 须产出 .math-inline[data-math]（宿主按此渲染 KaTeX）");
+  assert.match(widget, /setAttribute\("data-math", this\.latex\)/, "须携带 data-math");
+  // 关键回归点：不能改用 display:block 的 .math-block，那会在段落文本行里插一个块级盒子，
+  // 把一行劈成「公式前 / 公式后」两个匿名块。独占一行居中的 $$…$$ 由块级识别接管。
+  assert.doesNotMatch(widget, /className\s*=\s*"[^"]*math-block/, "不得用 display:block 的 math-block 撑断段落行");
+  assert.match(widget, /queueMicrotask/, "须在挂载后异步触发宿主渲染");
+  assert.match(widget, /this\.source/, "未渲染前应显示用户写的原始源码（含定界符）");
+
+  const scanner = fnBody(coreSrc, "function scanInlineMathTokens(text)");
+  assert.ok(scanner.includes('text[i - 1] === "\\\\"'), "应跳过反斜杠转义的 \\$");
+  assert.match(scanner, /\\s\/\.test\(text\[open\]\)/, "开场定界符右侧不得为空白（避免「售价 $ 5 元」误判）");
+  assert.match(scanner, /close === -1\) break/, "未闭合的半截公式应保持源码");
+});
+
+test("Worker 侧 escapeHtml 保留 NUL 占位符边界", () => {
+  // 跨行块级公式的占位符是 `\u0000MBLK_n_MBLK\u0000`；旧 escapeHtml 把 NUL 一并剥离，
+  // 还原正则匹配不到 → 阅读栏直接显示字面量 MBLK_0_MBLK。
+  const workerSrc = readFileSync(new URL("../public/markdown-worker.js", import.meta.url), "utf8");
+  const body = fnBody(workerSrc, "function escapeHtml(value)");
+  assert.ok(!body.includes("\\u0000-\\u0008"), "控制字符剥离不得从 U+0000 开始");
+  assert.ok(body.includes("\\u0001-\\u0008"), "应从 U+0001 起剥离，保留 NUL");
+  assert.match(workerSrc, /\\u0000MBLK_/, "占位符 token 仍以 NUL 为边界");
+});
+
+// ── 图表排版（过大 / 占位） ────────────────────────────────────────────────
+// 背景：mermaid 出图后页面 CSS 直接 width:100%，中文 4 节点流程图被从 266px 拉到 922px
+// （3.27×，标签字号相当于正文 3 倍），再被 70vh 容器截断；
+// 同时 _mermaidRenderSeq 全局序号让同批 4 个图表只出 1 个，其余永久停在加载占位。
+
+test("图表渲染序号按容器记账，沉浸多图并发不再只出一个", () => {
+  assert.doesNotMatch(appSrc, /let _mermaidRenderSeq\b/, "不得再使用全局渲染序号");
+  const preview = fnBody(appSrc, "async function renderChartsInPreview(");
+  assert.match(preview, /_chartRenderSeqs/, "预览路径应按容器记账");
+  assert.match(preview, /const isCurrent = \(\) =>/, "应派生 isCurrent 判定");
+  assert.doesNotMatch(preview, /seq === _mermaidRenderSeq\b/, "不得再与全局序号比较");
+  const print = fnBody(appSrc, "async function materializePrintArtifacts(");
+  assert.match(print, /_chartRenderSeqs/, "打印路径同样按容器记账");
+  assert.doesNotMatch(print, /seq === _mermaidRenderSeq\b/, "打印路径也不得再与全局序号比较");
+});
+
+test("Mermaid 图表不再强制拉满版心，以自然尺寸为上限", () => {
+  assert.match(appSrc, /function naturalSvgWidth\(svgEl\)/, "应有自然尺寸计算函数");
+  const helper = fnBody(appSrc, "function naturalSvgWidth(svgEl)");
+  assert.match(helper, /getAttribute\("viewBox"\)/, "自然宽度取自修正后的 viewBox（已双向夹紧）");
+  for (const [name, marker] of [
+    ["预览", "async function renderChartsInPreview("],
+    ["打印", "async function materializePrintArtifacts("],
+  ]) {
+    const body = fnBody(appSrc, marker);
+    assert.match(body, /naturalSvgWidth\(svgEl\)/, `${name}路径应计算自然宽度`);
+    assert.match(body, /style\.maxWidth = `\$\{Math\.round\(naturalW\)\}px`/, `${name}路径应以自然宽度为 max-width 上限`);
+    assert.match(body, /style\.margin = "0 auto"/, `${name}路径应让小于版心的图表水平居中`);
+  }
+});
+
+test("Mermaid 渲染 id 必须全局唯一，且渲染串行化", () => {
+  // 背景：mermaid 会把生成的根 <svg> id 设为调用时传入的 id，并在下一次 render 结束时
+  // 按 `#id` 删除该元素。旧 id `mermaid-svg-${Date.now()}-${i}-${seq}` 在沉浸模式下
+  // i/seq 恒为 0/1，同帧并发落在同一毫秒 → id 相同 → 后一次渲染把前一次已写入正文的
+  // 图表从 DOM 里删掉，实测 4 张图只剩 1 张。串行化则是修 mermaid.render 本身的并发不安全
+  // （实测 4 张同帧渲染：1 张悬挂占位、1 张量出 2412×512 失真 viewBox）。
+  assert.doesNotMatch(appSrc, /const id = `mermaid-svg-\$\{Date\.now\(\)\}/, "渲染 id 不得再用 Date.now()（同帧并发会碰撞）");
+  assert.match(appSrc, /let _mermaidRenderUid = 0/, "应使用全局自增 id");
+  assert.match(appSrc, /mermaid-svg-\$\{\+\+_mermaidRenderUid\}/, "预览路径 id 应全局自增");
+  assert.match(appSrc, /print-mermaid-\$\{\+\+_mermaidRenderUid\}/, "打印路径 id 应全局自增");
+  assert.match(appSrc, /function renderMermaidSerialized\(/, "应有 mermaid 渲染串行化入口");
+  const ser = fnBody(appSrc, "function renderMermaidSerialized(");
+  assert.match(ser, /_mermaidRenderChain\.then/, "真正的 render 应挂在串行链上");
+  assert.match(ser, /_mermaidRenderChain = task\.then\(\(\) => \{\}, \(\) => \{\}\)/, "成败都要放行链条（一次失败不得堵死后续）");
+  assert.match(ser, /Mermaid 渲染超时/, "应有兜底超时，卡死的图不得永久堵住队列");
+  const preview = fnBody(appSrc, "async function renderChartsInPreview(");
+  const print = fnBody(appSrc, "async function materializePrintArtifacts(");
+  assert.match(preview, /renderMermaidSerialized\(mermaid, id, rawDef\)/, "预览路径应走串行化渲染");
+  assert.match(print, /renderMermaidSerialized\(mermaid, id, rawDef\)/, "打印路径应走串行化渲染");
+});
+
+test("沉浸模式：多行块占位行收缩 + 图表错误区限高", () => {
+  // 多行块除首行外都是 MarkdownBlankWidget(<span class="mt-md-blank">)，不是 <br>，
+  // :has(> br:only-child) 命中不了 → 每行仍占整行高，块底拖出上百像素空白。
+  const blankIdx = cssSrc.indexOf(".app-shell.immersive #editor .cm-line:has(> .mt-md-blank)");
+  assert.ok(blankIdx >= 0, "多行块占位行必须纳入空行收缩");
+  const blankBlock = cssSrc.slice(blankIdx, cssSrc.indexOf("}", blankIdx) + 1);
+  assert.match(blankBlock, /line-height:\s*var\(--mt-immersive-blank-line\)/, "占位行行高须收缩");
+
+  const errIdx = cssSrc.indexOf(".app-shell.immersive .mt-md-wysiwyg .chart-error");
+  assert.ok(errIdx >= 0, "沉浸模式必须限制图表错误区高度");
+  const errBlock = cssSrc.slice(errIdx, cssSrc.indexOf("}", errIdx) + 1);
+  assert.match(errBlock, /max-height:\s*\d+px/, "错误区须限高（几十行英文报错会占满一屏）");
+  assert.match(errBlock, /overflow:\s*auto/, "错误区须允许内部滚动");
+});

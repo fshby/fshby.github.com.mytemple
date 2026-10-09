@@ -1,7 +1,11 @@
 function escapeHtml(value) {
   const v = String(value || "")
-    // 去掉 < 0x20 控制字符（保留 \t\n\r）+ U+FFFE/FFFF 非法码点
-    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, "");
+    // 去掉 < 0x20 控制字符（保留 \t\n\r）+ U+FFFE/FFFF 非法码点。
+    // 注意：必须保留 U+0000 —— 跨行块级公式 `$$…$$` 的占位符
+    // `\u0000MBLK_n_MBLK\u0000` 依赖它作 token 边界，剥掉后占位符无法还原，
+    // 阅读栏会把字面量 `MBLK_0_MBLK` 显示出来（app.js 侧的 escapeHtml 保留 NUL，
+    // 此处与之对齐；残余 NUL 由 HTML 解析器按 U+FFFD 处理，不会出现在正文里）。
+    .replace(/[\u0001-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, "");
   return v
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")

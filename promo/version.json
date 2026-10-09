@@ -1,7 +1,7 @@
 {
-    "version":  "2.1.34",
+    "version":  "2.1.35",
     "downloadUrl":  "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
-    "latestReleaseNotes":  "沉浸模式企业级排版：正文居中版心、隐藏行号栏、块间间距对齐文档结构；内存占用优化：纸张纹理无缝平铺、录屏窗口关闭释放资源、后端分配器升级",
-    "releaseNotes":  "v2.1.34 release. See changelog for details.",
+    "latestReleaseNotes":  "沉浸模式公式与图表修复：段落内公式正常渲染、同屏多公式/图表不再只剩最后一块；图表恢复自然尺寸不再拉满版心。",
+    "releaseNotes":  "v2.1.35 release. See changelog for details.",
     "releaseDate":  "2026-10-09"
 }

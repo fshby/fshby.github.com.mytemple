@@ -164,6 +164,58 @@ class InlineStyleWidget extends WidgetType {
   }
 }
 
+/**
+ * 行内数学公式 `$…$` / `$$…$$` 的「只读渲染」装饰。
+ *
+ * 与行内样式标记同源的问题：块级渲染只覆盖 5 类块（且 `$$` 围栏要求定界符独占一行），
+ * 混在普通段落里的公式从不进入渲染管线 —— 沉浸模式下用户看到的是一串 LaTeX 源码。
+ *
+ * 解法与 InlineStyleWidget 一致：只把「定界符连同公式体」的字符范围替换掉，
+ * 段落仍是普通段落。真正的 KaTeX 排版交给宿主注入的挂载钩子
+ * （app.js::renderMathInPreview —— 它按 `[data-math]` 取待渲染元素），
+ * 因此这里只要造出正确的 `.math-inline[data-math]` 结构即可，核心不依赖 KaTeX。
+ *
+ * 一律按**行内**排版（不区分 `$` / `$$`）：`.math-block` 是 display:block，
+ * 插进段落文本行会把这一行劈成「公式前 / 公式后」两个匿名块，观感比缩小的公式更糟。
+ * 真正需要独占一行居中排版的 `$$…$$` 由块级识别（collectMdBlockRanges）接管。
+ */
+class InlineMathWidget extends WidgetType {
+  constructor(latex, source, onMount) {
+    super();
+    this.latex = latex;
+    // 保留原始源码（含用户写的定界符），KaTeX 不可用时降级显示
+    this.source = source;
+    this.onMount = onMount || null;
+  }
+  eq(other) {
+    return (
+      other instanceof InlineMathWidget &&
+      other.latex === this.latex &&
+      other.source === this.source
+    );
+  }
+  toDOM() {
+    const span = document.createElement("span");
+    span.className = "math-inline mt-md-inline-math";
+    span.setAttribute("data-math", this.latex);
+    // 未渲染前（KaTeX 尚未加载 / 无外网）显示源码，避免布局从空到有的跳动。
+    span.textContent = this.source;
+    if (typeof this.onMount === "function") {
+      const cb = this.onMount;
+      queueMicrotask(() => {
+        try {
+          cb(span);
+        } catch (_) {}
+      });
+    }
+    return span;
+  }
+  ignoreEvent() {
+    // 点击渲染结果仍把事件交给编辑器，保证可定位光标
+    return false;
+  }
+}
+
 // 标记语法：{color:#rrggbb|内容} / {bg:#rrggbb|内容} / {size:1-2位数字|内容}
 // 值域与 app.js::inlineMarkdown 的 styleToken 完全一致，避免两处解析分叉。
 const INLINE_STYLE_TOKEN = /\{(color|bg|size):(#[0-9a-fA-F]{6}|\d{1,2})\|/g;
@@ -248,6 +300,53 @@ function scanInlineStyleTokens(text) {
       html: renderInlineStyleHtml(text.slice(m.index, close + 1)),
     });
     INLINE_STYLE_TOKEN.lastIndex = close + 1;
+  }
+  return out;
+}
+
+/**
+ * 扫描一行文本里的行内数学公式（`$…$` 与同一行内的 `$$…$$`）。
+ *
+ * 与块级公式互补：独占一行的 `$$` 围栏由 collectMdBlockRanges 接管（整块替换），
+ * 本函数只处理**混在普通段落里**的公式，替换范围仅覆盖定界符与公式体，
+ * 段落结构、行高与光标落点都不受影响。
+ *
+ * 保守规则（宁可漏渲染也不误伤正文）：
+ *   - 反斜杠转义的 `\$` 不算定界符；
+ *   - 开定界符右侧、闭定界符左侧不得是空白 —— 避免「售价 $ 5 元」这类误判；
+ *   - 未配对时直接放弃该行剩余部分（保持源码，等待下一次输入）；
+ *   - 不支持跨行：行内装饰本就逐行计算，跨行公式走 `$$` 围栏。
+ */
+function scanInlineMathTokens(text) {
+  const out = [];
+  let i = 0;
+  while (i < text.length) {
+    if (text[i] !== "$" || (i > 0 && text[i - 1] === "\\")) {
+      i += 1;
+      continue;
+    }
+    const display = text[i + 1] === "$";
+    const open = i + (display ? 2 : 1);
+    if (open >= text.length || /\s/.test(text[open])) {
+      i = open;
+      continue;
+    }
+    let close = -1;
+    for (let k = open; k < text.length; k += 1) {
+      if (text[k] === "\\") { k += 1; continue; }
+      if (text[k] !== "$") continue;
+      if (display) {
+        if (text[k + 1] === "$") { close = k; break; }
+      } else if (!/\s/.test(text[k - 1])) {
+        close = k;
+        break;
+      }
+    }
+    if (close === -1) break; // 未闭合的半截公式：保持源码
+    const end = close + (display ? 2 : 1);
+    const latex = text.slice(open, close).trim();
+    if (latex) out.push({ from: i, to: end, latex });
+    i = end;
   }
   return out;
 }
@@ -472,23 +571,42 @@ function buildMarkdownWysiwygExtension(getRenderer, isEnabled, onWidgetMount) {
           }
         }
 
-        // ── 行内样式标记的只读渲染（{color|bg|size:值|内容}）─────────────────
-        // 普通段落不参与上面的块替换（保护光标落点），但段落里的自定义标记
-        // 必须在沉浸模式下可见，否则用户会看到「字体和背景没生效」。
+        // ── 行内装饰：自定义样式标记 + 行内公式 ────────────────────────────────
+        // 普通段落不参与上面的块替换（保护光标落点），但段落里的自定义标记与
+        // 数学公式必须在沉浸模式下可见，否则用户看到的是「字体和背景没生效」
+        // 与「公式显示成 LaTeX 源码」。
         // 这里只把「标记字符范围」替换成渲染结果，段落本身仍是普通段落。
         for (let n = 1; n <= doc.lines; n += 1) {
           if (blockedLines.has(n)) continue;   // 已由块级渲染接管
           if (cursorLines.has(n)) continue;    // 光标所在行保持源码可编辑
           const line = doc.line(n);
-          if (!line.text || line.text.indexOf("{") === -1) continue; // 快速跳过
-          for (const tok of scanInlineStyleTokens(line.text)) {
-            if (tok.from === tok.to) continue;
-            builder.push(
-              Decoration.replace({
-                widget: new InlineStyleWidget(tok.html),
-                block: false,
-              }).range(line.from + tok.from, line.from + tok.to),
-            );
+          const text = line.text;
+          if (!text) continue;
+          // 同一段文本只能有一个替换装饰（重叠会让 CodeMirror 直接抛错），
+          // 样式标记先占位，公式标记与之重叠时让路。
+          const claimed = [];
+          if (text.indexOf("{") !== -1) {
+            for (const tok of scanInlineStyleTokens(text)) {
+              if (tok.from === tok.to) continue;
+              claimed.push([tok.from, tok.to]);
+              builder.push(
+                Decoration.replace({
+                  widget: new InlineStyleWidget(tok.html),
+                  block: false,
+                }).range(line.from + tok.from, line.from + tok.to),
+              );
+            }
+          }
+          if (text.indexOf("$") !== -1) {
+            for (const tok of scanInlineMathTokens(text)) {
+              if (claimed.some(([f, t]) => tok.from < t && tok.to > f)) continue;
+              builder.push(
+                Decoration.replace({
+                  widget: new InlineMathWidget(tok.latex, text.slice(tok.from, tok.to), mount()),
+                  block: false,
+                }).range(line.from + tok.from, line.from + tok.to),
+              );
+            }
           }
         }
         return Decoration.set(builder, true);
