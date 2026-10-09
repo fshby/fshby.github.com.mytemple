@@ -18,6 +18,11 @@ pub mod security;
 pub mod server;
 pub mod utils;
 
+// 全局分配器：mimalloc（见 Cargo.toml 依赖处注释）。
+// 必须在任何分配发生前声明；对业务代码零侵入。
+#[global_allocator]
+static GLOBAL_ALLOCATOR: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 use serde::{Deserialize, Serialize};
 use std::fs as stdfs;
 use std::path::PathBuf;

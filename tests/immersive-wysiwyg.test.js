@@ -254,7 +254,7 @@ test("沉浸容器级属性必须被中和，避免 markdown-body 的限宽/居�
   }
   // 中和规则必须比 .markdown-body 更晚出现（同权重下后者覆盖前者）
   assert.ok(
-    idx > cssSrc.indexOf(".markdown-body {\n  width: min(860px"),
+    idx > cssSrc.indexOf(".markdown-body {"),
     "中和规则必须位于 .markdown-body 容器级规则之后，否则会被覆盖",
   );
 });
@@ -297,4 +297,67 @@ test("静态资源缓存版本已同步递增", () => {
   assert.ok(coreVersion && appVersion && cssVersion, "三处版本参数都应存在");
   assert.equal(coreVersion, appVersion, "editor-core 与 app.js 版本应一致");
   assert.match(appSrc, new RegExp(`editor-core\\.js\\?v=${coreVersion}`), "app.js 引用版本应同步");
+});
+
+// ── 企业级文档排版（居中版心） ─────────────────────────────────────────────
+// 背景：旧版沉浸正文按视口全宽左对齐铺满（padding-inline 仅 4~6px），
+// 行号栏常驻左缘 —— 观感是「代码编辑器」而不是「文档」。
+// 现改为：正文收进固定阅读测度并水平居中、行号栏隐藏、块间空行收缩。
+
+test("沉浸正文栏必须收进固定阅读测度并水平居中", () => {
+  const idx = cssSrc.indexOf(".app-shell.immersive #editor .cm-content");
+  assert.ok(idx >= 0, "必须存在沉浸正文容器规则");
+  const block = cssSrc.slice(idx, cssSrc.indexOf("}", idx) + 1);
+  // 百分比 padding 相对滚动视口解析：宽屏时正文栏 = 版心宽并水平居中
+  assert.match(
+    block,
+    /padding:\s*36px\s+max\(24px,\s*calc\(\(100% - var\(--mt-immersive-measure\)\) \/ 2\)\)\s+55vh/,
+    "必须用对称 padding 实现居中版心，且保留顶部 36px 与底部 55vh 滚动余量",
+  );
+  // 顶部留白与预览一致（36px），不得回到 24px
+  assert.doesNotMatch(block, /padding:\s*24px/, "顶部留白不得退回 24px");
+});
+
+test("沉浸版心测度必须与预览面板同源（920px 并按 1.04 字号比放大）", () => {
+  // 预览 .markdown-body 用 min(920px, …)；沉浸正文字号是预览的 1.04 倍，
+  // 测度同步放大 1.04 才能保证两种视图每行字符数一致（换行位置对齐）。
+  assert.match(
+    cssSrc,
+    /--mt-immersive-measure:\s*calc\(920px \* 1\.04\)/,
+    "版心测度必须是 920px * 1.04（与预览同源）",
+  );
+  // 预览面板的 920px 阅读测度不得被改动
+  assert.match(cssSrc, /\.markdown-body \{\r?\n  width: min\(920px/);
+});
+
+test("沉浸模式必须隐藏行号/折叠栏", () => {
+  const idx = cssSrc.indexOf(".app-shell.immersive #editor .cm-gutters");
+  assert.ok(idx >= 0, "必须存在沉浸模式隐藏行号栏的规则");
+  const block = cssSrc.slice(idx, cssSrc.indexOf("}", idx) + 1);
+  assert.match(block, /display:\s*none/, "行号/折叠栏应整体隐藏");
+  // 作用域必须限定在 immersive，普通编辑态的行号不得受影响
+  const plainGutter = cssSrc.indexOf("#editor .cm-gutters");
+  assert.ok(plainGutter >= 0 && plainGutter < idx, "普通编辑态的行号栏规则必须仍然存在");
+});
+
+test("块间空行必须收缩到与预览段落间距一致，但不得归零", () => {
+  const idx = cssSrc.indexOf(".app-shell.immersive #editor .cm-line:has(> br:only-child)");
+  assert.ok(idx >= 0, "必须存在空行收缩规则（CodeMirror 只给空行渲染唯一 <br>）");
+  const block = cssSrc.slice(idx, cssSrc.indexOf("}", idx) + 1);
+  assert.match(block, /line-height:\s*var\(--mt-immersive-blank-line\)/, "空行行高必须走变量");
+  // 变量必须定义为 16px（≈预览段落间距 1em）；写 0 会得到不可见的光标
+  assert.match(cssSrc, /--mt-immersive-blank-line:\s*16px/, "空行行高必须为 16px");
+  assert.doesNotMatch(
+    block,
+    /height:\s*0|line-height:\s*0/,
+    "空行不得归零：0 高行会让光标消失、无法点击定位",
+  );
+  // :has 不被支持时整条规则被丢弃，空行退回整行高 —— 平滑降级，无需 JS 兜底
+  assert.match(block, /:has\(> br:only-child\)/, "必须用 br:only-child 精确匹配空行");
+});
+
+test("窄屏下沉浸正文只保留贴边可读宽度", () => {
+  const mq = cssSrc.slice(cssSrc.indexOf("@media (max-width: 720px)"));
+  const block = mq.slice(mq.indexOf(".app-shell.immersive #editor .cm-content"));
+  assert.match(block, /padding-inline:\s*14px/, "窄屏应使用 14px 贴边留白");
 });

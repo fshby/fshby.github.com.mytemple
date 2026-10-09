@@ -135,3 +135,67 @@ test("前端开始录制时向后端下发选区，后端命令接受 region 参
     "api_start_native_record 应接受可选 region 参数"
   );
 });
+
+// ── 关闭时释放页面资源（内存优化） ─────────────────────────────
+// 背景：Rust 侧关闭录屏窗口只做 hide()（不 reload / 不 about:blank，避免闪屏），
+// 页面会一直持有：整屏背景 JPEG 解码位图（1920×1080 ≈ 8MB）、其 blob URL（此前从未
+// revoke）、以及 overlay/outCanvas 两块 canvas 后备存储。隐藏窗口里 GC 触发很晚，
+// 这些内存在录屏结束后长期不释放。现由 Rust eval __mtRecorderReset 显式清理。
+test("recorder.html 提供 __mtRecorderReset 复位钩子，释放背景帧与画布", () => {
+  assert.ok(
+    recorderSrc.includes("window.__mtRecorderReset = function ()"),
+    "recorder.html 必须暴露 __mtRecorderReset（后端关闭时调用）"
+  );
+  assert.ok(
+    recorderSrc.includes("URL.revokeObjectURL(bgImg.src)"),
+    "必须 revoke 背景帧的 blob URL（否则 blob 一直不被释放）"
+  );
+  assert.ok(
+    /outCanvas\.width = 0/.test(recorderSrc),
+    "必须把输出 canvas 后备存储置 0（仅断引用要等 GC，隐藏窗口里很晚才触发）"
+  );
+  assert.ok(
+    recorderSrc.includes("cap.width = 0"),
+    "必须把选区遮罩 canvas 后备存储置 0"
+  );
+  // 复位钩子不得发起任何后端调用：窗口已由 Rust 关闭，重复调用会造成重入
+  const hookBody = recorderSrc.slice(recorderSrc.indexOf("window.__mtRecorderReset"));
+  const hookEnd = hookBody.indexOf("\n};");
+  const body = hookBody.slice(0, hookEnd);
+  assert.ok(
+    !body.includes("invoke(") && !body.includes("httpPost(") && !body.includes("fetch("),
+    "__mtRecorderReset 内不得有 invoke/httpPost/fetch（纯页面清理）"
+  );
+});
+
+test("前端主动关闭路径也会 revoke 背景帧 blob URL", () => {
+  const cleanup = recorderSrc.slice(
+    recorderSrc.indexOf("function cleanupAndClose()"),
+    recorderSrc.indexOf("function releaseBackgroundFrame()")
+  );
+  assert.ok(cleanup.includes("releaseBackgroundFrame()"), "cleanupAndClose 应复用统一的资源释放函数");
+});
+
+test("后端关闭录屏窗口时在 hide() 之后 eval 复位钩子", () => {
+  const idx = captureSrc.indexOf("pub fn close_recorder_window");
+  assert.ok(idx > 0, "找不到 close_recorder_window");
+  const fn = captureSrc.slice(idx, idx + 2200);
+  assert.ok(
+    fn.includes('window.__mtRecorderReset && window.__mtRecorderReset();'),
+    "close_recorder_window 必须 eval 前端复位钩子，否则隐藏期间页面资源一直挂着"
+  );
+  const iHide = fn.indexOf("win.hide()");
+  const iEval = fn.indexOf("__mtRecorderReset");
+  assert.ok(iHide > 0 && iEval > iHide, "必须先 hide 再清理 DOM：窗口可见时清 DOM 会露出桌面");
+  // 与截图窗口同一顺序约定：置顶/吞事件都排在 hide 之后
+  const iTop = fn.indexOf("set_always_on_top(false)");
+  assert.ok(iTop > iHide, "取消置顶必须排在 hide 之后（避免掉层中间态）");
+});
+
+test("录屏页缓存版本已随内容变更递增（预创建窗口不吃 ?_t= 那条路径）", () => {
+  const versions = captureSrc.match(/recorder\.html\?v=(\d{8}-v\d+)/g) || [];
+  assert.ok(versions.length >= 2, "预创建与兜底两处 URL 都应带版本参数");
+  const uniq = [...new Set(versions.map((v) => v.split("=")[1]))];
+  assert.equal(uniq.length, 1, "两处版本号必须一致");
+  assert.equal(uniq[0], "20261009-v1", "改了 recorder.html 就必须递增缓存版本");
+});

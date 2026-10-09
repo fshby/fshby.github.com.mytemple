@@ -505,7 +505,7 @@ pub fn precreate_windows(app: &AppHandle, port: u16) {
 
     // 预创建录屏窗口
     if app.get_webview_window("recorder").is_none() {
-        let url = format!("http://127.0.0.1:{}/recorder.html?v=20260930-v1", port);
+        let url = format!("http://127.0.0.1:{}/recorder.html?v=20261009-v1", port);
         if let Ok(url_parsed) = url::Url::parse(&url) {
             match tauri::WebviewWindowBuilder::new(
                 app,
@@ -1043,7 +1043,7 @@ fn prepare_recorder_window(app: &AppHandle) {
         }
         _ => (1920.0, 1080.0),
     };
-    let url = format!("http://127.0.0.1:{}/recorder.html?v=20260930-v1", port);
+    let url = format!("http://127.0.0.1:{}/recorder.html?v=20261009-v1", port);
     let url_parsed = match url::Url::parse(&url) {
         Ok(u) => u,
         Err(e) => {
@@ -1163,6 +1163,12 @@ pub fn close_recorder_window(app: &AppHandle) {
     // 页面状态复位改由下次准备阶段（prepare_recorder_window）的 reload 完成。
     if let Some(win) = app.get_webview_window("recorder") {
         let _ = win.hide();
+        // 通知前端释放隐藏期间占用的资源：背景帧位图（整屏 JPEG 解码后 ≈8MB）、
+        // 其 blob URL、以及 overlay/outCanvas 两块 canvas 后备存储。
+        // 隐藏窗口里 GC 触发很晚，仅靠断引用这些内存会一直挂着；显式置 0 立即归还。
+        // 与截图窗口同一顺序约定：必须 hide() 之后再做，否则清 DOM 会露出桌面。
+        // 不做任何状态保留是安全的：下次准备阶段 prepare_recorder_window 必定 reload 页面。
+        let _ = win.eval("window.__mtRecorderReset && window.__mtRecorderReset();");
         let _ = win.set_always_on_top(false);
         // 隐藏期间忽略鼠标事件，避免残留窗口吃掉点击
         let _ = win.set_ignore_cursor_events(true);

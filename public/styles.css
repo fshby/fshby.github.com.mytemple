@@ -8442,11 +8442,23 @@ body[data-theme="image"] #editor .cm-editor {
   }
 }
 
-/* Notepad-like immersive editor: remove the centered reading gutter and let
-   the document use the full viewport while keeping the existing toolbar and
-   editor commands available. */
+/* 沉浸编辑器（企业级文档排版）：
+   正文收进固定阅读测度并水平居中（与预览栏同一条版心），行号栏隐藏，
+   块间空行收缩到与预览段落间距一致 —— 观感向「文档」而不是「代码编辑器」靠拢，
+   顶部工具栏与全部编辑命令保持可用。 */
 body.immersive-editing {
   background: var(--surface-0);
+}
+
+/* 版心测度：预览面板 .markdown-body 用 min(920px, calc(100% - 42px))，
+   而沉浸正文字号比预览大 4%（max(16px, doc*1.04)），测度同步放大 1.04，
+   两种视图每行容纳的字符数一致 —— 换行位置对齐，所见即所得成立。 */
+.app-shell.immersive {
+  --mt-immersive-measure: calc(920px * 1.04);
+  /* 块间空行的行高：预览里空行不产生 DOM，块间距完全由 margin 提供（段落 1em=16px）；
+     沉浸里每个空行都是一行 CodeMirror 文本，保持整行高会把所有间距放大一倍。
+     收缩到 16px ≈ 预览的段落间距；光标仍清晰可见、可点击，不会出现 0 高光标。 */
+  --mt-immersive-blank-line: 16px;
 }
 
 .app-shell.immersive .workspace {
@@ -8507,9 +8519,25 @@ body.immersive-editing {
 }
 
 .app-shell.immersive #editor .cm-content {
-  padding: 24px max(4px, 0.4vw) 55vh;
+  /* 百分比 padding 相对滚动视口解析：宽屏时正文栏 = 版心宽并水平居中，
+     窄屏时退化为 24px 最小留白；垂直滚动条出现/消失会自动重新居中。 */
+  padding: 36px max(24px, calc((100% - var(--mt-immersive-measure)) / 2)) 55vh;
   font-size: max(16px, calc(var(--doc-font-size) * 1.04));
   line-height: 1.8;
+}
+
+/* 行号/折叠栏是代码编辑器的部件：在文档视图里会把视觉重心拉向左缘，
+   与居中版心直接冲突。沉浸模式隐藏之；普通编辑态的行号与折叠不受影响。
+   （display 在 .cm-gutters 上无其它声明竞争，低权重规则即可生效） */
+.app-shell.immersive #editor .cm-gutters {
+  display: none;
+}
+
+/* 块间空行收缩（测度见上方变量说明）。仅命中真正空行：
+   CodeMirror 只给空行渲染唯一的 <br> 子节点，含任何内容的行都不会匹配；
+   :has() 不被支持时整条规则被丢弃，空行退回整行高 —— 平滑降级，无副作用。 */
+.app-shell.immersive #editor .cm-line:has(> br:only-child) {
+  line-height: var(--mt-immersive-blank-line);
 }
 
 .app-shell.immersive .cm-editor .cm-line {
@@ -8585,7 +8613,8 @@ body.immersive-editing {
   }
 
   .app-shell.immersive #editor .cm-content {
-    padding-inline: 2px;
+    /* 窄屏不再追求居中留白，仅保留贴边可读宽度 */
+    padding-inline: 14px;
   }
 }
 

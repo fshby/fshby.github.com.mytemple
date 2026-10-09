@@ -751,6 +751,9 @@ function cleanupAndClose() {
   }
   recorder = null;
   chunks = [];
+  // 释放背景帧：整屏 JPEG 解码后是整屏位图（1920×1080 ≈ 8MB），
+  // 只断引用要等 GC，blob URL 更是一直被引用不释放 —— 这里显式 revoke。
+  releaseBackgroundFrame();
   // 清理 DOM
   if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
   overlay = null; canvas = null; ctx = null;
@@ -765,6 +768,45 @@ function cleanupAndClose() {
   document.body.innerHTML = '';
   closeRecorderWindow();
 }
+
+// 释放背景帧相关的全部资源。
+// bgImg 来自 /api/recorder/bg 的 blob URL（本文件此前从未 revoke → blob 与解码位图
+// 在录屏结束后的闲置期一直挂着）；canvas 后备存储则显式置 0 让它立即归还内存
+// （仅置 null 要等 GC，隐藏窗口里 GC 触发很晚）。
+function releaseBackgroundFrame() {
+  try {
+    if (bgImg && bgImg.src && String(bgImg.src).startsWith('blob:')) {
+      URL.revokeObjectURL(bgImg.src);
+    }
+  } catch (_) {}
+  try {
+    const cap = overlay ? overlay.querySelector('.capture-canvas') : null;
+    if (cap) { cap.width = 0; cap.height = 0; }
+    if (outCanvas) { outCanvas.width = 0; outCanvas.height = 0; }
+  } catch (_) {}
+}
+
+// 后端主动关闭窗口时（心跳兜底 / 超时 / 外部关闭）由 Rust eval 调用。
+// Rust 侧关闭只做 hide()（不 reload、不 about:blank，避免闪屏），页面会一直持有
+// 背景帧位图 + blob URL + 两块 canvas 后备存储；这里把它们清掉，
+// 让录屏结束后的常驻内存回到基线。不做任何网络请求、不调用后端命令 ——
+// 窗口状态复位由下次 prepare_recorder_window 的 reload 负责（见 global_capture.rs）。
+window.__mtRecorderReset = function () {
+  try {
+    recording = false;
+    if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+    if (recorder && recorder.state !== 'inactive') { try { recorder.stop(); } catch (_) {} }
+    recorder = null;
+    chunks = [];
+    releaseBackgroundFrame();
+    if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
+    const tip = document.getElementById('loadingTip');
+    if (tip && tip.parentNode) tip.parentNode.removeChild(tip);
+    overlay = null; canvas = null; ctx = null;
+    outCanvas = null; outCtx = null;
+    frameImg = null; bgImg = null; region = null; elapsed = 0;
+  } catch (_) {}
+};
 
 // 启动
 init();

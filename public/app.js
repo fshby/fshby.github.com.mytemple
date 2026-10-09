@@ -1,5 +1,5 @@
-import { createMarkdownEditor } from "/editor-core.js?v=20261008-v6";
-import { createPeriodicPerlin, generateSeamlessPaperTextureDataUrl, generateLargePaperTextureDataUrl, getPaperBackgroundUrl } from "./modules/paper-texture.js";
+import { createMarkdownEditor } from "/editor-core.js?v=20261009-v1";
+import { getPaperBackgroundUrl } from "./modules/paper-texture.js";
 import { escapeHtml, displayName, displayRelativePath, splitPathRef, joinPathRef, parentPathRef, compactName, splitWorkspaceRef, plainText, headingId } from "./modules/path-utils.js";
 import { extractOutline, addCnEnSpaces } from "./modules/editor-utils.js";
 import { stripFrontmatter, escapeRegex, splitIntoLogicalBlocks, estimateBlockLines, splitMarkdownIntoSlides, normalizeAssetUrlsToRelative } from "./modules/export-utils.js";
@@ -843,13 +843,22 @@ function applyPaperTexture() {
     styleEl.id = ruleId;
     document.head.appendChild(styleEl);
   }
-  let _panelTex = "";
-  try { _panelTex = generateSeamlessPaperTextureDataUrl(512, 67890); } catch (_) {}
-  const panelVal = _panelTex ? `url("${_panelTex}")` : "none";
+  // --paper-panel 历史上用于面板底纹，但全项目已无任何规则消费它（grep 仅此处赋值）。
+  // 之前每次进入护眼主题都要生成一张 512² 无缝纹理并把 base64 写进 <style> 文本
+  // （约 300KB 字符串 + 一次 512² 画布生成）——纯属白费，这里不再生成。
+  const panelVal = "none";
+  // 纸张背景已由「视口级大图拉伸」改为「无缝小 tile 平铺」（见 modules/paper-texture.js）。
+  // CSS size 取与原图 1:1 的像素尺寸，保证颗粒粗细与旧版观感一致（默认不缩放）。
+  // 探测开关 ?size= 时退回旧语义：大图填满视口且不重复。
+  let tileMode = true;
+  try { tileMode = !new URLSearchParams(window.location.search).get("size"); } catch (_) {}
+  const PAPER_TILE_CSS_SIZE = 512;
   styleEl.textContent = `
   body[data-theme="eye"] {
     --paper-bg: url("${url}");
     --paper-panel: ${panelVal};
+    --paper-bg-size: ${tileMode ? `${PAPER_TILE_CSS_SIZE}px ${PAPER_TILE_CSS_SIZE}px` : "100% 100%"};
+    --paper-bg-repeat: ${tileMode ? "repeat" : "no-repeat"};
     background-color: #f3f1e7;
     background-image:
       var(--paper-bg),
@@ -857,8 +866,8 @@ function applyPaperTexture() {
       radial-gradient(ellipse 60% 85% at 92% 12%, rgba(223, 233, 203, 0.22), transparent 65%),
       radial-gradient(ellipse 70% 60% at 15% 90%, rgba(215, 224, 186, 0.14), transparent 60%),
       linear-gradient(90deg, rgba(229, 223, 201, 0.65) 0%, rgba(236, 231, 214, 0.42) 40%, rgba(241, 237, 226, 0.22) 72%, transparent 100%);
-    background-size: 100% 100%, cover, cover, cover, cover;
-    background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, no-repeat;
+    background-size: var(--paper-bg-size), cover, cover, cover, cover;
+    background-repeat: var(--paper-bg-repeat), no-repeat, no-repeat, no-repeat, no-repeat;
     background-attachment: fixed, fixed, fixed, fixed, fixed;
   }
   body[data-theme="eye"]::after {

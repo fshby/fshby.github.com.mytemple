@@ -1,7 +1,7 @@
 {
-    "version":  "2.1.33",
+    "version":  "2.1.34",
     "downloadUrl":  "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
-    "latestReleaseNotes":  "行内样式在裸段落中恢复显示（颜色/背景色/字号不再漏出源码），修复图表不居中与放大不清晰",
-    "releaseNotes":  "v2.1.33 release. See changelog for details.",
-    "releaseDate":  "2026-10-08"
+    "latestReleaseNotes":  "沉浸模式企业级排版：正文居中版心、隐藏行号栏、块间间距对齐文档结构；内存占用优化：纸张纹理无缝平铺、录屏窗口关闭释放资源、后端分配器升级",
+    "releaseNotes":  "v2.1.34 release. See changelog for details.",
+    "releaseDate":  "2026-10-09"
 }
