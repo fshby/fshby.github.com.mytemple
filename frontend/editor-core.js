@@ -351,6 +351,190 @@ function scanInlineMathTokens(text) {
   return out;
 }
 
+/* ---------------------------------------------------------------------------
+   行内语义标记：**粗体** / *斜体* / `代码` / [文字](url) / ~~删除~~ / ==高亮==
+   ---------------------------------------------------------------------------
+   与行内样式标记、行内公式同源的问题：块级渲染只接管「整块」，
+   普通段落里的 Markdown 语义标记一直以源码形式裸露 —— 叠加等宽字体后，
+   观感是「半渲染的 Markdown 编辑器」，而不是「写作即成品」。
+
+   解法与 InlineStyleWidget 完全一致：只把「标记字符范围」替换为渲染结果，
+   段落本身仍是普通段落，光标落点与行高不受影响。容器复用 .markdown-body 类，
+   直接取得 strong / em / code / a / del / mark 的语义样式，不再维护一份会过期的副本。
+
+   保守规则（宁可漏渲染也不误伤正文）：
+     - 反斜杠转义（\* \_ \` \[ \~ \=）一律不参与匹配；
+     - 定界符内侧不得是空白，「* 星号 *」保持源码；
+     - 行内代码优先级最高，其内部不再解析其它标记；
+     - 与样式标记 / 行内公式 / 链接重叠时让路（重叠的 replace 装饰会让 CodeMirror 抛错）。
+--------------------------------------------------------------------------- */
+
+const INLINE_MARK_MAX_DEPTH = 4;
+
+/** 只放行可交给系统浏览器打开的协议；相对路径不渲染为可点击链接，避免 WebView 内部跳转。 */
+function safeInlineUrl(value) {
+  const url = String(value || "").trim();
+  if (!url) return "";
+  if (url.startsWith("#")) return url;
+  const protocol = (url.match(/^([a-z][a-z0-9+.-]*):/i) || [])[1];
+  if (protocol) return /^(https?|mailto|tel)$/i.test(protocol) ? url : "";
+  return "";
+}
+
+/** 纯文本段落 → HTML：先还原反斜杠转义，再做 HTML 转义。 */
+function inlineTextToHtml(text) {
+  return escapeHtml(String(text).replace(/\\([\\`*_[\]()~=#+\-.!>])/g, "$1"));
+}
+
+/**
+ * 扫描一行里的行内语义标记。返回按位置升序、互不重叠的 { from, to, html } 列表。
+ *
+ * 嵌套（**粗 \`码\` 体** / [**粗**](url)）的取舍：
+ *   同一段文本只能有一个替换装饰（重叠的 replace 会让 CodeMirror 直接抛错），
+ *   而外层标记的 html 本身就是由 renderInlineMarkHtml 递归渲染内层得到的，
+ *   所以这里按「起点升序、终点降序」贪心取最外层子集：
+ *     · 被已选范围包含的候选 → 丢弃（外层递归时会把它渲染出来）；
+ *     · 包含已选范围的候选 → 取代之（并回看，可能连吞多个）；
+ *     · 交叉重叠（互不包含）→ 丢弃后到的，宁可漏渲染也不误伤正文。
+ */
+function scanInlineMarkTokens(text, depth) {
+  const d = depth || 0;
+  if (!text || d >= INLINE_MARK_MAX_DEPTH) return [];
+  const candidates = [];
+  const inner = (s) => renderInlineMarkHtml(s, d + 1);
+  let m;
+
+  // 1) 行内代码：优先级最高，内部一律不再解析
+  const codeRe = /(?<!\\)`([^`\n]+)`/g;
+  while ((m = codeRe.exec(text)) !== null) {
+    candidates.push({
+      from: m.index,
+      to: m.index + m[0].length,
+      html: `<code>${escapeHtml(m[1])}</code>`,
+    });
+  }
+
+  // 2) 链接 [文字](url) 与 [文字](url "标题")
+  const linkRe = /(?<!\\)\[([^\]\n]*)\]\(\s*([^)\s]*)\s*(?:"([^"\n]*)")?\s*\)/g;
+  while ((m = linkRe.exec(text)) !== null) {
+    const label = inner(m[1]) || inlineTextToHtml(m[2]);
+    const url = safeInlineUrl(m[2]);
+    if (!url) {
+      // 非外链协议（相对路径 / 未知协议）：只保留文字，不生成可点击元素
+      candidates.push({ from: m.index, to: m.index + m[0].length, html: label });
+      continue;
+    }
+    const title = escapeHtml(m[3] || m[2]);
+    candidates.push({
+      from: m.index,
+      to: m.index + m[0].length,
+      html: `<a class="mt-md-inline-link" role="link" data-href="${escapeHtml(url)}" title="${title}">${label}</a>`,
+    });
+  }
+
+  // 3) 加粗
+  const strongRe = /(?<!\\)\*\*(?=\S)([\s\S]*?\S)\*\*/g;
+  while ((m = strongRe.exec(text)) !== null) {
+    candidates.push({ from: m.index, to: m.index + m[0].length, html: `<strong>${inner(m[1])}</strong>` });
+  }
+
+  // 4) 斜体（* 与 _；_ 需避免 foo_bar_baz 这类标识符误判）
+  const emStarRe = /(?<![\w*\\])\*(?=\S)([^*\n]*?[^\s*])\*(?!\*)/g;
+  while ((m = emStarRe.exec(text)) !== null) {
+    candidates.push({ from: m.index, to: m.index + m[0].length, html: `<em>${inner(m[1])}</em>` });
+  }
+  const emUnderRe = /(?<![\w_\\])_(?=\S)([^_\n]*?[^\s_])_(?![\w_])/g;
+  while ((m = emUnderRe.exec(text)) !== null) {
+    candidates.push({ from: m.index, to: m.index + m[0].length, html: `<em>${inner(m[1])}</em>` });
+  }
+
+  // 5) 删除线
+  const delRe = /(?<!\\)~~(?=\S)([^~\n]*?[^\s~])~~/g;
+  while ((m = delRe.exec(text)) !== null) {
+    candidates.push({ from: m.index, to: m.index + m[0].length, html: `<del>${inner(m[1])}</del>` });
+  }
+
+  // 6) 高亮
+  const markRe = /(?<!\\)==(?=\S)([^=\n]*?[^\s=])==/g;
+  while ((m = markRe.exec(text)) !== null) {
+    candidates.push({ from: m.index, to: m.index + m[0].length, html: `<mark>${inner(m[1])}</mark>` });
+  }
+
+  candidates.sort((a, b) => a.from - b.from || b.to - a.to);
+  const out = [];
+  for (const c of candidates) {
+    let keep = true;
+    while (out.length) {
+      const last = out[out.length - 1];
+      if (c.from >= last.to) break;              // 不重叠，接在后面
+      if (c.to <= last.to) { keep = false; break; }  // 被包含 → 让路（外层会递归渲染它）
+      if (c.from <= last.from) { out.pop(); continue; } // 包含 → 取代并回看
+      keep = false;                              // 交叉重叠 → 丢弃后到的
+      break;
+    }
+    if (keep) out.push(c);
+  }
+  return out;
+}
+
+/** 把一行文本转成「行内标记已渲染」的 HTML；无标记时等价于转义。 */
+function renderInlineMarkHtml(text, depth) {
+  const d = depth || 0;
+  if (!text) return "";
+  if (d >= INLINE_MARK_MAX_DEPTH) return inlineTextToHtml(text);
+  const tokens = scanInlineMarkTokens(text, d);
+  if (!tokens.length) return inlineTextToHtml(text);
+  let out = "";
+  let cursor = 0;
+  for (const tok of tokens) {
+    out += inlineTextToHtml(text.slice(cursor, tok.from));
+    out += tok.html;
+    cursor = tok.to;
+  }
+  out += inlineTextToHtml(text.slice(cursor));
+  return out;
+}
+
+/**
+ * 行内语义标记的「只读渲染」装饰。
+ * 容器同时挂 .markdown-body，取得 strong/em/code/a/del/mark 的语义样式；
+ * 容器级属性（限宽/居中/内边距/字号/行高）由 styles.css 中和为继承值。
+ */
+class InlineMarkWidget extends WidgetType {
+  constructor(html, key) {
+    super();
+    this.html = html;
+    this.key = key;
+  }
+  eq(other) {
+    return other instanceof InlineMarkWidget && other.key === this.key;
+  }
+  toDOM() {
+    const span = document.createElement("span");
+    span.className = "mt-md-inline-mark markdown-body";
+    span.innerHTML = this.html || "";
+    // 普通点击交给编辑器定位光标；Ctrl / Cmd + 点击才打开外部链接，
+    // 与预览栏「外链交给系统浏览器」的策略保持一致。
+    for (const a of span.querySelectorAll("a[data-href]")) {
+      a.addEventListener("click", (event) => {
+        if (!event.ctrlKey && !event.metaKey) return;
+        const url = a.getAttribute("data-href") || "";
+        if (!url) return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (typeof window !== "undefined" && typeof window.__mtOpenExternal === "function") {
+          window.__mtOpenExternal(url);
+        }
+      });
+    }
+    return span;
+  }
+  ignoreEvent() {
+    // 点击渲染结果仍把事件交给编辑器，保证可定位光标
+    return false;
+  }
+}
+
 class MarkdownPreviewWidget extends WidgetType {
   constructor(html, signature, onMount) {
     super();
@@ -582,9 +766,10 @@ function buildMarkdownWysiwygExtension(getRenderer, isEnabled, onWidgetMount) {
           const line = doc.line(n);
           const text = line.text;
           if (!text) continue;
-          // 同一段文本只能有一个替换装饰（重叠会让 CodeMirror 直接抛错），
-          // 样式标记先占位，公式标记与之重叠时让路。
+          // 同一段文本只能有一个替换装饰（重叠会让 CodeMirror 直接抛错）。
+          // 优先级：自定义样式标记 > 行内公式 > 行内语义标记；后者与前两者重叠时让路。
           const claimed = [];
+          const overlapsClaimed = (f, t) => claimed.some(([cf, ct]) => f < ct && t > cf);
           if (text.indexOf("{") !== -1) {
             for (const tok of scanInlineStyleTokens(text)) {
               if (tok.from === tok.to) continue;
@@ -599,10 +784,24 @@ function buildMarkdownWysiwygExtension(getRenderer, isEnabled, onWidgetMount) {
           }
           if (text.indexOf("$") !== -1) {
             for (const tok of scanInlineMathTokens(text)) {
-              if (claimed.some(([f, t]) => tok.from < t && tok.to > f)) continue;
+              if (overlapsClaimed(tok.from, tok.to)) continue;
+              claimed.push([tok.from, tok.to]);
               builder.push(
                 Decoration.replace({
                   widget: new InlineMathWidget(tok.latex, text.slice(tok.from, tok.to), mount()),
+                  block: false,
+                }).range(line.from + tok.from, line.from + tok.to),
+              );
+            }
+          }
+          // 行内语义标记：**粗体** / *斜体* / `代码` / [文字](url) / ~~删除~~ / ==高亮==
+          if (/[*_`[\]~=]/.test(text)) {
+            for (const tok of scanInlineMarkTokens(text)) {
+              if (overlapsClaimed(tok.from, tok.to)) continue;
+              claimed.push([tok.from, tok.to]);
+              builder.push(
+                Decoration.replace({
+                  widget: new InlineMarkWidget(tok.html, `${tok.from}:${tok.to}:${tok.html}`),
                   block: false,
                 }).range(line.from + tok.from, line.from + tok.to),
               );

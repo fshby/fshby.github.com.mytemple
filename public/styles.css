@@ -1,3 +1,7 @@
+/* ═══ 层 1/5 · 01-tokens-theme.css — Layer 0/1/2 令牌 · 四主题 · 兼容别名层 · 基础排版与阅读栏前段
+   本层是样式表唯一可编辑的源；public/styles.css 是由本层按序合并出的产物，请勿手改。
+   ⚠ 级联顺序 = 文件名字典序（build-css.mjs 按序合并），请勿调换文件顺序或在本层内
+     重排规则；修改样式请改本层源文件，再运行 `npm run build:css` 重新生成产物。 */
 :root {
   color-scheme: light;
   --bg: #faf7f2;
@@ -73,6 +77,59 @@
   --callout-question: #8b5cf6;
   --callout-quote: #6b7280;
   --callout-example: #06b6d4;
+
+  /* ================= Layer 0 · 度量与刻度 =================
+     全主题共享，不随主题变化。主题只允许覆盖颜色（Layer 1/2），
+     禁止覆盖以下度量令牌，否则会出现「换主题导致正文重排」的问题。 */
+  --app-font-mono: "Cascadia Mono", "Cascadia Code", "JetBrains Mono", "Fira Code",
+                   "Sarasa Mono SC", "Sarasa Mono T SC", "Source Han Mono SC",
+                   "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei",
+                   Consolas, "Courier New", monospace;
+  /* 间距刻度 4 → 64 */
+  --space-1: 4px;  --space-2: 8px;  --space-3: 12px; --space-4: 16px;
+  --space-5: 24px; --space-6: 32px; --space-7: 48px; --space-8: 64px;
+  /* 圆角刻度（radius-1 控件 / radius-2 卡片 / radius-3 面板） */
+  --radius-1: 6px; --radius-2: 10px; --radius-3: 14px;
+  /* 字号刻度 */
+  --fs-xs: 12px; --fs-sm: 13px; --fs-md: 14px; --fs-lg: 16px;
+  --fs-xl: 18px; --fs-2xl: 22px;
+  /* 动效时长三档 + 统一缓动 */
+  --dur-1: 120ms; --dur-2: 200ms; --dur-3: 320ms;
+  --ease-standard: cubic-bezier(0.2, 0.7, 0.3, 1);
+  /* 层级刻度（新组件必须取自本表） */
+  --z-base: 1; --z-raised: 10; --z-dropdown: 100; --z-sticky: 200;
+  --z-overlay: 1000; --z-modal: 9000; --z-toast: 10000;
+
+  /* ---- 正文度量：阅读 / 预览 / 沉浸三视图的唯一出处 ----
+     历史问题：同一段落在三种视图里各写各的字面量，导致字号、行高、版心
+     三处漂移（阅读 1.82 / 修改 1.76 / 沉浸 1.8 / 渲染容器 1.82）。
+     现在三处只引用下面这组令牌，任何排版调整只改这里一处。
+     · --prose-size     正文字号（跟随用户「文档字号」设置）
+     · --prose-leading  正文行高比例，四主题共用（主题只允许覆盖颜色）
+     · --prose-measure  阅读版心宽（= 阅读栏 .markdown-body 的宽度上限）
+     · --prose-scale    沉浸放大系数；版心与字号同乘，保证 em 宽度恒定
+     · --prose-gutter   浮窗小于版心时的最小左右留白
+     · --prose-font     正文字体（跟随用户「字体」设置）
+     · --prose-block-gap 渲染块之间的块间距（段落；随字号缩放）
+     · --prose-block-gap-fixed 块级容器间距（引用/提示/表格/代码块；不随字号缩放） */
+  --prose-size: var(--doc-font-size);
+  --prose-leading: 1.78;
+  --prose-measure: 860px;
+  --prose-scale: 1.04;
+  --prose-gutter: 56px;
+  --prose-font: var(--app-font-family);
+  --prose-block-gap: 1em;
+  --prose-block-gap-fixed: 16px;
+
+  /* ---- 强调色三角色（浅色默认值）----
+     历史问题：--accent 一个值同时承担「实心控件底 / 正文强调色 / 氛围柔光」
+     三种互相冲突的角色，导致白字压在浅强调底上对比度不足。
+     拆为三个令牌，各自独立校验（实算数据见 docs/ui-audit-2026-10-09.html 8.2）。
+     · --accent-solid 实心控件底   · --on-accent 其上的文字色
+     · --accent-text  正文/链接强调色（= --accent-strong 的规范名）
+     --accent 自身继续承担氛围角色（hover 底、径向渐变、柔光）。 */
+  --accent-solid: color-mix(in srgb, var(--accent) 68%, #1a1408);
+  --on-accent: #ffffff;
 }
 
 body[data-theme="dark"] {
@@ -81,10 +138,13 @@ body[data-theme="dark"] {
   --panel-glass: rgba(38, 42, 40, 0.88);
   --line: rgba(110, 120, 114, 0.38);
   --text: #c5bfb2;
-  --muted: #8f8a7e;
+  --muted: #9a9488;
   --soft: #303431;
   --accent: #7ab89a;
   --accent-strong: #96c9b0;
+  /* 暗色主题的薄荷绿本身够浅 → 实心底保持本色，配深墨绿字（对比度 7.30:1） */
+  --accent-solid: var(--accent);
+  --on-accent: #14201c;
   --warn: #c9b87a;
   --code-bg: #252827;
   --code-text: #c5bfb2;
@@ -112,6 +172,8 @@ body[data-theme="dark"] {
   --md-strong: #e2ddd0;
   --md-emphasis: #c5bfb2;
   --md-inline-code: #b8a48c;
+  --md-table-accent: #323a36;
+  --md-tag: #96c9b0;
   --md-search-bg: rgba(201, 184, 122, 0.18);
   --md-search-text: #d9c98b;
   /* syntax highlight tokens - warm eye-care dark theme */
@@ -156,7 +218,10 @@ body[data-theme="glow"] {
   --muted: #5f6c58;
   --soft: #eef2e3;
   --accent: #88a956;
-  --accent-strong: #6e8d3b;
+  --accent-strong: #567321;
+  /* 护眼绿本身过亮，实心底需下沉一档才能承载白字（6.13:1） */
+  --accent-solid: color-mix(in srgb, var(--accent) 68%, #1a1408);
+  --on-accent: #ffffff;
   --warn: #9e7551;
   --code-bg: #f8faf0;
   --code-text: #2d3729;
@@ -180,10 +245,12 @@ body[data-theme="glow"] {
   --graph-active: #88a956;
   --graph-label-bg: rgba(253, 252, 246, 0.92);
   --md-heading: #1f2a1c;
-  --md-link: #6e8d3b;
+  --md-link: #567321;
   --md-strong: #1a2418;
   --md-emphasis: #4a5644;
   --md-inline-code: #4a5944;
+  --md-table-accent: #e6ecd6;
+  --md-tag: #47631a;
   --md-search-bg: rgba(136, 169, 86, 0.16);
   --md-search-text: #1f2a1c;
   --surface-0: #f3f1e7;
@@ -221,7 +288,6 @@ body[data-theme="glow"] {
   --callout-question: #7c3aed;
   --callout-quote: #6b7280;
   --callout-example: #0891b2;
-  letter-spacing: 0.006em;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
@@ -280,8 +346,9 @@ body[data-theme="eye"] .global-search-dialog {
 body[data-theme="eye"] .global-search-input-wrap input,
 body[data-theme="eye"] .global-search-item-title,
 body[data-theme="eye"] .global-search-item-snippet { color: #2d3729; }
-body[data-theme="eye"] .markdown-body { line-height: 1.82; letter-spacing: 0.01em; color: var(--text); }
-body[data-theme="eye"] #editor .cm-content { line-height: 1.82; letter-spacing: 0.006em; }
+body[data-theme="eye"] .markdown-body { color: var(--text); }
+/* 主题只允许覆盖颜色：此处原先把编辑器行高 1.76 → 1.82、字距 ×3，
+   换主题会改变排版度量（正文重排、光标漂移），已移除，改由 --prose-leading 统一。 */
 body[data-theme="eye"] .markdown-body pre { background: var(--surface-2); border: 1px solid var(--line); }
 body[data-theme="eye"] .markdown-body :not(pre) > code {
   background: var(--inline-code-bg);
@@ -341,15 +408,10 @@ body[data-theme="glow"] .global-search-item-snippet {
 }
 
 body[data-theme="glow"] .markdown-body {
-  line-height: 1.82;
-  letter-spacing: 0.01em;
   color: var(--text);
 }
 
-body[data-theme="glow"] #editor .cm-content {
-  line-height: 1.82;
-  letter-spacing: 0.006em;
-}
+/* 同 eye：主题不再覆盖行高与字距这两项排版度量。 */
 
 body[data-theme="glow"] .markdown-body pre {
   background: var(--surface-2);
@@ -373,6 +435,48 @@ body[data-theme="glow"] *::-webkit-scrollbar-thumb {
 
 body[data-theme="glow"] *::-webkit-scrollbar-track {
   background: transparent;
+}
+
+/* ================= Layer 2 · 兼容别名层 =================
+   把历史上「被引用但从未定义」的名称映射到规范令牌。
+   此前这些名称共造成 9 处声明被整条静默丢弃（hover 反馈缺失、边框/阴影消失），
+   并且在沉浸模式下使渲染块取不到用户字体设置。
+
+   实现要点：自定义属性中的 var() 在「声明所在元素」上完成替换，
+   因此本规则必须覆盖全部主题作用域（:root / dark / eye / glow / image），
+   否则深色主题会锁死浅色值。这里用一个选择器列表一次性声明。 */
+:root,
+body[data-theme="dark"],
+body[data-theme="eye"],
+body[data-theme="glow"],
+body[data-theme="image"] {
+  --hover: var(--hover-bg);
+  --border: var(--line);
+  --border-color: var(--line);
+  --border-strong: color-mix(in srgb, var(--text) 22%, transparent);
+  --secondary: var(--soft);
+  --bg-soft: var(--soft);
+  --bg-subtle: var(--soft);
+  --text-soft: var(--muted);
+  --text-faint: var(--muted);
+  --text-secondary: var(--muted);
+  --btn-bg: var(--panel);
+  --btn-fg: var(--text);
+  --danger: var(--callout-danger);
+  --warning: var(--callout-warning);
+  /* 字体别名：--font-sans 是沉浸渲染容器的字体来源，此前未定义 →
+     渲染块不跟随用户字体设置；现统一映射到用户可配置的 --app-font-family。 */
+  --font-sans: var(--app-font-family);
+  --sans-font: var(--app-font-family);
+  --mono: var(--app-font-mono);
+  --mono-font: var(--app-font-mono);
+  --md-fg: var(--code-text);
+  --md-code-fg: var(--code-text);
+  --editor-font-size: var(--doc-font-size);
+  --editor-font-size-local: var(--editor-font-size);
+  --shadow-lg: var(--shadow-md);
+  --accent-text: var(--accent-strong);
+  --focus-ring: var(--accent-text);
 }
 
 body {
@@ -704,9 +808,9 @@ button:hover, button.active {
 }
 
 button.primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
+  background: var(--accent-solid);
+  border-color: var(--accent-solid);
+  color: var(--on-accent);
 }
 
 button.primary.danger-action {
@@ -869,7 +973,7 @@ body.resizing-sidebar {
   height: 36px;
   border-radius: 8px;
   background: var(--brand-bg);
-  color: #fff;
+  color: var(--on-accent);
   font-weight: 800;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
@@ -1028,8 +1132,8 @@ body.resizing-sidebar {
   transition: background 0.12s;
 }
 .tree-context-menu button:hover:not(:disabled) {
-  background: var(--accent);
-  color: #fff;
+  background: var(--accent-solid);
+  color: var(--on-accent);
 }
 .tree-context-menu button:disabled {
   opacity: 0.4;
@@ -1277,9 +1381,9 @@ body.resizing-sidebar {
 }
 
 .tree-workspace-head .ws-actions-inline button:hover {
-  background: var(--accent);
-  color: #fff;
-  border-color: var(--accent);
+  background: var(--accent-solid);
+  color: var(--on-accent);
+  border-color: var(--accent-solid);
 }
 
 .tree-workspace-head .ws-new-folder {
@@ -1317,8 +1421,8 @@ body.resizing-sidebar {
 }
 
 .folder-title .folder-new:hover {
-  background: var(--accent);
-  color: #fff;
+  background: var(--accent-solid);
+  color: var(--on-accent);
 }
 
 .tree-workspace-head .ws-actions {
@@ -1358,7 +1462,7 @@ body.resizing-sidebar {
 /* 为不同工作区分配不同强调色，增强并排显示时的视觉区分 */
 .tree-workspace.workspace-default { border-left: 4px solid var(--accent); }
 .tree-workspace.workspace-default .ws-dot,
-.workspace-summary .ws-chip.workspace-default { background: var(--accent); color: #fff; }
+.workspace-summary .ws-chip.workspace-default { background: var(--accent-solid); color: var(--on-accent); }
 
 
 
@@ -1718,8 +1822,8 @@ body.resizing-sidebar {
 }
 
 .recent-docs .recent-item.active {
-  background: var(--accent);
-  color: var(--text);
+  background: var(--accent-solid);
+  color: var(--on-accent);
 }
 
 .recent-docs .recent-item .recent-icon {
@@ -1934,12 +2038,13 @@ body.resizing-sidebar {
 }
 
 .markdown-body {
-  width: min(920px, calc(100% - 42px));
+  /* 版心 / 字号 / 行高三者只引用 --prose-* 令牌，三视图共用同一套度量 */
+  width: min(var(--prose-measure), calc(100% - var(--prose-gutter)));
   min-width: 0;
   margin: 0 auto;
   padding: 36px 0 80px;
-  line-height: 1.72;
-  font-size: var(--doc-font-size);
+  line-height: var(--prose-leading);
+  font-size: var(--prose-size);
   overflow-wrap: anywhere;
   word-break: break-word;
 }
@@ -1955,8 +2060,8 @@ body.resizing-sidebar {
   height: 28px;
   padding: 0 9px;
   border-color: color-mix(in srgb, var(--accent) 58%, white 18%);
-  background: color-mix(in srgb, var(--accent) 78%, #252827 22%);
-  color: #fff;
+  background: var(--accent-solid);
+  color: var(--on-accent);
   font-size: 12px;
   font-weight: 700;
   box-shadow: 0 2px 8px rgba(0, 0, 0, .22);
@@ -1982,7 +2087,7 @@ body.resizing-sidebar {
 
 .markdown-body h2 { font-size: calc(var(--doc-font-size) * 1.5); }
 .markdown-body h3 { font-size: calc(var(--doc-font-size) * 1.2); }
-.markdown-body p { margin: 0 0 1em; }
+.markdown-body p { margin: 0 0 var(--prose-block-gap); }
 .markdown-body a { color: var(--md-link); }
 .markdown-body strong { color: var(--md-strong); font-weight: 700; }
 .markdown-body em { color: var(--md-emphasis); }
@@ -2025,7 +2130,7 @@ body.resizing-sidebar {
 }
 
 .markdown-body blockquote {
-  margin: 16px 0;
+  margin: var(--prose-block-gap-fixed) 0;
   padding: 8px 16px;
   border-left: 3px solid var(--accent);
   background: var(--soft);
@@ -2045,7 +2150,7 @@ body.resizing-sidebar {
 .markdown-body .callout,
 #preview .callout,
 #markdownView .callout {
-  margin: 16px 0;
+  margin: var(--prose-block-gap-fixed) 0;
   padding: 10px 16px;
   border: 1px solid var(--line);
   border-left-width: 4px;
@@ -2057,6 +2162,10 @@ body.resizing-sidebar {
   background-color: var(--soft);
   transition: box-shadow 120ms ease, transform 120ms ease;
 }
+/* ═══ 层 2/5 · 02-shell-editor.css — 应用外壳 / 侧栏 / 顶栏 / 工具栏 / 编辑器与预览面板 / callout 前段
+   本层是样式表唯一可编辑的源；public/styles.css 是由本层按序合并出的产物，请勿手改。
+   ⚠ 级联顺序 = 文件名字典序（build-css.mjs 按序合并），请勿调换文件顺序或在本层内
+     重排规则；修改样式请改本层源文件，再运行 `npm run build:css` 重新生成产物。 */
 .markdown-body .callout:hover,
 #preview .callout:hover,
 #markdownView .callout:hover {
@@ -2745,7 +2854,7 @@ html body[data-theme="image"] .markdown-body .callout .callout-title::before {
 
 .markdown-table-wrap {
   width: 100%;
-  margin: 18px 0;
+  margin: var(--prose-block-gap-fixed) 0;
   overflow-x: auto;
   overscroll-behavior-inline: contain;
   border: 1px solid var(--line);
@@ -2796,7 +2905,7 @@ html body[data-theme="image"] .markdown-body .callout .callout-title::before {
   min-height: 60px;
   min-width: 60px;
   object-fit: contain;
-  margin: 16px 0;
+  margin: var(--prose-block-gap-fixed) 0;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--panel);
@@ -3241,8 +3350,8 @@ html body[data-theme="image"] .markdown-body .callout .callout-title::before {
   min-height: 0;
   background: var(--panel-glass);
   color: var(--text);
-  /* 更紧凑且利于编辑的行高与字重：正文1.75，中文字正，英文等宽不挤压 */
-  line-height: 1.76;
+  /* 行高与正文共用同一令牌：修改模式分栏的左右两侧律动一致，不再 1.76 vs 1.78 */
+  line-height: var(--prose-leading);
   /* 等宽字体栈：优先使用 Windows 11 / 新 IDE 自带的 Cascadia Mono/Cascadia Code 连字，
      FiraCode 连字次之；中文退回到更清晰的微软雅黑/PingFang/Sarasa/思源等宽。
      保证中文与英文的字形比例更均衡，避免中文比英文大一截或渲染发虚。*/
@@ -3416,9 +3525,10 @@ html body[data-theme="image"] .markdown-body .callout .callout-title::before {
 
 .editor-panel.preview-hidden #editor {
   /* 仅隐藏预览时，编辑器本身"字号"不做自动放大，尊重用户 Ctrl+/- 手动设置；
-     但保留更宽松的行距 + 更大外边距以获得清爽的单栏写作感受。*/
+     但保留更宽松的行距 + 更大外边距以获得清爽的单栏写作感受。
+     行距同样引用 --prose-leading：单栏与分栏、阅读栏的比例保持一致。 */
   font-size: var(--editor-font-size-local, var(--editor-font-size, var(--doc-font-size, 16px)));
-  line-height: 1.82;
+  line-height: var(--prose-leading);
 }
 
 .editor-panel.preview-hidden #preview {
@@ -3869,7 +3979,7 @@ html body[data-theme="image"] .markdown-body .callout .callout-title::before {
   bottom: 24px;
   width: 64px;
   height: 64px;
-  background: var(--accent);
+  background: var(--accent-solid);
   border: none;
   border-radius: 50%;
   cursor: pointer;
@@ -3879,7 +3989,7 @@ html body[data-theme="image"] .markdown-body .callout .callout-title::before {
   transition: transform 0.3s ease, opacity 0.3s ease, box-shadow 0.3s ease;
   box-shadow: 0 6px 24px rgba(15, 118, 110, 0.4);
   z-index: 1000;
-  color: #fff;
+  color: var(--on-accent);
   overflow: visible;
 }
 
@@ -3981,8 +4091,8 @@ html body[data-theme="image"] .markdown-body .callout .callout-title::before {
 .about-header {
   text-align: center;
   padding: 32px 24px 20px;
-  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%);
-  color: #fff;
+  background: linear-gradient(135deg, var(--accent-solid) 0%, var(--accent-strong) 100%);
+  color: var(--on-accent);
 }
 
 .about-logo {
@@ -4177,10 +4287,10 @@ html body[data-theme="image"] .markdown-body .callout .callout-title::before {
 }
 
 .donation-header {
-  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%);
+  background: linear-gradient(135deg, var(--accent-solid) 0%, var(--accent-strong) 100%);
   padding: 32px 24px 24px;
   text-align: center;
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .donation-icon-lg {
@@ -4365,15 +4475,15 @@ html body[data-theme="image"] .markdown-body .callout .callout-title::before {
 }
 
 .view-mode-switch button.active {
-  background: var(--accent);
-  color: #fff;
+  background: var(--accent-solid);
+  color: var(--on-accent);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
 }
 
 #graphBtn.active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
+  background: var(--accent-solid);
+  border-color: var(--accent-solid);
+  color: var(--on-accent);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
 }
 
@@ -4412,7 +4522,7 @@ html body[data-theme="image"] .markdown-body .callout .callout-title::before {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--accent-solid);
   border: 2px solid var(--panel);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
   cursor: pointer;
@@ -4421,7 +4531,7 @@ html body[data-theme="image"] .markdown-body .callout .callout-title::before {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--accent-solid);
   border: 2px solid var(--panel);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
   cursor: pointer;
@@ -4451,7 +4561,7 @@ html body[data-theme="image"] .markdown-body .callout .callout-title::before {
   width: 38%;
   height: 100%;
   border-radius: inherit;
-  background: var(--accent);
+  background: var(--accent-solid);
   animation: progress-slide 900ms ease-in-out infinite alternate;
 }
 
@@ -4811,9 +4921,9 @@ html body[data-theme="image"] .markdown-body .callout .callout-title::before {
 }
 
 .workspace-item.active .ws-toggle {
-  background: var(--accent);
-  color: #fff;
-  border-color: var(--accent);
+  background: var(--accent-solid);
+  color: var(--on-accent);
+  border-color: var(--accent-solid);
 }
 
 .workspace-actions .ws-rename {
@@ -5242,9 +5352,9 @@ button.secondary:hover {
 button.primary.full {
   width: 100%;
   height: 36px;
-  background: var(--accent);
-  color: #fff;
-  border-color: var(--accent);
+  background: var(--accent-solid);
+  color: var(--on-accent);
+  border-color: var(--accent-solid);
   font-weight: 600;
 }
 
@@ -5281,9 +5391,9 @@ button.primary.full:hover {
 }
 
 .create-workspace-choices button.active {
-  background: var(--accent);
-  color: #fff;
-  border-color: var(--accent);
+  background: var(--accent-solid);
+  color: var(--on-accent);
+  border-color: var(--accent-solid);
   font-weight: 600;
 }
 
@@ -5346,9 +5456,9 @@ button.primary.full:hover {
 }
 
 .settings-section .segmented button.active {
-  background: var(--accent);
-  color: #fff;
-  border-color: var(--accent);
+  background: var(--accent-solid);
+  color: var(--on-accent);
+  border-color: var(--accent-solid);
   font-weight: 600;
 }
 
@@ -5432,6 +5542,10 @@ button.primary.full:hover {
   color: var(--text);
 }
 
+/* ═══ 层 3/5 · 03-workspace-views.css — 内嵌文件浏览器 / 工作区树 / 搜索 / 主题变体 / 响应式前段
+   本层是样式表唯一可编辑的源；public/styles.css 是由本层按序合并出的产物，请勿手改。
+   ⚠ 级联顺序 = 文件名字典序（build-css.mjs 按序合并），请勿调换文件顺序或在本层内
+     重排规则；修改样式请改本层源文件，再运行 `npm run build:css` 重新生成产物。 */
 /* ========== 内嵌文件浏览器（全宽列表视图） ========== */
 .file-browser {
   display: grid;
@@ -5535,8 +5649,8 @@ button.primary.full:hover {
   gap: 6px;
   padding: 4px 12px;
   border-radius: 999px;
-  background: var(--accent);
-  color: #fff;
+  background: var(--accent-solid);
+  color: var(--on-accent);
   font-size: 12px;
   font-weight: 600;
   flex: 0 0 auto;
@@ -5758,15 +5872,15 @@ button.primary.full:hover {
   padding: 0 16px;
   border-radius: 6px;
   font-size: 13px;
-  background: var(--accent);
-  color: #fff;
-  border-color: var(--accent);
+  background: var(--accent-solid);
+  color: var(--on-accent);
+  border-color: var(--accent-solid);
   font-weight: 600;
   cursor: pointer;
 }
 
 .browser-footer .primary:hover {
-  background: var(--accent);
+  background: var(--accent-solid);
   filter: brightness(1.05);
 }
 
@@ -5833,7 +5947,9 @@ button.primary.full:hover {
    inexpensive on large libraries.
 --------------------------------------------------------------------------- */
 :root {
-  --surface-0: #f5f7f9;
+  /* 默认（浅色）主题的页面底色跟随暖色基座 --bg，
+     避免此前 #f5f7f9 冷灰蓝底与暖米色面板形成「暖面板坐在冷底色上」的细微割裂。 */
+  --surface-0: var(--bg);
   --surface-1: color-mix(in srgb, var(--panel) 96%, transparent);
   --surface-2: color-mix(in srgb, var(--panel) 88%, var(--soft));
   --surface-3: color-mix(in srgb, var(--soft) 82%, var(--panel));
@@ -5842,6 +5958,7 @@ button.primary.full:hover {
   --accent-wash: color-mix(in srgb, var(--accent) 6%, transparent);
   --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05), 0 8px 24px rgba(15, 23, 42, 0.04);
   --shadow-md: 0 18px 46px rgba(15, 23, 42, 0.12);
+  /* 历史圆角令牌：值保持不变以避免视觉回归；新代码请使用 Layer 0 的 --radius-1/2/3 */
   --radius-sm: 9px;
   --radius-md: 14px;
   --radius-lg: 20px;
@@ -5913,7 +6030,7 @@ body {
   width: 38px;
   height: 38px;
   border-radius: 10px;
-  background: linear-gradient(145deg, var(--accent), var(--accent-strong));
+  background: linear-gradient(145deg, var(--accent-solid), var(--accent-strong));
   box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 24%, transparent);
   letter-spacing: -0.04em;
 }
@@ -5976,7 +6093,7 @@ button:active {
 }
 
 button.primary {
-  background: linear-gradient(145deg, var(--accent), var(--accent-strong));
+  background: linear-gradient(145deg, var(--accent-solid), var(--accent-strong));
   box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 20%, transparent);
 }
 
@@ -6107,10 +6224,10 @@ button.primary {
 }
 
 .markdown-body {
-  width: min(860px, calc(100% - 56px));
+  width: min(var(--prose-measure), calc(100% - var(--prose-gutter)));
   padding-top: 48px;
   padding-bottom: 112px;
-  line-height: 1.82;
+  line-height: var(--prose-leading);
 }
 
 .markdown-body h1,
@@ -6160,8 +6277,8 @@ button.primary {
 }
 
 #editor {
-  /* 与前一个 #editor 规则的 line-height 保持一致，避免被覆盖回 1.74 打断比例 */
-  line-height: 1.76;
+  /* 与前一处的 #editor 一样引用同一令牌，两条规则不会再各自漂移 */
+  line-height: var(--prose-leading);
   font-weight: 450;
   /* Windows下字体略细会虚，适度抬升字重到 450 但仍保持普通字重观感 */
   color: color-mix(in srgb, var(--text) 96%, #000);
@@ -6403,9 +6520,9 @@ body[data-theme="image"] .tree-item.active {
 }
 
 body[data-theme="image"] button.primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
+  background: var(--accent-solid);
+  border-color: var(--accent-solid);
+  color: var(--on-accent);
 }
 
 /* 图片主题：弹窗/对话框保持可读 */
@@ -7336,10 +7453,22 @@ body[data-theme="image"] .editor-splitter::before {
   }
 }
 
+/* 动效可访问性：PR-4 起补全到「关键帧动画 + 过渡 + 平滑滚动」三类。
+   原先只压 transition-duration，11 处 animation（含 2 处 infinite 旋转/脉冲）
+   仍照常播放 —— 对前庭功能敏感的用户是实打实的伤害。
+   这里不是「减速」而是「停播」：0.01ms + 单次迭代 = 动画直接落到终态，
+   元素该有的静态外观（终态样式）全部保留，仅去掉运动过程。
+   scroll-behavior 一并复位，避免「点击目录后整页平滑滚动」在降级模式下发生。 */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
   }
+  html { scroll-behavior: auto !important; }
 }
 
 @media (max-width: 720px) {
@@ -7981,7 +8110,7 @@ body[data-theme="image"] .editor-splitter::before {
 
 /* 预览中图表渲染块 */
 .chart-block {
-  margin: 16px 0;
+  margin: var(--prose-block-gap-fixed) 0;
   border: 1px solid var(--line);
   border-radius: 8px;
   overflow: hidden;
@@ -8450,11 +8579,11 @@ body.immersive-editing {
   background: var(--surface-0);
 }
 
-/* 版心测度：预览面板 .markdown-body 用 min(920px, calc(100% - 42px))，
-   而沉浸正文字号比预览大 4%（max(16px, doc*1.04)），测度同步放大 1.04，
+/* 版心测度：阅读/预览用 min(--prose-measure, 100% - --prose-gutter)，
+   沉浸正文字号比阅读大 --prose-scale 倍，版心同步放大同一系数，
    两种视图每行容纳的字符数一致 —— 换行位置对齐，所见即所得成立。 */
 .app-shell.immersive {
-  --mt-immersive-measure: calc(920px * 1.04);
+  --mt-immersive-measure: calc(var(--prose-measure) * var(--prose-scale));
   /* 块间空行的行高：预览里空行不产生 DOM，块间距完全由 margin 提供（段落 1em=16px）；
      沉浸里每个空行都是一行 CodeMirror 文本，保持整行高会把所有间距放大一倍。
      收缩到 16px ≈ 预览的段落间距；光标仍清晰可见、可点击，不会出现 0 高光标。 */
@@ -8520,10 +8649,12 @@ body.immersive-editing {
 
 .app-shell.immersive #editor .cm-content {
   /* 百分比 padding 相对滚动视口解析：宽屏时正文栏 = 版心宽并水平居中，
-     窄屏时退化为 24px 最小留白；垂直滚动条出现/消失会自动重新居中。 */
-  padding: 36px max(24px, calc((100% - var(--mt-immersive-measure)) / 2)) 55vh;
-  font-size: max(16px, calc(var(--doc-font-size) * 1.04));
-  line-height: 1.8;
+     窄屏时退化为最小留白（--prose-gutter 的一半）；垂直滚动条出现/消失会自动重新居中。 */
+  padding: 36px max(calc(var(--prose-gutter) / 2), calc((100% - var(--mt-immersive-measure)) / 2)) 55vh;
+  /* 去掉历史上的 max(16px, …) 下限：该下限会在文档字号 ≤15.4px 时把正文强制放大，
+     版心却不变 → 换行与阅读栏错位。现在字号与版心同乘 --prose-scale，小字号同样对齐。 */
+  font-size: calc(var(--prose-size) * var(--prose-scale));
+  line-height: var(--prose-leading);
 }
 
 /* 行号/折叠栏是代码编辑器的部件：在文档视图里会把视觉重心拉向左缘，
@@ -8587,9 +8718,10 @@ body.immersive-editing {
   margin: 0;
   padding: 0;
   font-size: inherit;
-  /* 行高不继承编辑器（#editor: 1.76 为源码可读性调过），
-     沿用文档正文比例 1.82 —— 与预览面板 .markdown-body 完全一致。 */
-  line-height: 1.82;
+  /* 行高继承编辑器行盒：--prose-leading 已在 #editor/.cm-content 上统一，
+     渲染块与源码行、阅读栏三处比例一致（历史上此处硬写 1.82 而 #editor 是 1.76，
+     导致光标移入/移出时该行"变脸"）。 */
+  line-height: inherit;
 }
 
 .app-shell.immersive .cm-line.mt-md-block {
@@ -8634,6 +8766,10 @@ body.immersive-editing {
   }
 }
 
+/* ═══ 层 4/5 · 04-modes-dialogs.css — 轻量编辑模式 / 低 GPU 模式 / PDF·打印导出 / 各类对话框
+   本层是样式表唯一可编辑的源；public/styles.css 是由本层按序合并出的产物，请勿手改。
+   ⚠ 级联顺序 = 文件名字典序（build-css.mjs 按序合并），请勿调换文件顺序或在本层内
+     重排规则；修改样式请改本层源文件，再运行 `npm run build:css` 重新生成产物。 */
 /* ===== 轻量编辑模式：禁用语法高亮，减少渲染开销 =====
    注意：必须排除 .mt-md-wysiwyg（沉浸模式的渲染结果容器）。
    该容器里是渲染后的真实 DOM，其颜色/背景/字号/加粗等属于「文档内容本身的语义」，
@@ -8643,8 +8779,13 @@ body.immersive-editing {
    .mt-md-inline-style 同理：普通段落里 {bg:…}/{color:…}/{size:…} 标记的
    行内渲染容器（不参与块替换），其内部 span 同样靠内联 style 生效。
    .mt-md-inline-math 同理：普通段落里 $…$ 的 KaTeX 渲染容器，其内部 span 靠
-   KaTeX 的字体族/字重样式呈现数学字形（变量斜体、\mathbf 加粗），清零会毁掉它们。 */
-body.lightweight-editor .cm-line span:not(.mt-md-wysiwyg):not(.mt-md-wysiwyg *):not(.mt-md-inline-style):not(.mt-md-inline-style *):not(.mt-md-inline-math):not(.mt-md-inline-math *),
+   KaTeX 的字体族/字重样式呈现数学字形（变量斜体、\mathbf 加粗），清零会毁掉它们。
+   .mt-md-inline-mark 同理：普通段落里 **粗体** / *斜体* / 【行内码】 / [链接]() /
+   ~~删除~~ / ==高亮== 的行内渲染容器（同样不参与块替换），容器本身是 span，
+   若被清零，.markdown-body 提供的 strong/em/code/a 语义样式会连带失效。
+   注意：本条注释里绝不能出现星号加斜杠的连续组合，那会被当作注释结束符，
+   导致紧随其后的清零规则被整条丢弃（实测踩过）。 */
+body.lightweight-editor .cm-line span:not(.mt-md-wysiwyg):not(.mt-md-wysiwyg *):not(.mt-md-inline-style):not(.mt-md-inline-style *):not(.mt-md-inline-math):not(.mt-md-inline-math *):not(.mt-md-inline-mark):not(.mt-md-inline-mark *),
 body.lightweight-editor .cm-line .cm-heading,
 body.lightweight-editor .cm-line .cm-link,
 body.lightweight-editor .cm-line .cm-url,
@@ -8687,6 +8828,29 @@ body.lightweight-editor .cm-line .mt-md-wysiwyg * {
    高公式（分式/矩阵）按自身高度撑开行盒，而不是与上下行重叠。 */
 .app-shell.immersive .cm-line .mt-md-inline-math {
   display: inline-block;
+}
+
+/* 段落内行内语义标记（**粗体** / *斜体* / 【行内码】 / [链接]() / ~~删除~~ / ==高亮==）：
+   容器同挂 .markdown-body 以取用 strong/em/code/a 的语义样式，
+   但它是「行内片段」而非「整篇文档」，.markdown-body 自带的容器级属性
+   （版心宽度、水平居中、36px/80px 内边距、正文字号）必须中和成继承值，
+   否则行内片段的字号会比同一行其余文字小 1/0.04（沉浸字号 = 正文 × --prose-scale），
+   出现「同一句话里字号不一致」。
+   .mt-md-inline-style（{color|bg|size:值|内容}）同理：它承载的是文档正文，
+   也应使用正文字体，而不是编辑器的等宽字体。 */
+.app-shell.immersive .cm-line .mt-md-inline-mark.markdown-body {
+  width: auto;
+  min-width: 0;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.app-shell.immersive .cm-line .mt-md-inline-mark,
+.app-shell.immersive .cm-line .mt-md-inline-style {
+  font-family: var(--prose-font);
 }
 
 body.lightweight-editor .cm-activeLine,
@@ -8978,9 +9142,9 @@ body.low-gpu-mode .coffee-steam span {
 }
 
 .update-header {
-  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%);
+  background: linear-gradient(135deg, var(--accent-solid) 0%, var(--accent-strong) 100%);
   padding: 28px 24px 20px;
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .update-header h2 {
@@ -9450,8 +9614,8 @@ body:not([data-theme="image"]):not([data-theme="eye"]):not([data-theme="glow"]) 
   height: 28px;
   border: 1px solid var(--accent);
   border-radius: 6px;
-  background: var(--accent);
-  color: #fff;
+  background: var(--accent-solid);
+  color: var(--on-accent);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -10488,6 +10652,10 @@ html body .markdown-body .callout.callout-question > .callout-title,
 html body #markdownView .callout.callout-question > .callout-title::before,
 html body #preview .callout.callout-question > .callout-title::before,
 html body .markdown-body .callout.callout-question > .callout-title::before { color: #8b5cf6 !important; }
+/* ═══ 层 5/5 · 05-fallback-density.css — 高亮提示块兜底 · PR-4 交互与密度（五态/焦点环/命中区/状态栏/动效）
+   本层是样式表唯一可编辑的源；public/styles.css 是由本层按序合并出的产物，请勿手改。
+   ⚠ 级联顺序 = 文件名字典序（build-css.mjs 按序合并），请勿调换文件顺序或在本层内
+     重排规则；修改样式请改本层源文件，再运行 `npm run build:css` 重新生成产物。 */
 
 /* ================================================================
    ░▒▓█ 高亮提示块 · 终局无依赖绝对兜底（NO-THEME FALLBACK v9 20260822）█▓▒░
@@ -11575,3 +11743,265 @@ html body .print-body.print-body .callout.callout.callout-example.callout-exampl
 .ocr-result-copy:hover {
   background: rgba(34, 211, 238, 0.25);
 }
+
+/* ===========================================================================
+   PR-4 · 交互与密度
+   目标：五态矩阵统一、分隔条命中区放大、工具栏不再藏内容、状态栏密度收敛、
+         键盘焦点全流程可见、动效三档并完整尊重 reduced-motion。
+   约束：**全部为展示层调整** —— 不改类名契约、不改 DOM 结构、不改任何 JS 逻辑。
+   令牌沿用 Layer 0 的 --space-* / --dur-* / --ease-standard / --fs-xs。
+   =========================================================================== */
+
+/* ---- 4.1 控件五态令牌 ------------------------------------------------
+   同 PR-1 的别名层：var() 在「声明所在元素」上解析，必须覆盖全部主题作用域，
+   否则深色主题会锁死浅色值（--panel/--accent/--line 都由 body[data-theme] 提供）。 */
+:root,
+body[data-theme="dark"],
+body[data-theme="eye"],
+body[data-theme="glow"],
+body[data-theme="image"] {
+  --ctl-bg: var(--panel);
+  --ctl-bg-hover: color-mix(in srgb, var(--accent) 9%, var(--panel));
+  --ctl-bg-active: color-mix(in srgb, var(--accent) 18%, var(--panel));
+  --ctl-border: var(--line);
+  --ctl-border-hover: color-mix(in srgb, var(--accent) 42%, var(--line));
+  --ctl-fg: var(--text);
+  --ctl-fg-muted: var(--muted);
+  --ctl-disabled-opacity: 0.45;
+  /* 状态栏高度：.editor-panel 的第三行必须按同一数值预留 —— 状态栏是
+     绝对定位、不参与栅格流，写 auto 会塌成 0 并把编辑区顶到状态栏底下。 */
+  --status-bar-h: 26px;
+  /* 五态开关（含禁用态）统一挂在下面这条 transitions 上 */
+  --ctl-transition:
+    background-color var(--dur-1) var(--ease-standard),
+    border-color var(--dur-1) var(--ease-standard),
+    color var(--dur-1) var(--ease-standard),
+    box-shadow var(--dur-2) var(--ease-standard),
+    transform var(--dur-1) var(--ease-standard);
+}
+
+/* ---- 4.2 五态矩阵：默认 / hover / 按下 / 键盘焦点 / 禁用 ----------------
+   只覆盖「中性」控件；带语义色的控件（.primary / .danger / .active / 分段控件）
+   保持各自配色，仅补齐其原本缺失的 hover、按下与禁用反馈。 */
+.toolbar button,
+.editor-toolbar button:not([data-format="h1"]):not([data-format="h2"]):not([data-format="h3"]),
+.editor-toolbar select,
+.editor-toolbar label,
+.menu-item,
+.settings-nav-item,
+.segmented button,
+.status-bar .status-item {
+  transition: var(--ctl-transition);
+}
+
+.toolbar button:not(.danger):not(.active):hover,
+.editor-toolbar button:not([data-format="h1"]):not([data-format="h2"]):not([data-format="h3"]):hover,
+.editor-toolbar select:hover,
+.editor-toolbar label:hover,
+.menu-item:hover,
+.settings-nav-item:hover,
+.segmented button:hover,
+.status-bar .status-item:hover {
+  background-color: var(--ctl-bg-hover);
+  border-color: var(--ctl-border-hover);
+  color: var(--ctl-fg);
+}
+
+.toolbar button:not(.danger):not(.active):active,
+.editor-toolbar button:not([data-format="h1"]):not([data-format="h2"]):not([data-format="h3"]):active,
+.menu-item:active,
+.settings-nav-item:active,
+.segmented button:active,
+.status-bar .status-item:active {
+  background-color: var(--ctl-bg-active);
+  /* 0.5px 的下沉：给出「按下」的触感，又不足以引起布局位移 */
+  transform: translateY(0.5px);
+}
+
+/* 禁用态：统一降饱和 + 降不透明度 + 明确光标；不得只靠颜色变浅（可达性） */
+.toolbar button:disabled,
+.editor-toolbar button:disabled,
+.editor-toolbar select:disabled,
+.editor-toolbar label:has(input:disabled),
+.menu-item:disabled,
+.settings-nav-item:disabled,
+.segmented button:disabled {
+  opacity: var(--ctl-disabled-opacity);
+  cursor: not-allowed;
+  filter: saturate(0.5);
+  transform: none;
+}
+
+/* ---- 4.3 全局键盘焦点环 ------------------------------------------------
+   现状：文件里散落 14 处 outline:none / outline:0，其中一部分（如顶栏搜索框）
+   没有任何替代指示，键盘用户会「看不见自己在哪」。
+   这里用 !important 统一兜底（可压过那些非 important 的 outline:none），
+   并用 :where() 把特异度压到 0，避免与既有品牌化焦点样式抢优先级。
+   刻意排除：编辑器本体（#editor / CodeMirror 内容区自带光标与选中反馈）。 */
+:where(a[href], button, [role="button"], [role="tab"], [role="menuitem"], summary,
+       input, select, textarea, [tabindex]:not([tabindex="-1"])):focus-visible {
+  outline: 2px solid var(--focus-ring) !important;
+  outline-offset: 2px !important;
+  border-radius: inherit;
+}
+
+/* 内部控件已经被外层容器（label / 分段控件）表达焦点时，不再叠加内圈虚线 */
+.editor-toolbar label input:focus-visible { outline-offset: 1px !important; }
+
+/* ---- 4.4 分隔条命中区：视觉 3~8px → 可点 10px --------------------------
+   网格列宽保持不变（不改布局），改由伪元素向外扩出命中区；
+   分隔条自带 z-index，命中区压得住相邻面板，因而不影响两侧内容的选择与点击。 */
+.sidebar-resizer::after,
+.editor-splitter::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 10px;
+  transform: translateX(-50%);
+  /* 命中区本身不可见，只负责把 3px 的细线变成好点的目标 */
+  background: transparent;
+}
+
+.sidebar-resizer::after { width: 10px; }
+
+/* 悬停/拖动时给命中区一个极淡的回执，避免「点了却没反应」的错觉 */
+.sidebar-resizer:hover::after,
+.sidebar-resizer.dragging::after,
+.editor-splitter:hover::after,
+.editor-splitter.dragging::after {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+/* ---- 4.5 工具栏：不再把内容藏在滚动条后面 ------------------------------
+   现状：.editor-toolbar 是 overflow-x:auto + flex-wrap:nowrap，
+   1440px 下已有 1 个控件被推出可视区、1024px 下多达 8 个，
+   Windows 上滚动条默认隐藏 → 用户完全不知道还有东西可用。
+   改为自动换行 + 不裁切：内容永远可见，代价是窄窗口下工具栏占两行。 */
+.editor-toolbar {
+  overflow: visible;
+  flex-wrap: wrap;
+  row-gap: var(--space-1);
+  column-gap: 4px;
+  align-content: center;
+  height: auto;
+  min-height: 42px;
+}
+
+/* 让 21 个控件在 1440px 下回到单行：水平内边距 9px→7px（每控件省 4px，
+   21 个合计约 84px），正好补上「单行放不下」的缺口；再配合列间距 5px→4px。
+   视觉差异不足 1px，且不改变点击目标高度（仍 32px）。 */
+.editor-toolbar button,
+.editor-toolbar select,
+.editor-toolbar label {
+  padding-inline: 7px;
+}
+
+/* 工具栏由「固定 46px 行」变为「随内容自适应行」；第三行必须继续为状态栏
+   预留高度（状态栏是绝对定位），否则编辑区会滑到状态栏底下。 */
+.editor-panel {
+  grid-template-rows: auto minmax(0, 1fr) var(--status-bar-h);
+}
+
+/* ---- 4.6 状态栏：密度收敛到 12px + 优先级逐级展开 ----------------------
+   现状：11px / 单行 8 项，小字号 + 高密度，长时间阅读疲劳。
+   桌面端（≥1200px）保留全部信息，窄窗口按优先级收起次要项，
+   保证「核心 4 项」（文档名 / 字数 / 行列 / 保存状态）始终可见且不换行。 */
+.status-bar {
+  font-size: var(--fs-xs);
+  box-sizing: border-box;
+  height: var(--status-bar-h);
+  min-height: var(--status-bar-h);
+  gap: 6px;
+  padding: 0 12px;
+}
+
+.status-bar .status-item {
+  gap: 5px;
+  padding: 1px 3px;
+  border-radius: var(--radius-1);
+  /* 文档名可能很长：允许条目标收缩，再由文本省略号收尾，
+     而不是把后续条目挤出可视区（那属于「被裁切的隐藏内容」）。 */
+  min-width: 0;
+}
+
+.status-bar [data-status-field$="Text"] {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-bar .status-sep {
+  opacity: 0.5;
+}
+
+/* 渐进收起：核心 4 项（文档名 / 字数 / 行列 / 保存状态）在任何宽度都保留，
+   其余按「最不重要优先」让位。收起条目时必须同时收起它前面的分隔线，
+   否则会出现两个相邻的 |（用 :has(+ …) 命中「紧邻被隐藏项」的那个 sep）。 */
+@media (max-width: 1400px) {
+  .status-bar [data-status-field="pomodoro"],
+  .status-bar [data-status-field="systemTime"],
+  .status-bar .status-sep:has(+ [data-status-field="pomodoro"]),
+  .status-bar .status-sep:has(+ [data-status-field="systemTime"]) {
+    display: none;
+  }
+}
+
+@media (max-width: 1120px) {
+  .status-bar [data-status-field="created"],
+  .status-bar .status-sep:has(+ [data-status-field="created"]) {
+    display: none;
+  }
+}
+
+@media (max-width: 940px) {
+  .status-bar [data-status-field="encoding"],
+  .status-bar .status-sep:has(+ [data-status-field="encoding"]) {
+    display: none;
+  }
+}
+
+/* ---- 4.7 动效三档落到具体控件 ------------------------------------------
+   只用 --dur-1（120ms，状态回执）/ --dur-2（200ms，浮层进出）两档；
+   --dur-3（320ms）留给整页级过渡（欢迎页、模式切换），不在交互反馈里使用。 */
+.view-mode-switch button,
+.settings-nav-item,
+.segmented button {
+  transition-duration: var(--dur-1);
+  transition-timing-function: var(--ease-standard);
+}
+
+.toolbar-dropdown-panel,
+.settings-modal,
+.dialog {
+  transition-duration: var(--dur-2);
+  transition-timing-function: var(--ease-standard);
+}
+
+/* ---- 4.8 模式切换：分段控件观感 ----------------------------------------
+   DOM 不变（仍是 .view-mode-switch > button），只把「带外框的胶囊」改成
+   「内嵌分段」：容器下沉、选中段上浮并带内阴影，视觉上成为一个整体控件。 */
+.view-mode-switch {
+  height: 32px;
+  padding: 2px;
+  border-radius: var(--radius-2);
+  background: color-mix(in srgb, var(--soft) 70%, var(--panel));
+  box-shadow: inset 0 1px 2px color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+.view-mode-switch button {
+  height: 100%;
+  padding: 0 16px;
+  border-radius: calc(var(--radius-2) - 2px);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.view-mode-switch button.active {
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--text) 14%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #fff 22%, transparent);
+}
+

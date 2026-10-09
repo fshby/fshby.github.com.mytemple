@@ -1,0 +1,1886 @@
+/* ═══ 层 4/5 · 04-modes-dialogs.css — 轻量编辑模式 / 低 GPU 模式 / PDF·打印导出 / 各类对话框
+   本层是样式表唯一可编辑的源；public/styles.css 是由本层按序合并出的产物，请勿手改。
+   ⚠ 级联顺序 = 文件名字典序（build-css.mjs 按序合并），请勿调换文件顺序或在本层内
+     重排规则；修改样式请改本层源文件，再运行 `npm run build:css` 重新生成产物。 */
+/* ===== 轻量编辑模式：禁用语法高亮，减少渲染开销 =====
+   注意：必须排除 .mt-md-wysiwyg（沉浸模式的渲染结果容器）。
+   该容器里是渲染后的真实 DOM，其颜色/背景/字号/加粗等属于「文档内容本身的语义」，
+   而不是编辑器语法高亮；若一并清除，沉浸模式下字体颜色、背景色会全部失效。
+   用 :not(.mt-md-wysiwyg) 过滤容器本身，再排除容器下的所有后代 ——
+   渲染结果的裸 span（如 {color:#dc2626|红字}）正是靠内联 style 生效，必须放行。
+   .mt-md-inline-style 同理：普通段落里 {bg:…}/{color:…}/{size:…} 标记的
+   行内渲染容器（不参与块替换），其内部 span 同样靠内联 style 生效。
+   .mt-md-inline-math 同理：普通段落里 $…$ 的 KaTeX 渲染容器，其内部 span 靠
+   KaTeX 的字体族/字重样式呈现数学字形（变量斜体、\mathbf 加粗），清零会毁掉它们。
+   .mt-md-inline-mark 同理：普通段落里 **粗体** / *斜体* / 【行内码】 / [链接]() /
+   ~~删除~~ / ==高亮== 的行内渲染容器（同样不参与块替换），容器本身是 span，
+   若被清零，.markdown-body 提供的 strong/em/code/a 语义样式会连带失效。
+   注意：本条注释里绝不能出现星号加斜杠的连续组合，那会被当作注释结束符，
+   导致紧随其后的清零规则被整条丢弃（实测踩过）。 */
+body.lightweight-editor .cm-line span:not(.mt-md-wysiwyg):not(.mt-md-wysiwyg *):not(.mt-md-inline-style):not(.mt-md-inline-style *):not(.mt-md-inline-math):not(.mt-md-inline-math *):not(.mt-md-inline-mark):not(.mt-md-inline-mark *),
+body.lightweight-editor .cm-line .cm-heading,
+body.lightweight-editor .cm-line .cm-link,
+body.lightweight-editor .cm-line .cm-url,
+body.lightweight-editor .cm-line .cm-emphasis,
+body.lightweight-editor .cm-line .cm-strong,
+body.lightweight-editor .cm-line .cm-monospace,
+body.lightweight-editor .cm-line .cm-comment,
+body.lightweight-editor .cm-line .cm-keyword,
+body.lightweight-editor .cm-line .cm-string,
+body.lightweight-editor .cm-line .cm-number,
+body.lightweight-editor .cm-line .cm-bool,
+body.lightweight-editor .cm-line .cm-typeName,
+body.lightweight-editor .cm-line .cm-propertyName,
+body.lightweight-editor .cm-line .cm-operator,
+body.lightweight-editor .cm-line .cm-punctuation,
+body.lightweight-editor .cm-line .cm-invalid {
+  color: inherit !important;
+  font-weight: normal !important;
+  font-style: normal !important;
+  text-decoration: none !important;
+  background-color: transparent !important;
+}
+
+/* 沉浸渲染容器内：只解除上面的「清零」规则，不再新设任何具体值。
+   revert 会退回「当前层之前的样式层」——即 UA 默认样式与元素内联 style，
+   因此 strong/em/del/mark/u 的语义样式与 span 的 color/background 内联样式都能原样生效。
+   切勿在此写 background-color: transparent 之类的具体值，
+   否则会盖掉 <mark> 的 UA 默认黄底（实测会变成灰底）。 */
+body.lightweight-editor .cm-line .mt-md-wysiwyg,
+body.lightweight-editor .cm-line .mt-md-wysiwyg * {
+  color: revert;
+  font-weight: revert;
+  font-style: revert;
+  text-decoration: revert;
+  background-color: revert;
+}
+
+/* 段落内行内公式（$…$ / $$…$$，不参与块替换）：它不在 .markdown-body 作用域内，
+   拿不到预览的 .math-inline { display:inline-block } 规则。inline-block 让
+   高公式（分式/矩阵）按自身高度撑开行盒，而不是与上下行重叠。 */
+.app-shell.immersive .cm-line .mt-md-inline-math {
+  display: inline-block;
+}
+
+/* 段落内行内语义标记（**粗体** / *斜体* / 【行内码】 / [链接]() / ~~删除~~ / ==高亮==）：
+   容器同挂 .markdown-body 以取用 strong/em/code/a 的语义样式，
+   但它是「行内片段」而非「整篇文档」，.markdown-body 自带的容器级属性
+   （版心宽度、水平居中、36px/80px 内边距、正文字号）必须中和成继承值，
+   否则行内片段的字号会比同一行其余文字小 1/0.04（沉浸字号 = 正文 × --prose-scale），
+   出现「同一句话里字号不一致」。
+   .mt-md-inline-style（{color|bg|size:值|内容}）同理：它承载的是文档正文，
+   也应使用正文字体，而不是编辑器的等宽字体。 */
+.app-shell.immersive .cm-line .mt-md-inline-mark.markdown-body {
+  width: auto;
+  min-width: 0;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.app-shell.immersive .cm-line .mt-md-inline-mark,
+.app-shell.immersive .cm-line .mt-md-inline-style {
+  font-family: var(--prose-font);
+}
+
+body.lightweight-editor .cm-activeLine,
+body.lightweight-editor .cm-activeLineGutter {
+  background-color: transparent !important;
+}
+
+body.lightweight-editor .cm-selectionBackground,
+body.lightweight-editor .cm-focused .cm-selectionBackground {
+  background-color: color-mix(in srgb, var(--accent) 20%, transparent) !important;
+}
+
+/* ===== 低 GPU 模式：移除毛玻璃与大阴影，节省 GPU 合成层与显存 ===== */
+body.low-gpu-mode * {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+body.low-gpu-mode .sidebar,
+body.low-gpu-mode .topbar,
+body.low-gpu-mode .editor-toolbar,
+body.low-gpu-mode .status-bar,
+body.low-gpu-mode .reader-toolbar,
+body.low-gpu-mode .panel-header {
+  background: var(--surface-1) !important;
+}
+body.low-gpu-mode .welcome-overlay,
+body.low-gpu-mode .app-splash,
+body.low-gpu-mode .modal-overlay {
+  background: color-mix(in srgb, var(--surface-0) 92%, #000) !important;
+}
+/* 缩小大范围阴影为小阴影 */
+body.low-gpu-mode .welcome-dialog,
+body.low-gpu-mode .settings-dialog,
+body.low-gpu-mode .ai-panel,
+body.low-gpu-mode .global-search-panel,
+body.low-gpu-mode .modal-content {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12) !important;
+}
+body.low-gpu-mode .coffee-button,
+body.low-gpu-mode .button-primary,
+body.low-gpu-mode .toolbar-dropdown-panel {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08) !important;
+}
+/* 图谱画布保留 contain 隔离 */
+body.low-gpu-mode #graphCanvas {
+  filter: none !important;
+  will-change: auto !important;
+}
+/* 低显存模式禁用持续动画：咖啡蒸汽 */
+body.low-gpu-mode .coffee-steam span {
+  animation: none !important;
+}
+
+/* ===== PDF / 公众号导出按钮 ===== */
+#exportPdfBtn {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  color: var(--accent-strong);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+#exportPdfBtn:hover {
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+}
+
+#copyWechatBtn {
+  border-color: color-mix(in srgb, #07c160 45%, var(--line));
+  color: #07c160;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+#copyWechatBtn:hover {
+  background: color-mix(in srgb, #07c160 12%, var(--panel));
+  border-color: #07c160;
+}
+
+/* ===== PDF / 打印导出 ===== */
+.print-root {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  width: 820px;
+  height: auto;
+  overflow: visible;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.print-root.hidden {
+  display: none;
+}
+
+.print-article {
+  background: #ffffff;
+  color: #1f2937;
+  font-family: "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+  font-size: 14px;
+  line-height: 1.75;
+  padding: 48px 56px;
+  max-width: 820px;
+  margin: 0 auto;
+}
+
+.print-header {
+  text-align: center;
+  border-bottom: 2px solid #1f2937;
+  padding-bottom: 18px;
+  margin-bottom: 28px;
+}
+
+.print-title {
+  font-size: 26px;
+  font-weight: 700;
+  color: #111827;
+  margin: 0 0 8px;
+  line-height: 1.35;
+}
+
+.print-meta {
+  font-size: 12px;
+  color: #6b7280;
+  margin: 0 0 4px;
+}
+
+.print-author {
+  font-size: 12px;
+  color: #9ca3af;
+  margin: 0;
+}
+
+.print-body h1,
+.print-body h2,
+.print-body h3,
+.print-body h4 {
+  color: #111827;
+  font-weight: 600;
+  line-height: 1.4;
+  margin-top: 1.6em;
+  margin-bottom: 0.6em;
+}
+
+.print-body h1 { font-size: 22px; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px; }
+.print-body h2 { font-size: 19px; border-bottom: 1px solid #eef0f3; padding-bottom: 4px; }
+.print-body h3 { font-size: 16px; }
+.print-body h4 { font-size: 14px; }
+
+.print-body p { margin: 0.7em 0; }
+
+.print-body a {
+  color: #2563eb;
+  text-decoration: underline;
+  word-break: break-all;
+}
+
+.print-body img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 14px auto;
+  border-radius: 4px;
+  page-break-inside: avoid;
+}
+
+.print-body blockquote {
+  margin: 1em 0;
+  padding: 8px 16px;
+  border-left: 3px solid #2563eb;
+  background: #f8fafc;
+  color: #475569;
+}
+
+.print-body blockquote p { margin: 0.4em 0; }
+
+.print-body pre {
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 14px 16px;
+  overflow-x: auto;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  page-break-inside: avoid;
+}
+
+.print-body code {
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 0.92em;
+  background: rgba(15, 23, 42, 0.06);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+.print-body pre code {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  font-size: 13px;
+}
+
+.print-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1em 0;
+  font-size: 13px;
+  page-break-inside: avoid;
+}
+
+.print-body th,
+.print-body td {
+  border: 1px solid #d1d5db;
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.print-body th {
+  background: #f1f5f9;
+  font-weight: 600;
+}
+
+.print-body ul,
+.print-body ol {
+  margin: 0.7em 0;
+  padding-left: 1.8em;
+}
+
+.print-body li { margin: 0.3em 0; }
+
+.print-body hr {
+  border: 0;
+  border-top: 1px solid #e5e7eb;
+  margin: 1.8em 0;
+}
+
+.print-footer {
+  margin-top: 36px;
+  padding-top: 14px;
+  border-top: 1px solid #e5e7eb;
+  text-align: center;
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+@media print {
+  html, body {
+    overflow: visible !important;
+    height: auto !important;
+  }
+  body.printing > :not(.print-root) {
+    display: none !important;
+  }
+  body.printing .print-root {
+    position: static !important;
+    width: auto !important;
+    height: auto !important;
+    overflow: visible !important;
+    pointer-events: auto !important;
+    z-index: auto !important;
+  }
+  body.printing .print-root.hidden {
+    display: block !important;
+  }
+  body.printing .print-article {
+    max-width: none !important;
+    width: auto !important;
+  }
+  .print-body pre,
+  .print-body table,
+  .print-body img {
+    page-break-inside: auto;
+  }
+  .print-body h1,
+  .print-body h2,
+  .print-body h3 {
+    page-break-after: avoid;
+  }
+  @page {
+    margin: 18mm 16mm;
+  }
+}
+
+/* ===== 更新对话框 ===== */
+.update-dialog {
+  max-width: 480px;
+  width: 90%;
+  padding: 0;
+  overflow: hidden;
+}
+
+.update-header {
+  background: linear-gradient(135deg, var(--accent-solid) 0%, var(--accent-strong) 100%);
+  padding: 28px 24px 20px;
+  color: var(--on-accent);
+}
+
+.update-header h2 {
+  margin: 0 0 12px;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.update-versions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  opacity: 0.95;
+  flex-wrap: wrap;
+}
+
+.update-versions strong {
+  font-weight: 600;
+}
+
+.update-version-arrow {
+  opacity: 0.7;
+}
+
+.update-version-latest {
+  color: #fef08a;
+}
+
+.update-notes {
+  padding: 20px 24px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.update-notes strong {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.update-notes > div {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary, var(--muted));
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.update-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 0 24px 24px;
+}
+
+.update-actions .secondary {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.update-actions .secondary:hover {
+  background: var(--control-bg);
+  color: var(--text);
+}
+
+/* ===== 全局搜索对话框 ===== */
+.global-search-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+  background: rgba(15, 18, 24, 0.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  animation: globalSearchFadeIn 0.15s ease;
+}
+@keyframes globalSearchFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.global-search-dialog {
+  width: 720px;
+  max-width: calc(100vw - 48px);
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel, #fff);
+  border: 1px solid var(--line, rgba(0,0,0,0.1));
+  border-radius: 16px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255,255,255,0.05);
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  animation: globalSearchSlide 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes globalSearchSlide {
+  from { opacity: 0; transform: translateY(-16px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.global-search-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line, rgba(0,0,0,0.08));
+}
+.global-search-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  color: var(--muted, #888);
+  opacity: 0.7;
+}
+.global-search-input-wrap input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 16px;
+  color: var(--text, #333);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+}
+.global-search-input-wrap input::placeholder {
+  color: var(--muted, #999);
+}
+.global-search-kbd {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--muted, #888);
+  background: var(--hover-bg, rgba(0,0,0,0.05));
+  padding: 3px 8px;
+  border-radius: 5px;
+  border: 1px solid var(--line, rgba(0,0,0,0.08));
+  white-space: nowrap;
+}
+.global-search-results {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 0;
+  min-height: 0;
+}
+.global-search-results:empty::after {
+  content: "输入关键词搜索全部文档";
+  display: block;
+  text-align: center;
+  padding: 32px 0;
+  color: var(--muted, #999);
+  font-size: 13px;
+}
+.global-search-group {
+  padding: 4px 18px 2px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted, #999);
+}
+.global-search-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 18px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: background 0.1s ease;
+  border-left: 3px solid transparent;
+}
+.global-search-item:hover,
+.global-search-item.selected {
+  background: var(--hover-bg, rgba(0,0,0,0.04));
+  border-left-color: var(--accent, #10b981);
+}
+.global-search-item-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text, #333);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  word-break: break-word;
+  line-height: 1.4;
+  font-family: inherit;
+}
+.global-search-item-path {
+  font-size: 11px;
+  color: var(--muted, #999);
+  word-break: break-all;
+  line-height: 1.3;
+  font-family: inherit;
+}
+.global-search-item-snippet {
+  font-size: 12px;
+  color: var(--muted, #777);
+  line-height: 1.5;
+  font-family: inherit;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.global-search-item-snippet mark {
+  background: color-mix(in srgb, var(--accent, #10b981) 20%, transparent);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+.global-search-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 18px;
+  border-top: 1px solid var(--line, rgba(0,0,0,0.08));
+  font-size: 11px;
+  color: var(--muted, #888);
+}
+.global-search-count {
+  font-weight: 600;
+}
+
+/* 护眼主题适配 */
+body[data-theme="eye"] .global-search-overlay {
+  background: rgba(55, 42, 28, 0.42);
+}
+body[data-theme="eye"] .global-search-dialog {
+  background: rgba(247, 243, 235, 0.96) !important;
+  border-color: rgba(158, 138, 108, 0.22);
+  box-shadow: 0 24px 64px rgba(60, 45, 25, 0.30);
+}
+body[data-theme="eye"] .global-search-input-wrap input {
+  color: #3a3530;
+}
+body[data-theme="eye"] .global-search-input-wrap input::placeholder {
+  color: #8a7f72;
+}
+body[data-theme="eye"] .global-search-icon {
+  color: #7a6b54;
+}
+body[data-theme="eye"] .global-search-kbd {
+  background: rgba(139, 122, 82, 0.10);
+  border-color: rgba(139, 122, 82, 0.20);
+  color: #7a6b54;
+}
+body[data-theme="eye"] .global-search-item:hover,
+body[data-theme="eye"] .global-search-item.selected {
+  background: rgba(139, 122, 82, 0.10);
+  border-left-color: #7a5c3e;
+}
+body[data-theme="eye"] .global-search-item-title {
+  color: #3a3530;
+}
+body[data-theme="eye"] .global-search-item-path {
+  color: #8a7f72;
+}
+body[data-theme="eye"] .global-search-item-snippet {
+  color: #6b6258;
+}
+body[data-theme="eye"] .global-search-item-snippet mark {
+  background: rgba(139, 122, 82, 0.18);
+}
+body[data-theme="eye"] .global-search-footer {
+  border-color: rgba(158, 138, 108, 0.18);
+  color: #7a6b54;
+}
+body[data-theme="eye"] .global-search-group {
+  color: #8a7f72;
+}
+
+/* 深色主题适配：暖调柔光遮罩，降低蓝光刺激 */
+body[data-theme="dark"] .global-search-overlay {
+  background: rgba(20, 26, 23, 0.70);
+}
+
+/* 图片主题适配：搜索对话框保持高可读玻璃底 */
+body[data-theme="image"] .global-search-overlay {
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+body[data-theme="image"] .global-search-dialog {
+  background: rgba(255, 255, 255, 0.88) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border-color: rgba(255, 255, 255, 0.30);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.30);
+}
+
+/* Resize isolation: the startup artwork must never remain visible after boot.
+   Non-image themes use an opaque app canvas so compositor redraws cannot expose
+   the previous image surface at the window edges. */
+body:not([data-theme="image"]):not([data-theme="eye"]):not([data-theme="glow"]) {
+  background-color: var(--bg) !important;
+  background-image: none !important;
+  background-attachment: initial !important;
+}
+
+body:not([data-theme="image"]):not([data-theme="eye"]):not([data-theme="glow"]) .app-shell {
+  background: var(--bg) !important;
+  background-image: none !important;
+}
+
+/* CodeMirror search panel styling */
+.cm-editor .cm-panels {
+  border-bottom: 1px solid var(--line) !important;
+  padding: 6px 8px !important;
+  font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif) !important;
+  font-size: 13px !important;
+}
+.cm-editor .cm-panels.cm-panels-top {
+  border-bottom: 1px solid var(--line) !important;
+  border-top: none !important;
+}
+.cm-editor .cm-search input,
+.cm-editor .cm-search button {
+  font-family: inherit !important;
+  font-size: inherit !important;
+}
+.cm-editor .cm-search input[type="text"] {
+  border: 1px solid var(--line) !important;
+  background: var(--surface-2) !important;
+  color: var(--text) !important;
+  border-radius: 4px !important;
+  padding: 4px 8px !important;
+  min-width: 140px !important;
+  outline: none !important;
+}
+.cm-editor .cm-search input[type="text"]:focus {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent) !important;
+}
+.cm-editor .cm-search button {
+  border: 1px solid var(--line) !important;
+  background: var(--surface-2) !important;
+  color: var(--text) !important;
+  border-radius: 4px !important;
+  padding: 4px 8px !important;
+  cursor: pointer !important;
+  margin: 0 2px !important;
+  min-width: 30px !important;
+  line-height: 1 !important;
+}
+.cm-editor .cm-search button:hover {
+  background: var(--surface-3) !important;
+  border-color: var(--accent) !important;
+}
+.cm-editor .cm-search button:disabled {
+  opacity: 0.4 !important;
+  cursor: not-allowed !important;
+}
+.cm-editor .cm-search label {
+  color: var(--text) !important;
+  user-select: none !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 3px !important;
+  cursor: pointer !important;
+}
+.cm-editor .cm-search label input[type="checkbox"] {
+  accent-color: var(--accent) !important;
+}
+.cm-editor .cm-search .cm-search-match-info {
+  color: var(--text) !important;
+  opacity: 0.8 !important;
+  margin: 0 6px !important;
+}
+.cm-editor .cm-search .cm-search-actions {
+  display: inline-flex !important;
+  gap: 2px !important;
+}
+
+#editor .cm-placeholder {
+  color: var(--muted);
+  font-style: italic;
+  pointer-events: none;
+  user-select: none;
+  font-family: "Cascadia Code", Consolas, "JetBrains Mono", monospace;
+  font-size: 14px;
+  line-height: 1.6;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+#editor .cm-placeholder.visible {
+  opacity: 1;
+}
+
+#editor .cm-placeholder .kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  margin: 0 2px;
+  border-radius: 4px;
+  background: var(--soft);
+  color: var(--accent-strong);
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 0.85em;
+  font-weight: 600;
+  border: 1px solid var(--line);
+}
+
+.ai-inline-dialog {
+  position: absolute;
+  z-index: 200;
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 14px 10px 44px;
+  background: color-mix(in srgb, var(--panel) 85%, transparent);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  font-size: 14px;
+  backdrop-filter: blur(4px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  opacity: 0;
+}
+
+.ai-inline-dialog.visible {
+  display: flex;
+  opacity: 1;
+}
+
+.ai-inline-dialog .ai-inline-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  flex-shrink: 0;
+  color: var(--accent);
+  font-size: 16px;
+}
+
+.ai-inline-dialog .ai-inline-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ai-inline-dialog .ai-inline-input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: inherit;
+  outline: none;
+  line-height: 1.5;
+}
+
+.ai-inline-dialog .ai-inline-input::placeholder {
+  color: var(--muted);
+  opacity: 0.75;
+}
+
+.ai-inline-dialog .ai-inline-submit {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--accent-solid);
+  color: var(--on-accent);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.ai-inline-dialog .ai-inline-submit:hover {
+  background: var(--accent-strong);
+}
+
+.ai-inline-dialog .ai-inline-submit:active {
+  transform: scale(0.94);
+}
+
+.ai-inline-dialog .ai-inline-submit:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.ai-inline-dialog .ai-inline-hint {
+  text-align: left;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.ai-inline-dialog .ai-inline-hint kbd {
+  display: inline-block;
+  padding: 0 5px;
+  border-radius: 3px;
+  background: var(--soft);
+  border: 1px solid var(--line);
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-strong);
+}
+
+.ai-inline-dialog .ai-inline-status {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--muted);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-inline-dialog .ai-inline-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--line);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: ai-spin 0.6s linear infinite;
+}
+
+@keyframes ai-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ===== 编辑器关键字检索弹窗 ===== */
+.editor-search-popup {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 300;
+  width: 420px;
+  max-width: calc(100% - 24px);
+  max-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel, #fff);
+  border: 1px solid var(--line, rgba(0,0,0,0.1));
+  border-radius: 10px;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.18);
+  overflow: hidden;
+  animation: editorSearchSlide 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.editor-search-popup.hidden { display: none; }
+@keyframes editorSearchSlide {
+  from { opacity: 0; transform: translateY(-10px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.editor-search-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line, rgba(0,0,0,0.08));
+  background: var(--soft, rgba(0,0,0,0.02));
+}
+.editor-search-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--muted, #888);
+}
+.editor-search-header input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 14px;
+  color: var(--text, #333);
+}
+.editor-search-header input::placeholder {
+  color: var(--muted, #999);
+}
+.editor-search-count {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--muted, #888);
+  white-space: nowrap;
+}
+.editor-search-close {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--muted, #888);
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: background 0.15s, color 0.15s;
+}
+.editor-search-close:hover {
+  background: var(--line, rgba(0,0,0,0.08));
+  color: var(--text, #333);
+}
+.editor-search-results {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+.editor-search-replace-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--line, rgba(0,0,0,0.08));
+  background: var(--panel, #fff);
+}
+.editor-search-replace-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--muted, #888);
+}
+.editor-search-replace-bar input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 13px;
+  color: var(--text, #333);
+}
+.editor-search-replace-bar input::placeholder {
+  color: var(--muted, #999);
+}
+.editor-search-replace-btn {
+  flex-shrink: 0;
+  border: 1px solid var(--line, rgba(0,0,0,0.12));
+  background: var(--soft, rgba(0,0,0,0.03));
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text, #333);
+  padding: 3px 10px;
+  border-radius: 5px;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+.editor-search-replace-btn:hover {
+  background: var(--accent, #8a7c5c);
+  color: #fff;
+  border-color: var(--accent, #8a7c5c);
+}
+.editor-search-replace-btn:active {
+  transform: scale(0.96);
+}
+.editor-search-results:empty::after {
+  content: "输入关键字以检索文档行…";
+  display: block;
+  text-align: center;
+  padding: 20px;
+  font-size: 13px;
+  color: var(--muted, #999);
+}
+.editor-search-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 7px 14px;
+  cursor: pointer;
+  transition: background 0.12s;
+  border-left: 2px solid transparent;
+}
+.editor-search-item:hover,
+.editor-search-item.selected {
+  background: var(--soft, rgba(0,0,0,0.04));
+  border-left-color: var(--accent, #8a7c5c);
+}
+.editor-search-item-line {
+  flex-shrink: 0;
+  min-width: 32px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent, #8a7c5c);
+  font-family: "Cascadia Code", Consolas, monospace;
+  padding-top: 1px;
+}
+.editor-search-item-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text, #333);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.editor-search-item-text mark {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+.editor-toolbar {
+  position: relative;
+}
+.editor-toolbar button,
+.editor-toolbar select,
+.editor-toolbar label {
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border, var(--line));
+  background: var(--btn-bg, var(--panel));
+  color: var(--btn-fg, var(--text));
+  transition: background-color 0.15s ease;
+}
+.editor-toolbar button:hover,
+.editor-toolbar select:hover,
+.editor-toolbar label:hover {
+  background: color-mix(in srgb, var(--accent) 10%, var(--btn-bg, var(--panel)));
+}
+.editor-toolbar button:active,
+.editor-toolbar select:active {
+  background: color-mix(in srgb, var(--accent) 15%, var(--btn-bg, var(--panel)));
+}
+.spell-error {
+  border-bottom: 2px wavy #ef4444;
+  cursor: help;
+}
+
+/* ============================================================
+   「高亮提示块 · 终极颜色保障」— data-callout-type 属性选择器
+   规则位置：文件末尾（级联优先级最高）
+   匹配方式：.callout[data-callout-type="type"] 双重匹配，无父容器依赖
+   ============================================================ */
+.callout[data-callout-type] { border-left-width: 4px !important; border-left-style: solid !important; }
+
+/* — 蓝系 — */
+.callout[data-callout-type="note"] {
+  border-left-color: #4f8cf7 !important;
+  background-color: rgba(79, 140, 247, 0.12) !important;
+}
+.callout[data-callout-type="note"] .callout-title,
+.callout[data-callout-type="note"] .callout-title::before { color: #4f8cf7 !important; }
+
+.callout[data-callout-type="info"] {
+  border-left-color: #3b82f6 !important;
+  background-color: rgba(59, 130, 246, 0.12) !important;
+}
+.callout[data-callout-type="info"] .callout-title,
+.callout[data-callout-type="info"] .callout-title::before { color: #3b82f6 !important; }
+
+/* — 绿系 — */
+.callout[data-callout-type="tip"] {
+  border-left-color: #10b981 !important;
+  background-color: rgba(16, 185, 129, 0.12) !important;
+}
+.callout[data-callout-type="tip"] .callout-title,
+.callout[data-callout-type="tip"] .callout-title::before { color: #10b981 !important; }
+
+.callout[data-callout-type="success"] {
+  border-left-color: #059669 !important;
+  background-color: rgba(5, 150, 105, 0.12) !important;
+}
+.callout[data-callout-type="success"] .callout-title,
+.callout[data-callout-type="success"] .callout-title::before { color: #059669 !important; }
+
+/* — 黄/琥珀/橙系 — */
+.callout[data-callout-type="warning"] {
+  border-left-color: #f59e0b !important;
+  background-color: rgba(245, 158, 11, 0.12) !important;
+}
+.callout[data-callout-type="warning"] .callout-title,
+.callout[data-callout-type="warning"] .callout-title::before { color: #f59e0b !important; }
+
+.callout[data-callout-type="todo"] {
+  border-left-color: #d97706 !important;
+  background-color: rgba(217, 119, 6, 0.12) !important;
+}
+.callout[data-callout-type="todo"] .callout-title,
+.callout[data-callout-type="todo"] .callout-title::before { color: #d97706 !important; }
+
+.callout[data-callout-type="important"] {
+  border-left-color: #ea580c !important;
+  background-color: rgba(234, 88, 12, 0.14) !important;
+}
+.callout[data-callout-type="important"] .callout-title,
+.callout[data-callout-type="important"] .callout-title::before { color: #ea580c !important; }
+
+/* — 红系 — */
+.callout[data-callout-type="caution"] {
+  border-left-color: #ef4444 !important;
+  background-color: rgba(239, 68, 68, 0.12) !important;
+}
+.callout[data-callout-type="caution"] .callout-title,
+.callout[data-callout-type="caution"] .callout-title::before { color: #ef4444 !important; }
+
+.callout[data-callout-type="danger"],
+.callout[data-callout-type="failure"],
+.callout[data-callout-type="bug"] {
+  border-left-color: #dc2626 !important;
+  background-color: rgba(220, 38, 38, 0.12) !important;
+}
+.callout[data-callout-type="danger"] .callout-title,
+.callout[data-callout-type="danger"] .callout-title::before,
+.callout[data-callout-type="failure"] .callout-title,
+.callout[data-callout-type="failure"] .callout-title::before,
+.callout[data-callout-type="bug"] .callout-title,
+.callout[data-callout-type="bug"] .callout-title::before { color: #dc2626 !important; }
+
+/* — 紫系 — */
+.callout[data-callout-type="question"] {
+  border-left-color: #8b5cf6 !important;
+  background-color: rgba(139, 92, 246, 0.12) !important;
+}
+.callout[data-callout-type="question"] .callout-title,
+.callout[data-callout-type="question"] .callout-title::before { color: #8b5cf6 !important; }
+
+/* — 灰系 — */
+.callout[data-callout-type="quote"],
+.callout[data-callout-type="abstract"] {
+  border-left-color: #6b7280 !important;
+  background-color: rgba(107, 114, 128, 0.10) !important;
+}
+.callout[data-callout-type="quote"] .callout-title,
+.callout[data-callout-type="quote"] .callout-title::before,
+.callout[data-callout-type="abstract"] .callout-title,
+.callout[data-callout-type="abstract"] .callout-title::before { color: #6b7280 !important; }
+
+/* — 青系 — */
+.callout[data-callout-type="example"] {
+  border-left-color: #06b6d4 !important;
+  background-color: rgba(6, 182, 212, 0.12) !important;
+}
+.callout[data-callout-type="example"] .callout-title,
+.callout[data-callout-type="example"] .callout-title::before { color: #06b6d4 !important; }
+
+/* — image 主题 glass 效果 — 在背景 rgba 之上再叠一层半透明白，保持玻璃态观感 */
+body[data-theme="image"] .callout[data-callout-type] {
+  backdrop-filter: blur(6px) !important;
+  -webkit-backdrop-filter: blur(6px) !important;
+}
+body[data-theme="image"] .callout[data-callout-type="note"] {
+  background-color: rgba(255,255,255,0.72) !important;
+  border-color: rgba(79,140,247,0.45) !important;
+}
+body[data-theme="image"] .callout[data-callout-type="info"] {
+  background-color: rgba(255,255,255,0.72) !important;
+  border-color: rgba(59,130,246,0.45) !important;
+}
+body[data-theme="image"] .callout[data-callout-type="tip"] {
+  background-color: rgba(255,255,255,0.72) !important;
+  border-color: rgba(16,185,129,0.45) !important;
+}
+body[data-theme="image"] .callout[data-callout-type="success"] {
+  background-color: rgba(255,255,255,0.72) !important;
+  border-color: rgba(5,150,105,0.45) !important;
+}
+body[data-theme="image"] .callout[data-callout-type="warning"] {
+  background-color: rgba(255,255,255,0.72) !important;
+  border-color: rgba(245,158,11,0.45) !important;
+}
+body[data-theme="image"] .callout[data-callout-type="todo"] {
+  background-color: rgba(255,255,255,0.72) !important;
+  border-color: rgba(217,119,6,0.45) !important;
+}
+body[data-theme="image"] .callout[data-callout-type="important"] {
+  background-color: rgba(255,255,255,0.72) !important;
+  border-color: rgba(234,88,12,0.48) !important;
+}
+body[data-theme="image"] .callout[data-callout-type="caution"] {
+  background-color: rgba(255,255,255,0.72) !important;
+  border-color: rgba(239,68,68,0.48) !important;
+}
+body[data-theme="image"] .callout[data-callout-type="danger"],
+body[data-theme="image"] .callout[data-callout-type="failure"],
+body[data-theme="image"] .callout[data-callout-type="bug"] {
+  background-color: rgba(255,255,255,0.72) !important;
+  border-color: rgba(220,38,38,0.48) !important;
+}
+body[data-theme="image"] .callout[data-callout-type="question"] {
+  background-color: rgba(255,255,255,0.72) !important;
+  border-color: rgba(139,92,246,0.45) !important;
+}
+body[data-theme="image"] .callout[data-callout-type="quote"],
+body[data-theme="image"] .callout[data-callout-type="abstract"] {
+  background-color: rgba(255,255,255,0.70) !important;
+  border-color: rgba(107,114,128,0.40) !important;
+}
+body[data-theme="image"] .callout[data-callout-type="example"] {
+  background-color: rgba(255,255,255,0.72) !important;
+  border-color: rgba(6,182,212,0.45) !important;
+}
+
+/* ============================================================
+   「高亮提示块 · 最高优先级终极规则」
+   位置：文件最末尾（级联顺序最强）
+   选择器特异性构造：
+     html body × #preview/.markdown-body 双重父容器
+     × .callout[class~="callout-类型"] × [data-callout-type="类型"]
+     → 保证无论 class 名是否被覆盖、父容器嵌套方式如何、
+       CSS 变量是否生效，最终颜色都能锁定。
+   颜色策略：全部使用硬编码十六进制色值，不依赖 --callout-* 变量，
+     彻底绕开主题变量未覆盖、变量被覆盖、color-mix 混合异常等风险。
+   ============================================================ */
+/* —— 蓝系 —— */
+html body #preview .callout.callout-note[data-callout-type="note"],
+html body #preview .callout[data-callout-type="note"],
+html body .markdown-body .callout.callout-note[data-callout-type="note"],
+html body .markdown-body .callout[data-callout-type="note"],
+html body .callout.callout-note[data-callout-type="note"],
+html body .callout[data-callout-type="note"] {
+  border-left: 4px solid #4f8cf7 !important;
+  background-color: rgba(79, 140, 247, 0.12) !important;
+}
+html body #preview .callout.callout-note[data-callout-type="note"] > .callout-title,
+html body #preview .callout[data-callout-type="note"] > .callout-title,
+html body .markdown-body .callout[data-callout-type="note"] > .callout-title,
+html body .callout[data-callout-type="note"] > .callout-title,
+html body #preview .callout.callout-note[data-callout-type="note"] > .callout-title::before,
+html body #preview .callout[data-callout-type="note"] > .callout-title::before,
+html body .markdown-body .callout[data-callout-type="note"] > .callout-title::before,
+html body .callout[data-callout-type="note"] > .callout-title::before {
+  color: #4f8cf7 !important;
+}
+
+html body #preview .callout.callout-info[data-callout-type="info"],
+html body #preview .callout[data-callout-type="info"],
+html body .markdown-body .callout[data-callout-type="info"],
+html body .callout[data-callout-type="info"] {
+  border-left: 4px solid #3b82f6 !important;
+  background-color: rgba(59, 130, 246, 0.12) !important;
+}
+html body #preview .callout[data-callout-type="info"] > .callout-title,
+html body .markdown-body .callout[data-callout-type="info"] > .callout-title,
+html body .callout[data-callout-type="info"] > .callout-title,
+html body #preview .callout[data-callout-type="info"] > .callout-title::before,
+html body .markdown-body .callout[data-callout-type="info"] > .callout-title::before,
+html body .callout[data-callout-type="info"] > .callout-title::before {
+  color: #3b82f6 !important;
+}
+
+/* —— 绿系 —— */
+html body #preview .callout.callout-tip[data-callout-type="tip"],
+html body #preview .callout[data-callout-type="tip"],
+html body .markdown-body .callout[data-callout-type="tip"],
+html body .callout[data-callout-type="tip"] {
+  border-left: 4px solid #10b981 !important;
+  background-color: rgba(16, 185, 129, 0.12) !important;
+}
+html body #preview .callout[data-callout-type="tip"] > .callout-title,
+html body .markdown-body .callout[data-callout-type="tip"] > .callout-title,
+html body .callout[data-callout-type="tip"] > .callout-title,
+html body #preview .callout[data-callout-type="tip"] > .callout-title::before,
+html body .markdown-body .callout[data-callout-type="tip"] > .callout-title::before,
+html body .callout[data-callout-type="tip"] > .callout-title::before {
+  color: #10b981 !important;
+}
+
+html body #preview .callout.callout-success[data-callout-type="success"],
+html body #preview .callout[data-callout-type="success"],
+html body .markdown-body .callout[data-callout-type="success"],
+html body .callout[data-callout-type="success"] {
+  border-left: 4px solid #059669 !important;
+  background-color: rgba(5, 150, 105, 0.12) !important;
+}
+html body #preview .callout[data-callout-type="success"] > .callout-title,
+html body .markdown-body .callout[data-callout-type="success"] > .callout-title,
+html body .callout[data-callout-type="success"] > .callout-title,
+html body #preview .callout[data-callout-type="success"] > .callout-title::before,
+html body .markdown-body .callout[data-callout-type="success"] > .callout-title::before,
+html body .callout[data-callout-type="success"] > .callout-title::before {
+  color: #059669 !important;
+}
+
+/* —— 黄/琥珀系 (warning/todo) —— */
+html body #preview .callout.callout-warning[data-callout-type="warning"],
+html body #preview .callout[data-callout-type="warning"],
+html body .markdown-body .callout[data-callout-type="warning"],
+html body .callout[data-callout-type="warning"] {
+  border-left: 4px solid #f59e0b !important;
+  background-color: rgba(245, 158, 11, 0.12) !important;
+}
+html body #preview .callout[data-callout-type="warning"] > .callout-title,
+html body .markdown-body .callout[data-callout-type="warning"] > .callout-title,
+html body .callout[data-callout-type="warning"] > .callout-title,
+html body #preview .callout[data-callout-type="warning"] > .callout-title::before,
+html body .markdown-body .callout[data-callout-type="warning"] > .callout-title::before,
+html body .callout[data-callout-type="warning"] > .callout-title::before {
+  color: #f59e0b !important;
+}
+
+html body #preview .callout.callout-todo[data-callout-type="todo"],
+html body #preview .callout[data-callout-type="todo"],
+html body .markdown-body .callout[data-callout-type="todo"],
+html body .callout[data-callout-type="todo"] {
+  border-left: 4px solid #d97706 !important;
+  background-color: rgba(217, 119, 6, 0.12) !important;
+}
+html body #preview .callout[data-callout-type="todo"] > .callout-title,
+html body .markdown-body .callout[data-callout-type="todo"] > .callout-title,
+html body .callout[data-callout-type="todo"] > .callout-title,
+html body #preview .callout[data-callout-type="todo"] > .callout-title::before,
+html body .markdown-body .callout[data-callout-type="todo"] > .callout-title::before,
+html body .callout[data-callout-type="todo"] > .callout-title::before {
+  color: #d97706 !important;
+}
+
+/* —— 橙色系 (important) 与绿系黄系明确拉开距离 —— */
+html body #preview .callout.callout-important[data-callout-type="important"],
+html body #preview .callout[data-callout-type="important"],
+html body .markdown-body .callout[data-callout-type="important"],
+html body .callout[data-callout-type="important"] {
+  border-left: 4px solid #ea580c !important;
+  background-color: rgba(234, 88, 12, 0.14) !important;
+}
+html body #preview .callout[data-callout-type="important"] > .callout-title,
+html body .markdown-body .callout[data-callout-type="important"] > .callout-title,
+html body .callout[data-callout-type="important"] > .callout-title,
+html body #preview .callout[data-callout-type="important"] > .callout-title::before,
+html body .markdown-body .callout[data-callout-type="important"] > .callout-title::before,
+html body .callout[data-callout-type="important"] > .callout-title::before {
+  color: #ea580c !important;
+}
+
+/* —— 红系 (caution/danger/failure/bug) 与橙色系再拉开距离 —— */
+html body #preview .callout.callout-caution[data-callout-type="caution"],
+html body #preview .callout[data-callout-type="caution"],
+html body .markdown-body .callout[data-callout-type="caution"],
+html body .callout[data-callout-type="caution"] {
+  border-left: 4px solid #ef4444 !important;
+  background-color: rgba(239, 68, 68, 0.12) !important;
+}
+html body #preview .callout[data-callout-type="caution"] > .callout-title,
+html body .markdown-body .callout[data-callout-type="caution"] > .callout-title,
+html body .callout[data-callout-type="caution"] > .callout-title,
+html body #preview .callout[data-callout-type="caution"] > .callout-title::before,
+html body .markdown-body .callout[data-callout-type="caution"] > .callout-title::before,
+html body .callout[data-callout-type="caution"] > .callout-title::before {
+  color: #ef4444 !important;
+}
+
+html body #preview .callout.callout-danger[data-callout-type="danger"],
+html body #preview .callout[data-callout-type="danger"],
+html body #preview .callout.callout-failure[data-callout-type="failure"],
+html body #preview .callout[data-callout-type="failure"],
+html body #preview .callout.callout-bug[data-callout-type="bug"],
+html body #preview .callout[data-callout-type="bug"],
+html body .markdown-body .callout[data-callout-type="danger"],
+html body .markdown-body .callout[data-callout-type="failure"],
+html body .markdown-body .callout[data-callout-type="bug"],
+html body .callout[data-callout-type="danger"],
+html body .callout[data-callout-type="failure"],
+html body .callout[data-callout-type="bug"] {
+  border-left: 4px solid #dc2626 !important;
+  background-color: rgba(220, 38, 38, 0.12) !important;
+}
+html body #preview .callout[data-callout-type="danger"] > .callout-title,
+html body #preview .callout[data-callout-type="failure"] > .callout-title,
+html body #preview .callout[data-callout-type="bug"] > .callout-title,
+html body .markdown-body .callout[data-callout-type="danger"] > .callout-title,
+html body .markdown-body .callout[data-callout-type="failure"] > .callout-title,
+html body .markdown-body .callout[data-callout-type="bug"] > .callout-title,
+html body .callout[data-callout-type="danger"] > .callout-title,
+html body .callout[data-callout-type="failure"] > .callout-title,
+html body .callout[data-callout-type="bug"] > .callout-title,
+html body #preview .callout[data-callout-type="danger"] > .callout-title::before,
+html body #preview .callout[data-callout-type="failure"] > .callout-title::before,
+html body #preview .callout[data-callout-type="bug"] > .callout-title::before,
+html body .markdown-body .callout[data-callout-type="danger"] > .callout-title::before,
+html body .markdown-body .callout[data-callout-type="failure"] > .callout-title::before,
+html body .markdown-body .callout[data-callout-type="bug"] > .callout-title::before,
+html body .callout[data-callout-type="danger"] > .callout-title::before,
+html body .callout[data-callout-type="failure"] > .callout-title::before,
+html body .callout[data-callout-type="bug"] > .callout-title::before {
+  color: #dc2626 !important;
+}
+
+/* —— 紫系 (question) —— */
+html body #preview .callout.callout-question[data-callout-type="question"],
+html body #preview .callout[data-callout-type="question"],
+html body .markdown-body .callout[data-callout-type="question"],
+html body .callout[data-callout-type="question"] {
+  border-left: 4px solid #8b5cf6 !important;
+  background-color: rgba(139, 92, 246, 0.12) !important;
+}
+html body #preview .callout[data-callout-type="question"] > .callout-title,
+html body .markdown-body .callout[data-callout-type="question"] > .callout-title,
+html body .callout[data-callout-type="question"] > .callout-title,
+html body #preview .callout[data-callout-type="question"] > .callout-title::before,
+html body .markdown-body .callout[data-callout-type="question"] > .callout-title::before,
+html body .callout[data-callout-type="question"] > .callout-title::before {
+  color: #8b5cf6 !important;
+}
+
+/* —— 灰系 (quote/abstract) —— */
+html body #preview .callout.callout-quote[data-callout-type="quote"],
+html body #preview .callout[data-callout-type="quote"],
+html body #preview .callout.callout-abstract[data-callout-type="abstract"],
+html body #preview .callout[data-callout-type="abstract"],
+html body .markdown-body .callout[data-callout-type="quote"],
+html body .markdown-body .callout[data-callout-type="abstract"],
+html body .callout[data-callout-type="quote"],
+html body .callout[data-callout-type="abstract"] {
+  border-left: 4px solid #6b7280 !important;
+  background-color: rgba(107, 114, 128, 0.10) !important;
+}
+html body #preview .callout[data-callout-type="quote"] > .callout-title,
+html body #preview .callout[data-callout-type="abstract"] > .callout-title,
+html body .markdown-body .callout[data-callout-type="quote"] > .callout-title,
+html body .markdown-body .callout[data-callout-type="abstract"] > .callout-title,
+html body .callout[data-callout-type="quote"] > .callout-title,
+html body .callout[data-callout-type="abstract"] > .callout-title,
+html body #preview .callout[data-callout-type="quote"] > .callout-title::before,
+html body #preview .callout[data-callout-type="abstract"] > .callout-title::before,
+html body .markdown-body .callout[data-callout-type="quote"] > .callout-title::before,
+html body .markdown-body .callout[data-callout-type="abstract"] > .callout-title::before,
+html body .callout[data-callout-type="quote"] > .callout-title::before,
+html body .callout[data-callout-type="abstract"] > .callout-title::before {
+  color: #6b7280 !important;
+}
+
+/* —— 青系 (example) —— */
+html body #preview .callout.callout-example[data-callout-type="example"],
+html body #preview .callout[data-callout-type="example"],
+html body .markdown-body .callout[data-callout-type="example"],
+html body .callout[data-callout-type="example"] {
+  border-left: 4px solid #06b6d4 !important;
+  background-color: rgba(6, 182, 212, 0.12) !important;
+}
+html body #preview .callout[data-callout-type="example"] > .callout-title,
+html body .markdown-body .callout[data-callout-type="example"] > .callout-title,
+html body .callout[data-callout-type="example"] > .callout-title,
+html body #preview .callout[data-callout-type="example"] > .callout-title::before,
+html body .markdown-body .callout[data-callout-type="example"] > .callout-title::before,
+html body .callout[data-callout-type="example"] > .callout-title::before {
+  color: #06b6d4 !important;
+}
+
+/* ================================================================
+   ░▒▓█ 高亮提示块 · 最终最后防线（FINAL FALLBACK v8 20260822）█▓▒░
+   位置：CSS 文件最末尾，级联顺序绝对最后
+   策略：
+     1. 纯硬编码颜色值（彻底绕开 CSS 变量 / color-mix 的不确定性）
+     2. 高特异性选择器（id×2 + class×3 + 属性 + 伪类 + 元素前缀）
+     3. 覆盖所有渲染容器：#markdownView（阅读区）、#preview（编辑预览）、.markdown-body（通用）
+     4. 不依赖 data-callout-type 属性，纯 class 选择器兜底旧版渲染 HTML
+     5. 所有颜色声明自带 !important
+   设计目标：
+     → 无论此前多少层通用规则覆盖、主题变量缺省、CSS 被部分截断加载，
+       此处规则必然匹配生效，7 大类颜色绝对区分：
+       note蓝 / info深蓝 / tip绿 / success深绿 / warning琥珀 /
+       todo深琥珀 / important橙 / caution红 / danger深红 /
+       question紫 / quote灰 / example青
+   ================================================================ */
+
+/* —— 前缀速记：提权三件套 —— */
+/* html:root body[data-theme]  → 元素 + :root伪类 + 属性选择器 = 三重基础权重 */
+/* #markdownView#markdownView  → 双倍 ID（浏览器兼容：重复 ID 选择器仍命中元素，权重倍增） */
+/* #preview#preview            → 编辑预览容器 */
+/* .callout.callout-XXX.callout-XXX → 三倍 class 权重，进一步拉开与通用规则的距离 */
+
+/* ———— NOTE 蓝系 (#4f8cf7) ———— */
+html:root body[data-theme] #markdownView#markdownView .callout.callout-note.callout-note,
+html:root body[data-theme] #preview#preview .callout.callout-note.callout-note,
+html:root body[data-theme] .markdown-body.markdown-body .callout.callout-note.callout-note {
+  border-left: 4px solid #4f8cf7 !important;
+  background-color: rgba(79, 140, 247, 0.14) !important;
+  border-top-color: rgba(79, 140, 247, 0.30) !important;
+  border-right-color: rgba(79, 140, 247, 0.22) !important;
+  border-bottom-color: rgba(79, 140, 247, 0.22) !important;
+}
+html:root body[data-theme] #markdownView#markdownView .callout.callout-note.callout-note > .callout-title,
+html:root body[data-theme] #preview#preview .callout.callout-note.callout-note > .callout-title,
+html:root body[data-theme] .markdown-body.markdown-body .callout.callout-note.callout-note > .callout-title,
+html:root body[data-theme] #markdownView#markdownView .callout.callout-note.callout-note > .callout-title::before,
+html:root body[data-theme] #preview#preview .callout.callout-note.callout-note > .callout-title::before,
+html:root body[data-theme] .markdown-body.markdown-body .callout.callout-note.callout-note > .callout-title::before {
+  color: #4f8cf7 !important;
+}
+
+/* ———— INFO 深蓝系 (#3b82f6) ———— */
+html:root body[data-theme] #markdownView#markdownView .callout.callout-info.callout-info,
+html:root body[data-theme] #preview#preview .callout.callout-info.callout-info,
+html:root body[data-theme] .markdown-body.markdown-body .callout.callout-info.callout-info {
+  border-left: 4px solid #3b82f6 !important;
+  background-color: rgba(59, 130, 246, 0.14) !important;
+  border-top-color: rgba(59, 130, 246, 0.30) !important;
+  border-right-color: rgba(59, 130, 246, 0.22) !important;
+  border-bottom-color: rgba(59, 130, 246, 0.22) !important;
+}
+html:root body[data-theme] #markdownView#markdownView .callout.callout-info.callout-info > .callout-title,
+html:root body[data-theme] #preview#preview .callout.callout-info.callout-info > .callout-title,
+html:root body[data-theme] .markdown-body.markdown-body .callout.callout-info.callout-info > .callout-title,
+html:root body[data-theme] #markdownView#markdownView .callout.callout-info.callout-info > .callout-title::before,
+html:root body[data-theme] #preview#preview .callout.callout-info.callout-info > .callout-title::before,
+html:root body[data-theme] .markdown-body.markdown-body .callout.callout-info.callout-info > .callout-title::before {
+  color: #3b82f6 !important;
+}
+
+/* ———— TIP 绿系 (#10b981) ———— */
+html:root body[data-theme] #markdownView#markdownView .callout.callout-tip.callout-tip,
+html:root body[data-theme] #preview#preview .callout.callout-tip.callout-tip,
+html:root body[data-theme] .markdown-body.markdown-body .callout.callout-tip.callout-tip {
+  border-left: 4px solid #10b981 !important;
+  background-color: rgba(16, 185, 129, 0.14) !important;
+  border-top-color: rgba(16, 185, 129, 0.30) !important;
+  border-right-color: rgba(16, 185, 129, 0.22) !important;
+  border-bottom-color: rgba(16, 185, 129, 0.22) !important;
+}
+html:root body[data-theme] #markdownView#markdownView .callout.callout-tip.callout-tip > .callout-title,
+html:root body[data-theme] #preview#preview .callout.callout-tip.callout-tip > .callout-title,
+html:root body[data-theme] .markdown-body.markdown-body .callout.callout-tip.callout-tip > .callout-title,
+html:root body[data-theme] #markdownView#markdownView .callout.callout-tip.callout-tip > .callout-title::before,
+html:root body[data-theme] #preview#preview .callout.callout-tip.callout-tip > .callout-title::before,
+html:root body[data-theme] .markdown-body.markdown-body .callout.callout-tip.callout-tip > .callout-title::before {
+  color: #10b981 !important;
+}
+
+/* ———— SUCCESS 深绿系 (#059669) ———— */
+html:root body[data-theme] #markdownView#markdownView .callout.callout-success.callout-success,
+html:root body[data-theme] #preview#preview .callout.callout-success.callout-success,
+html:root body[data-theme] .markdown-body.markdown-body .callout.callout-success.callout-success {
+  border-left: 4px solid #059669 !important;
+  background-color: rgba(5, 150, 105, 0.14) !important;
+  border-top-color: rgba(5, 150, 105, 0.30) !important;
+  border-right-color: rgba(5, 150, 105, 0.22) !important;
+  border-bottom-color: rgba(5, 150, 105, 0.22) !important;
+}
+html:root body[data-theme] #markdownView#markdownView .callout.callout-success.callout-success > .callout-title,
+html:root body[data-theme] #preview#preview .callout.callout-success.callout-success > .callout-title,
+html:root body[data-theme] .markdown-body.markdown-body .callout.callout-success.callout-success > .callout-title,
+html:root body[data-theme] #markdownView#markdownView .callout.callout-success.callout-success > .callout-title::before,
+html:root body[data-theme] #preview#preview .callout.callout-success.callout-success > .callout-title::before,
+html:root body[data-theme] .markdown-body.markdown-body .callout.callout-success.callout-success > .callout-title::before {
+  color: #059669 !important;
+}
+
+/* ———— WARNING 琥珀系 (#f59e0b) ———— */
+html:root body[data-theme] #markdownView#markdownView .callout.callout-warning.callout-warning,
+html:root body[data-theme] #preview#preview .callout.callout-warning.callout-warning,
+html:root body[data-theme] .markdown-body.markdown-body .callout.callout-warning.callout-warning {
+  border-left: 4px solid #f59e0b !important;
+  background-color: rgba(245, 158, 11, 0.15) !important;
+  border-top-color: rgba(245, 158, 11, 0.32) !important;
+  border-right-color: rgba(245, 158, 11, 0.24) !important;
+  border-bottom-color: rgba(245, 158, 11, 0.24) !important;
+}
+html:root body[data-theme] #markdownView#markdownView .callout.callout-warning.callout-warning > .callout-title,
+html:root body[data-theme] #preview#preview .callout.callout-warning.callout-warning > .callout-title,
+html:root body[data-theme] .markdown-body.markdown-body .callout.callout-warning.callout-warning > .callout-title,
+html:root body[data-theme] #markdownView#markdownView .callout.callout-warning.callout-warning > .callout-title::before,
+html:root body[data-theme] #preview#preview .callout.callout-warning.callout-warning > .callout-title::before,
+html:root body[data-theme] .markdown-body.markdown-body .callout.callout-warning.callout-warning > .callout-title::before {
+  color: #f59e0b !important;
+}
+
+/* ———— TODO 深琥珀系 (#d97706) ———— */
+html:root body[data-theme] #markdownView#markdownView .callout.callout-todo.callout-todo,
+html:root body[data-theme] #preview#preview .callout.callout-todo.callout-todo,
+html:root body[data-theme] .markdown-body.markdown-body .callout.callout-todo.callout-todo {
+  border-left: 4px solid #d97706 !important;
+  background-color: rgba(217, 119, 6, 0.15) !important;
+  border-top-color: rgba(217, 119, 6, 0.32) !important;
+  border-right-color: rgba(217, 119, 6, 0.24) !important;
+  border-bottom-color: rgba(217, 119, 6, 0.24) !important;
+}
+html:root body[data-theme] #markdownView#markdownView .callout.callout-todo.callout-todo > .callout-title,
+html:root body[data-theme] #preview#preview .callout.callout-todo.callout-todo > .callout-title,
+html:root body[data-theme] .markdown-body.markdown-body .callout.callout-todo.callout-todo > .callout-title,
+html:root body[data-theme] #markdownView#markdownView .callout.callout-todo.callout-todo > .callout-title::before,
+html:root body[data-theme] #preview#preview .callout.callout-todo.callout-todo > .callout-title::before,
+html:root body[data-theme] .markdown-body.markdown-body .callout.callout-todo.callout-todo > .callout-title::before {
+  color: #d97706 !important;
+}
+
+/* ———— IMPORTANT 橙色系 (#ea580c) ———— */
+/* 关键：与 warning（琥珀）、caution（红）三色系明确拉开距离，避免误识别 */
+html:root body[data-theme] #markdownView#markdownView .callout.callout-important.callout-important,
+html:root body[data-theme] #preview#preview .callout.callout-important.callout-important,
+html:root body[data-theme] .markdown-body.markdown-body .callout.callout-important.callout-important {
+  border-left: 4px solid #ea580c !important;
+  background-color: rgba(234, 88, 12, 0.16) !important;
+  border-top-color: rgba(234, 88, 12, 0.34) !important;
+  border-right-color: rgba(234, 88, 12, 0.26) !important;
+  border-bottom-color: rgba(234, 88, 12, 0.26) !important;
+}
+html:root body[data-theme] #markdownView#markdownView .callout.callout-important.callout-important > .callout-title,
+html:root body[data-theme] #preview#preview .callout.callout-important.callout-important > .callout-title,
+html:root body[data-theme] .markdown-body.markdown-body .callout.callout-important.callout-important > .callout-title,
+html:root body[data-theme] #markdownView#markdownView .callout.callout-important.callout-important > .callout-title::before,
+html:root body[data-theme] #preview#preview .callout.callout-important.callout-important > .callout-title::before,
+html:root body[data-theme] .markdown-body.markdown-body .callout.callout-important.callout-important > .callout-title::before {
+  color: #ea580c !important;
+}
+
+/* ———— CAUTION 亮红系 (#ef4444) ———— */
+html:root body[data-theme] #markdownView#markdownView .callout.callout-caution.callout-caution,
+html:root body[data-theme] #preview#preview .callout.callout-caution.callout-caution,
+html:root body[data-theme] .markdown-body.markdown-body .callout.callout-caution.callout-caution {
+  border-left: 4px solid #ef4444 !important;
+  background-color: rgba(239, 68, 68, 0.14) !important;
+  border-top-color: rgba(239, 68, 68, 0.30) !important;
+  border-right-color: rgba(239, 68, 68, 0.22) !important;
+  border-bottom-color: rgba(239, 68, 68, 0.22) !important;
+}
+html:root body[data-theme] #markdownView#markdownView .callout.callout-caution.callout-caution > .callout-title,
+html:root body[data-theme] #preview#preview .callout.callout-caution.callout-caution > .callout-title,
+html:root body[data-theme] .markdown-body.markdown-body .callout.callout-caution.callout-caution > .callout-title,
+html:root body[data-theme] #markdownView#markdownView .callout.callout-caution.callout-caution > .callout-title::before,
+html:root body[data-theme] #preview#preview .callout.callout-caution.callout-caution > .callout-title::before,
+html:root body[data-theme] .markdown-body.markdown-body .callout.callout-caution.callout-caution > .callout-title::before {
+  color: #ef4444 !important;
+}
+
+/* ———— DANGER / FAILURE / BUG 深红系 (#dc2626) ———— */
+html:root body[data-theme] #markdownView#markdownView .callout.callout-danger.callout-danger,
+html:root body[data-theme] #preview#preview .callout.callout-danger.callout-danger,
+html:root body[data-theme] .markdown-body.markdown-body .callout.callout-danger.callout-danger,
+html:root body[data-theme] #markdownView#markdownView .callout.callout-failure.callout-failure,
+html:root body[data-theme] #preview#preview .callout.callout-failure.callout-failure,
+html:root body[data-theme] .markdown-body.markdown-body .callout.callout-failure.callout-failure,
+html:root body[data-theme] #markdownView#markdownView .callout.callout-bug.callout-bug,
+html:root body[data-theme] #preview#preview .callout.callout-bug.callout-bug,
+html:root body[data-theme] .markdown-body.markdown-body .callout.callout-bug.callout-bug {
+  border-left: 4px solid #dc2626 !important;
+  background-color: rgba(220, 38, 38, 0.14) !important;
+  border-top-color: rgba(220, 38, 38, 0.30) !important;
+  border-right-color: rgba(220, 38, 38, 0.22) !important;
+  border-bottom-color: rgba(220, 38, 38, 0.22) !important;
+}
+html:root body[data-theme] #markdownView#markdownView .callout.callout-danger.callout-danger > .callout-title,
+html:root body[data-theme] #preview#preview .callout.callout-danger.callout-danger > .callout-title,
+html:root body[data-theme] .markdown-body.markdown-body .callout.callout-danger.callout-danger > .callout-title,
+html:root body[data-theme] #markdownView#markdownView .callout.callout-failure.callout-failure > .callout-title,
+html:root body[data-theme] #preview#preview .callout.callout-failure.callout-failure > .callout-title,
+html:root body[data-theme] .markdown-body.markdown-body .callout.callout-failure.callout-failure > .callout-title,
+html:root body[data-theme] #markdownView#markdownView .callout.callout-bug.callout-bug > .callout-title,
+html:root body[data-theme] #preview#preview .callout.callout-bug.callout-bug > .callout-title,
+html:root body[data-theme] .markdown-body.markdown-body .callout.callout-bug.callout-bug > .callout-title,
+html:root body[data-theme] #markdownView#markdownView .callout.callout-danger.callout-danger > .callout-title::before,
+html:root body[data-theme] #preview#preview .callout.callout-danger.callout-danger > .callout-title::before,
+html:root body[data-theme] .markdown-body.markdown-body .callout.callout-danger.callout-danger > .callout-title::before,
+html:root body[data-theme] #markdownView#markdownView .callout.callout-failure.callout-failure > .callout-title::before,
+html:root body[data-theme] #preview#preview .callout.callout-failure.callout-failure > .callout-title::before,
+html:root body[data-theme] .markdown-body.markdown-body .callout.callout-failure.callout-failure > .callout-title::before,
+html:root body[data-theme] #markdownView#markdownView .callout.callout-bug.callout-bug > .callout-title::before,
+html:root body[data-theme] #preview#preview .callout.callout-bug.callout-bug > .callout-title::before,
+html:root body[data-theme] .markdown-body.markdown-body .callout.callout-bug.callout-bug > .callout-title::before {
+  color: #dc2626 !important;
+}
+
+/* ———— QUESTION 紫色系 (#8b5cf6) ———— */
+html:root body[data-theme] #markdownView#markdownView .callout.callout-question.callout-question,
+html:root body[data-theme] #preview#preview .callout.callout-question.callout-question,
+html:root body[data-theme] .markdown-body.markdown-body .callout.callout-question.callout-question {
+  border-left: 4px solid #8b5cf6 !important;
+  background-color: rgba(139, 92, 246, 0.14) !important;
+  border-top-color: rgba(139, 92, 246, 0.30) !important;
+  border-right-color: rgba(139, 92, 246, 0.22) !important;
+  border-bottom-color: rgba(139, 92, 246, 0.22) !important;
+}
+html:root body[data-theme] #markdownView#markdownView .callout.callout-question.callout-question > .callout-title,
+html:root body[data-theme] #preview#preview .callout.callout-question.callout-question > .callout-title,
+html:root body[data-theme] .markdown-body.markdown-body .callout.callout-question.callout-question > .callout-title,
+html:root body[data-theme] #markdownView#markdownView .callout.callout-question.callout-question > .callout-title::before,
+html:root body[data-theme] #preview#preview .callout.callout-question.callout-question > .callout-title::before,
+html:root body[data-theme] .markdown-body.markdown-body .callout.callout-question.callout-question > .callout-title::before {
+  color: #8b5cf6 !important;
+}
+
+/* ———— QUOTE / ABSTRACT 灰色系 (#6b7280) ———— */
+html:root body[data-theme] #markdownView#markdownView .callout.callout-quote.callout-quote,
+html:root body[data-theme] #preview#preview .callout.callout-quote.callout-quote,
+html:root body[data-theme] .markdown-body.markdown-body .callout.callout-quote.callout-quote,
+html:root body[data-theme] #markdownView#markdownView .callout.callout-abstract.callout-abstract,
+html:root body[data-theme] #preview#preview .callout.callout-abstract.callout-abstract,
+html:root body[data-theme] .markdown-body.markdown-body .callout.callout-abstract.callout-abstract {
+  border-left: 4px solid #6b7280 !important;
+  background-color: rgba(107, 114, 128, 0.12) !important;
+  border-top-color: rgba(107, 114, 128, 0.26) !important;
+  border-right-color: rgba(107, 114, 128, 0.18) !important;
+  border-bottom-color: rgba(107, 114, 128, 0.18) !important;
+}
+html:root body[data-theme] #markdownView#markdownView .callout.callout-quote.callout-quote > .callout-title,
+html:root body[data-theme] #preview#preview .callout.callout-quote.callout-quote > .callout-title,
+html:root body[data-theme] .markdown-body.markdown-body .callout.callout-quote.callout-quote > .callout-title,
+html:root body[data-theme] #markdownView#markdownView .callout.callout-abstract.callout-abstract > .callout-title,
+html:root body[data-theme] #preview#preview .callout.callout-abstract.callout-abstract > .callout-title,
+html:root body[data-theme] .markdown-body.markdown-body .callout.callout-abstract.callout-abstract > .callout-title,
+html:root body[data-theme] #markdownView#markdownView .callout.callout-quote.callout-quote > .callout-title::before,
+html:root body[data-theme] #preview#preview .callout.callout-quote.callout-quote > .callout-title::before,
+html:root body[data-theme] .markdown-body.markdown-body .callout.callout-quote.callout-quote > .callout-title::before,
+html:root body[data-theme] #markdownView#markdownView .callout.callout-abstract.callout-abstract > .callout-title::before,
+html:root body[data-theme] #preview#preview .callout.callout-abstract.callout-abstract > .callout-title::before,
+html:root body[data-theme] .markdown-body.markdown-body .callout.callout-abstract.callout-abstract > .callout-title::before {
+  color: #6b7280 !important;
+}
+
+/* ———— EXAMPLE 青色系 (#06b6d4) ———— */
+html:root body[data-theme] #markdownView#markdownView .callout.callout-example.callout-example,
+html:root body[data-theme] #preview#preview .callout.callout-example.callout-example,
+html:root body[data-theme] .markdown-body.markdown-body .callout.callout-example.callout-example {
+  border-left: 4px solid #06b6d4 !important;
+  background-color: rgba(6, 182, 212, 0.14) !important;
+  border-top-color: rgba(6, 182, 212, 0.30) !important;
+  border-right-color: rgba(6, 182, 212, 0.22) !important;
+  border-bottom-color: rgba(6, 182, 212, 0.22) !important;
+}
+html:root body[data-theme] #markdownView#markdownView .callout.callout-example.callout-example > .callout-title,
+html:root body[data-theme] #preview#preview .callout.callout-example.callout-example > .callout-title,
+html:root body[data-theme] .markdown-body.markdown-body .callout.callout-example.callout-example > .callout-title,
+html:root body[data-theme] #markdownView#markdownView .callout.callout-example.callout-example > .callout-title::before,
+html:root body[data-theme] #preview#preview .callout.callout-example.callout-example > .callout-title::before,
+html:root body[data-theme] .markdown-body.markdown-body .callout.callout-example.callout-example > .callout-title::before {
+  color: #06b6d4 !important;
+}
+
+/* ———— 备份层：移除 body[data-theme] 限制的备用规则（兼容 body 未设置 data-theme 时的降级场景）———— */
+html body #markdownView .callout.callout-important { border-left:4px solid #ea580c !important; background-color: rgba(234,88,12,0.16) !important; }
+html body #preview .callout.callout-important { border-left:4px solid #ea580c !important; background-color: rgba(234,88,12,0.16) !important; }
+html body .markdown-body .callout.callout-important { border-left:4px solid #ea580c !important; background-color: rgba(234,88,12,0.16) !important; }
+html body #markdownView .callout.callout-important > .callout-title,
+html body #preview .callout.callout-important > .callout-title,
+html body .markdown-body .callout.callout-important > .callout-title,
+html body #markdownView .callout.callout-important > .callout-title::before,
+html body #preview .callout.callout-important > .callout-title::before,
+html body .markdown-body .callout.callout-important > .callout-title::before { color: #ea580c !important; }
+
+html body #markdownView .callout.callout-caution { border-left:4px solid #ef4444 !important; background-color: rgba(239,68,68,0.14) !important; }
+html body #preview .callout.callout-caution { border-left:4px solid #ef4444 !important; background-color: rgba(239,68,68,0.14) !important; }
+html body .markdown-body .callout.callout-caution { border-left:4px solid #ef4444 !important; background-color: rgba(239,68,68,0.14) !important; }
+html body #markdownView .callout.callout-caution > .callout-title,
+html body #preview .callout.callout-caution > .callout-title,
+html body .markdown-body .callout.callout-caution > .callout-title,
+html body #markdownView .callout.callout-caution > .callout-title::before,
+html body #preview .callout.callout-caution > .callout-title::before,
+html body .markdown-body .callout.callout-caution > .callout-title::before { color: #ef4444 !important; }
+
+html body #markdownView .callout.callout-tip { border-left:4px solid #10b981 !important; background-color: rgba(16,185,129,0.14) !important; }
+html body #preview .callout.callout-tip { border-left:4px solid #10b981 !important; background-color: rgba(16,185,129,0.14) !important; }
+html body .markdown-body .callout.callout-tip { border-left:4px solid #10b981 !important; background-color: rgba(16,185,129,0.14) !important; }
+html body #markdownView .callout.callout-tip > .callout-title,
+html body #preview .callout.callout-tip > .callout-title,
+html body .markdown-body .callout.callout-tip > .callout-title,
+html body #markdownView .callout.callout-tip > .callout-title::before,
+html body #preview .callout.callout-tip > .callout-title::before,
+html body .markdown-body .callout.callout-tip > .callout-title::before { color: #10b981 !important; }
+
+html body #markdownView .callout.callout-warning { border-left:4px solid #f59e0b !important; background-color: rgba(245,158,11,0.15) !important; }
+html body #preview .callout.callout-warning { border-left:4px solid #f59e0b !important; background-color: rgba(245,158,11,0.15) !important; }
+html body .markdown-body .callout.callout-warning { border-left:4px solid #f59e0b !important; background-color: rgba(245,158,11,0.15) !important; }
+html body #markdownView .callout.callout-warning > .callout-title,
+html body #preview .callout.callout-warning > .callout-title,
+html body .markdown-body .callout.callout-warning > .callout-title,
+html body #markdownView .callout.callout-warning > .callout-title::before,
+html body #preview .callout.callout-warning > .callout-title::before,
+html body .markdown-body .callout.callout-warning > .callout-title::before { color: #f59e0b !important; }
+
+html body #markdownView .callout.callout-note { border-left:4px solid #4f8cf7 !important; background-color: rgba(79,140,247,0.14) !important; }
+html body #preview .callout.callout-note { border-left:4px solid #4f8cf7 !important; background-color: rgba(79,140,247,0.14) !important; }
+html body .markdown-body .callout.callout-note { border-left:4px solid #4f8cf7 !important; background-color: rgba(79,140,247,0.14) !important; }
+html body #markdownView .callout.callout-note > .callout-title,
+html body #preview .callout.callout-note > .callout-title,
+html body .markdown-body .callout.callout-note > .callout-title,
+html body #markdownView .callout.callout-note > .callout-title::before,
+html body #preview .callout.callout-note > .callout-title::before,
+html body .markdown-body .callout.callout-note > .callout-title::before { color: #4f8cf7 !important; }
+
+html body #markdownView .callout.callout-danger,
+html body #markdownView .callout.callout-failure,
+html body #markdownView .callout.callout-bug { border-left:4px solid #dc2626 !important; background-color: rgba(220,38,38,0.14) !important; }
+html body #preview .callout.callout-danger,
+html body #preview .callout.callout-failure,
+html body #preview .callout.callout-bug { border-left:4px solid #dc2626 !important; background-color: rgba(220,38,38,0.14) !important; }
+html body .markdown-body .callout.callout-danger,
+html body .markdown-body .callout.callout-failure,
+html body .markdown-body .callout.callout-bug { border-left:4px solid #dc2626 !important; background-color: rgba(220,38,38,0.14) !important; }
+html body #markdownView .callout.callout-danger > .callout-title,
+html body #preview .callout.callout-danger > .callout-title,
+html body .markdown-body .callout.callout-danger > .callout-title,
+html body #markdownView .callout.callout-failure > .callout-title,
+html body #preview .callout.callout-failure > .callout-title,
+html body .markdown-body .callout.callout-failure > .callout-title,
+html body #markdownView .callout.callout-bug > .callout-title,
+html body #preview .callout.callout-bug > .callout-title,
+html body .markdown-body .callout.callout-bug > .callout-title,
+html body #markdownView .callout.callout-danger > .callout-title::before,
+html body #preview .callout.callout-danger > .callout-title::before,
+html body .markdown-body .callout.callout-danger > .callout-title::before,
+html body #markdownView .callout.callout-failure > .callout-title::before,
+html body #preview .callout.callout-failure > .callout-title::before,
+html body .markdown-body .callout.callout-failure > .callout-title::before,
+html body #markdownView .callout.callout-bug > .callout-title::before,
+html body #preview .callout.callout-bug > .callout-title::before,
+html body .markdown-body .callout.callout-bug > .callout-title::before { color: #dc2626 !important; }
+
+html body #markdownView .callout.callout-question { border-left:4px solid #8b5cf6 !important; background-color: rgba(139,92,246,0.14) !important; }
+html body #preview .callout.callout-question { border-left:4px solid #8b5cf6 !important; background-color: rgba(139,92,246,0.14) !important; }
+html body .markdown-body .callout.callout-question { border-left:4px solid #8b5cf6 !important; background-color: rgba(139,92,246,0.14) !important; }
+html body #markdownView .callout.callout-question > .callout-title,
+html body #preview .callout.callout-question > .callout-title,
+html body .markdown-body .callout.callout-question > .callout-title,
+html body #markdownView .callout.callout-question > .callout-title::before,
+html body #preview .callout.callout-question > .callout-title::before,
+html body .markdown-body .callout.callout-question > .callout-title::before { color: #8b5cf6 !important; }

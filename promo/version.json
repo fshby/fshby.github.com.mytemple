@@ -1,7 +1,7 @@
 {
-    "version":  "2.1.35",
+    "version":  "2.1.36",
     "downloadUrl":  "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
-    "latestReleaseNotes":  "沉浸模式公式与图表修复：段落内公式正常渲染、同屏多公式/图表不再只剩最后一块；图表恢复自然尺寸不再拉满版心。",
-    "releaseNotes":  "v2.1.35 release. See changelog for details.",
+    "latestReleaseNotes":  "界面设计系统重制：设计令牌统一与四主题配色全面达标（对比度 0 不达标项）、编辑/预览/沉浸三视图排版对齐、沉浸模式行内标记（加粗/斜体/链接/删除线/高亮）按最终效果渲染、交互热区与键盘可达性补强。",
+    "releaseNotes":  "v2.1.36 release. See changelog for details.",
     "releaseDate":  "2026-10-09"
 }

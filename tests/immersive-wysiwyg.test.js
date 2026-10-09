@@ -176,6 +176,18 @@ test("轻量模式的语法清零规则必须放行渲染容器", () => {
     /:not\(\.mt-md-inline-style \*\)/,
     "还须排除行内样式容器的所有后代",
   );
+  // 行内语义标记（**粗** / `码` / [链接]()）的容器本身就是一个 span，
+  // 若不清零放行，.markdown-body 提供的 strong/em/code/a 语义样式会连带失效。
+  assert.match(
+    selector,
+    /:not\(\.mt-md-inline-mark\)/,
+    "清零选择器必须排除 .mt-md-inline-mark 容器",
+  );
+  assert.match(
+    selector,
+    /:not\(\.mt-md-inline-mark \*\)/,
+    "还须排除行内语义标记容器的所有后代",
+  );
 });
 
 test("卡片渲染须走挂载后处理（KaTeX / Mermaid / 高亮）", () => {
@@ -245,13 +257,18 @@ test("沉浸容器级属性必须被中和，避免 markdown-body 的限宽/居�
     /margin:\s*0/,
     /padding:\s*0/,
     /font-size:\s*inherit/,
-    // 行高必须固定为文档正文比例 1.82（与预览面板 .markdown-body 一致），
-    // 不能 inherit —— 编辑器 #editor 是 1.76（为源码可读性调过），
-    // 继承会让沉浸正文行高比预览低 3.3%，实测可得 29.952px vs 29.12px。
-    /line-height:\s*1\.82/,
+    // 行高必须继承编辑器行盒。自 PR-2 度量统一后，--prose-leading 已是
+    // #editor / .cm-content / .markdown-body 三处唯一出处，继承即等于阅读栏比例；
+    // 反向契约：此处不得再写死 1.82 之类的字面量，否则光标移入/移出时该行会变脸。
+    /line-height:\s*inherit/,
   ]) {
     assert.match(block, decl, `容器级属性未中和：${decl}`);
   }
+  assert.doesNotMatch(
+    block,
+    /line-height:\s*1\.\d+/,
+    "容器行高不得写死字面量，必须继承统一的 --prose-leading",
+  );
   // 中和规则必须比 .markdown-body 更晚出现（同权重下后者覆盖前者）
   assert.ok(
     idx > cssSrc.indexOf(".markdown-body {"),
@@ -311,23 +328,47 @@ test("沉浸正文栏必须收进固定阅读测度并水平居中", () => {
   // 百分比 padding 相对滚动视口解析：宽屏时正文栏 = 版心宽并水平居中
   assert.match(
     block,
-    /padding:\s*36px\s+max\(24px,\s*calc\(\(100% - var\(--mt-immersive-measure\)\) \/ 2\)\)\s+55vh/,
+    /padding:\s*36px\s+max\(calc\(var\(--prose-gutter\)\s*\/\s*2\),\s*calc\(\(100% - var\(--mt-immersive-measure\)\)\s*\/\s*2\)\)\s+55vh/,
     "必须用对称 padding 实现居中版心，且保留顶部 36px 与底部 55vh 滚动余量",
   );
   // 顶部留白与预览一致（36px），不得回到 24px
   assert.doesNotMatch(block, /padding:\s*24px/, "顶部留白不得退回 24px");
 });
 
-test("沉浸版心测度必须与预览面板同源（920px 并按 1.04 字号比放大）", () => {
-  // 预览 .markdown-body 用 min(920px, …)；沉浸正文字号是预览的 1.04 倍，
-  // 测度同步放大 1.04 才能保证两种视图每行字符数一致（换行位置对齐）。
+test("沉浸字号必须与版心同乘 --prose-scale，不得再设 max() 下限", () => {
+  // 历史缺陷：font-size: max(16px, calc(var(--doc-font-size) * 1.04))
+  // —— 文档字号 ≤15.4px 时正文被强制放大到 16px，而版心不变，换行与阅读栏错位。
+  const idx = cssSrc.indexOf(".app-shell.immersive #editor .cm-content");
+  const block = cssSrc.slice(idx, cssSrc.indexOf("}", idx) + 1);
+  assert.match(
+    block,
+    /font-size:\s*calc\(var\(--prose-size\)\s*\*\s*var\(--prose-scale\)\)/,
+    "沉浸字号必须是 --prose-size × --prose-scale（与版心同源等比）",
+  );
+  assert.doesNotMatch(
+    block,
+    /^\s*font-size:[^;]*max\(\s*16px/m,
+    "不得保留 max(16px, …) 下限，它会让小字号用户的设置失效",
+  );
+  assert.match(block, /line-height:\s*var\(--prose-leading\)/, "沉浸正文行高必须引用 --prose-leading");
+});
+
+test("沉浸版心测度必须与阅读栏同源（同一令牌 × 同一放大系数）", () => {
+  // 阅读/预览 .markdown-body 的宽 = min(--prose-measure, 100% - --prose-gutter)；
+  // 沉浸正文字号是阅读的 --prose-scale 倍，测度同步放大同一系数，
+  // 两种视图每行字符数一致（换行位置对齐），实测两侧均为 53.75em。
   assert.match(
     cssSrc,
-    /--mt-immersive-measure:\s*calc\(920px \* 1\.04\)/,
-    "版心测度必须是 920px * 1.04（与预览同源）",
+    /--mt-immersive-measure:\s*calc\(var\(--prose-measure\)\s*\*\s*var\(--prose-scale\)\)/,
+    "版心测度必须是 --prose-measure × --prose-scale（与阅读栏同源）",
   );
-  // 预览面板的 920px 阅读测度不得被改动
-  assert.match(cssSrc, /\.markdown-body \{\r?\n  width: min\(920px/);
+  // 阅读版心必须取自同一令牌，不得再写死像素
+  assert.match(
+    cssSrc,
+    /\.markdown-body\s*\{[^}]*width:\s*min\(var\(--prose-measure\),\s*calc\(100% - var\(--prose-gutter\)\)\)/,
+    "阅读版心必须引用 --prose-measure / --prose-gutter",
+  );
+  assert.doesNotMatch(cssSrc, /width:\s*min\(920px/, "不应再出现写死的 920px 版心");
 });
 
 test("沉浸模式必须隐藏行号/折叠栏", () => {
@@ -479,4 +520,185 @@ test("沉浸模式：多行块占位行收缩 + 图表错误区限高", () => {
   const errBlock = cssSrc.slice(errIdx, cssSrc.indexOf("}", errIdx) + 1);
   assert.match(errBlock, /max-height:\s*\d+px/, "错误区须限高（几十行英文报错会占满一屏）");
   assert.match(errBlock, /overflow:\s*auto/, "错误区须允许内部滚动");
+});
+
+// ===========================================================================
+// PR-3 · 沉浸模式补全：行内语义标记 + 正文字体 + 块间距令牌
+// ===========================================================================
+
+// editor-core.js 的这段实现只依赖 escapeHtml 与 WidgetType，两者都能在测试里补齐，
+// 因此直接切出源码片段求值 —— 验证的是「真实行为」，而不是「代码长什么样」。
+function loadInlineMarkModule() {
+  const start = coreSrc.indexOf("const INLINE_MARK_MAX_DEPTH");
+  const end = coreSrc.indexOf("class MarkdownPreviewWidget");
+  assert.ok(start >= 0 && end > start, "找不到行内语义标记渲染模块");
+  const chunk = coreSrc.slice(start, end);
+  const shim = [
+    "class WidgetType {}",
+    "function escapeHtml(value) {",
+    "  return String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;')",
+    "    .replaceAll('>', '&gt;').replaceAll('\\\"', '&quot;');",
+    "}",
+  ].join("\n");
+  const factory = new Function(
+    `${shim}\n${chunk}\nreturn { scanInlineMarkTokens, renderInlineMarkHtml, safeInlineUrl };`,
+  );
+  return factory();
+}
+
+test("PR-3：行内语义标记六类语法的渲染结果", () => {
+  const { renderInlineMarkHtml } = loadInlineMarkModule();
+  assert.equal(renderInlineMarkHtml("**粗**"), "<strong>粗</strong>");
+  assert.equal(renderInlineMarkHtml("*斜*"), "<em>斜</em>");
+  assert.equal(renderInlineMarkHtml("_斜_"), "<em>斜</em>");
+  assert.equal(renderInlineMarkHtml("`码`"), "<code>码</code>");
+  assert.equal(renderInlineMarkHtml("~~删~~"), "<del>删</del>");
+  assert.equal(renderInlineMarkHtml("==亮=="), "<mark>亮</mark>");
+  const link = renderInlineMarkHtml("[官网](https://example.com)");
+  assert.match(link, /<a class="mt-md-inline-link"/, "外链须产出锚点");
+  assert.match(link, /data-href="https:\/\/example\.com"/, "外链地址写入 data-href，不写 href 以免 WebView 内部跳转");
+  assert.doesNotMatch(link, /\shref="https/, "不得写 href 属性");
+  assert.match(link, />官网<\/a>/, "锚点文字保留");
+  // 未含标记的普通文本等价于 HTML 转义
+  assert.equal(renderInlineMarkHtml("普通 a < b"), "普通 a &lt; b");
+});
+
+test("PR-3：行内语义标记的保守规则（转义 / 未闭合 / 非外链一律不误伤）", () => {
+  const { renderInlineMarkHtml, safeInlineUrl } = loadInlineMarkModule();
+  // 未闭合 → 保持源码
+  assert.equal(renderInlineMarkHtml("**没闭合"), "**没闭合");
+  assert.equal(renderInlineMarkHtml("~~没闭合"), "~~没闭合");
+  assert.equal(renderInlineMarkHtml("==没闭合"), "==没闭合");
+  // 反斜杠转义 → 不渲染，且还原为字面字符
+  assert.equal(renderInlineMarkHtml("\\*不是斜体\\*"), "*不是斜体*");
+  assert.equal(renderInlineMarkHtml("\\`不是代码\\`"), "`不是代码`");
+  // 定界符内侧是空白 → 保持源码
+  assert.equal(renderInlineMarkHtml("* 不是斜体 *"), "* 不是斜体 *");
+  // snake_case 标识符不得被判成斜体
+  assert.equal(renderInlineMarkHtml("foo_bar_baz"), "foo_bar_baz");
+  // 行内代码优先级最高：内部不再解析其它标记
+  assert.equal(renderInlineMarkHtml("`**不是粗体**`"), "<code>**不是粗体**</code>");
+  // 非白名单协议只保留文字，不生成可点击元素
+  assert.equal(renderInlineMarkHtml("[x](ftp://a.com/b)"), "x");
+  assert.doesNotMatch(renderInlineMarkHtml("[x](../相对路径.md)"), /<a /, "相对路径不得渲染为链接");
+  assert.doesNotMatch(renderInlineMarkHtml("[x](javascript:alert(1))"), /<a /, "脚本协议必须拒绝");
+  assert.equal(safeInlineUrl("javascript:alert(1)"), "");
+  assert.equal(safeInlineUrl("data:text/html,x"), "");
+  assert.equal(safeInlineUrl("https://a.com"), "https://a.com");
+  assert.equal(safeInlineUrl("mailto:a@b.c"), "mailto:a@b.c");
+  assert.equal(safeInlineUrl("tel:+8613800000000"), "tel:+8613800000000");
+});
+
+test("PR-3：行内语义标记可嵌套、范围互不重叠且递归有上限", () => {
+  const { renderInlineMarkHtml, scanInlineMarkTokens } = loadInlineMarkModule();
+  assert.equal(
+    renderInlineMarkHtml("**粗 `码` 体**"),
+    "<strong>粗 <code>码</code> 体</strong>",
+    "加粗内可嵌套行内代码",
+  );
+  assert.equal(
+    renderInlineMarkHtml("==亮 `码`==\n".trim()),
+    "<mark>亮 <code>码</code></mark>",
+    "高亮内可嵌套行内代码",
+  );
+  // 外层被内层包裹时，内层的「不再解析」规则优先：代码里的 ** 必须保持字面
+  assert.equal(renderInlineMarkHtml("`**x**`"), "<code>**x**</code>");
+  const toks = scanInlineMarkTokens("a **b** c `d` e");
+  assert.equal(toks.length, 2);
+  for (let i = 1; i < toks.length; i += 1) {
+    assert.ok(
+      toks[i - 1].to <= toks[i].from,
+      "扫描结果必须互不重叠（重叠的 replace 装饰会让 CodeMirror 直接抛错）",
+    );
+    assert.ok(toks[i - 1].from <= toks[i].from, "结果须按位置升序");
+  }
+  assert.match(coreSrc, /INLINE_MARK_MAX_DEPTH/, "必须有递归深度上限");
+  // 极深嵌套不得抛异常（超深应退化为纯文本）
+  assert.equal(typeof renderInlineMarkHtml("*".repeat(24) + "x"), "string");
+});
+
+test("PR-3：行内语义标记接入装饰构建器，并与样式标记/行内公式共享占位", () => {
+  const builder = fnBody(coreSrc, "compute(view) {");
+  assert.match(builder, /scanInlineMarkTokens\(text\)/, "构建器须调用行内语义标记扫描");
+  assert.match(builder, /new InlineMarkWidget\(/, "须替换为行内语义标记 widget");
+  assert.match(builder, /overlapsClaimed/, "须与样式标记/行内公式共用重叠判定");
+  // 同一段文本只能有一个替换装饰：优先级须为 样式标记 > 行内公式 > 语义标记
+  const styleIdx = builder.indexOf("scanInlineStyleTokens");
+  const mathIdx = builder.indexOf("scanInlineMathTokens");
+  const markIdx = builder.indexOf("scanInlineMarkTokens");
+  assert.ok(styleIdx >= 0 && mathIdx > styleIdx && markIdx > mathIdx, "优先级须为 样式标记 > 行内公式 > 语义标记");
+  // widget 必须参与 DOM 复用判断，否则每次重渲染都替换节点
+  const widget = fnBody(coreSrc, "class InlineMarkWidget extends WidgetType");
+  assert.match(widget, /eq\(other\)/, "widget 须实现 eq 以复用 DOM");
+  assert.match(widget, /other\.key === this\.key/, "复用判据须基于内容 key");
+  assert.match(widget, /mt-md-inline-mark markdown-body/, "容器须同挂 markdown-body 以复用预览排版");
+});
+
+test("PR-3：行内渲染容器在沉浸模式下中和容器级属性并改用正文字体", () => {
+  const idx = cssSrc.indexOf(".app-shell.immersive .cm-line .mt-md-inline-mark.markdown-body");
+  assert.ok(idx >= 0, "必须有行内语义标记容器的中和规则");
+  const block = cssSrc.slice(idx, cssSrc.indexOf("}", idx) + 1);
+  assert.match(block, /width:\s*auto/, "版心宽度必须中和");
+  assert.match(block, /max-width:\s*none/, "最大宽度必须中和");
+  assert.match(block, /padding:\s*0/, "36px/80px 内边距必须中和");
+  assert.match(
+    block,
+    /^\s*font-size:\s*inherit;/m,
+    "行内片段字号必须继承编辑器行盒（沉浸字号 = 正文 × --prose-scale），否则同一句话里字号不一致",
+  );
+  assert.match(block, /line-height:\s*inherit/, "行高必须继承");
+  assert.doesNotMatch(
+    block,
+    /^\s*font-size:\s*var\(--prose-size\)/m,
+    "不得沿用 .markdown-body 的正文绝对字号",
+  );
+  // 字体：与块级渲染容器同源，避免同一文档出现两种 font-family
+  const fontIdx = cssSrc.search(
+    /\.app-shell\.immersive \.cm-line \.mt-md-inline-mark,\s*\n\s*\.app-shell\.immersive \.cm-line \.mt-md-inline-style \{/,
+  );
+  assert.ok(fontIdx >= 0, "行内语义标记与行内样式标记必须显式声明正文字体");
+  const fontBlock = cssSrc.slice(fontIdx, cssSrc.indexOf("}", fontIdx) + 1);
+  assert.match(fontBlock, /font-family:\s*var\(--prose-font\)/, "须使用 --prose-font");
+});
+
+test("PR-3：块级与行内渲染容器的正文字体必须同源且跟随用户设置", () => {
+  // --prose-font / --font-sans 都必须映射到用户可配置的 --app-font-family
+  assert.match(cssSrc, /--prose-font:\s*var\(--app-font-family\)/, "--prose-font 必须跟随用户字体设置");
+  assert.match(cssSrc, /--font-sans:\s*var\(--app-font-family\)/, "--font-sans 必须跟随用户字体设置");
+  // 块级渲染容器沿用 --font-sans（含兜底栈），行内容器用 --prose-font，两者最终指向同一栈
+  const idx = cssSrc.indexOf(".app-shell.immersive .mt-md-wysiwyg {");
+  assert.ok(idx >= 0, "找不到块级渲染容器基座规则");
+  const block = cssSrc.slice(idx, cssSrc.indexOf("}", idx) + 1);
+  assert.match(block, /font-family:\s*var\(--font-sans/, "块级渲染容器须使用无衬线字体（不得继承 #editor 的等宽栈）");
+  // 宿主确实把用户设置写到 :root 上
+  assert.match(appSrc, /setProperty\(\s*"--app-font-family"/, "宿主须把用户字体设置写到 :root");
+});
+
+test("PR-3：渲染块块间距改由令牌控制", () => {
+  assert.match(cssSrc, /--prose-block-gap:\s*1em/, "须有段落块间距令牌");
+  assert.match(cssSrc, /--prose-block-gap-fixed:\s*16px/, "须有块级容器间距令牌");
+  assert.match(
+    cssSrc,
+    /\.markdown-body p \{\s*margin:\s*0 0 var\(--prose-block-gap\);\s*\}/,
+    "段落间距须引用令牌",
+  );
+  assert.doesNotMatch(cssSrc, /\.markdown-body p \{\s*margin:\s*0 0 1em;\s*\}/, "不得再写死 1em");
+  const fixedUses = (cssSrc.match(/var\(--prose-block-gap-fixed\)/g) || []).length;
+  assert.ok(fixedUses >= 5, `引用块间距令牌的规则应≥5 处（引用/提示/表格/图片/图表），实际 ${fixedUses}`);
+  // 引用、表格、图片、图表都不得再写死 16px/18px
+  assert.doesNotMatch(cssSrc, /\.markdown-body blockquote \{\s*margin:\s*16px 0;/, "引用块间距须走令牌");
+  assert.doesNotMatch(cssSrc, /\.markdown-table-wrap \{\s*width:\s*100%;\s*margin:\s*18px 0;/, "表格容器间距须走令牌");
+  assert.doesNotMatch(cssSrc, /\.chart-block \{\s*margin:\s*16px 0;/, "图表容器间距须走令牌");
+});
+
+test("PR-3：沉浸渲染结果的外链点击桥已接到宿主", () => {
+  assert.match(appSrc, /window\.__mtOpenExternal = /, "宿主必须暴露外链打开桥");
+  const bridge = fnBody(appSrc, "window.__mtOpenExternal = async function");
+  assert.match(bridge, /\/api\/open-url/, "复用统一的外链打开路由");
+  assert.match(bridge, /https\?:\|mailto:\|tel:/, "只放行 http/https/mailto/tel");
+  assert.match(bridge, /window\.open\(href, "_blank", "noopener,noreferrer"\)/, "失败须回退到新标签打开");
+  const widget = fnBody(coreSrc, "class InlineMarkWidget extends WidgetType");
+  assert.match(widget, /__mtOpenExternal/, "行内链接组件须调用宿主桥");
+  assert.match(widget, /!event\.ctrlKey && !event\.metaKey/, "Ctrl/Cmd + 点击才打开外链，普通点击仍用于定位光标");
+  assert.match(widget, /ignoreEvent\(\)[\s\S]*return false/, "须把普通点击交还编辑器");
 });

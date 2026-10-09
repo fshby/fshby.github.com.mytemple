@@ -1,0 +1,3224 @@
+/* ═══ 层 3/5 · 03-workspace-views.css — 内嵌文件浏览器 / 工作区树 / 搜索 / 主题变体 / 响应式前段
+   本层是样式表唯一可编辑的源；public/styles.css 是由本层按序合并出的产物，请勿手改。
+   ⚠ 级联顺序 = 文件名字典序（build-css.mjs 按序合并），请勿调换文件顺序或在本层内
+     重排规则；修改样式请改本层源文件，再运行 `npm run build:css` 重新生成产物。 */
+/* ========== 内嵌文件浏览器（全宽列表视图） ========== */
+.file-browser {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--soft);
+}
+
+.file-browser[hidden] {
+  display: none;
+}
+
+.browser-toolbar {
+  display: grid;
+  gap: 8px;
+}
+
+/* 完整绝对路径（顶部高亮） */
+.browser-full-path {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 14px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--accent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  letter-spacing: 0.2px;
+}
+
+/* 面包屑行：上一级 + 面包屑 + 搜索提示 */
+.breadcrumb-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.breadcrumb-row .secondary {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.breadcrumb-row .secondary[disabled] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.breadcrumbs {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  padding: 2px 0;
+  white-space: nowrap;
+  min-width: 120px;
+}
+
+.breadcrumbs .crumb {
+  flex: 0 0 auto;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.breadcrumbs .crumb:hover {
+  border-color: var(--accent);
+  background: var(--hover-bg);
+  color: var(--accent);
+}
+
+.breadcrumbs .crumb-sep {
+  color: var(--muted);
+  font-size: 14px;
+  padding: 0 2px;
+  flex: 0 0 auto;
+}
+
+/* 搜索提示 */
+.browser-search-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--accent-solid);
+  color: var(--on-accent);
+  font-size: 12px;
+  font-weight: 600;
+  flex: 0 0 auto;
+}
+
+.browser-search-hint span {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  letter-spacing: 1px;
+  text-transform: none;
+}
+
+.browser-search-hint.hidden {
+  display: none;
+}
+
+/* 快捷跳转按钮行（常用 + 磁盘） */
+.quick-jumps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 6px 2px;
+  align-items: center;
+}
+
+.jump-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.jump-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 0 2px;
+  flex: 0 0 auto;
+}
+
+.jump-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.jump-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease, color 120ms ease;
+  white-space: nowrap;
+}
+
+.jump-btn:hover {
+  border-color: var(--accent);
+  background: var(--hover-bg);
+  color: var(--accent);
+}
+
+.jump-btn-drive {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 600;
+}
+
+/* 列表区域 */
+.browser-list-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  min-height: 300px;
+}
+
+/* 列表头部（名称 | 完整路径） */
+.browser-list-header {
+  display: grid;
+  grid-template-columns: 28px 200px 1fr;
+  gap: 12px;
+  padding: 8px 14px;
+  background: var(--soft);
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  align-items: center;
+}
+
+.browser-list-header span:first-child {
+  /* 第一列是图标，留空 */
+}
+
+/* 列表视图 */
+.browser-list-view {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  max-height: 360px;
+}
+
+.folder-row {
+  display: grid;
+  grid-template-columns: 28px 200px 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms ease, border-left-color 120ms ease;
+  border-left: 3px solid transparent;
+}
+
+.folder-row:last-child {
+  border-bottom: none;
+}
+
+.folder-row:hover {
+  background: var(--hover-bg);
+}
+
+.folder-row.quick-match {
+  background: var(--hover-bg);
+  border-left-color: var(--accent);
+}
+
+.folder-row.quick-match .folder-row-name {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.folder-row-icon {
+  flex: 0 0 auto;
+  font-size: 16px;
+  line-height: 1;
+  text-align: center;
+}
+
+.folder-row-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.folder-row-path {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.folder-row:hover .folder-row-name {
+  color: var(--accent);
+}
+
+.folder-row:hover .folder-row-path {
+  color: var(--text);
+}
+
+.browser-empty,
+.browser-error {
+  padding: 60px 20px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.browser-error {
+  color: #b42318;
+}
+
+/* 底部：完整路径 + 选择按钮 */
+.browser-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--line);
+  background: var(--soft);
+}
+
+.current-path-label {
+  flex: 1 1 auto;
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.browser-footer .primary {
+  height: 34px;
+  padding: 0 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  background: var(--accent-solid);
+  color: var(--on-accent);
+  border-color: var(--accent-solid);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.browser-footer .primary:hover {
+  background: var(--accent-solid);
+  filter: brightness(1.05);
+}
+
+@media (max-width: 560px) {
+  .app-shell {
+    grid-template-rows: 32vh 68vh;
+  }
+
+  .app-shell.sidebar-collapsed {
+    grid-template-columns: 1fr;
+    grid-template-rows: 100vh;
+  }
+
+  .app-shell.sidebar-collapsed .workspace {
+    grid-column: 1;
+    grid-row: 1;
+    height: 100vh;
+  }
+
+  .workspace {
+    height: 68vh;
+  }
+  .toolbar {
+    gap: 4px;
+  }
+  .toolbar button {
+    padding: 0 7px;
+  }
+  .graph-heading {
+    display: none;
+  }
+  .graph-controls {
+    justify-content: flex-start;
+  }
+  .graph-legend {
+    max-width: calc(100% - 28px);
+    overflow: hidden;
+  }
+  .quick-jumps {
+    gap: 10px;
+  }
+  .browser-list-header {
+    grid-template-columns: 24px 120px 1fr;
+  }
+  .folder-row {
+    grid-template-columns: 24px 120px 1fr;
+    gap: 8px;
+    padding: 8px 10px;
+  }
+  .browser-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .browser-footer .primary {
+    width: 100%;
+  }
+}
+
+/* -------------------------------------------------------------------------
+   Immersive visual system
+   Kept CSS-only so document, graph and editor behavior remain unchanged.
+   Surfaces use opaque/color-mixed layers by default; blur is reserved for
+   the few floating chrome elements to keep scrolling and canvas rendering
+   inexpensive on large libraries.
+--------------------------------------------------------------------------- */
+:root {
+  /* 默认（浅色）主题的页面底色跟随暖色基座 --bg，
+     避免此前 #f5f7f9 冷灰蓝底与暖米色面板形成「暖面板坐在冷底色上」的细微割裂。 */
+  --surface-0: var(--bg);
+  --surface-1: color-mix(in srgb, var(--panel) 96%, transparent);
+  --surface-2: color-mix(in srgb, var(--panel) 88%, var(--soft));
+  --surface-3: color-mix(in srgb, var(--soft) 82%, var(--panel));
+  --hairline: color-mix(in srgb, var(--line) 74%, transparent);
+  --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
+  --accent-wash: color-mix(in srgb, var(--accent) 6%, transparent);
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05), 0 8px 24px rgba(15, 23, 42, 0.04);
+  --shadow-md: 0 18px 46px rgba(15, 23, 42, 0.12);
+  /* 历史圆角令牌：值保持不变以避免视觉回归；新代码请使用 Layer 0 的 --radius-1/2/3 */
+  --radius-sm: 9px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+}
+
+body[data-theme="dark"] {
+  --surface-0: #1c201f;
+  --surface-1: color-mix(in srgb, #282e2b 92%, transparent);
+  --surface-2: color-mix(in srgb, #303834 88%, #1f2322);
+  --surface-3: color-mix(in srgb, #3a423e 76%, #1f2322);
+  --hairline: rgba(140, 152, 144, 0.18);
+  --accent-soft: color-mix(in srgb, var(--accent) 15%, transparent);
+  --accent-wash: color-mix(in srgb, var(--accent) 7%, transparent);
+  --shadow-sm: 0 1px 2px rgba(20, 26, 23, 0.28), 0 10px 26px rgba(20, 26, 23, 0.20);
+  --shadow-md: 0 22px 60px rgba(20, 26, 23, 0.40);
+}
+
+
+body {
+  background: var(--surface-0);
+  letter-spacing: 0.005em;
+  text-rendering: optimizeLegibility;
+}
+
+.app-shell {
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(900px 520px at 78% -18%, var(--accent-wash), transparent 68%),
+    radial-gradient(720px 520px at -12% 112%, color-mix(in srgb, var(--accent) 4%, transparent), transparent 72%),
+    var(--surface-0);
+}
+
+.app-shell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(135deg, transparent 0 48%, color-mix(in srgb, var(--accent) 2%, transparent) 100%);
+}
+
+.sidebar,
+.topbar,
+.reader-panel,
+.editor-toolbar,
+#editor,
+#preview {
+  background: var(--surface-1);
+  border-color: var(--hairline);
+}
+
+.sidebar {
+  box-shadow: 10px 0 32px rgba(15, 23, 42, 0.035);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+#preview.preview-pending {
+  cursor: progress;
+}
+
+.brand {
+  padding: 12px 14px 10px;
+  gap: 10px;
+}
+
+.brand-mark {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: linear-gradient(145deg, var(--accent-solid), var(--accent-strong));
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 24%, transparent);
+  letter-spacing: -0.04em;
+}
+
+.brand-text h1 {
+  font-size: 15px;
+  letter-spacing: 0.02em;
+}
+
+.brand-text p {
+  font-size: 11px;
+}
+
+.search-box {
+  height: 40px;
+  margin: 8px 16px 12px;
+  border-color: var(--hairline);
+  border-radius: 12px;
+  background: var(--surface-2);
+  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.search-box:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 64%, var(--line));
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  background: var(--surface-1);
+}
+
+.sidebar-actions {
+  gap: 7px;
+  padding: 0 16px 12px;
+}
+
+button,
+.editor-toolbar button,
+.editor-toolbar select,
+.editor-toolbar label,
+.graph-controls select,
+.graph-controls button,
+.graph-toggle,
+.graph-search {
+  border-color: var(--hairline);
+  border-radius: var(--radius-sm);
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+button {
+  background: var(--surface-2);
+}
+
+button:hover,
+button.active {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 54%, var(--line));
+  color: var(--accent-strong);
+}
+
+button:active {
+  transform: translateY(1px);
+}
+
+button.primary {
+  background: linear-gradient(145deg, var(--accent-solid), var(--accent-strong));
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.tree,
+.search-results {
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
+.tree-workspace {
+  margin: 9px 4px 17px;
+  padding: 11px;
+  border-color: var(--hairline);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface-2) 86%, transparent);
+  box-shadow: var(--shadow-sm);
+}
+
+.tree-workspace::before {
+  left: 16px;
+  right: 16px;
+  height: 2px;
+  opacity: 0.72;
+}
+
+.tree-workspace.active-workspace {
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--line));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent), var(--shadow-sm);
+}
+
+.folder-title,
+.file-item,
+.search-item {
+  min-height: 36px;
+  border-radius: 10px;
+  color: var(--text);
+}
+
+.folder-title:hover,
+.file-item:hover,
+.search-item:hover {
+  background: var(--accent-wash);
+}
+
+.file-item.active,
+.folder-title.selected {
+  background: linear-gradient(90deg, var(--accent-soft), transparent);
+  color: var(--accent-strong);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.folder-children {
+  border-left-color: color-mix(in srgb, var(--accent) 25%, var(--line));
+}
+
+.workspace {
+  position: relative;
+}
+
+.topbar {
+  min-height: 58px;
+  padding: 9px 20px;
+  box-shadow: 0 1px 0 var(--hairline), 0 8px 28px rgba(15, 23, 42, 0.025);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.doc-meta strong {
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+}
+
+.recent-docs .recent-item {
+  border-radius: 999px;
+  background: var(--surface-2);
+  border-color: transparent;
+}
+
+.recent-docs .recent-item.active {
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.reader-panel {
+  background: color-mix(in srgb, var(--surface-1) 82%, transparent);
+}
+
+.reader-outline {
+  background: var(--surface-2);
+  border-color: var(--hairline);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* ── 阅读模式大纲 / 阅读面板滚动条 ── */
+.reader-outline,
+.reader-panel > .markdown-body {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) transparent;
+}
+
+.reader-outline::-webkit-scrollbar,
+.reader-panel > .markdown-body::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.reader-outline::-webkit-scrollbar-track,
+.reader-panel > .markdown-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.reader-outline::-webkit-scrollbar-thumb,
+.reader-panel > .markdown-body::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted) 35%, transparent);
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background-clip: padding-box;
+}
+
+.reader-outline::-webkit-scrollbar-thumb:hover,
+.reader-panel > .markdown-body::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--accent) 55%, transparent);
+  background-clip: padding-box;
+}
+
+.markdown-body {
+  width: min(var(--prose-measure), calc(100% - var(--prose-gutter)));
+  padding-top: 48px;
+  padding-bottom: 112px;
+  line-height: var(--prose-leading);
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3 {
+  letter-spacing: -0.018em;
+  color: color-mix(in srgb, var(--text) 94%, var(--accent));
+}
+
+.markdown-body h1 {
+  padding-bottom: 16px;
+  border-bottom-color: var(--hairline);
+}
+
+.markdown-body blockquote {
+  border-left-width: 2px;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--accent-wash);
+  padding: 12px 18px;
+}
+
+.markdown-body pre {
+  border: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.markdown-body img {
+  border-color: var(--hairline);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.editor-panel {
+  background: color-mix(in srgb, var(--surface-1) 88%, transparent);
+}
+
+.editor-toolbar {
+  padding: 7px 14px;
+  gap: 7px;
+  box-shadow: 0 1px 0 var(--hairline);
+}
+
+#editor,
+#preview {
+  background: color-mix(in srgb, var(--surface-1) 84%, transparent);
+}
+
+#editor {
+  /* 与前一处的 #editor 一样引用同一令牌，两条规则不会再各自漂移 */
+  line-height: var(--prose-leading);
+  font-weight: 450;
+  /* Windows下字体略细会虚，适度抬升字重到 450 但仍保持普通字重观感 */
+  color: color-mix(in srgb, var(--text) 96%, #000);
+}
+
+#editor:focus-within {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 34%, transparent);
+}
+
+#editor .cm-editor,
+#editor .cm-scroller {
+  height: 100%;
+}
+
+#editor .cm-scroller::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+#editor .cm-scroller::-webkit-scrollbar-track {
+  background: transparent;
+}
+#editor .cm-scroller::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 3px;
+}
+#editor .cm-scroller::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+}
+#editor .cm-scroller {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+/* ── 统一滚动条样式：工作区目录 / 编辑大纲 / 预览栏 ── */
+.tree,
+.editor-outline,
+#preview {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) transparent;
+}
+
+.tree::-webkit-scrollbar,
+.editor-outline::-webkit-scrollbar,
+#preview::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.tree::-webkit-scrollbar-track,
+.editor-outline::-webkit-scrollbar-track,
+#preview::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.tree::-webkit-scrollbar-thumb,
+.editor-outline::-webkit-scrollbar-thumb,
+#preview::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted) 35%, transparent);
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background-clip: padding-box;
+}
+
+.tree::-webkit-scrollbar-thumb:hover,
+.editor-outline::-webkit-scrollbar-thumb:hover,
+#preview::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--accent) 55%, transparent);
+  background-clip: padding-box;
+}
+
+#editor .cm-editor {
+  background: transparent;
+}
+
+.editor-panel.preview-hidden #editor .cm-content {
+  padding-left: max(28px, 4vw);
+  padding-right: max(28px, 4vw);
+  font-size: calc(var(--doc-font-size) * 1.05);
+  line-height: 1.8;
+}
+
+#preview {
+  padding-left: 30px;
+  padding-right: 30px;
+}
+
+.modal {
+  background: color-mix(in srgb, #0b1220 30%, transparent);
+  backdrop-filter: blur(7px);
+  -webkit-backdrop-filter: blur(7px);
+}
+
+.modal-dialog {
+  border-color: var(--hairline);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-md);
+  padding: 22px;
+}
+
+.settings-section {
+  border-top-color: var(--hairline);
+}
+
+.graph-panel {
+  background: var(--graph-bg);
+}
+
+.graph-tools {
+  min-height: 68px;
+  padding: 11px 18px;
+  border-bottom-color: var(--hairline);
+  background: color-mix(in srgb, var(--surface-1) 90%, transparent);
+  box-shadow: 0 8px 26px rgba(15, 23, 42, 0.04);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.graph-heading strong {
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.graph-controls {
+  gap: 6px;
+}
+
+.graph-controls select,
+.graph-controls button,
+.graph-toggle,
+.graph-search {
+  background: color-mix(in srgb, var(--surface-2) 90%, transparent);
+}
+
+.graph-stage {
+  background-image:
+    radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 46%),
+    radial-gradient(var(--graph-grid) 1px, transparent 1px);
+}
+
+.graph-tooltip,
+.graph-legend,
+.graph-hint {
+  border-color: var(--hairline);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-1) 90%, transparent);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* Graph mode is a high-frequency canvas surface; avoid compositor blur and
+   deep shadows here while keeping the static reader treatment unchanged. */
+body.graph-mode .graph-tools,
+body.graph-mode .graph-tooltip,
+body.graph-mode .graph-legend,
+body.graph-mode .graph-hint {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+}
+
+body.graph-mode .graph-panel {
+  contain: layout paint;
+}
+
+.graph-legend,
+.graph-hint {
+  bottom: 18px;
+}
+
+.graph-legend {
+  left: 18px;
+  padding: 8px 11px;
+}
+
+.graph-hint {
+  right: 18px;
+  padding: 8px 11px;
+}
+
+.coffee-button {
+  width: 56px;
+  height: 56px;
+  right: 22px;
+  bottom: 22px;
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+body[data-theme="image"] .app-shell {
+  background: transparent;
+}
+
+/* 图片主题：所有UI全透明，背景图完整显示 */
+body[data-theme="image"] .sidebar,
+body[data-theme="image"] .topbar,
+body[data-theme="image"] .reader-panel,
+body[data-theme="image"] .graph-panel,
+body[data-theme="image"] .editor-toolbar,
+body[data-theme="image"] .graph-tools,
+body[data-theme="image"] #editor,
+body[data-theme="image"] #preview,
+body[data-theme="image"] .editor-body,
+body[data-theme="image"] .editor-outline,
+body[data-theme="image"] .reader-outline {
+  background-color: transparent !important;
+  background-image: none !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* 图片主题：按钮/控件全透明，仅边框和交互状态可见 */
+body[data-theme="image"] button,
+body[data-theme="image"] .menu-item,
+body[data-theme="image"] .tree-folder,
+body[data-theme="image"] .tree-file,
+body[data-theme="image"] .search-box,
+body[data-theme="image"] .workspace-summary,
+body[data-theme="image"] select,
+body[data-theme="image"] input[type="text"],
+body[data-theme="image"] input[type="search"] {
+  background-color: transparent;
+  border-color: rgba(255, 255, 255, 0.15);
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+body[data-theme="image"] button:hover,
+body[data-theme="image"] .menu-item:hover,
+body[data-theme="image"] .menu-item.active,
+body[data-theme="image"] .tree-folder:hover,
+body[data-theme="image"] .tree-file:hover,
+body[data-theme="image"] .tree-item.active {
+  background-color: rgba(255, 255, 255, 0.12);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+body[data-theme="image"] button.primary {
+  background: var(--accent-solid);
+  border-color: var(--accent-solid);
+  color: var(--on-accent);
+}
+
+/* 图片主题：弹窗/对话框保持可读 */
+body[data-theme="image"] .modal-dialog,
+body[data-theme="image"] .settings-dialog,
+body[data-theme="image"] .welcome-dialog,
+body[data-theme="image"] .donation-dialog,
+body[data-theme="image"] .update-dialog {
+  background-color: rgba(255, 255, 255, 0.85) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border-color: rgba(255, 255, 255, 0.30) !important;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.30) !important;
+}
+
+body[data-theme="image"] .modal-overlay,
+body[data-theme="image"] .settings-overlay,
+body[data-theme="image"] .welcome-overlay {
+  background: rgba(0, 0, 0, 0.40);
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* 图片主题：文字自动契合背景 */
+body[data-theme="image"] .sidebar,
+body[data-theme="image"] .topbar,
+body[data-theme="image"] .editor-outline,
+body[data-theme="image"] .reader-outline,
+body[data-theme="image"] .graph-tools,
+body[data-theme="image"] .editor-toolbar {
+  color: #1f2733;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.60), 0 0 10px rgba(255, 255, 255, 0.40);
+}
+
+body[data-theme="image"] .menu-item,
+body[data-theme="image"] .tree-folder,
+body[data-theme="image"] .tree-file,
+body[data-theme="image"] .workspace-summary,
+body[data-theme="image"] .sidebar-section-title,
+body[data-theme="image"] .graph-heading,
+body[data-theme="image"] .doc-meta {
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.60), 0 0 8px rgba(255, 255, 255, 0.35);
+}
+
+body[data-theme="image"] .markdown-body {
+  color: #1f2733;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.65), 0 0 12px rgba(255, 255, 255, 0.45);
+}
+
+body[data-theme="image"] .markdown-body h1,
+body[data-theme="image"] .markdown-body h2,
+body[data-theme="image"] .markdown-body h3,
+body[data-theme="image"] .markdown-body h4,
+body[data-theme="image"] .markdown-body strong {
+  color: #0f172a;
+  text-shadow: 0 1px 3px rgba(255, 255, 255, 0.75), 0 0 14px rgba(255, 255, 255, 0.50);
+}
+
+body[data-theme="image"] #editor .cm-content,
+body[data-theme="image"] #editor .cm-line {
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.60), 0 0 8px rgba(255, 255, 255, 0.35);
+}
+
+/* 图片主题：代码块半透明深底 */
+body[data-theme="image"] .markdown-body :not(pre) > code {
+  background: rgba(15, 23, 42, 0.45);
+  color: #e5e7eb;
+  text-shadow: none;
+}
+
+body[data-theme="image"] .markdown-body pre {
+  background: rgba(15, 23, 42, 0.55);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+body[data-theme="image"] .markdown-body pre code {
+  color: #e5e7eb;
+  text-shadow: none;
+}
+
+/* 图片主题：callout 色变量（半透明玻璃效果） */
+body[data-theme="image"] {
+  --callout-note: #3b82f6;
+  --callout-info: #2563eb;
+  --callout-tip: #10b981;
+  --callout-success: #047857;
+  --callout-warning: #d97706;
+  --callout-todo: #b45309;
+  --callout-important: #c2410c;
+  --callout-caution: #dc2626;
+  --callout-danger: #b91c1c;
+  --callout-question: #7c3aed;
+  --callout-quote: #6b7280;
+  --callout-example: #0891b2;
+}
+
+body[data-theme="image"] .callout,
+body[data-theme="image"] .markdown-body .callout,
+body[data-theme="image"] #preview .callout {
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.08);
+}
+/* 图片主题：为每种 callout 类型重设带玻璃态的混合色，保留颜色区分 */
+body[data-theme="image"] .callout.callout-note,
+body[data-theme="image"] .markdown-body .callout.callout-note,
+body[data-theme="image"] #preview .callout.callout-note {
+  background: color-mix(in srgb, rgba(255,255,255,0.70) 80%, var(--callout-note, #3b82f6) 20%) !important;
+  border-color: color-mix(in srgb, rgba(255,255,255,0.35) 55%, var(--callout-note, #3b82f6) 45%) !important;
+  border-left-color: var(--callout-note, #3b82f6) !important;
+}
+body[data-theme="image"] .callout.callout-info,
+body[data-theme="image"] .markdown-body .callout.callout-info,
+body[data-theme="image"] #preview .callout.callout-info {
+  background: color-mix(in srgb, rgba(255,255,255,0.70) 80%, var(--callout-info, #2563eb) 20%) !important;
+  border-color: color-mix(in srgb, rgba(255,255,255,0.35) 55%, var(--callout-info, #2563eb) 45%) !important;
+  border-left-color: var(--callout-info, #2563eb) !important;
+}
+body[data-theme="image"] .callout.callout-tip,
+body[data-theme="image"] .markdown-body .callout.callout-tip,
+body[data-theme="image"] #preview .callout.callout-tip {
+  background: color-mix(in srgb, rgba(255,255,255,0.70) 80%, var(--callout-tip, #10b981) 20%) !important;
+  border-color: color-mix(in srgb, rgba(255,255,255,0.35) 55%, var(--callout-tip, #10b981) 45%) !important;
+  border-left-color: var(--callout-tip, #10b981) !important;
+}
+body[data-theme="image"] .callout.callout-success,
+body[data-theme="image"] .markdown-body .callout.callout-success,
+body[data-theme="image"] #preview .callout.callout-success {
+  background: color-mix(in srgb, rgba(255,255,255,0.70) 80%, var(--callout-success, #047857) 20%) !important;
+  border-color: color-mix(in srgb, rgba(255,255,255,0.35) 55%, var(--callout-success, #047857) 45%) !important;
+  border-left-color: var(--callout-success, #047857) !important;
+}
+body[data-theme="image"] .callout.callout-warning,
+body[data-theme="image"] .markdown-body .callout.callout-warning,
+body[data-theme="image"] #preview .callout.callout-warning {
+  background: color-mix(in srgb, rgba(255,255,255,0.70) 80%, var(--callout-warning, #d97706) 20%) !important;
+  border-color: color-mix(in srgb, rgba(255,255,255,0.35) 55%, var(--callout-warning, #d97706) 45%) !important;
+  border-left-color: var(--callout-warning, #d97706) !important;
+}
+body[data-theme="image"] .callout.callout-todo,
+body[data-theme="image"] .markdown-body .callout.callout-todo,
+body[data-theme="image"] #preview .callout.callout-todo {
+  background: color-mix(in srgb, rgba(255,255,255,0.70) 80%, var(--callout-todo, #b45309) 20%) !important;
+  border-color: color-mix(in srgb, rgba(255,255,255,0.35) 55%, var(--callout-todo, #b45309) 45%) !important;
+  border-left-color: var(--callout-todo, #b45309) !important;
+}
+body[data-theme="image"] .callout.callout-important,
+body[data-theme="image"] .markdown-body .callout.callout-important,
+body[data-theme="image"] #preview .callout.callout-important {
+  background: color-mix(in srgb, rgba(255,255,255,0.70) 80%, var(--callout-important, #c2410c) 20%) !important;
+  border-color: color-mix(in srgb, rgba(255,255,255,0.35) 55%, var(--callout-important, #c2410c) 45%) !important;
+  border-left-color: var(--callout-important, #c2410c) !important;
+}
+body[data-theme="image"] .callout.callout-caution,
+body[data-theme="image"] .markdown-body .callout.callout-caution,
+body[data-theme="image"] #preview .callout.callout-caution {
+  background: color-mix(in srgb, rgba(255,255,255,0.70) 80%, var(--callout-caution, #dc2626) 20%) !important;
+  border-color: color-mix(in srgb, rgba(255,255,255,0.35) 55%, var(--callout-caution, #dc2626) 45%) !important;
+  border-left-color: var(--callout-caution, #dc2626) !important;
+}
+body[data-theme="image"] .callout.callout-danger,
+body[data-theme="image"] .markdown-body .callout.callout-danger,
+body[data-theme="image"] #preview .callout.callout-danger,
+body[data-theme="image"] .callout.callout-failure,
+body[data-theme="image"] .markdown-body .callout.callout-failure,
+body[data-theme="image"] #preview .callout.callout-failure,
+body[data-theme="image"] .callout.callout-bug,
+body[data-theme="image"] .markdown-body .callout.callout-bug,
+body[data-theme="image"] #preview .callout.callout-bug {
+  background: color-mix(in srgb, rgba(255,255,255,0.70) 80%, var(--callout-danger, #b91c1c) 20%) !important;
+  border-color: color-mix(in srgb, rgba(255,255,255,0.35) 55%, var(--callout-danger, #b91c1c) 45%) !important;
+  border-left-color: var(--callout-danger, #b91c1c) !important;
+}
+body[data-theme="image"] .callout.callout-question,
+body[data-theme="image"] .markdown-body .callout.callout-question,
+body[data-theme="image"] #preview .callout.callout-question {
+  background: color-mix(in srgb, rgba(255,255,255,0.70) 80%, var(--callout-question, #7c3aed) 20%) !important;
+  border-color: color-mix(in srgb, rgba(255,255,255,0.35) 55%, var(--callout-question, #7c3aed) 45%) !important;
+  border-left-color: var(--callout-question, #7c3aed) !important;
+}
+body[data-theme="image"] .callout.callout-quote,
+body[data-theme="image"] .markdown-body .callout.callout-quote,
+body[data-theme="image"] #preview .callout.callout-quote,
+body[data-theme="image"] .callout.callout-abstract,
+body[data-theme="image"] .markdown-body .callout.callout-abstract,
+body[data-theme="image"] #preview .callout.callout-abstract {
+  background: color-mix(in srgb, rgba(255,255,255,0.70) 80%, var(--callout-quote, #6b7280) 20%) !important;
+  border-color: color-mix(in srgb, rgba(255,255,255,0.35) 55%, var(--callout-quote, #6b7280) 45%) !important;
+  border-left-color: var(--callout-quote, #6b7280) !important;
+}
+body[data-theme="image"] .callout.callout-example,
+body[data-theme="image"] .markdown-body .callout.callout-example,
+body[data-theme="image"] #preview .callout.callout-example {
+  background: color-mix(in srgb, rgba(255,255,255,0.70) 80%, var(--callout-example, #0891b2) 20%) !important;
+  border-color: color-mix(in srgb, rgba(255,255,255,0.35) 55%, var(--callout-example, #0891b2) 45%) !important;
+  border-left-color: var(--callout-example, #0891b2) !important;
+}
+
+/* 图片主题：AI抽屉 */
+body[data-theme="image"] .ai-drawer {
+  background-color: rgba(255, 255, 255, 0.85);
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+/* 图片主题：分割线全透明 */
+body[data-theme="image"] .sidebar-resizer,
+body[data-theme="image"] .editor-splitter {
+  background: transparent;
+}
+body[data-theme="image"] .sidebar-resizer::before,
+body[data-theme="image"] .editor-splitter::before {
+  background: transparent;
+}
+
+/* A narrow window must keep the editor and preview readable instead of
+   leaving them in a five-column grid wider than the viewport. */
+@media (max-width: 860px) {
+  .workspace,
+  .reader-panel,
+  .editor-panel,
+  .graph-panel {
+    min-width: 0;
+  }
+
+  .editor-body,
+  .editor-body.outline-hidden,
+  .editor-body.preview-hidden,
+  .editor-body.outline-hidden.preview-hidden {
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) !important;
+  }
+
+  .editor-body > #editorOutline,
+  .editor-body > #outlineSplitter,
+  .editor-body > #editor,
+  .editor-body > #previewSplitter,
+  .editor-body > #preview {
+    grid-column: 1 !important;
+  }
+
+  .editor-body > #editorOutline { grid-row: 1; }
+  .editor-body > #outlineSplitter { display: none; }
+  .editor-body > #editor { grid-row: 1; border-right: 0; border-bottom: 1px solid var(--line); }
+  .editor-body > #previewSplitter { display: none; }
+  .editor-body > #preview { grid-row: 2; }
+  .editor-body.outline-hidden #editor { grid-row: 1; }
+  .editor-body.preview-hidden #editor { grid-row: 1 / span 2; }
+  .editor-body.preview-hidden #preview { display: none !important; }
+}
+
+/* Quiet support affordance: visible, reachable and theme-aware without
+   competing with the document canvas or graph nodes. */
+.coffee-button {
+  width: 46px;
+  height: 46px;
+  right: 20px;
+  bottom: 20px;
+  color: var(--accent-strong);
+  background: color-mix(in srgb, var(--surface-2) 92%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--line));
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.1);
+  opacity: 0.62;
+  transform: scale(0.92);
+  transition: opacity 180ms ease, transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.coffee-button:hover,
+.coffee-button:focus-visible {
+  opacity: 1;
+  transform: scale(1);
+  border-color: color-mix(in srgb, var(--accent) 66%, var(--line));
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.coffee-button:focus-visible {
+  outline: 3px solid var(--accent-soft);
+  outline-offset: 3px;
+}
+
+.coffee-button svg {
+  width: 25px;
+  height: 25px;
+}
+
+.coffee-steam {
+  display: none;
+}
+
+.donation-dialog {
+  max-width: 540px;
+  border-radius: 22px;
+  background: var(--surface-1);
+  border-color: var(--hairline);
+}
+
+.donation-header {
+  padding: 28px 30px 22px;
+  color: var(--text);
+  text-align: left;
+  background:
+    radial-gradient(280px 140px at 8% 0%, var(--accent-soft), transparent 70%),
+    var(--surface-1);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.donation-icon-lg {
+  width: 48px;
+  height: 48px;
+  margin: 0 0 16px;
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
+  border-radius: 14px;
+}
+
+.donation-icon-lg svg {
+  width: 28px;
+  height: 28px;
+}
+
+.donation-header h2 {
+  margin-bottom: 6px;
+  font-size: 20px;
+  letter-spacing: -0.02em;
+}
+
+.donation-header p {
+  color: var(--muted);
+  opacity: 1;
+  font-size: 13px;
+}
+
+.donation-methods {
+  gap: 12px;
+  padding: 20px 24px 16px;
+}
+
+.donation-card-item {
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--surface-2);
+  border-color: var(--hairline);
+  transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+.donation-card-item:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
+  box-shadow: var(--shadow-sm);
+}
+
+.qr-code {
+  width: 132px;
+  height: 132px;
+  border-radius: 10px;
+  box-shadow: none;
+}
+
+.contact-section {
+  padding: 0 24px 24px;
+}
+
+.contact-item {
+  padding: 9px 11px;
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+}
+
+/* Responsive settings workspace. The dialog remains fully usable at 100%
+   browser zoom and scrolls internally on short screens. */
+.modal {
+  padding: 16px;
+  overflow: auto;
+}
+
+.modal-dialog {
+  position: relative;
+}
+
+.settings-dialog {
+  width: min(860px, calc(100vw - 32px));
+  height: min(680px, calc(100vh - 64px));
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+.settings-dialog .settings-section {
+  min-width: 0;
+}
+
+.community-settings-section button {
+  width: 100%;
+}
+
+.community-dialog {
+  width: min(620px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+}
+
+.community-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.community-head p {
+  margin-bottom: 0;
+}
+
+.community-close {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  padding: 0;
+  font-size: 21px;
+  line-height: 1;
+}
+
+.community-readonly-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  gap: 22px;
+  align-items: center;
+  padding: 18px;
+  border: 1px solid var(--hairline);
+  border-radius: 16px;
+  background: var(--surface-2);
+}
+
+.community-description {
+  display: grid;
+  gap: 10px;
+  color: var(--text);
+}
+
+.community-description strong {
+  font-size: 16px;
+}
+
+.community-description p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.community-description span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.community-qr-preview {
+  width: 220px;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line));
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 12px 28px color-mix(in srgb, #000 14%, transparent);
+}
+
+.community-qr-preview img {
+  width: 100%;
+  height: 100%;
+  padding: 8px;
+  object-fit: contain;
+}
+
+.community-dialog > .modal-actions {
+  margin-top: 16px;
+}
+
+@media (max-width: 720px) {
+  .settings-dialog {
+    width: calc(100vw - 16px);
+    height: calc(100vh - 16px);
+  }
+
+  .community-readonly-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .community-qr-preview {
+    width: min(220px, 100%);
+    margin: 0 auto;
+  }
+}
+
+.community-inline-body {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.community-inline-body .community-description {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.community-inline-body .community-description p {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: var(--text-soft, #6b7280);
+  line-height: 1.6;
+}
+
+.community-inline-body .community-description span {
+  font-size: 12px;
+  color: var(--text-faint, #9ca3af);
+}
+
+.community-inline-body .community-qr-preview {
+  flex: 0 0 auto;
+  width: 140px;
+  height: 140px;
+}
+
+.community-inline-body .community-qr-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.ai-index-dashboard {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+.ai-index-dashboard > div {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-2) 78%, transparent);
+}
+.ai-index-dashboard span,
+.ai-index-dashboard strong {
+  display: block;
+}
+.ai-index-dashboard span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.ai-index-dashboard strong {
+  margin-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+}
+.ai-index-progress-wrap {
+  grid-column: 1 / -1;
+}
+.ai-index-progress {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--border) 70%, transparent);
+}
+.ai-index-progress span {
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 180ms ease;
+}
+.ai-index-progress-wrap small {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+}
+.ai-settings-section #aiSettingsStatus {
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+}
+.ai-settings-section .ai-provider-choices {
+  margin: 6px 0 4px;
+}
+.ai-provider-fields > p.muted {
+  margin-top: 4px;
+  line-height: 1.6;
+}
+.km-health-score {
+  margin: 8px 0 12px;
+}
+.km-score-overview {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--soft);
+  border: 1px solid var(--line);
+}
+.km-score-ring {
+  flex: 0 0 auto;
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 4px solid var(--line);
+  background: var(--panel, #fff);
+  position: relative;
+}
+.km-score-ring.km-score-excellent { border-color: #10b981; }
+.km-score-ring.km-score-good { border-color: #3b82f6; }
+.km-score-ring.km-score-fair { border-color: #d97706; }
+.km-score-ring.km-score-poor { border-color: #dc2626; }
+.km-score-ring-value {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text);
+}
+.km-score-ring-label {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.km-score-breakdown {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 16px;
+  min-width: 0;
+}
+.km-score-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.km-score-item-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+}
+.km-score-item-head span {
+  color: var(--muted);
+}
+.km-score-item-head strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.km-score-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--line);
+  overflow: hidden;
+}
+.km-score-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-strong));
+  transition: width 0.4s ease;
+}
+.km-score-tip {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+@media (max-width: 640px) {
+  .km-score-overview {
+    flex-direction: column;
+    text-align: center;
+  }
+  .km-score-breakdown {
+    width: 100%;
+  }
+}
+.km-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin: 8px 0 12px;
+}
+.km-stats > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--soft);
+  border: 1px solid var(--line);
+}
+.km-stats span {
+  font-size: 11px;
+  color: var(--muted);
+}
+.km-stats strong {
+  font-size: 18px;
+  color: var(--text);
+}
+.km-group {
+  margin-top: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-glass, var(--panel));
+}
+.km-group > summary {
+  cursor: pointer;
+  padding: 10px 12px;
+  font-weight: 600;
+  list-style: none;
+  user-select: none;
+}
+.km-group > summary::-webkit-details-marker { display: none; }
+.km-group > summary::before {
+  content: "▸";
+  display: inline-block;
+  margin-right: 6px;
+  transition: transform 0.2s;
+  color: var(--muted);
+}
+.km-group[open] > summary::before { transform: rotate(90deg); }
+.km-group > p.muted { margin: 0 12px 6px; }
+.km-doc-list {
+  list-style: none;
+  margin: 0 8px 10px;
+  padding: 0;
+  max-height: 240px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.km-doc-item { margin: 0; padding: 0; }
+.km-doc-open {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--soft);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.km-doc-open:hover {
+  border-color: var(--accent);
+  background: var(--hover-bg);
+}
+.km-doc-title {
+  font-size: 13px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.km-doc-meta {
+  font-size: 11px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.km-doc-empty {
+  padding: 10px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 12px;
+}
+.km-guide {
+  margin: 6px 0 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.km-guide li {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text);
+}
+.ai-selection-menu {
+  position: fixed;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: min(96vw, 520px);
+  padding: 7px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  background: var(--surface-1);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+.ai-local-note {
+  margin-inline-start: auto;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.ai-selection-menu span {
+  padding: 0 5px;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
+}
+.ai-selection-menu button {
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 9px;
+  color: var(--text);
+}
+.ai-transform-dialog {
+  width: min(680px, calc(100vw - 32px));
+  max-height: min(760px, calc(100dvh - 32px));
+  overflow: auto;
+}
+.ai-transform-instruction-field textarea {
+  min-height: 72px;
+  font-family: var(--mono, ui-monospace, monospace);
+}
+
+/* AI 智能编辑提示 popover */
+.ai-edit-hint-popover {
+  position: fixed;
+  z-index: 9000;
+  width: min(320px, calc(100vw - 24px));
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.18);
+  font-size: 13px;
+  color: var(--text);
+  animation: hint-pop 0.18s ease;
+}
+@keyframes hint-pop {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.ai-edit-hint-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.ai-edit-hint-close {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 18px;
+  cursor: pointer;
+  line-height: 1;
+}
+.ai-edit-hint-text {
+  margin: 0 0 10px;
+  line-height: 1.6;
+  color: var(--text);
+  max-height: 160px;
+  overflow-y: auto;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+.ai-edit-hint-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.ai-edit-hint-actions button {
+  border: 1px solid var(--line);
+  background: var(--control-bg);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.ai-edit-hint-actions button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 16%, var(--control-bg));
+  border-color: var(--accent);
+}
+.ai-edit-hint-actions button:disabled { opacity: 0.4; cursor: not-allowed; }
+.ai-transform-dialog .modal-head {
+  align-items: flex-start;
+}
+.ai-transform-result-field textarea {
+  min-height: 220px;
+  resize: vertical;
+  line-height: 1.65;
+}
+@media (max-width: 720px) {
+  .ai-index-dashboard {
+    grid-template-columns: 1fr 1fr;
+  }
+  .ai-selection-menu {
+    left: 12px !important;
+    right: 12px;
+    bottom: 16px;
+    justify-content: center;
+  }
+  .ai-selection-menu span {
+    display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .coffee-button {
+    right: 14px;
+    bottom: 14px;
+  }
+
+  .donation-methods {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 动效可访问性：PR-4 起补全到「关键帧动画 + 过渡 + 平滑滚动」三类。
+   原先只压 transition-duration，11 处 animation（含 2 处 infinite 旋转/脉冲）
+   仍照常播放 —— 对前庭功能敏感的用户是实打实的伤害。
+   这里不是「减速」而是「停播」：0.01ms + 单次迭代 = 动画直接落到终态，
+   元素该有的静态外观（终态样式）全部保留，仅去掉运动过程。
+   scroll-behavior 一并复位，避免「点击目录后整页平滑滚动」在降级模式下发生。 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+  html { scroll-behavior: auto !important; }
+}
+
+@media (max-width: 720px) {
+  .settings-dialog {
+    width: calc(100vw - 16px);
+    height: calc(100vh - 16px);
+  }
+  .settings-body {
+    flex-direction: column;
+  }
+  .settings-nav {
+    flex: 0 0 auto;
+    flex-direction: row;
+    overflow-x: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    padding: 8px 12px;
+    gap: 4px;
+  }
+  .settings-nav-item {
+    white-space: nowrap;
+    padding: 6px 10px;
+  }
+  .settings-nav-item.active::before {
+    display: none;
+  }
+  .settings-content {
+    padding: 0 16px 20px;
+  }
+}
+
+/* License activation dialog */
+.license-dialog {
+  width: min(480px, calc(100vw - 32px));
+  padding: 0;
+  overflow: hidden;
+}
+
+#licenseModal.startup-block .license-dialog {
+  border: 2px solid var(--accent, #6366f1);
+  box-shadow: 0 0 40px color-mix(in srgb, var(--accent, #6366f1) 30%, transparent);
+}
+
+.license-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.license-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.license-body {
+  padding: 20px 24px 24px;
+}
+
+.license-section {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.license-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.license-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 0;
+}
+
+.license-machine-code {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.license-machine-code code {
+  flex: 1;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 10px 14px;
+  background: var(--inline-code-bg);
+  color: var(--md-inline-code);
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  word-break: break-all;
+}
+
+.license-copy-btn {
+  flex-shrink: 0;
+  padding: 8px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--control-bg);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.license-copy-btn:hover {
+  background: var(--hover-bg);
+  border-color: var(--accent);
+}
+
+.license-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.license-form textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--control-bg);
+  color: var(--text);
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 12px;
+  resize: vertical;
+  transition: border-color 0.15s ease;
+}
+
+.license-form textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.license-activate-btn {
+  align-self: flex-start;
+  padding: 10px 28px;
+}
+
+.license-status {
+  margin: 0;
+  font-size: 13px;
+  min-height: 18px;
+}
+
+.license-status.error {
+  color: #ef4444;
+}
+
+.license-status.success {
+  color: var(--accent-strong);
+}
+
+.license-success {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 0;
+}
+
+.license-success-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+  font-size: 28px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.license-success-text {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.license-details {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  background: var(--soft);
+  border-radius: 8px;
+}
+
+.license-details > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+
+.license-details span {
+  color: var(--muted);
+}
+
+.license-details code {
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 12px;
+  color: var(--md-inline-code);
+}
+
+.license-warning {
+  margin-top: 8px;
+  padding: 10px 14px;
+  background: color-mix(in srgb, var(--warning, #d97706) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warning, #d97706) 30%, transparent);
+  border-radius: 6px;
+  color: var(--warning, #d97706);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.license-deactivate-btn {
+  padding: 6px 16px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.license-deactivate-btn:hover {
+  color: #ef4444;
+  border-color: #ef4444;
+}
+
+/* P0 local RAG surface: an overlay keeps the editor and graph layout stable. */
+.ai-drawer {
+  position: fixed;
+  z-index: 40;
+  top: 0;
+  right: 0;
+  width: min(430px, calc(100vw - 24px));
+  height: 100dvh;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  color: var(--text);
+  background: color-mix(in srgb, var(--surface-1) 96%, transparent);
+  border-left: 1px solid var(--hairline);
+  box-shadow: -20px 0 50px color-mix(in srgb, #000 18%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+.ai-drawer.hidden { display: none; }
+.ai-drawer-head, .ai-scope-row, .ai-composer { padding: 14px 16px; }
+.ai-drawer-head { display: flex; align-items: flex-start; justify-content: space-between; border-bottom: 1px solid var(--hairline); }
+.ai-drawer-head > div { display: grid; gap: 5px; }
+.ai-drawer-head > button { width: 30px; height: 30px; padding: 0; font-size: 20px; }
+.ai-status-badge { width: fit-content; padding: 3px 8px; border-radius: 999px; color: var(--muted); background: var(--surface-2); font-size: 11px; }
+.ai-status-badge.ready { color: var(--accent-strong); background: color-mix(in srgb, var(--accent) 14%, var(--surface-2)); }
+.ai-status-badge.warn { color: var(--warning, #b7791f); }
+.ai-scope-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 1px solid var(--hairline); }
+.ai-scope-row label { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+.ai-scope-row select { min-width: 128px; }
+.ai-messages { display: flex; flex-direction: column; gap: 12px; overflow: auto; padding: 16px; contain: content; }
+.ai-empty { display: grid; gap: 8px; margin: auto 0; padding: 20px; color: var(--muted); text-align: center; border: 1px dashed var(--hairline); border-radius: 16px; }
+.ai-message { display: grid; gap: 8px; max-width: 96%; }
+.ai-message.user { align-self: flex-end; }
+.ai-message-bubble { padding: 11px 13px; border-radius: 14px; white-space: pre-wrap; line-height: 1.6; font-size: 13px; background: var(--surface-2); }
+.ai-message.user .ai-message-bubble { background: color-mix(in srgb, var(--accent) 17%, var(--surface-2)); }
+.ai-message-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.ai-action-btn { padding: 4px 10px; font-size: 11px; color: var(--muted); border: 1px solid var(--hairline); border-radius: 8px; background: transparent; cursor: pointer; transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease; }
+.ai-action-btn:hover { color: var(--accent); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.ai-sources { display: grid; gap: 6px; }
+.ai-source { display: grid; gap: 3px; width: 100%; padding: 8px 10px; color: var(--text); text-align: left; border: 1px solid var(--hairline); border-radius: 10px; background: transparent; }
+.ai-source:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.ai-source-title { overflow: hidden; font-size: 12px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.ai-source-meta, .ai-source-excerpt { overflow: hidden; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.ai-composer { border-top: 1px solid var(--hairline); background: color-mix(in srgb, var(--surface-2) 70%, transparent); }
+.ai-composer textarea { width: 100%; min-height: 74px; resize: vertical; }
+.ai-composer > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; }
+.ai-composer span { color: var(--muted); font-size: 11px; }
+.setting-field { display: grid; grid-template-columns: 76px minmax(0, 1fr); align-items: center; gap: 8px; }
+.setting-field > span { color: var(--muted); font-size: 12px; }
+.setting-field input { min-width: 0; }
+.inline-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.ai-settings-section, .ai-governance-section { grid-column: 1 / -1; }
+.frontmatter-dialog { width: min(980px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; }
+.frontmatter-diff { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.frontmatter-diff section { min-width: 0; display: grid; gap: 6px; }
+.frontmatter-diff pre { max-height: 48dvh; overflow: auto; margin: 0; padding: 12px; color: var(--muted); border: 1px solid var(--hairline); border-radius: 10px; background: var(--surface-2); white-space: pre-wrap; word-break: break-word; font: 12px/1.55 "Cascadia Code", Consolas, monospace; }
+@media (max-width: 720px) {
+  .frontmatter-diff { grid-template-columns: 1fr; }
+  .ai-drawer { width: 100vw; }
+}
+
+/* P0 UX polish: settings use a stable information hierarchy instead of a
+   long mixed grid; AI source cards must override the global 34px button height. */
+.shortcut-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+  margin-top: 10px;
+}
+.shortcut-grid div {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface-1) 74%, transparent);
+}
+.shortcut-grid code {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent-strong);
+  white-space: nowrap;
+}
+.shortcut-grid span {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+.shortcut-settings-section > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  list-style: none;
+}
+.shortcut-settings-section > summary::-webkit-details-marker { display: none; }
+.shortcut-settings-section > summary::after {
+  content: "⌄";
+  color: var(--muted);
+  transition: transform .18s ease;
+}
+.shortcut-settings-section[open] > summary::after { transform: rotate(180deg); }
+.shortcut-settings-section > summary + strong { display: none; }
+.settings-dialog .about-section { display: flex; align-items: center; }
+.privacy-inline {
+  width: 100%;
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border-color, rgba(128, 128, 128, .22));
+}
+.privacy-inline-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.privacy-inline-head strong { display: block; margin-bottom: 6px; }
+.privacy-inline-head p { margin: 0; max-width: 62ch; }
+.privacy-details { margin-top: 12px; }
+.privacy-details summary { cursor: pointer; color: var(--accent, #4a6fa5); font-weight: 600; }
+.privacy-summary { margin-top: 10px; line-height: 1.75; }
+.privacy-summary p { margin: 7px 0; }
+.privacy-summary a { overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .privacy-inline-head { flex-direction: column; }
+}
+.settings-dialog .about-btn { width: 100%; justify-content: flex-start; }
+
+/* Enterprise editor chrome: compact controls, clear visual grouping and
+   predictable density on small laptop screens. The existing button IDs and
+   data-format hooks remain unchanged; this is intentionally presentation-only. */
+.editor-toolbar {
+  min-height: 42px;
+  height: 42px;
+  padding: 5px 10px;
+  gap: 5px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--accent) 42%, var(--line)) transparent;
+  background: color-mix(in srgb, var(--surface-1) 96%, var(--surface-0));
+  box-shadow: inset 0 -1px 0 var(--hairline);
+}
+.editor-panel { grid-template-rows: 42px minmax(0, 1fr) 24px; }
+.editor-toolbar button,
+.editor-toolbar select,
+.editor-toolbar label {
+  height: 31px;
+  min-height: 31px;
+  padding: 0 9px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .01em;
+  white-space: nowrap;
+}
+.editor-toolbar button[data-format="h1"],
+.editor-toolbar button[data-format="h2"],
+.editor-toolbar button[data-format="h3"] {
+  min-width: 35px;
+  font-family: "Cascadia Code", Consolas, monospace;
+  color: var(--accent-strong);
+}
+.editor-toolbar button[data-format="bold"],
+.editor-toolbar button[data-format="italic"],
+.editor-toolbar button[data-format="underline"],
+.editor-toolbar button[data-format="strike"] {
+  min-width: 32px;
+  font-family: Georgia, serif;
+  font-size: 14px;
+}
+.editor-toolbar label { gap: 5px; }
+.editor-toolbar label input[type="color"] { width: 18px; height: 18px; }
+.editor-toolbar select { min-width: 54px; }
+.editor-toolbar button:hover,
+.editor-toolbar select:hover,
+.editor-toolbar label:hover { transform: none; }
+.editor-toolbar button:focus-visible,
+.editor-toolbar select:focus-visible,
+.editor-toolbar label:focus-within {
+  outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  outline-offset: 1px;
+}
+/* Delimit logical tool groups without requiring a markup change. */
+.editor-toolbar .toolbar-separator {
+  flex: 0 0 auto;
+  width: 1px;
+  height: 24px;
+  background: var(--line);
+  margin: 0 4px;
+  border-radius: 1px;
+}
+.editor-toolbar .toolbar-separator + button,
+.editor-toolbar .toolbar-separator + select,
+.editor-toolbar .toolbar-separator + label {
+  margin-left: 4px;
+}
+.editor-toolbar > .toolbar-separator:nth-of-type(2) {
+  margin-left: auto;
+}
+.editor-toolbar > .toolbar-separator:last-of-type + button:last-child,
+.editor-toolbar > .toolbar-separator:last-of-type ~ .save-btn,
+.editor-toolbar > #saveBtn {
+  border-color: color-mix(in srgb, var(--accent) 46%, var(--line));
+  background: color-mix(in srgb, var(--accent) 10%, var(--soft));
+}
+
+/* Enterprise editor dropdown panels and color pickers: visual chrome for
+   paragraph/list dropdown, emphasis style dropdown, font/bg color pickers
+   with preset swatch grid, and the format button. */
+.editor-toolbar { position: relative; }
+.toolbar-dropdown-panel.hidden { display: none !important; }
+.toolbar-dropdown-panel {
+  /* fixed 定位以逃逸 .editor-toolbar 的 overflow 裁剪（工具栏需 overflow-x:auto 横向滚动，
+     其 overflow-y 会被算成 auto 也裁剪，故面板不能用 absolute+top:110%）；
+     面板位置由 JS 按触发按钮锚定到正下方。 */
+  position: fixed;
+  z-index: 9999;
+  left: -9999px;
+  min-width: 210px;
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px solid var(--hairline);
+  background: var(--surface-1);
+  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.12), 0 2px 6px rgba(15, 23, 42, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+.toolbar-dropdown-panel[data-panel="block"] button,
+.toolbar-dropdown-panel[data-panel="emphasis"] button {
+  width: 100%;
+  height: 32px;
+  justify-content: flex-start;
+  padding: 0 10px;
+  border: none;
+  background: transparent;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  text-align: left;
+  transition: background 120ms ease, color 120ms ease;
+}
+.toolbar-dropdown-panel[data-panel="block"] button:hover,
+.toolbar-dropdown-panel[data-panel="emphasis"] button:hover {
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface-2));
+  color: var(--accent-strong);
+}
+.toolbar-dropdown-panel[data-panel="block"] button strong,
+.toolbar-dropdown-panel[data-panel="emphasis"] button strong,
+.toolbar-dropdown-panel[data-panel="block"] button em,
+.toolbar-dropdown-panel[data-panel="emphasis"] button em {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+}
+
+/* 高亮提示块下拉：按钮内图标按类型着色，与预览中 callout 左边框色一致；
+   "更多"分隔线与标题为面板内信息分区。 */
+.toolbar-dropdown-panel[data-panel="callout"] button {
+  width: 100%;
+  height: 32px;
+  justify-content: flex-start;
+  align-items: center;
+  padding: 0 10px;
+  border: none;
+  background: transparent;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  text-align: left;
+  display: flex;
+  gap: 8px;
+  transition: background 120ms ease, color 120ms ease;
+}
+.toolbar-dropdown-panel[data-panel="callout"] button:hover {
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface-2));
+  color: var(--accent-strong);
+}
+.toolbar-dropdown-panel .callout-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  font-size: 14px;
+  line-height: 1;
+  border-radius: 5px;
+  flex-shrink: 0;
+  color: #fff;
+}
+.callout-icon-tip { background: #10b981; }
+.callout-icon-warning { background: #f59e0b; }
+.callout-icon-note { background: #4f8cf7; }
+.callout-icon-important { background: #f59e0b; }
+.callout-icon-caution { background: #ef4444; }
+.callout-icon-toc { background: #0ea5e9; }
+.callout-icon-details { background: #6b7280; }
+.callout-separator {
+  margin: 8px 4px 6px;
+  border-top: 1px solid var(--line);
+}
+.callout-more-title {
+  margin: 2px 6px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+/* 数学公式下拉面板 */
+.toolbar-dropdown-panel[data-panel="formula"] button {
+  width: 100%;
+  height: 30px;
+  justify-content: flex-start;
+  align-items: center;
+  padding: 0 10px;
+  border: none;
+  background: transparent;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  text-align: left;
+  transition: background 120ms ease, color 120ms ease;
+}
+.toolbar-dropdown-panel[data-panel="formula"] button:hover {
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface-2));
+  color: var(--accent-strong);
+}
+.toolbar-dropdown-panel[data-panel="formula"] .formula-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  margin-right: 8px;
+  font-size: 12px;
+  font-family: "Cambria Math", "Times New Roman", serif;
+  font-style: italic;
+  color: var(--accent);
+  opacity: 0.85;
+}
+.toolbar-dropdown-panel[data-panel="formula"] .formula-separator {
+  margin: 6px 4px 4px;
+  border-top: 1px solid var(--line);
+}
+
+/* 图表下拉面板 */
+.toolbar-dropdown-panel[data-panel="chart"] {
+  min-width: 200px;
+  max-height: 480px;
+  overflow-y: auto;
+}
+.toolbar-dropdown-panel[data-panel="chart"] .chart-group-title {
+  margin: 4px 6px 2px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.toolbar-dropdown-panel[data-panel="chart"] button {
+  width: 100%;
+  height: 28px;
+  justify-content: flex-start;
+  align-items: center;
+  padding: 0 10px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  text-align: left;
+  transition: background 120ms ease, color 120ms ease;
+}
+.toolbar-dropdown-panel[data-panel="chart"] button:hover {
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface-2));
+  color: var(--accent-strong);
+}
+.toolbar-dropdown-panel[data-panel="chart"] .chart-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  margin-right: 8px;
+  font-size: 13px;
+  color: var(--accent);
+  opacity: 0.85;
+}
+.toolbar-dropdown-panel[data-panel="chart"] .chart-separator {
+  margin: 6px 4px 4px;
+  border-top: 1px solid var(--line);
+}
+
+/* 预览中图表渲染块 */
+.chart-block {
+  margin: var(--prose-block-gap-fixed) 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--surface-1);
+  position: relative;
+}
+.chart-block .mermaid-source,
+.chart-block .excalidraw-source {
+  display: none;
+}
+.chart-block .mermaid-container,
+.chart-block .excalidraw-container {
+  padding: 16px;
+  min-height: 80px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  background: var(--surface-2);
+  overflow: auto;
+  max-height: 70vh;
+}
+.chart-block .mermaid-container svg {
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  cursor: zoom-in;
+  display: block;
+}
+.chart-block .excalidraw-preview canvas {
+  cursor: zoom-in;
+}
+.chart-block .chart-zoom-hint {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  font-size: 11px;
+  color: var(--muted);
+  opacity: 0.7;
+  pointer-events: none;
+  z-index: 1;
+}
+.chart-block .chart-placeholder {
+  color: var(--muted);
+  font-size: 13px;
+  font-style: italic;
+}
+.chart-block .chart-error {
+  color: #dc2626;
+  font-size: 13px;
+  padding: 8px 12px;
+  background: color-mix(in srgb, #dc2626 10%, transparent);
+  border-radius: 4px;
+}
+.chart-block .excalidraw-preview {
+  width: 100%;
+  text-align: center;
+}
+.chart-block .excalidraw-json {
+  max-height: 150px;
+  overflow: auto;
+  font-family: var(--mono, "Cascadia Code", Consolas, monospace);
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 8px;
+  text-align: left;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.chart-block .excalidraw-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+/* 图表底部滚动提示 */
+.chart-block .chart-scroll-hint {
+  text-align: center;
+  font-size: 11px;
+  color: var(--muted);
+  padding: 4px 0 8px;
+  background: var(--surface-2);
+  opacity: 0.6;
+}
+
+/* Color picker button (inline swatch + label) */
+.editor-toolbar .color-picker-btn {
+  position: relative;
+  padding-left: 8px;
+  padding-right: 10px;
+  min-width: 54px;
+}
+.editor-toolbar .color-picker-btn .color-preview {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  border: 1px solid color-mix(in srgb, var(--text) 18%, transparent);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+  margin-right: 2px;
+  flex-shrink: 0;
+}
+
+/* Color picker dropdown chrome */
+.toolbar-dropdown-panel[data-panel="textColor"] .color-row,
+.toolbar-dropdown-panel[data-panel="bgColor"] .color-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px 8px;
+  border-bottom: 1px dashed var(--line);
+  margin-bottom: 6px;
+}
+.toolbar-dropdown-panel[data-panel="textColor"] .color-row strong,
+.toolbar-dropdown-panel[data-panel="bgColor"] .color-row strong {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  color: var(--text);
+  flex: 1;
+}
+.toolbar-dropdown-panel[data-panel="textColor"] .color-row input[type="color"],
+.toolbar-dropdown-panel[data-panel="bgColor"] .color-row input[type="color"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 40px;
+  height: 28px;
+  border: 1px solid var(--hairline);
+  border-radius: 7px;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  overflow: hidden;
+}
+.toolbar-dropdown-panel[data-panel="textColor"] .color-row input[type="color"]::-webkit-color-swatch-wrapper,
+.toolbar-dropdown-panel[data-panel="bgColor"] .color-row input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+.toolbar-dropdown-panel[data-panel="textColor"] .color-row input[type="color"]::-webkit-color-swatch,
+.toolbar-dropdown-panel[data-panel="bgColor"] .color-row input[type="color"]::-webkit-color-swatch {
+  border: none;
+  border-radius: 6px;
+}
+
+/* 8 preset swatch grid */
+.color-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 7px;
+  padding: 2px 4px 4px;
+}
+.color-preset {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.40), 0 1px 2px rgba(15, 23, 42, 0.06);
+  transition: transform 100ms ease, box-shadow 100ms ease;
+}
+.color-preset:hover {
+  transform: translateY(-1px) scale(1.04);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.55), 0 3px 8px rgba(15, 23, 42, 0.10);
+}
+.color-preset:active {
+  transform: translateY(0) scale(0.96);
+}
+
+/* Format button (Fmt) — strong contrast, enterprise grade */
+.editor-toolbar #formatBtn {
+  min-width: 52px;
+  font-weight: 800;
+  letter-spacing: .02em;
+  color: var(--text);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 14%, var(--soft)), color-mix(in srgb, var(--accent) 6%, var(--surface-1)));
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--hairline));
+}
+.editor-toolbar #formatBtn:hover {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 20%, var(--soft)), color-mix(in srgb, var(--accent) 10%, var(--surface-1)));
+}
+/* Clear format button — red contrast accent */
+.editor-toolbar .clear-format-btn {
+  color: #ffffff;
+  background: linear-gradient(180deg, #ef4444, #dc2626);
+  border-color: #b91c1c;
+  font-weight: 700;
+  letter-spacing: .02em;
+}
+.editor-toolbar .clear-format-btn:hover {
+  background: linear-gradient(180deg, #f87171, #ef4444);
+}
+
+/* Font size & heading select chrome */
+select#fontSizeSelect,
+select.heading-select {
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--hairline, var(--border, var(--line)));
+  background: var(--btn-bg, var(--panel));
+  color: var(--btn-fg, var(--text));
+}
+
+/* Settings workspace: stronger hierarchy, consistent field rhythm and less
+   visual noise while keeping every existing action available. */
+.settings-dialog {
+  width: min(960px, calc(100vw - 28px));
+  height: min(880px, calc(100dvh - 28px));
+  padding: 0 24px 24px;
+  gap: 14px;
+  background: var(--surface-0);
+}
+.settings-header {
+  margin: 0 -24px;
+  padding: 20px 24px 16px;
+  background: color-mix(in srgb, var(--surface-0) 94%, transparent);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--surface-0) 35%, transparent);
+}
+.settings-dialog .settings-section {
+  gap: 10px;
+  padding: 17px 18px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-1) 88%, transparent);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--line) 42%, transparent);
+}
+.settings-dialog .settings-section > strong {
+  display: block;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+.settings-dialog .settings-section > p { max-width: 72ch; }
+.settings-dialog .setting-row,
+.settings-dialog .setting-field {
+  min-height: 36px;
+}
+.settings-dialog .setting-field {
+  grid-template-columns: 88px minmax(0, 1fr);
+}
+.settings-dialog input:not([type="range"]):not([type="file"]),
+.settings-dialog select {
+  min-height: 36px;
+  border-radius: 8px;
+}
+.settings-dialog .inline-actions { align-items: center; margin-top: 2px; }
+.settings-dialog .inline-actions button { min-height: 34px; }
+.settings-dialog .shortcut-settings-section {
+  background: color-mix(in srgb, var(--surface-2) 72%, transparent);
+}
+.settings-dialog .shortcut-settings-section > summary {
+  min-height: 30px;
+  color: var(--text);
+}
+.settings-dialog .shortcut-settings-section > summary .muted { font-size: 11px; }
+.settings-dialog .shortcut-grid { margin-top: 12px; gap: 8px; }
+.settings-dialog .shortcut-grid div { padding: 9px 11px; border-radius: 9px; }
+@media (max-width: 760px) {
+  .editor-toolbar { height: 40px; min-height: 40px; }
+  .editor-panel { grid-template-rows: 40px minmax(0, 1fr) 24px; }
+  .editor-toolbar button, .editor-toolbar select, .editor-toolbar label { height: 29px; min-height: 29px; }
+  .settings-dialog { width: calc(100vw - 16px); padding-inline: 14px; }
+  .settings-header { margin-inline: -14px; padding-inline: 14px; }
+}
+
+.code-block { position: relative; }
+.code-language {
+  position: absolute;
+  top: 8px;
+  left: 12px;
+  z-index: 1;
+  color: color-mix(in srgb, var(--text) 62%, transparent);
+  font: 600 10px/1 "Cascadia Code", Consolas, monospace;
+  letter-spacing: .04em;
+  text-transform: lowercase;
+  pointer-events: none;
+}
+.code-block pre { padding-top: 30px; }
+
+/* CodeMirror semantic tokens are driven by theme variables so Markdown
+   punctuation and links stay readable in every application theme. */
+:root #editor .cm-editor {
+  --cm-link: #6b5f44;
+  --cm-url: #7a6b54;
+  --cm-keyword: #7a5c3e;
+  --cm-string: #6b7856;
+  --cm-number: #b08850;
+  --cm-type: #7a6856;
+  --cm-property: #8a7a68;
+  --cm-operator: #5a5048;
+  --cm-comment: #9a8f82;
+  --cm-variable: #3d3830;
+  --cm-function: #a07850;
+  --cm-tag: #7a5c3e;
+  --cm-attr: #8a7a68;
+  background-color: var(--bg);
+}
+body[data-theme="dark"] #editor .cm-editor {
+  --cm-heading: #96c9b0;
+  --cm-heading-strong: #b0d5c0;
+  --cm-link: #89b0c0;
+  --cm-url: #a5b0b8;
+  --cm-emphasis: #d8d3c6;
+  --cm-strong: #e2ddd0;
+  --cm-code: #d0cbc0;
+  --cm-comment: #8a9a88;
+  --cm-keyword: #a5b5cc;
+  --cm-string: #b8c9a8;
+  --cm-number: #d9c98b;
+  --cm-bool: #c9a4a4;
+  --cm-type: #96c9b0;
+  --cm-property: #a5c0b5;
+  --cm-operator: #b5b0a5;
+  --cm-punctuation: #b0aca0;
+  --cm-invalid: #c9a4a4;
+}
+body[data-theme="eye"] #editor .cm-editor {
+  /* 编辑器语法高亮：暖沙色调，低饱和墨色 */
+  --cm-link: #6c5e3c;
+  --cm-url: #7a6b54;
+  --cm-keyword: #7a5c3e;
+  --cm-string: #6b7856;
+  --cm-number: #b08850;
+  --cm-type: #7a6856;
+  --cm-property: #8a7a68;
+  --cm-operator: #5a5048;
+  --cm-comment: #9a8f82;
+  --cm-variable: #3a3530;
+  --cm-function: #a07850;
+  --cm-tag: #7a5c3e;
+  --cm-attr: #8a7a68;
+  background-color: var(--bg);
+}
+body[data-theme="glow"] #editor .cm-editor {
+  /* 编辑器语法高亮：自然绿色调 */
+  --cm-link: #6e8d3b;
+  --cm-url: #88a956;
+  --cm-keyword: #6e8d3b;
+  --cm-string: #6b7856;
+  --cm-number: #b08850;
+  --cm-type: #7a6856;
+  --cm-property: #8a9580;
+  --cm-operator: #4a5644;
+  --cm-comment: #8a9580;
+  --cm-variable: #2d3729;
+  --cm-function: #5c7a2c;
+  --cm-tag: #6e8d3b;
+  --cm-attr: #8a9580;
+  background-color: var(--bg);
+}
+body[data-theme="image"] #editor .cm-editor {
+  --cm-link: #1d4ed8;
+  --cm-url: #4338ca;
+  --cm-keyword: #6d28d9;
+  --cm-string: #047857;
+  --cm-number: #92400e;
+  --cm-type: #0369a1;
+  --cm-property: #0f766e;
+  --cm-comment: #64748b;
+  background-color: transparent;
+}
+
+.ai-drawer {
+  width: clamp(420px, 38vw, 560px);
+  background: var(--surface-1);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.ai-drawer-head { padding: 18px 20px 15px; }
+.ai-drawer-head strong { font-size: 16px; letter-spacing: .01em; }
+.ai-scope-row { padding: 11px 20px; }
+.ai-messages {
+  min-height: 0;
+  padding: 18px 20px 22px;
+  contain: layout paint;
+  scrollbar-gutter: stable;
+}
+.ai-message { min-width: 0; max-width: 100%; }
+.ai-message.user { max-width: 88%; }
+.ai-message-bubble { font-size: 14px; line-height: 1.7; }
+.ai-sources { gap: 8px; }
+.ai-source {
+  height: auto;
+  min-height: 82px;
+  align-content: start;
+  padding: 10px 12px;
+  overflow: visible;
+}
+.ai-source-title {
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-source-meta,
+.ai-source-excerpt {
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.5;
+  text-overflow: clip;
+  white-space: normal;
+}
+.ai-source-excerpt {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.ai-composer { padding: 14px 20px 18px; }
+.ai-composer textarea { min-height: 82px; max-height: 220px; line-height: 1.6; }
+
+@media (max-width: 720px) {
+  .settings-dialog { padding-inline: 14px; }
+  .settings-header { margin-inline: -14px; padding-inline: 14px; }
+  .shortcut-grid { grid-template-columns: 1fr; }
+  .ai-drawer { width: 100vw; }
+}
+
+/* Settings layout refinement: keep configuration and live status visible in
+   one viewport on desktop, while retaining a straightforward single-column
+   flow on narrow screens. Existing IDs and actions are intentionally intact. */
+@media (min-width: 900px) {
+  .settings-dialog .ai-settings-section {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(260px, .8fr);
+    column-gap: 22px;
+    align-items: start;
+  }
+
+  .settings-dialog .ai-settings-section > strong,
+  .settings-dialog .ai-settings-section > p,
+  .settings-dialog .ai-settings-section > datalist {
+    grid-column: 1 / -1;
+  }
+
+  .settings-dialog .ai-settings-section .setting-field,
+  .settings-dialog .ai-settings-section .inline-actions {
+    grid-column: 1;
+  }
+
+  .settings-dialog .ai-settings-section .ai-index-dashboard,
+  .settings-dialog .ai-settings-section #aiSettingsStatus {
+    grid-column: 2;
+  }
+
+  .settings-dialog .ai-settings-section .ai-index-dashboard {
+    grid-row: 3 / span 4;
+    align-self: stretch;
+    margin-top: 0;
+  }
+
+  .settings-dialog .ai-settings-section #aiSettingsStatus {
+    margin-top: -2px;
+  }
+}
+
+@media (max-width: 899px) {
+  .settings-dialog .ai-settings-section {
+    display: grid;
+  }
+}
+
+/* 沉浸编辑器（企业级文档排版）：
+   正文收进固定阅读测度并水平居中（与预览栏同一条版心），行号栏隐藏，
+   块间空行收缩到与预览段落间距一致 —— 观感向「文档」而不是「代码编辑器」靠拢，
+   顶部工具栏与全部编辑命令保持可用。 */
+body.immersive-editing {
+  background: var(--surface-0);
+}
+
+/* 版心测度：阅读/预览用 min(--prose-measure, 100% - --prose-gutter)，
+   沉浸正文字号比阅读大 --prose-scale 倍，版心同步放大同一系数，
+   两种视图每行容纳的字符数一致 —— 换行位置对齐，所见即所得成立。 */
+.app-shell.immersive {
+  --mt-immersive-measure: calc(var(--prose-measure) * var(--prose-scale));
+  /* 块间空行的行高：预览里空行不产生 DOM，块间距完全由 margin 提供（段落 1em=16px）；
+     沉浸里每个空行都是一行 CodeMirror 文本，保持整行高会把所有间距放大一倍。
+     收缩到 16px ≈ 预览的段落间距；光标仍清晰可见、可点击，不会出现 0 高光标。 */
+  --mt-immersive-blank-line: 16px;
+}
+
+.app-shell.immersive .workspace {
+  grid-template-rows: 52px minmax(0, 1fr);
+  background: var(--surface-0);
+}
+
+.app-shell.immersive .topbar {
+  min-height: 52px;
+  padding: 7px 16px;
+  border-bottom: 1px solid var(--hairline);
+  background: color-mix(in srgb, var(--surface-1) 96%, transparent);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--line) 35%, transparent);
+}
+
+.app-shell.immersive .doc-meta {
+  min-width: 0;
+}
+
+.app-shell.immersive .doc-meta strong {
+  display: block;
+  overflow: hidden;
+  max-width: min(60vw, 720px);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+  letter-spacing: .01em;
+}
+
+.app-shell.immersive .toolbar {
+  gap: 6px;
+}
+
+.app-shell.immersive .toolbar button {
+  min-height: 32px;
+  height: 32px;
+  padding-inline: 12px;
+}
+
+.app-shell.immersive .editor-panel {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: 42px minmax(0, 1fr);
+  background: var(--surface-0);
+}
+
+.app-shell.immersive .editor-toolbar {
+  min-height: 42px;
+  height: 42px;
+  padding-inline: 10px;
+  border-bottom: 1px solid var(--hairline);
+  background: color-mix(in srgb, var(--surface-1) 97%, transparent);
+}
+
+.app-shell.immersive #editor {
+  min-width: 0;
+  border-right: 0;
+  background: var(--surface-0);
+}
+
+.app-shell.immersive #editor .cm-content {
+  /* 百分比 padding 相对滚动视口解析：宽屏时正文栏 = 版心宽并水平居中，
+     窄屏时退化为最小留白（--prose-gutter 的一半）；垂直滚动条出现/消失会自动重新居中。 */
+  padding: 36px max(calc(var(--prose-gutter) / 2), calc((100% - var(--mt-immersive-measure)) / 2)) 55vh;
+  /* 去掉历史上的 max(16px, …) 下限：该下限会在文档字号 ≤15.4px 时把正文强制放大，
+     版心却不变 → 换行与阅读栏错位。现在字号与版心同乘 --prose-scale，小字号同样对齐。 */
+  font-size: calc(var(--prose-size) * var(--prose-scale));
+  line-height: var(--prose-leading);
+}
+
+/* 行号/折叠栏是代码编辑器的部件：在文档视图里会把视觉重心拉向左缘，
+   与居中版心直接冲突。沉浸模式隐藏之；普通编辑态的行号与折叠不受影响。
+   （display 在 .cm-gutters 上无其它声明竞争，低权重规则即可生效） */
+.app-shell.immersive #editor .cm-gutters {
+  display: none;
+}
+
+/* 块间空行收缩（测度见上方变量说明）。仅命中真正空行：
+   CodeMirror 只给空行渲染唯一的 <br> 子节点，含任何内容的行都不会匹配；
+   :has() 不被支持时整条规则被丢弃，空行退回整行高 —— 平滑降级，无副作用。 */
+.app-shell.immersive #editor .cm-line:has(> br:only-child) {
+  line-height: var(--mt-immersive-blank-line);
+}
+
+/* 多行块（围栏代码 / 表格 / 列表 / 引用 / $$ 公式）由 collectMdBlockRanges 整块接管：
+   首行放渲染结果，其余行用 MarkdownBlankWidget 占位。占位行产出的是 <span class="mt-md-blank">
+   而不是 <br>，上面那条 :has(> br:only-child) 命中不了 —— 一个 5 行的围栏代码块会在
+   图表/代码下方拖出 4 整行（约 130px）的纯空白。这里把占位行一并收缩。 */
+.app-shell.immersive #editor .cm-line:has(> .mt-md-blank) {
+  line-height: var(--mt-immersive-blank-line);
+}
+
+/* 图表渲染失败时，mermaid 的报错文本可能有几十行（例如 architecture-beta 不支持中文标签，
+   解析器会把整段英文诊断吐出来），塞进 70vh 容器就变成一整屏红色错误区。
+   沉浸模式下限高并允许内部滚动，避免报错把文档版式冲掉。 */
+.app-shell.immersive .mt-md-wysiwyg .chart-error {
+  max-height: 180px;
+  overflow: auto;
+}
+
+.app-shell.immersive .cm-editor .cm-line {
+  padding-left: 0;
+}
+
+.app-shell.immersive #preview {
+  display: none;
+}
+
+.app-shell.immersive .coffee-button {
+  display: none;
+}
+
+/* ---------------------------------------------------------------------------
+   沉浸式渲染（所见即所得）
+   仅作用于沉浸模式下由编辑器渲染出的块级预览，普通编辑态完全不受影响。
+   .mt-md-block 为被替换为预览的块行，.mt-md-wysiwyg 为注入的渲染结果容器。
+
+   渲染容器同时携带 markdown-body 类，直接复用预览面板那套 400+ 条排版规则
+   （图片限宽限高、表格边框、代码块底色、引用缩进、链接取主题色、按主题微调…），
+   不再维护一份追不上的手写副本。
+   下面的「容器级属性中和」把 .markdown-body 自带的容器级属性（限宽/居中/内边距/
+   字号/行高）还原成继承值——沉浸模式的宽度与留白由外层 .cm-content 控制。
+   --------------------------------------------------------------------------- */
+
+.app-shell.immersive .cm-line .mt-md-wysiwyg.markdown-body {
+  width: auto;
+  min-width: 0;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  font-size: inherit;
+  /* 行高继承编辑器行盒：--prose-leading 已在 #editor/.cm-content 上统一，
+     渲染块与源码行、阅读栏三处比例一致（历史上此处硬写 1.82 而 #editor 是 1.76，
+     导致光标移入/移出时该行"变脸"）。 */
+  line-height: inherit;
+}
+
+.app-shell.immersive .cm-line.mt-md-block {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+/* 下面只保留 .markdown-body 那套规则「没有覆盖到」的部分：
+   —— 容器基座（颜色/字体）与首末子元素的边距归零。
+   其余元素级排版（h1~h6、p、ul/ol、li、blockquote、hr、strong、code、pre、
+   table、th/td）已全部由 .markdown-body 提供，不再重复定义。
+   历史教训：此前这里手写了 10 种元素的规则，其中 pre 背景、table collapse、
+   th/td padding 等声明因被轻量模式的 revert 规则反制而从未生效，属于无效功。 */
+.app-shell.immersive .mt-md-wysiwyg {
+  --mt-wysiwyg-ink: var(--text);
+  color: var(--mt-wysiwyg-ink);
+  font-family: var(--font-sans, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif);
+  letter-spacing: .005em;
+}
+
+.app-shell.immersive .mt-md-wysiwyg > *:first-child {
+  margin-top: 0;
+}
+
+.app-shell.immersive .mt-md-wysiwyg > *:last-child {
+  margin-bottom: 0;
+}
+
+@media (max-width: 720px) {
+  .app-shell.immersive .topbar {
+    padding-inline: 10px;
+  }
+
+  .app-shell.immersive .doc-meta strong {
+    max-width: 46vw;
+    font-size: 14px;
+  }
+
+  .app-shell.immersive #editor .cm-content {
+    /* 窄屏不再追求居中留白，仅保留贴边可读宽度 */
+    padding-inline: 14px;
+  }
+}
+

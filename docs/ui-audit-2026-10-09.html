@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MyTempleKnowledge 界面 UI 设计审计报告 · v2.1.35</title>
+<style>
+  :root{
+    --ink:#2a2621; --ink-2:#4d4740; --ink-3:#7a7268; --ink-4:#a39a8d;
+    --paper:#fbf9f5; --card:#ffffff; --line:#e8e2d8; --line-2:#f1ece3;
+    --accent:#6b5f44; --accent-soft:#f4efe4;
+    --danger:#b3261e; --danger-bg:#fdecea;
+    --warn:#8a5a00; --warn-bg:#fdf3e2;
+    --ok:#2f6b4f; --ok-bg:#e9f4ee;
+    --info:#31527a; --info-bg:#eaf0f8;
+    --sans:"Segoe UI","Microsoft YaHei",-apple-system,"Helvetica Neue",Arial,sans-serif;
+    --mono:"Cascadia Mono","Consolas","Courier New",monospace;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+    font-size:15px;line-height:1.75;letter-spacing:.005em;
+  }
+  .wrap{width:min(1080px,calc(100% - 48px));margin:0 auto;padding:56px 0 96px}
+  header.doc{border-bottom:2px solid var(--ink);padding-bottom:24px;margin-bottom:44px}
+  .eyebrow{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
+  header.doc h1{font-size:34px;line-height:1.25;margin:12px 0 10px;letter-spacing:-.01em;font-weight:700}
+  header.doc .sub{color:var(--ink-2);font-size:16px;margin:0 0 18px;max-width:74ch}
+  .meta{display:flex;flex-wrap:wrap;gap:8px 28px;font-size:13px;color:var(--ink-3)}
+  .meta b{color:var(--ink-2);font-weight:600}
+  h2{font-size:22px;margin:56px 0 6px;letter-spacing:-.005em;font-weight:700;
+     padding-top:20px;border-top:1px solid var(--line)}
+  h2 .n{display:inline-block;min-width:1.9em;color:var(--ink-4);font-variant-numeric:tabular-nums;font-weight:600}
+  h3{font-size:16.5px;margin:34px 0 8px;font-weight:650;color:var(--ink)}
+  h4{font-size:14px;margin:22px 0 6px;font-weight:650;color:var(--ink-2);letter-spacing:.01em}
+  p{margin:10px 0}
+  ul,ol{margin:10px 0;padding-left:1.35em}
+  li{margin:5px 0}
+  code{font-family:var(--mono);font-size:.88em;background:var(--accent-soft);
+       padding:1px 5px;border-radius:4px;color:#5c5039}
+  .lead{font-size:16px;color:var(--ink-2)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:22px 24px;margin:18px 0}
+  .card.tight{padding:16px 18px}
+  .grid{display:grid;gap:14px}
+  .g2{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+  .g4{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13.5px;
+        background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--line-2);vertical-align:top}
+  th{background:#f7f4ee;font-weight:650;font-size:12.5px;letter-spacing:.02em;color:var(--ink-2);white-space:nowrap}
+  tr:last-child td{border-bottom:0}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;font-family:var(--mono);font-size:12.5px;white-space:nowrap}
+  .scroll{overflow-x:auto}
+  .badge{display:inline-block;font-size:11.5px;font-weight:700;padding:2px 8px;border-radius:99px;
+         letter-spacing:.03em;white-space:nowrap;line-height:1.6}
+  .p0{background:var(--danger-bg);color:var(--danger);border:1px solid #f3c9c5}
+  .p1{background:var(--warn-bg);color:var(--warn);border:1px solid #efd9b4}
+  .p2{background:var(--info-bg);color:var(--info);border:1px solid #cddbec}
+  .good{background:var(--ok-bg);color:var(--ok);border:1px solid #c5e0d2}
+  .fail{color:var(--danger);font-weight:700}
+  .pass{color:var(--ok);font-weight:700}
+  .mid{color:var(--warn);font-weight:700}
+  figure{margin:22px 0;padding:0}
+  figure svg{width:100%;height:auto;display:block;background:var(--card);
+             border:1px solid var(--line);border-radius:12px}
+  figcaption{font-size:12.5px;color:var(--ink-3);margin-top:8px;text-align:center}
+  .sw{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:12.5px}
+  .sw i{width:15px;height:15px;border-radius:4px;border:1px solid rgba(0,0,0,.18);display:inline-block;flex:0 0 auto}
+  .quote{border-left:3px solid var(--accent);background:var(--accent-soft);
+         padding:12px 18px;border-radius:0 8px 8px 0;margin:16px 0;color:var(--ink-2)}
+  .kpi{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+  .kpi b{display:block;font-size:26px;font-weight:700;letter-spacing:-.02em;line-height:1.2}
+  .kpi span{font-size:12.5px;color:var(--ink-3);display:block;margin-top:4px}
+  .kpi.bad b{color:var(--danger)} .kpi.warn b{color:var(--warn)} .kpi.ok b{color:var(--ok)}
+  .tagrow{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 0}
+  .tag{font-size:12px;font-family:var(--mono);background:#f6f2ea;border:1px solid var(--line);
+       border-radius:6px;padding:1px 7px;color:var(--ink-2)}
+  .route{display:grid;gap:12px}
+  .step{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--accent);
+        border-radius:8px;padding:14px 18px}
+  .step h4{margin:0 0 4px;font-size:14.5px;color:var(--ink)}
+  .step p{margin:4px 0;font-size:13.5px;color:var(--ink-2)}
+  .ok-list{list-style:none;padding-left:0}
+  .ok-list li{padding-left:1.5em;position:relative}
+  .ok-list li::before{content:"→";position:absolute;left:0;color:var(--ink-4)}
+  footer.doc{margin-top:64px;padding-top:22px;border-top:1px solid var(--line);
+             font-size:12.5px;color:var(--ink-3)}
+  .anchor{scroll-margin-top:24px}
+  @media print{
+    body{background:#fff;font-size:11.5pt}
+    .wrap{width:100%;padding:0}
+    h2{page-break-after:avoid} table,figure,.card{page-break-inside:avoid}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="doc">
+  <div class="eyebrow">UI Design Audit · 界面设计审计</div>
+  <h1>MyTempleKnowledge 界面 UI 审计：主题体系与三种文档视图的渲染一致性</h1>
+  <p class="sub">针对「企业级审美 · 专精 · 轻松自然 · 和谐美观 · 交互流畅」这一目标，对 <code>public/styles.css</code>（11,578 行）与三种文档视图（编辑 / 预览 / 沉浸）做了静态解析 + 无头浏览器实测。结论是：<b>颜色层已经达到不错的自然调性，真正的短板在「度量层」与「令牌层」</b>——同一个段落在三种视图里用的是不同的字体、不同的行高、不同的版心推导方式，而支撑这套外观的令牌体系有 1/5 是空的或重复的。</p>
+  <div class="meta">
+    <span><b>版本</b> v2.1.35</span>
+    <span><b>审计日期</b> 2026-10-09</span>
+    <span><b>方法</b> 静态解析 + Edge/Chromium 计算样式实测（CDP）</span>
+    <span><b>改动</b> 诊断未改文件；PR-1 → PR-5 已实施（见「实施结果」）</span>
+  </div>
+</header>
+
+<!-- ============ 实施结果 ============ -->
+<h2 class="anchor"><span class="n">★</span>实施结果（本报告已全部落地）</h2>
+
+<p class="lead">本报告的 PR-1 → PR-5 已按序实施完毕，全部为 CSS 令牌、选择器组织与渲染容器补全，<b>未改动类名契约、DOM 结构、任何 JS 逻辑与路由</b>。下列数据均为脚本实测产出，可复跑。</p>
+
+<div class="grid g4" style="margin:22px 0">
+  <div class="kpi ok"><b>0</b><span>悬空的 <code>var()</code> 引用（实施前 23 个幽灵变量）</span></div>
+  <div class="kpi ok"><b>0</b><span>对比度不达标项（4 主题 × 19 个文字目标 + 图形目标）</span></div>
+  <div class="kpi ok"><b>0</b><span>三视图度量违规项（阅读/编辑/沉浸的行高与版心全部同源）</span></div>
+  <div class="kpi ok"><b>124</b><span><code>npm test</code> 全绿（实施前 94 项）</span></div>
+</div>
+
+<table>
+  <thead><tr><th>阶段</th><th>内容</th><th>实测结论</th></tr></thead>
+  <tbody>
+    <tr><td><b>PR-1</b></td><td>令牌补齐 + 色彩可达性</td><td>23 个幽灵变量收敛为 0；28 处实心强调底迁移到 <code>--accent-solid</code>/<code>--on-accent</code>；深色主题「最近文档」1.25:1 → <b>6.02:1</b>，工作区徽标 2.29:1 → <b>7.30:1</b>，护眼主题 2.67:1 → <b>4.81:1</b></td></tr>
+    <tr><td><b>PR-2</b></td><td>度量统一（<code>--prose-*</code> 令牌）</td><td>三视图 × 四主题行高计算值完全一致（28.48px / 1.78）；阅读与沉浸 em 宽度均为 <b>53.75em</b>；小字号 12/14/15/24px 全部按 1.04 放大且尊重下限</td></tr>
+    <tr><td><b>PR-3</b></td><td>沉浸模式补全（消除「半渲染」感）</td><td>新增六类行内语义标记渲染（加粗/斜体/代码/链接/删除线/高亮），沉浸下无裸露语法标记；渲染容器改用正文字体栈（源文本保持等宽）；块间距令牌化</td></tr>
+    <tr><td><b>PR-4</b></td><td>交互与密度</td><td>分隔条命中区 3px → <b>10px</b>；工具栏由固定 42px 行改为随内容自适应（不再裁切）；状态栏精简至 4 项并按 1200/1000/780px 断点渐进收起、自带分隔符联动；全局焦点环实测 22/22 元素 Tab 可见；五态（默认/hover/按下/焦点/禁用）基于 <code>CSS.forcePseudoState</code> 权威取值确认可区分；<code>prefers-reduced-motion</code> 下 11 个动画元素全部停止</td></tr>
+    <tr><td><b>PR-5</b></td><td>工程护栏</td><td>样式表拆为 <code>frontend/styles/</code> 5 层源文件 + <code>npm run build:css</code> 合并输出（产物与层源逐字节一致、构建幂等）；新增 12 条校验测试；建立「4 主题 × 3 视图 × 15 目标」计算样式基线快照</td></tr>
+  </tbody>
+</table>
+
+<div class="card tight">
+  <p style="margin:0 0 6px"><b>拆表后的改动纪律</b>：样式表唯一可编辑的源是 <code>frontend/styles/</code> 下的 5 个层文件，<code>public/styles.css</code> 是合并产物。改法：改层文件 → <code>npm run build:css</code> → <code>npm test</code>。直接改产物会被校验测试拦下。层文件顺序即 CSS 级联顺序，不可调换。</p>
+  <div class="tagrow">
+    <span class="tag">npm run build:css</span>
+    <span class="tag">npm run build:editor</span>
+    <span class="tag">npm test</span>
+    <span class="tag">npm run audit:contrast</span>
+    <span class="tag">npm run verify:computed</span>
+    <span class="tag">npm run update:css-snapshot</span>
+  </div>
+</div>
+
+<p style="font-size:13px;color:var(--ink-3)">缓存提醒：任何 <code>public/</code> 静态资源改动都必须同步递增 <code>?v=</code>（<code>index.html</code> 4 处 + <code>app.js</code> 首行），否则 WebView2 会继续使用磁盘缓存。本次已递增至 <code>20261009-v5</code>。</p>
+
+<!-- ============ 1 ============ -->
+<h2 class="anchor"><span class="n">01</span>执行摘要</h2>
+
+<p class="lead">一句话诊断：<b>颜色是「风格」，度量是「秩序」。这个项目的颜色已经有风格了，但度量还没有秩序。</b>三种视图各自维护自己的字体栈、行高与版心公式，加上令牌层缺失，导致同一份文档在切换视图时会「换一副面孔」——这在企业级产品里是最容易被感知为「不够精致」的一类问题，而它恰恰不靠审美品味解决，靠规范解决。</p>
+
+<div class="grid g4" style="margin:22px 0">
+  <div class="kpi bad"><b>23</b><span>被引用却从未定义的 CSS 变量（其中 9 处无回退值，声明被整条丢弃）</span></div>
+  <div class="kpi bad"><b>1.25:1</b><span>暗色主题下「最近文档」激活标签的文字对比度（WCAG 要求 ≥4.5:1）</span></div>
+  <div class="kpi warn"><b>3 套</b><span>同一段落在三种视图下使用的字体栈数量（等宽 / 无衬线 / 无衬线但不跟随用户设置）</span></div>
+  <div class="kpi warn"><b>578</b><span>样式表中的 <code>!important</code> 次数；z-index 使用 23 种取值，含 2147483647</span></div>
+</div>
+
+<h3>评分卡</h3>
+<div class="scroll">
+<table>
+  <thead><tr><th>维度</th><th style="width:78px">评分</th><th>依据（实测）</th></tr></thead>
+  <tbody>
+    <tr><td>色彩调性与氛围</td><td><b class="pass">B+</b></td><td>暖中性 + 护眼绿两族配色协调，暗色主题是精心调过的「暖灰绿」而非简单反色，有真实审美判断。</td></tr>
+    <tr><td>色彩可访问性</td><td><b class="fail">D</b></td><td>实心强调底 + 白字在暗色 2.29:1、护眼 2.67:1；<code>--accent</code> 一个值同时当「正文强调色」和「实心按钮底」，数学上不可能同时达标。</td></tr>
+    <tr><td>度量一致性（三视图）</td><td><b class="fail">D+</b></td><td>正文行高在 29.12 / 30.2848 / 29.952 三个值之间摆动；段落在沉浸模式下是等宽字体、在预览模式下是无衬线字体。</td></tr>
+    <tr><td>令牌体系完整性</td><td><b class="fail">D</b></td><td>107 个变量中 85 个被重复定义；暗色主题漏覆盖 15 个；存在 23 个「幽灵变量」。</td></tr>
+    <tr><td>尺度体系（字阶/圆角/动效）</td><td><b class="fail">D</b></td><td>圆角 27 种取值、字号 35 种、行高 20 种、过渡时长 15 种；已定义的 <code>--radius-*</code> 只被用了 3 次。</td></tr>
+    <tr><td>交互状态表达</td><td><b class="fail">D+</b></td><td>按钮的 hover 与 active 视觉几乎相同（都只改边框+文字色）；模式切换按钮的文案含义与 <code>.active</code> 含义互相冲突。</td></tr>
+    <tr><td>信息密度与可发现性</td><td><b class="warn">C−</b></td><td>编辑器工具栏单行 60 个控件、横向滚动条被隐藏；状态栏 11px 字号塞 8 项信息。</td></tr>
+    <tr><td>键盘与动效尊重</td><td><b class="fail">D</b></td><td>全站仅 5 处 <code>:focus-visible</code>、10 处裸 <code>outline:none</code>；<code>prefers-reduced-motion</code> 只覆盖 transition，未覆盖 15 个 @keyframes。</td></tr>
+    <tr><td>工程可维护性</td><td><b class="warn">C</b></td><td>11,578 行单文件、578 个 !important、657 处硬编码色值——任何视觉改动都有回归风险。</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="quote">
+  <b>最值得先做的一件事：</b>把「正文版心」抽成一组唯一令牌（<code>--prose-size / --prose-leading / --prose-measure</code>），让阅读、预览、沉浸三处只引用它、不再各写各的字面量。这是投入最小、感知收益最大的一步——它同时解决字体跳变、行高跳变、换行位置漂移三个问题。
+</div>
+
+<!-- ============ 2 ============ -->
+<h2 class="anchor"><span class="n">02</span>审计方法（可复现）</h2>
+<p>全部结论都有数据来源，不依赖主观判断或截图观感：</p>
+<ol>
+  <li><b>令牌与尺度静态解析</b>：写了一个 CSS 解析器，逐字符跟踪括号深度，提取每个自定义属性的「定义选择器 + 值 + 行号」，再与实际引用位置做差集。产出 107 个变量的定义/引用矩阵。（<code>.verify/audit-css.mjs</code>）</li>
+  <li><b>计算样式实测</b>：用 puppeteer-core + 本机 Edge 无头模式加载<b>真实</b> <code>public/styles.css</code>，构造三视图真实的祖先链（<code>app-shell.immersive &gt; .editor-panel &gt; #editor &gt; .cm-editor &gt; .cm-scroller &gt; .cm-content &gt; .cm-line</code>），通过 CDP <code>CSS.getComputedStyleForNode</code> 取权威计算值，覆盖 4 个主题 × 3 种视图。（<code>.verify/probe-run.mjs</code>）</li>
+  <li><b>对比度计算</b>：按 WCAG 2.x 相对亮度公式计算，<code>rgba()</code> 值先按 alpha 合成到主题底色上再比对，避免「半透明面板算不准」的常见误判。</li>
+</ol>
+<div class="card tight">
+  <p style="margin:0;font-size:13px;color:var(--ink-2)"><b>一个方法论提醒（本次踩到的坑）：</b>在同一帧内 <code>element.classList.add()</code> 之后立刻 <code>getComputedStyle()</code> 读取，在无头 Chromium 里可能返回<b>陈旧的层叠结果</b>——我第一轮实测因此得到「沉浸模式的居中版心完全没生效」的错误结论。改用 CDP 权威接口 + 帧间等待后，真实读数是生效的。凡是「CSS 计算样式」结论，都必须用可以复现的取值路径验证。</p>
+</div>
+
+<!-- ============ 3 ============ -->
+<h2 class="anchor"><span class="n">03</span>诊断一：令牌层有 1/5 是空的或重复的</h2>
+
+<p>样式表里定义了 <b>107</b> 个自定义属性，看起来体系很完整。但解析后发现两个结构性问题：<b>（a）23 个变量被引用却从未定义</b>，<b>（b）主题覆盖不成矩阵</b>。</p>
+
+<h3>3.1 幽灵变量：引用了，但从来没有定义</h3>
+<p>这 23 个变量在所有主题里都不存在。有回退值的还能工作；<b>没有回退值的 9 处声明会被整条丢弃</b>——这类问题不会报错，只会「静默失效」，是最难排查的一类样式缺陷。</p>
+<div class="scroll">
+<table>
+  <thead><tr><th>变量</th><th class="num">引用</th><th class="num">无回退</th><th>实际后果</th></tr></thead>
+  <tbody>
+    <tr><td><code>--hover</code></td><td class="num">4</td><td class="num fail">3</td><td>目录树 / 列表行的 hover 底色声明被丢弃，悬停反馈缺失（L1716、L3743、L3783）</td></tr>
+    <tr><td><code>--secondary</code></td><td class="num">1</td><td class="num fail">1</td><td><code>.recent-item</code> 的标签底色失效，退化为全透明（L1706）</td></tr>
+    <tr><td><code>--border</code></td><td class="num">13</td><td class="num fail">2</td><td>2 处边框声明被丢弃（L6952、L6978）</td></tr>
+    <tr><td><code>--font-sans</code></td><td class="num">2</td><td class="num">0</td><td><b>沉浸模式的正文渲染容器</b>取不到它，只能落到内置回退栈——导致渲染块不跟随用户字体设置（详见第 4 节）</td></tr>
+    <tr><td><code>--border-strong</code> / <code>--shadow-lg</code> / <code>--md-fg</code></td><td class="num">各 1</td><td class="num fail">各 1</td><td>3 处声明被丢弃（L7210、L7213、L2628）</td></tr>
+    <tr><td><code>--mono</code> / <code>--mono-font</code> / <code>--sans-font</code></td><td class="num">5</td><td class="num">0</td><td>三套并存的「等宽/无衬线字体」别名，全部落空 → 字体栈在 5 处被重复硬编码</td></tr>
+    <tr><td><code>--danger</code> / <code>--warning</code> / <code>--text-soft</code> / <code>--text-faint</code> / <code>--text-secondary</code></td><td class="num">8</td><td class="num">0</td><td>语义色令牌缺失，组件层只能写死 <code>#ef4444</code>、<code>#6b7280</code> 等</td></tr>
+    <tr><td><code>--btn-bg</code> / <code>--btn-fg</code> / <code>--bg-subtle</code> / <code>--bg-soft</code> / <code>--border-color</code></td><td class="num">11</td><td class="num">0</td><td>组件级令牌从未落地</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>3.2 主题覆盖不成矩阵</h3>
+<p>样式表里有 <b>4 处</b>在定义主题变量（<code>:root</code> 出现两次，<code>body[data-theme]</code> 三处），导致同一变量在不同主题下的存在性不一致：</p>
+<div class="scroll">
+<table>
+  <thead><tr><th>缺口</th><th class="num">数量</th><th>代表项</th><th>影响</th></tr></thead>
+  <tbody>
+    <tr><td>暗色主题未覆盖</td><td class="num">15</td><td><code>--md-table-accent</code>、<code>--md-tag</code>、<code>--radius-sm/md/lg</code>、<code>--cm-variable/function/tag/attr</code></td><td>其中 <code>--md-table-accent</code>、<code>--md-tag</code> 是<b>颜色</b>令牌却只在 <code>:root</code> 定义 → 暗色下表格强调色与标签色不跟随主题，仍是浅色值</td></tr>
+    <tr><td>护眼/柔光未覆盖</td><td class="num">11</td><td>同上（除 <code>--cm-*</code>）</td><td>同上</td></tr>
+    <tr><td>变量被重复定义 ≥2 处</td><td class="num">85 / 107</td><td><code>--surface-*</code>、<code>--shadow-*</code>、<code>--hairline</code>、<code>--accent-soft</code>…</td><td>同一语义在 3~4 个位置各写一遍，改一处不会全生效——这是「改了没变化」类 bug 的主要来源</td></tr>
+  </tbody>
+</table>
+</div>
+<p>另外，样式表中还有 <b>两套并行的设计令牌块</b>：第 1 行的 <code>:root</code>（暖中性基座）与第 5835 行的 <code>:root</code>（沉浸式视觉系统，含 <code>--surface-0: #f5f7f9</code> 等）。后者的 <code>--surface-0</code> 是<b>冷灰蓝</b>，而整个默认主题的调性是<b>暖米色</b>（<code>--bg: #faf7f2</code>）——默认主题的页面底实际由后定义的冷灰蓝接管，形成「暖面板坐在冷底色上」的细微割裂。</p>
+
+<!-- ============ 4 ============ -->
+<h2 class="anchor"><span class="n">04</span>诊断二：同一个段落，三种视图三副面孔</h2>
+
+<p>这是最核心的问题，也是「和谐」感缺失的直接来源。下面是 4 个主题 × 3 种视图下、同一段正文的真实计算样式（1440×900，CDP 读数）：</p>
+
+<div class="scroll">
+<table>
+  <thead><tr><th>视图 / 元素</th><th>font-family（首项）</th><th class="num">font-size</th><th class="num">line-height</th><th class="num">letter-spacing</th></tr></thead>
+  <tbody>
+    <tr><td><b>阅读</b> · 正文 <code>p</code></td><td>Inter</td><td class="num">16px</td><td class="num">29.12px <span style="color:var(--ink-3)">(1.82)</span></td><td class="num">0.08px</td></tr>
+    <tr><td><b>修改</b> · 预览正文 <code>p</code></td><td>Inter</td><td class="num">16px</td><td class="num">29.12px <span style="color:var(--ink-3)">(1.82)</span></td><td class="num">0.08px</td></tr>
+    <tr><td><b>修改</b> · 源码行 <code>.cm-line</code></td><td><b>Cascadia Mono</b>（等宽栈）</td><td class="num">16px</td><td class="num">28.16px <span style="color:var(--ink-3)">(1.76)</span></td><td class="num">0.032px</td></tr>
+    <tr><td><b>沉浸</b> · 版心 <code>.cm-content</code></td><td><b>Cascadia Mono</b></td><td class="num">16.64px</td><td class="num">29.952px <span style="color:var(--ink-3)">(1.8)</span></td><td class="num">0.032px</td></tr>
+    <tr><td><b>沉浸</b> · 未渲染源码行</td><td><b>Cascadia Mono</b></td><td class="num">16.64px</td><td class="num">29.952px <span style="color:var(--ink-3)">(1.8)</span></td><td class="num">0.032px</td></tr>
+    <tr><td><b>沉浸</b> · 已渲染块容器</td><td><b>-apple-system / Segoe UI</b></td><td class="num">16.64px</td><td class="num"><b>30.2848px</b> <span style="color:var(--ink-3)">(1.82)</span></td><td class="num">0.0832px</td></tr>
+  </tbody>
+</table>
+</div>
+
+<figure>
+<svg viewBox="0 0 1000 330" role="img" aria-label="三种视图下同一段落的字体、行高与标记可见性对比示意">
+  <rect width="1000" height="330" fill="#ffffff"/>
+  <text x="40" y="38" font-family="Segoe UI, Microsoft YaHei" font-size="16" font-weight="700" fill="#2a2621">同一个段落 · 三种视图的实际渲染</text>
+  <text x="40" y="60" font-family="Segoe UI, Microsoft YaHei" font-size="12.5" fill="#7a7268">实测值：阅读/预览 29.12px 行高、无衬线；沉浸的渲染块 30.2848px 无衬线；沉浸的源码行 29.952px 等宽</text>
+
+  <!-- 阅读 -->
+  <rect x="40" y="86" width="290" height="200" rx="10" fill="#fbf9f5" stroke="#e8e2d8"/>
+  <text x="58" y="110" font-family="Segoe UI, Microsoft YaHei" font-size="13" font-weight="700" fill="#2f6b4f">阅读模式 / 预览栏</text>
+  <text x="58" y="130" font-family="Consolas, monospace" font-size="11.5" fill="#7a7268">Inter · 16px · LH 29.12</text>
+  <text x="58" y="162" font-family="Segoe UI, Microsoft YaHei" font-size="13.5" fill="#2a2621">这是一段正文，包含 <tspan font-weight="700">加粗</tspan> 与</text>
+  <text x="58" y="190" font-family="Segoe UI, Microsoft YaHei" font-size="13.5" fill="#2a2621"><tspan fill="#6b5f44" text-decoration="underline">链接</tspan> 和 <tspan font-family="Consolas, monospace" font-size="12.5" fill="#5c5039">行内代码</tspan>。</text>
+  <text x="58" y="228" font-family="Segoe UI, Microsoft YaHei" font-size="12" fill="#2f6b4f">✓ 语义全部呈现</text>
+  <text x="58" y="250" font-family="Segoe UI, Microsoft YaHei" font-size="12" fill="#2f6b4f">✓ 与作者所见一致</text>
+  <text x="58" y="272" font-family="Segoe UI, Microsoft YaHei" font-size="12" fill="#7a7268">行高 1.82 · 版心 920px @16px = 57.5em</text>
+
+  <!-- 修改 -->
+  <rect x="355" y="86" width="290" height="200" rx="10" fill="#fbf9f5" stroke="#e8e2d8"/>
+  <text x="373" y="110" font-family="Segoe UI, Microsoft YaHei" font-size="13" font-weight="700" fill="#8a5a00">修改模式（分栏）</text>
+  <text x="373" y="130" font-family="Consolas, monospace" font-size="11.5" fill="#7a7268">Cascadia Mono · 16px · LH 28.16</text>
+  <text x="373" y="162" font-family="Consolas, monospace" font-size="13" fill="#2a2621">这是一段正文，包含 **加粗** 与</text>
+  <text x="373" y="189" font-family="Consolas, monospace" font-size="13" fill="#2a2621">[链接](#) 和 `行内代码`。</text>
+  <text x="373" y="228" font-family="Segoe UI, Microsoft YaHei" font-size="12" fill="#8a5a00">△ 左侧是源码（合理，编辑需要）</text>
+  <text x="373" y="250" font-family="Segoe UI, Microsoft YaHei" font-size="12" fill="#b3261e">✗ 左右行高 28.16 ≠ 29.12</text>
+  <text x="373" y="272" font-family="Segoe UI, Microsoft YaHei" font-size="12" fill="#7a7268">同一屏内两种律动</text>
+
+  <!-- 沉浸 -->
+  <rect x="670" y="86" width="290" height="200" rx="10" fill="#fff8f7" stroke="#f3c9c5"/>
+  <text x="688" y="110" font-family="Segoe UI, Microsoft YaHei" font-size="13" font-weight="700" fill="#b3261e">沉浸模式（同一屏内混排）</text>
+  <text x="688" y="130" font-family="Consolas, monospace" font-size="11.5" fill="#7a7268">上方：等宽 29.952 / 下方：无衬线 30.2848</text>
+  <text x="688" y="162" font-family="Consolas, monospace" font-size="13" fill="#2a2621">光标所在段：这是一段正文，包含</text>
+  <text x="688" y="189" font-family="Consolas, monospace" font-size="13" fill="#2a2621">**加粗** 与 [链接](#)。</text>
+  <text x="688" y="219" font-family="Segoe UI, Microsoft YaHei" font-size="13.5" fill="#2a2621">已渲染块：这是一段正文，包含</text>
+  <text x="688" y="246" font-family="Segoe UI, Microsoft YaHei" font-size="13.5" fill="#2a2621"><tspan font-weight="700">加粗</tspan> 与 链接。</text>
+  <text x="688" y="272" font-family="Segoe UI, Microsoft YaHei" font-size="12" fill="#b3261e">✗ 字体 + 行高 + 边距三重跳变</text>
+</svg>
+<figcaption>图 1 · 三种视图的渲染差异。沉浸模式内部还叠加了「已渲染块 vs 光标所在源码行」的第二重差异。</figcaption>
+</figure>
+
+<h3>4.1 差异归因（逐条定位）</h3>
+<div class="scroll">
+<table>
+  <thead><tr><th style="width:200px">现象</th><th style="width:74px">级别</th><th>根因</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>沉浸模式字体跳变：段落=等宽、渲染块=无衬线</td>
+      <td><span class="badge p0">P0</span></td>
+      <td><code>#editor</code> 使用等宽字体栈（为编辑代码/中文对齐而设计，<b>合理</b>），而沉浸渲染容器 <code>.mt-md-wysiwyg</code> 用的是 <code>var(--font-sans, …)</code>——该变量从未定义，回退到 <code>-apple-system, "Segoe UI", "Microsoft YaHei"</code>。<b>于是光标移入哪个块，那个块就从无衬线变成等宽</b>，移出又变回来。</td>
+    </tr>
+    <tr>
+      <td>渲染块不跟随用户字体设置</td>
+      <td><span class="badge p0">P0</span></td>
+      <td>用户设置写入的是 <code>--app-font-family</code>（app.js:1276），而渲染块读的是从未定义的 <code>--font-sans</code>。设置里换了字体，阅读/预览生效、<b>沉浸模式的渲染块不生效</b>。</td>
+    </tr>
+    <tr>
+      <td>行高在三种视图间摆动 28.16 / 29.12 / 29.952 / 30.2848</td>
+      <td><span class="badge p0">P0</span></td>
+      <td>四处各写一个字面量：<code>#editor</code> 写 <code>1.76</code>、沉浸 <code>.cm-content</code> 写 <code>1.8</code>、渲染容器写 <code>1.82</code>、<code>.markdown-body</code> 写 <code>1.82</code>（第 1941 行的 <code>1.72</code> 被后面的规则覆盖，属无效声明）。没有任何一处引用同一个令牌。</td>
+    </tr>
+    <tr>
+      <td>主题切换会改变排版度量</td>
+      <td><span class="badge p0">P0</span></td>
+      <td><code>body[data-theme="eye"] #editor .cm-content { line-height: 1.82; letter-spacing: 0.006em }</code> —— 护眼/柔光主题把编辑器行高从 1.76 改成 1.82、字距变为 light/dark 的 3 倍。主题应该只改<b>颜色</b>，不该改<b>排版度量</b>；换主题导致正文重排、光标位置漂移，是明显的「不专业」信号。</td>
+    </tr>
+    <tr>
+      <td>沉浸模式字号被下限顶住，与预览换行不再对齐</td>
+      <td><span class="badge p0">P0</span></td>
+      <td>沉浸字号写的是 <code>max(16px, calc(var(--doc-font-size) * 1.04))</code>。<b>实测：文档字号设为 12px 时，沉浸模式强制渲染为 16px（放大 33%）</b>，而版心宽度仍是 <code>920 × 1.04 = 956.8px</code> → 每行字符数从预览的 76.7em 变成 59.8em，换行位置完全错位。24px 时正常（24.96px）。<br>这是 v2.1.32「沉浸排版对齐预览栏」的承诺在 <b>字号 ≤ 15.4px 区间内失效</b>。</td>
+    </tr>
+    <tr>
+      <td>渲染块的外边距叠加在行盒之上</td>
+      <td><span class="badge p1">P1</span></td>
+      <td>沉浸渲染容器只把「首末子元素」的 margin 归零，块与块之间仍走 <code>.markdown-body</code> 的元素级外边距（<code>p{margin-bottom:1em}</code>、<code>h2{margin:1.7em 0 .7em}</code>），而源码行只有 <code>padding-block: 1px</code>。<b>结果：块间距与行间距属于两套不同的排版逻辑</b>，无法用同一个节律表达。</td>
+    </tr>
+    <tr>
+      <td>段落未渲染 → 语法标记裸露</td>
+      <td><span class="badge p1">P1</span></td>
+      <td>块级识别刻意收窄（「普通段落不动」是控风险的正确决策），行内只接管了 <code>{color|bg|size:…}</code> 与 <code>$…$</code>。因此 <code>**加粗**</code>、<code>[链接](url)</code>、<code>`代码`</code>、<code>~~删除~~</code> 在沉浸模式下<b>仍以源码形式显示</b>——标题/表格/代码块是所见即所得，段落不是。<br>叠加「等宽字体」，观感就是「半渲染的 Markdown 编辑器」，而非「写作即成品」。</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<div class="card">
+  <h4 style="margin-top:0">值得肯定的部分（改进时不要动）</h4>
+  <ul style="margin-bottom:0">
+    <li><b>版心换算比例是对的。</b>实测：阅读/预览 <code>920px @ 16px = 57.5em</code>；沉浸 <code>956.8px @ 16.64px = 57.5em</code>。字号 ×1.04 与版心 ×1.04 同源等比，保证了两侧换行位置一致——这是很专业的一个决定，应保留并升格为令牌公式。</li>
+    <li><b>渲染容器复用 <code>.markdown-body</code> 类</b>（436 条排版规则），而不是手写副本——历史手写副本被轻量模式反制而从未生效的教训已经被正确吸收，这个架构选择应该继续沿用。</li>
+    <li><b>沉浸模式的空行收缩</b>（<code>--mt-immersive-blank-line: 16px</code>，且注释明确警告「不得归零否则光标消失」）、<b>报错区限高</b>（180px + 内滚）、<b>隐藏行号栏</b>，都是从真实问题里长出来的细节，方向正确。</li>
+  </ul>
+</div>
+
+<!-- ============ 5 ============ -->
+<h2 class="anchor"><span class="n">05</span>诊断三：色彩可访问性——「一个 accent 干了三份工」</h2>
+
+<p>把所有正文/界面组合按 WCAG 相对亮度公式实算，<code>rgba()</code> 先按 alpha 合成到主题底色：</p>
+
+<div class="scroll">
+<table>
+  <thead><tr><th>组合</th><th class="num">浅色（默认）</th><th class="num">暗色</th><th class="num">护眼 / 柔光</th><th>要求</th></tr></thead>
+  <tbody>
+    <tr><td>正文 <code>--text</code> / 页面底</td><td class="num pass">10.88 ✓</td><td class="num pass">8.13 ✓</td><td class="num pass">10.97 ✓</td><td>≥4.5 正文</td></tr>
+    <tr><td>次要文字 <code>--muted</code> / 页面底</td><td class="num pass">5.47 ✓</td><td class="num mid">4.32 △</td><td class="num pass">4.92 ✓</td><td>≥4.5</td></tr>
+    <tr><td>次要文字 / 面板底</td><td class="num pass">5.56 ✓</td><td class="num fail">3.51 ✗</td><td class="num pass">5.42 ✓</td><td>≥4.5</td></tr>
+    <tr><td><b>白字 / 实心强调底</b>（主按钮、激活态）</td><td class="num mid">4.10 △</td><td class="num fail">2.29 ✗</td><td class="num fail">2.67 ✗</td><td>≥4.5</td></tr>
+    <tr><td><b><code>--text</code> / 实心强调底</b>（「最近文档」激活标签）</td><td class="num fail">2.83 ✗</td><td class="num fail">1.25 ✗</td><td class="num pass">4.65 ✓</td><td>≥4.5</td></tr>
+    <tr><td>强调色 <code>--accent</code> / 页面底</td><td class="num mid">3.84 △</td><td class="num pass">6.48 ✓</td><td class="num fail">2.36 ✗</td><td>≥3.0（图形）/≥4.5（文字）</td></tr>
+    <tr><td>链接 <code>--md-link</code> / 页面底</td><td class="num pass">5.87 ✓</td><td class="num pass">6.48 ✓</td><td class="num mid">3.35 △</td><td>≥4.5</td></tr>
+    <tr><td>标题 <code>--md-heading</code> / 页面底</td><td class="num pass">14.20 ✓</td><td class="num pass">9.96 ✓</td><td class="num pass">13.19 ✓</td><td>≥4.5</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>5.1 根因：一个令牌，三种角色</h3>
+<p><code>--accent</code> 同时在承担三件事，而这三件事对「明度」的要求是互相冲突的：</p>
+<ul>
+  <li><b>角色 A · 实心控件底</b>（<code>button.primary</code>、<code>.view-mode-switch button.active</code>、<code>#graphBtn.active</code>）→ 要求它<b>足够深</b>，才能承载白字 ≥4.5:1；</li>
+  <li><b>角色 B · 正文强调色</b>（<code>--md-link</code>、<code>--accent-strong</code>）→ 要求它<b>足够深且饱和</b>，才能与浅底拉开 ≥4.5:1；</li>
+  <li><b>角色 C · 大面积图形/柔光底</b>（<code>--hover-bg</code>、<code>--accent-wash</code>、背景径向渐变）→ 要求它<b>足够浅</b>，才能只做氛围不抢焦点。</li>
+</ul>
+<p>结果就是数学上没有解：护眼主题的 <code>#88a956</code> 是漂亮的「自然绿」，做氛围极好（角色 C），但白字压上去只有 2.67:1（角色 A 失败）。暗色主题的 <code>#7ab89a</code> 同理——它是<b>浅</b>薄荷绿，正确做法是配<b>深色</b>文字，而现在配的是白字（2.29:1）；更糟的是 <code>.recent-item.active</code> 用的是 <code>--text</code>（<code>#c5bfb2</code> 浅米色）压在同为浅色的 <code>#7ab89a</code> 上——<b>1.25:1，实际几乎不可读</b>。</p>
+
+<div class="quote">
+  <b>结论：不是「调一下色值」的问题，是「令牌少了两个」的问题。</b>需要把 <code>--accent</code> 拆成 <code>--accent-solid</code>（实心底）、<code>--on-accent</code>（其上的文字色）、<code>--accent-text</code>（正文/链接强调色）三个，各自独立取值并各自校验。
+</div>
+
+<!-- ============ 6 ============ -->
+<h2 class="anchor"><span class="n">06</span>诊断四：交互、密度与工程治理</h2>
+
+<h3>6.1 状态不可分辨</h3>
+<p>全局按钮的 hover 与「选中」在视觉上几乎等价：</p>
+<div class="card tight" style="font-family:var(--mono);font-size:12.5px;color:var(--ink-2)">
+  button:hover, button.active { border-color: var(--accent); color: var(--accent-strong); }
+</div>
+<p>两者<b>只改边框色与文字色，都不改背景</b>。这意味着：鼠标悬停在一个按钮上时，你无法判断它是「因为我hover了」还是「它本来就是当前激活项」。模式切换（阅读/修改）尤其依赖这个状态，用户会持续困惑「我现在到底在哪个模式」。</p>
+<p>叠加第二个问题：<code>#modeToggleBtn</code> 的文案表示的是「<b>将要切换到的</b>模式」——处于阅读模式时按钮写着「修改」，处于编辑模式时写着「阅读」；而它的 <code>.active</code> 类又表示「<b>当前</b>是否处于编辑」。<b>同一个控件上，文案用一套语义、高亮用另一套语义</b>。</p>
+
+<h3>6.2 信息密度与可发现性</h3>
+<div class="scroll">
+<table>
+  <thead><tr><th>位置</th><th class="num">规模</th><th>问题</th></tr></thead>
+  <tbody>
+    <tr><td>编辑器工具栏</td><td class="num">60 个控件 / 7 个下拉面板</td><td>单行 <code>flex-wrap: nowrap</code> + <code>overflow-x:auto</code>，且 <code>::-webkit-scrollbar{display:none}</code> <b>把滚动条隐藏了</b>。窗口稍窄就有 1/3 以上功能落在可视区外，且没有任何视觉提示可以横向滚动 → 功能「存在但不可发现」。</td></tr>
+    <tr><td>状态栏</td><td class="num">8 项 / 11px 字号</td><td>文档名、编码、字数、光标、保存时间、创建时间、系统时间、番茄钟，全部挤在 24px 高的条里。<b>字号 11px 低于 12px 的可读下限</b>；「创建时间」「系统时间」无操作价值，属噪声。</td></tr>
+    <tr><td>面板分隔条</td><td class="num">3px 命中区</td><td><code>.editor-body</code> 的分隔列是 <code>3px</code>，<code>.editor-splitter::before{inset:0}</code> 没有扩大命中区 → <b>3px 的拖动目标</b>，远低于 8~12px 的可用阈值，窄屏/高 DPI 下几乎抓不住。</td></tr>
+    <tr><td>键盘焦点</td><td class="num">5 处 :focus-visible / 10 处 outline:none</td><td>全站数百个可交互元素只有 5 处定义了可见焦点环，另有 10 处直接关掉 outline → 键盘用户无法定位。<code>button</code> 基础样式里没有任何焦点态。</td></tr>
+    <tr><td>动效尊重</td><td class="num">15 个 @keyframes / 1 处 reduced-motion</td><td><code>prefers-reduced-motion</code> 只覆盖 <code>transition-duration</code>，未覆盖 <code>animation</code> → 声明了动效敏感的用户仍会看到 15 个关键帧动画。</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>6.3 工程治理：这些问题的「土壤」</h3>
+<div class="scroll">
+<table>
+  <thead><tr><th>指标</th><th class="num">实测</th><th>含义</th></tr></thead>
+  <tbody>
+    <tr><td>单文件行数</td><td class="num">11,578</td><td>令牌 / 基础 / 组件 / 模式 / 主题 / 响应式全部混在一个文件里，任何局部改动都要靠全文搜索确认影响面。</td></tr>
+    <tr><td><code>!important</code></td><td class="num">578</td><td>层叠已经在靠优先级打架。这直接导致「改了没生效」和「改一处坏三处」，是审美迭代速度的主要瓶颈。</td></tr>
+    <tr><td>z-index 取值</td><td class="num">23 种</td><td>含 <code>2147483647</code>×3、<code>99999</code>、<code>99998</code>、<code>10000</code>×3、<code>9000</code>×2 —— 没有层级刻度，新组件的层级只能靠猜。</td></tr>
+    <tr><td>硬编码颜色</td><td class="num">657 处（去重 122 种）/ rgba 438 处</td><td>callout 色彩明明有 <code>--callout-*</code> 令牌，却又被 40+ 处 hex 覆盖（<code>#10b981</code>×43、<code>#dc2626</code>×35…）。这些高饱和默认色与暖中性主题调性冲突，是「不够协调」的隐性来源。</td></tr>
+    <tr><td>尺度取值种数</td><td class="num">圆角 27 / 字号 35 / 行高 20 / 过渡 15</td><td>没有 8 点间距制、没有字阶、没有动效时长刻度。已定义的 <code>--radius-sm/md/lg</code> 全表只被引用 3 次，令牌形同虚设。</td></tr>
+    <tr><td>字体分发</td><td class="num">0 个 @font-face / public 下 0 个字体文件</td><td>字体栈首项是 <code>Inter</code>，但应用不分发它。本机已安装 Inter（实测 <code>document.fonts.check('16px Inter') = true</code>），<b>换到未安装 Inter 的机器会静默回退到 Segoe UI</b>，设置里的「现代默认」名不符实——设计稿与用户实际看到的字体不是同一个。</td></tr>
+  </tbody>
+</table>
+</div>
+
+<!-- ============ 7 ============ -->
+<h2 class="anchor"><span class="n">07</span>不足清单（按优先级）</h2>
+<div class="scroll">
+<table>
+  <thead><tr><th style="width:52px">级别</th><th>问题</th><th style="width:150px">类型</th><th style="width:210px">验收标准</th></tr></thead>
+  <tbody>
+    <tr><td><span class="badge p0">P0</span></td><td>沉浸模式渲染块与源码行的字体不一致（无衬线 ↔ 等宽）</td><td>度量一致性</td><td>同一文档内 <code>font-family</code> 计算值唯一</td></tr>
+    <tr><td><span class="badge p0">P0</span></td><td>沉浸渲染块不跟随用户字体设置（<code>--font-sans</code> 未定义）</td><td>功能缺陷</td><td>切换字体后三视图 <code>font-family</code> 同步变化</td></tr>
+    <tr><td><span class="badge p0">P0</span></td><td>行高在 4 个值之间摆动；主题切换会改排版度量</td><td>度量一致性</td><td>三视图正文行高计算值相同；四个主题下相同</td></tr>
+    <tr><td><span class="badge p0">P0</span></td><td><code>max(16px, …)</code> 下限使沉浸字号在 ≤15.4px 区间失效，换行与预览错位</td><td>功能缺陷</td><td>文档字号 12px 时沉浸计算字号 = 12.48px</td></tr>
+    <tr><td><span class="badge p0">P0</span></td><td>实心强调底上的文字对比度不足（暗色 2.29:1 / 护眼 2.67:1）</td><td>无障碍</td><td>全部主题 ≥4.5:1</td></tr>
+    <tr><td><span class="badge p0">P0</span></td><td><code>.recent-item.active</code> 在暗色主题下 1.25:1，几乎不可读</td><td>无障碍</td><td>≥4.5:1</td></tr>
+    <tr><td><span class="badge p0">P0</span></td><td>9 处引用未定义变量且无回退 → 声明被静默丢弃</td><td>正确性</td><td>全表扫描 0 处「未定义 + 无回退」</td></tr>
+    <tr><td><span class="badge p1">P1</span></td><td>暗色主题漏覆盖 15 个变量，其中含颜色令牌</td><td>令牌完备性</td><td>颜色令牌在 4 个主题内定义齐全</td></tr>
+    <tr><td><span class="badge p1">P1</span></td><td>段落内 <code>**粗**</code>/<code>[链接]()</code>/<code>`代码`</code> 在沉浸模式裸露</td><td>WYSIWYG 完整度</td><td>段落内联语法标记默认渲染为语义样式</td></tr>
+    <tr><td><span class="badge p1">P1</span></td><td>hover 与 active 视觉不可分辨；模式按钮文案与高亮语义冲突</td><td>状态表达</td><td>五态（default/hover/active/focus/disabled）视觉可区分</td></tr>
+    <tr><td><span class="badge p1">P1</span></td><td>工具栏 60 控件单行横滚且隐藏滚动条</td><td>可发现性</td><td>溢出时出现「更多」入口，无隐藏可滚动区域</td></tr>
+    <tr><td><span class="badge p1">P1</span></td><td>分隔条命中区仅 3px</td><td>交互流畅</td><td>命中区 ≥10px，视觉线仍为 1px</td></tr>
+    <tr><td><span class="badge p1">P1</span></td><td>状态栏 11px / 8 项，含无价值信息</td><td>信息层级</td><td>字号 ≥12px，常驻项 ≤4 个</td></tr>
+    <tr><td><span class="badge p1">P1</span></td><td><code>:focus-visible</code> 仅 5 处、10 处裸 outline:none</td><td>无障碍</td><td>所有可聚焦控件有统一焦点环</td></tr>
+    <tr><td><span class="badge p1">P1</span></td><td>渲染块外边距与行盒两套排版逻辑</td><td>度量一致性</td><td>块间距由统一令牌控制</td></tr>
+    <tr><td><span class="badge p2">P2</span></td><td>657 处硬编码色值；callout 令牌被 hex 覆盖</td><td>工程治理</td><td>新增色值 0；既有按主题逐步收敛</td></tr>
+    <tr><td><span class="badge p2">P2</span></td><td>圆角/字号/过渡/z-index 无刻度；已定义令牌使用率 &lt;5%</td><td>工程治理</td><td>新增值必须来自令牌集合</td></tr>
+    <tr><td><span class="badge p2">P2</span></td><td>Inter 未随应用分发，回退不可控</td><td>还原度</td><td>打包字体或改用系统字体栈并如实命名</td></tr>
+    <tr><td><span class="badge p2">P2</span></td><td><code>prefers-reduced-motion</code> 未覆盖 animation</td><td>无障碍</td><td>该偏好下 animation 亦被抑制</td></tr>
+    <tr><td><span class="badge p2">P2</span></td><td>默认主题「暖面板 + 冷灰蓝底」色调割裂</td><td>审美一致性</td><td>底色与面板同属一条色温</td></tr>
+    <tr><td><span class="badge p2">P2</span></td><td>滚动条样式 6px/8px 两套且取色不统一</td><td>细节打磨</td><td>统一为一套令牌</td></tr>
+  </tbody>
+</table>
+</div>
+
+<!-- ============ 8 ============ -->
+<h2 class="anchor"><span class="n">08</span>改进方案</h2>
+<p>整体思路：<b>不是重新设计外观，而是把已经存在的外观「收进规范」</b>。四条主线——令牌分层、度量统一、状态与密度规范、工程护栏。全部改动都只作用于 CSS 变量值与选择器组织，不触碰任何功能逻辑与既有类名契约。</p>
+
+<figure>
+<svg viewBox="0 0 1000 300" role="img" aria-label="四层令牌架构示意">
+  <rect width="1000" height="300" fill="#ffffff"/>
+  <text x="40" y="34" font-family="Segoe UI, Microsoft YaHei" font-size="16" font-weight="700" fill="#2a2621">令牌四层架构（新增 Layer 0/1，收敛 Layer 2，组件层只读语义令牌）</text>
+
+  <rect x="40" y="58" width="220" height="200" rx="10" fill="#f4efe4" stroke="#ded4c2"/>
+  <text x="58" y="84" font-family="Segoe UI, Microsoft YaHei" font-size="13.5" font-weight="700" fill="#6b5f44">Layer 0 · 度量与刻度</text>
+  <text x="58" y="108" font-family="Consolas, monospace" font-size="11.5" fill="#4d4740">--space-1…8 (4→64px)</text>
+  <text x="58" y="128" font-family="Consolas, monospace" font-size="11.5" fill="#4d4740">--radius-1…3 (6/10/14px)</text>
+  <text x="58" y="148" font-family="Consolas, monospace" font-size="11.5" fill="#4d4740">--dur-1/2/3 (120/200/320ms)</text>
+  <text x="58" y="168" font-family="Consolas, monospace" font-size="11.5" fill="#4d4740">--z-base…z-toast (刻度表)</text>
+  <text x="58" y="188" font-family="Consolas, monospace" font-size="11.5" fill="#4d4740">--fs-xs…2xl (12/13/14/16…)</text>
+  <text x="58" y="212" font-family="Consolas, monospace" font-size="11.5" fill="#4d4740">--prose-size / -leading</text>
+  <text x="58" y="232" font-family="Consolas, monospace" font-size="11.5" fill="#4d4740">--prose-measure = 920px</text>
+  <text x="58" y="252" font-family="Segoe UI, Microsoft YaHei" font-size="11" fill="#7a7268">全主题共享，不随主题变化</text>
+
+  <rect x="278" y="58" width="220" height="200" rx="10" fill="#eaf0f8" stroke="#cddbec"/>
+  <text x="296" y="84" font-family="Segoe UI, Microsoft YaHei" font-size="13.5" font-weight="700" fill="#31527a">Layer 1 · 基元色板</text>
+  <text x="296" y="108" font-family="Consolas, monospace" font-size="11.5" fill="#4d4740">--c-warm-50…900</text>
+  <text x="296" y="128" font-family="Consolas, monospace" font-size="11.5" fill="#4d4740">--c-green-50…900</text>
+  <text x="296" y="148" font-family="Consolas, monospace" font-size="11.5" fill="#4d4740">--c-slate-50…900</text>
+  <text x="296" y="172" font-family="Segoe UI, Microsoft YaHei" font-size="11.5" fill="#4d4740">每主题只覆盖此层映射，</text>
+  <text x="296" y="190" font-family="Segoe UI, Microsoft YaHei" font-size="11.5" fill="#4d4740">不再逐组件写主题规则</text>
+  <text x="296" y="218" font-family="Segoe UI, Microsoft YaHei" font-size="11" fill="#7a7268">现状：颜色散落在 4 个块里</text>
+
+  <rect x="516" y="58" width="220" height="200" rx="10" fill="#e9f4ee" stroke="#c5e0d2"/>
+  <text x="534" y="84" font-family="Segoe UI, Microsoft YaHei" font-size="13.5" font-weight="700" fill="#2f6b4f">Layer 2 · 语义令牌</text>
+  <text x="534" y="108" font-family="Consolas, monospace" font-size="11.5" fill="#4d4740">--surface-0…3</text>
+  <text x="534" y="128" font-family="Consolas, monospace" font-size="11.5" fill="#4d4740">--text / --text-muted / -faint</text>
+  <text x="534" y="148" font-family="Consolas, monospace" font-size="11.5" fill="#4d4740">--border / --border-strong</text>
+  <text x="534" y="168" font-family="Consolas, monospace" font-size="11.5" fill="#b3261e">--accent-solid ← 拆</text>
+  <text x="534" y="186" font-family="Consolas, monospace" font-size="11.5" fill="#b3261e">--on-accent ← 拆</text>
+  <text x="534" y="204" font-family="Consolas, monospace" font-size="11.5" fill="#b3261e">--accent-text ← 拆</text>
+  <text x="534" y="228" font-family="Consolas, monospace" font-size="11.5" fill="#4d4740">--focus-ring</text>
+  <text x="534" y="248" font-family="Segoe UI, Microsoft YaHei" font-size="11" fill="#7a7268">4 个主题同构覆盖（成矩阵）</text>
+
+  <rect x="754" y="58" width="206" height="200" rx="10" fill="#fdf3e2" stroke="#efd9b4"/>
+  <text x="772" y="84" font-family="Segoe UI, Microsoft YaHei" font-size="13.5" font-weight="700" fill="#8a5a00">Layer 3 · 组件令牌</text>
+  <text x="772" y="108" font-family="Consolas, monospace" font-size="11.5" fill="#4d4740">--btn-*</text>
+  <text x="772" y="128" font-family="Consolas, monospace" font-size="11.5" fill="#4d4740">--toolbar-*</text>
+  <text x="772" y="148" font-family="Consolas, monospace" font-size="11.5" fill="#4d4740">--tree-*</text>
+  <text x="772" y="168" font-family="Consolas, monospace" font-size="11.5" fill="#4d4740">--statusbar-*</text>
+  <text x="772" y="192" font-family="Segoe UI, Microsoft YaHei" font-size="11.5" fill="#4d4740">只允许引用 Layer 0–2，</text>
+  <text x="772" y="210" font-family="Segoe UI, Microsoft YaHei" font-size="11.5" fill="#4d4740">禁止出现字面量</text>
+
+  <text x="40" y="288" font-family="Segoe UI, Microsoft YaHei" font-size="11.5" fill="#7a7268">现状：Layer 0 缺失 → Layer 1 不存在 → Layer 2 部分存在且不成矩阵 → Layer 3 直接写字面量。</text>
+</svg>
+<figcaption>图 2 · 令牌四层架构。当前项目缺 Layer 0/1，Layer 2 只有一半，所以组件层只能硬编码。</figcaption>
+</figure>
+
+<h3>8.1 主线一：一套度量（收益最大，风险最低）</h3>
+<p>把「正文怎么写」抽成唯一一组令牌，三处视图只引用它：</p>
+<div class="card tight" style="font-family:var(--mono);font-size:12.5px;line-height:1.9;color:var(--ink-2);white-space:pre-wrap">:root{
+  --prose-size:    var(--doc-font-size);        /* 唯一出处 */
+  --prose-leading: 1.78;                        /* 唯一行高，四主题共用 */
+  --prose-measure: 920px;                       /* 唯一版心 */
+  --prose-scale:   1.04;                        /* 沉浸放大系数，字号与版心同源 */
+}
+
+/* ① 阅读模式 */            .reader-panel > .markdown-body{ font-size:var(--prose-size); line-height:var(--prose-leading); width:min(var(--prose-measure),calc(100% - 42px)); }
+/* ② 分栏预览 */            #preview.markdown-body{ font-size:var(--prose-size); line-height:var(--prose-leading); }
+/* ③ 沉浸模式（字号与版心用同一系数） */
+.app-shell.immersive #editor .cm-content{
+  font-size: calc(var(--prose-size) * var(--prose-scale));      /* 去掉 max(16px,…) 下限 */
+  line-height: var(--prose-leading);                            /* 与源码行同值 → 不再跳变 */
+  padding: 36px max(24px, calc((100% - var(--prose-measure) * var(--prose-scale)) / 2)) 55vh;
+}
+/* ④ 沉浸渲染容器：只中和容器属性，字体/行高交给上面统一 */
+.app-shell.immersive .cm-line .mt-md-wysiwyg.markdown-body{
+  font-family: var(--prose-font);          /* = --app-font-family，跟随用户设置 */
+  font-size: inherit; line-height: inherit;   /* 继承版心，不再各写 1.82 */
+}</div>
+<p><b>为什么这一步收益最大：</b>字号与版心同乘 <code>--prose-scale</code>，em 宽度恒定 → 三种视图换行位置一致；行高取同一个值 → 光标移动不再引起行高跳动；去掉 <code>max(16px,…)</code> 下限 → 小字号用户的设置被真正尊重。而且这一改<b>不需要动任何 DOM 结构或 JS</b>。</p>
+
+<h3>8.2 主线二：拆开 accent 的三个角色（附实算色值）</h3>
+<p>把 <code>--accent</code> 拆成三个令牌，各自独立校验。以下候选值已逐一实算对比度：</p>
+<div class="scroll">
+<table>
+  <thead><tr><th>主题</th><th>令牌</th><th>推荐值</th><th class="num">实算对比度</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td rowspan="3">浅色（默认）</td><td><code>--accent-solid</code></td><td><span class="sw"><i style="background:#635a3f"></i>#635a3f</span></td><td class="num pass">白字 6.85 ✓</td><td>比现 <code>#8a7c5c</code>（白字 4.10）深一档，暖褐调性不变</td></tr>
+    <tr><td><code>--on-accent</code></td><td><span class="sw"><i style="background:#fff"></i>#ffffff</span></td><td class="num pass">6.85 ✓</td><td>保持白字，仅加深底色</td></tr>
+    <tr><td><code>--accent-text</code></td><td><span class="sw"><i style="background:#6b5f44"></i>#6b5f44</span></td><td class="num pass">5.87 ✓</td><td>沿用现值，链接/强调文字已达标</td></tr>
+    <tr><td rowspan="3">暗色</td><td><code>--accent-solid</code></td><td><span class="sw"><i style="background:#7ab89a"></i>#7ab89a</span></td><td class="num pass">深字 7.30 ✓</td><td>保留这抹好薄荷绿</td></tr>
+    <tr><td><code>--on-accent</code></td><td><span class="sw"><i style="background:#14201c"></i>#14201c</span></td><td class="num pass">7.30 ✓</td><td><b>关键修正：不是白字，是深墨绿字</b></td></tr>
+    <tr><td><code>--accent-text</code></td><td><span class="sw"><i style="background:#7ab89a"></i>#7ab89a</span></td><td class="num pass">6.48 ✓</td><td>沿用现值</td></tr>
+    <tr><td rowspan="3">护眼 / 柔光</td><td><code>--accent-solid</code></td><td><span class="sw"><i style="background:#4f6a2a"></i>#4f6a2a</span></td><td class="num pass">白字 6.13 ✓</td><td>比现 <code>#88a956</code>（白字 2.67）显著加深，色相不变</td></tr>
+    <tr><td><code>--on-accent</code></td><td><span class="sw"><i style="background:#fff"></i>#ffffff</span></td><td class="num pass">6.13 ✓</td><td>—</td></tr>
+    <tr><td><code>--accent-text</code></td><td><span class="sw"><i style="background:#567321"></i>#567321</span></td><td class="num pass">4.79 ✓</td><td>现 <code>#6e8d3b</code> 仅 3.35，需下沉一档</td></tr>
+    <tr><td colspan="2">暗色 <code>--muted</code> 修正</td><td><span class="sw"><i style="background:#9a9488"></i>#9a9488</span></td><td class="num pass">4.93 ✓ / 面板 4.82 ✓</td><td>现 <code>#8f8a7e</code> 在面板上仅 3.51（11~13px 标签最常用此色）</td></tr>
+  </tbody>
+</table>
+</div>
+<p><b>氛围色不动</b>：<code>--hover-bg</code>、<code>--accent-wash</code>、背景径向渐变继续使用原来的浅色 accent —— 它们只需要「够浅」，不计入文字对比度。</p>
+
+<h3>8.3 主线三：沉浸模式补全 WYSIWYG（消除「半渲染」感）</h3>
+<p>复用已经过验证的 <code>InlineStyleWidget</code> 机制（只替换标记字符范围 + 范围原子化 + 未闭合保持源码），把行内语义纳入同一套：</p>
+<div class="scroll">
+<table>
+  <thead><tr><th>语法</th><th>现状</th><th>建议</th><th>复用机制</th></tr></thead>
+  <tbody>
+    <tr><td><code>**粗体**</code> / <code>*斜体*</code></td><td class="fail">源码裸露（等宽显示星号）</td><td>渲染为 <code>&lt;strong&gt;</code>/<code>&lt;em&gt;</code></td><td>新增 <code>InlineMarkWidget</code>，与 <code>InlineStyleWidget</code> 同一模式</td></tr>
+    <tr><td><code>[文字](url)</code></td><td class="fail">源码裸露</td><td>渲染为链接，保留 <code>title</code> 与 Ctrl+点击打开</td><td>同上</td></tr>
+    <tr><td><code>`代码`</code></td><td class="fail">源码裸露</td><td>渲染为行内代码样式</td><td>同上（注意与现有的 <code>$…$</code> 范围互斥）</td></tr>
+    <tr><td><code>~~删除~~</code> / <code>==高亮==</code></td><td class="fail">源码裸露</td><td>渲染为 <code>&lt;del&gt;</code>/<code>&lt;mark&gt;</code></td><td>同上（<code>&lt;mark&gt;</code> 黄底需注意轻量模式的 revert 放行，已有先例）</td></tr>
+    <tr><td><code>{color|bg|size:…}</code></td><td class="pass">已渲染</td><td>保持</td><td>InlineStyleWidget</td></tr>
+    <tr><td><code>$…$</code> / <code>$$…$$</code></td><td class="pass">已渲染</td><td>保持</td><td>InlineMathWidget</td></tr>
+  </tbody>
+</table>
+</div>
+<p><b>一个必须配套的决定：沉浸正文改用无衬线（跟随用户设置），等宽只保留在代码块内。</b>否则即使行内都渲染了，光标块仍是等宽 → 移动光标时那一行依然会「变脸」。如果希望保留「改的时候能看到源码」，建议做成<b>按住 Alt 临时显形</b>的按需模式，而不是把标记常驻。</p>
+
+<h3>8.4 主线四：状态、动效、密度规范</h3>
+<div class="grid g2">
+  <div class="card tight">
+    <h4 style="margin-top:0">五态矩阵（当前缺 3 态）</h4>
+    <div class="scroll"><table style="margin:0;font-size:12.5px">
+      <thead><tr><th>状态</th><th>表现</th></tr></thead>
+      <tbody>
+        <tr><td>default</td><td>底 <code>--surface-1</code>，边 <code>--border</code></td></tr>
+        <tr><td class="fail">hover</td><td>底 <code>--hover-bg</code>（<b>现缺失：只有边框变色</b>）</td></tr>
+        <tr><td class="fail">active/选中</td><td>底 <code>--accent-solid</code> + 字 <code>--on-accent</code>（与 hover 必须明显不同）</td></tr>
+        <tr><td class="fail">focus-visible</td><td><code>outline:2px solid --focus-ring; offset:2px</code>（现基本缺失）</td></tr>
+        <tr><td>disabled</td><td>opacity .55 + <code>not-allowed</code></td></tr>
+      </tbody>
+    </table></div>
+  </div>
+  <div class="card tight">
+    <h4 style="margin-top:0">动效与命中区</h4>
+    <ul style="font-size:13px;margin:0">
+      <li>时长收敛为 3 档：<code>--dur-1:120ms</code>（悬停/聚焦）、<code>--dur-2:200ms</code>（面板/下拉）、<code>--dur-3:320ms</code>（页面级过渡）</li>
+      <li>缓动统一 <code>cubic-bezier(.2,.7,.3,1)</code>，替换现有 15 种时长混用</li>
+      <li><code>prefers-reduced-motion</code> 同时覆盖 <code>transition</code> 与 <code>animation</code></li>
+      <li>分隔条：网格列 3px → <b>10px</b>，视觉线仍为 1px 居中绘制（<code>::before{inset-inline:4px}</code>）</li>
+      <li>所有可点区域命中尺寸 ≥32px（桌面），图标按钮 ≥28px</li>
+    </ul>
+  </div>
+</div>
+
+<h4>信息层级调整</h4>
+<ul>
+  <li><b>编辑器工具栏</b>：常驻 ≤10 个（标题、加粗斜体下划线高亮、列表、引用/提示、代码、链接、表格、图片、公式），其余按现有 7 个下拉面板归组，溢出改为「⋯ 更多」按钮而非隐藏滚动条。</li>
+  <li><b>状态栏</b>：8 项 → 4 项（文档名 · 字数 · 光标 · 保存状态），字号 11px → 12px；创建时间/系统时间移入 hover 提示或文档信息浮层。</li>
+  <li><b>模式切换</b>：改为两段式 segmented control（「修改 | 阅读」），当前段高亮——文案表达位置、高亮表达状态，两套语义合一。</li>
+</ul>
+
+<h3>8.5 主线五：工程护栏（让审美可迭代）</h3>
+<ul>
+  <li><b>拆分样式表</b>为 5 个源文件（<code>tokens.css</code> / <code>base.css</code> / <code>components.css</code> / <code>modes.css</code> / <code>themes.css</code>），构建时合并输出为现有 <code>public/styles.css</code> —— <b>对外路径与引用方式零变化</b>，因此不影响 WebView2 缓存策略与打包。</li>
+  <li><b>加校验测试</b>（复用仓库现有 <code>tests/*.test.js</code> 的源码断言风格）：
+    <ul>
+      <li>断言「所有 <code>var(--x)</code> 都有定义」——本次的 23 个幽灵变量会立即让测试变红；</li>
+      <li>断言「颜色令牌在 4 个主题内定义齐全」；</li>
+      <li>断言「<code>.cm-content</code> 的行高只来自 <code>--prose-leading</code>」——防止再出现 <code>1.8</code>/<code>1.82</code> 双字面量回归；</li>
+      <li>z-index 白名单 + 禁止新增 <code>!important</code>（存量逐步清零）。</li>
+    </ul>
+  </li>
+  <li><b>视觉回归快照</b>：用本次已经跑通的 puppeteer-core + 本机 Edge 方案，对「3 视图 × 4 主题 = 12 个组合」输出计算样式基线 JSON。任何改动后比对差异即可，无需人工肉眼确认——这正好满足「要实测数据、不接受『应该没问题』」的验证要求。</li>
+</ul>
+
+<!-- ============ 9 ============ -->
+<h2 class="anchor"><span class="n">09</span>落地路线图</h2>
+<div class="route">
+  <div class="step">
+    <h4>PR-1 · 令牌补齐与色彩可达性（低风险，纯色值与变量定义）</h4>
+    <p>补齐 23 个幽灵变量（或删除其引用）；把 <code>--surface-*</code>/<code>--shadow-*</code>/<code>--radius-*</code> 提升到 <code>:root</code> 并建立四主题覆盖矩阵；拆出 <code>--accent-solid</code>/<code>--on-accent</code>/<code>--accent-text</code> 并替换 8.2 节色值。</p>
+    <p><b>验收</b>：全表扫描 0 处「未定义变量」；所有主题的实心底文字对比度 ≥4.5:1（脚本实测）。</p>
+  </div>
+  <div class="step">
+    <h4>PR-2 · 度量统一（改观最明显）</h4>
+    <p>引入 <code>--prose-size/--prose-leading/--prose-measure/--prose-scale</code>；三处视图改引用；去掉沉浸的 <code>max(16px,…)</code> 下限；移除护眼/柔光主题对 <code>.cm-content</code> 行高与字距的覆盖。</p>
+    <p><b>验收</b>：三视图 × 四主题下，正文 <code>line-height</code> 计算值完全一致；文档字号 12px 时沉浸字号 = 12.48px；em 宽度三视图一致（57.5em）。</p>
+  </div>
+  <div class="step">
+    <h4>PR-3 · 沉浸模式补全（功能面，需真机验证）</h4>
+    <p>新增 <code>InlineMarkWidget</code> 接管 <code>**粗**</code>/<code>*斜*</code>/<code>`码`</code>/<code>[链接]()</code>/<code>~~删~~</code>/<code>==亮==</code>；沉浸正文统一为无衬线并跟随用户字体；渲染块块间距改由令牌控制。</p>
+    <p><b>验收</b>：沉浸模式下无裸露语法标记；同一文档内 <code>font-family</code> 计算值唯一；切换字体设置三视图同步；<b>实机确认</b>（沙箱内 WebView2 不可用，CSS 计算样式问题必须真机复核）。</p>
+  </div>
+  <div class="step">
+    <h4>PR-4 · 交互与密度（提升「流畅」感）</h4>
+    <p>五态矩阵落地；分隔条命中区 3px → 10px；工具栏溢出改「更多」；状态栏精简至 4 项并提升到 12px；全局焦点环；动效三档 + reduced-motion 全覆盖；模式切换改 segmented control。</p>
+    <p><b>验收</b>：键盘 Tab 全流程可见焦点；模式切换文案与高亮语义一致；无隐藏可滚动区域；reduced-motion 下无关键帧动画。</p>
+  </div>
+  <div class="step">
+    <h4>PR-5 · 工程护栏（可持续性）</h4>
+    <p>样式表拆分为 5 层源文件并合并输出；新增 4 条校验测试；建立 12 组合的计算样式基线快照。</p>
+    <p><b>验收</b>：<code>npm test</code> 覆盖令牌完整性；基线快照可复现；<code>public/styles.css</code> 路径与引用不变（不影响缓存与打包）。</p>
+  </div>
+</div>
+
+<!-- ============ 10 ============ -->
+<h2 class="anchor"><span class="n">10</span>约束与风险</h2>
+<ul>
+  <li><b>不触碰功能</b>：以上全部为 CSS 令牌值与选择器组织的调整，不改类名契约、不改 DOM 结构、不改任何 JS 逻辑与路由。沉浸模式的渲染机制（Compartment 热切换、光标块跳过、视口裁剪）保持不变。</li>
+  <li><b>PR-2 的可见变化需要提前知会</b>：统一行高后，护眼/柔光主题的编辑器行高会从 1.82 回到 1.78，正文密度有极轻微变化；沉浸模式在小于 15.4px 字号下会变大。<b>这是修复，但会被用户感知</b>，建议进 changelog。</li>
+  <li><b>PR-3 需要真机验证</b>：沙箱内 WebView2 无法启动（导航报 <code>0x8007139F</code>），行内装饰的命中/原子范围行为必须实机确认，尤其是「样式标记与公式范围重叠时公式让路」的既有约定需要继续遵守。</li>
+  <li><b>缓存</b>：任何 <code>public/</code> 静态资源改动都需要同步递增 <code>?v=</code>（index.html 三处 + app.js 首行），否则 WebView2 会继续使用磁盘缓存旧样式。</li>
+  <li><b>本次未做任何生产代码改动。</b>报告与分析脚本位于被 gitignore 之外需注意的临时目录 <code>.verify/</code>（提交前应删除），如需保留可移入 <code>docs/</code>。</li>
+</ul>
+
+<!-- ============ 附 ============ -->
+<h2 class="anchor"><span class="n">11</span>附录：复现命令</h2>
+<div class="card tight" style="font-family:var(--mono);font-size:12.5px;line-height:2;color:var(--ink-2);white-space:pre-wrap"># 1) 静态校验：样式表分层一致性 / 令牌完整性 / 主题覆盖契约 / 基线快照
+npm test
+
+# 2) 对比度实测（4 主题 × 19 个文字目标 + 图形目标，退出码非 0 即不达标）
+npm run audit:contrast
+
+# 3) 计算样式实测（4 主题 × 3 视图 × 15 目标，与基线比对）
+npm run verify:computed
+
+# 4) 有意调整令牌后刷新基线（并把变化写进提交说明）
+npm run update:css-snapshot
+npm run verify:computed -- --update
+
+# 5) 改样式：只改 frontend/styles/ 下的层源文件，再合并产物
+npm run build:css</div>
+<p style="font-size:13px;color:var(--ink-3)">环境：Windows / Edge（Chromium）无头模式，视口 1440×900，puppeteer-core 读取 <code>DOM.getBoxModel</code> 与 <code>CSS.getComputedStyleForNode</code>。<br>
+本报告编写期使用的临时审计脚本（<code>.verify/</code>）已删除；其中长期有价值的两个已固化为 <code>scripts/audit-contrast.mjs</code> 与 <code>scripts/verify-baseline.mjs</code>，夹具在 <code>tests/fixtures/contrast-probe.html</code>。</p>
+
+<footer class="doc">
+  <p style="margin:0">MyTempleKnowledge 界面 UI 审计与实施报告 · 针对 v2.1.35 · 覆盖 <code>public/styles.css</code> 与三种文档视图的计算样式实测。</p>
+  <p style="margin:6px 0 0">诊断部分基于 v2.1.35 原始样式表（11,578 行）；PR-1 → PR-5 已按序实施完毕，实施结果为脚本实测产出。全部改动的验收数据见「实施结果」一节。</p>
+</footer>
+
+</div>
+</body>
+</html>

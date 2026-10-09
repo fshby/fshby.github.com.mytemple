@@ -1,4 +1,4 @@
-import { createMarkdownEditor } from "/editor-core.js?v=20261009-v2";
+import { createMarkdownEditor } from "/editor-core.js?v=20261009-v5";
 import { getPaperBackgroundUrl } from "./modules/paper-texture.js";
 import { escapeHtml, displayName, displayRelativePath, splitPathRef, joinPathRef, parentPathRef, compactName, splitWorkspaceRef, plainText, headingId } from "./modules/path-utils.js";
 import { extractOutline, addCnEnSpaces } from "./modules/editor-utils.js";
@@ -41,7 +41,7 @@ const LARGE_PREVIEW_DELAY = 700;
 const CHUNKED_RENDER_BYTES = 500 * 1024;
 const CHUNK_RENDER_SLICE_BYTES = 150 * 1024;
 const GRAPH_WORKER_URL = "/graph-worker.js?v=20260810-graph-1";
-const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20261009-v2";
+const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20261009-v5";
 // Markdown 渲染缓存版本戳：解析器或 CSS 规则升级时递增，确保旧缓存不被复用。
 // 2026-08-29 v1.8.102：安装包 resources 包含 public/ 前端静态文件、端口回滚；修正其他电脑安装后 404 白屏。
 const MARKDOWN_RENDER_VERSION = "20260829-v18102-install-static-bundle-port-scan";
@@ -608,6 +608,22 @@ try {
     try { highlightCodeBlocks(container); } catch (_) {}
   });
 } catch (_) {}
+
+// 沉浸渲染结果里的外链点击桥。editor-core.js（编辑器核心）不认识宿主的路由与
+// Tauri IPC，只暴露一个约定好的全局函数，把「怎么打开外链」交给宿主决定。
+// 策略与预览栏一致：http/https/mailto/tel 一律交给系统默认浏览器，
+// 避免 WebView 内部跳转导致当前页签离开应用。
+window.__mtOpenExternal = async function (url) {
+  const href = String(url || "").trim();
+  if (!/^(https?:|mailto:|tel:)/i.test(href)) return;
+  try {
+    await api.post("/api/open-url", { url: href });
+  } catch (_) {
+    // 失败回退：新标签打开，避免当前页签被替换离开应用
+    window.open(href, "_blank", "noopener,noreferrer");
+  }
+};
+
 
 if (els.graphDynamic) els.graphDynamic.checked = state.graphView.dynamic;
 

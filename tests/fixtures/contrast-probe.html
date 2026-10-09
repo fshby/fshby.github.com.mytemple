@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="/styles.css">
+<style>body{margin:0}</style>
+</head>
+<body data-theme="light">
+<div class="app-shell" id="shell">
+  <div class="view-mode-switch"><button class="active" id="vms">阅读</button></div>
+  <button class="primary" id="primary">保存</button>
+  <button id="graphBtn" class="active">图谱</button>
+  <button class="primary full" id="primaryFull">确定</button>
+  <div class="recent-docs"><span class="recent-item active" id="recent">文档.md</span></div>
+  <div class="about-header" id="aboutHeader">标题</div>
+  <div class="donation-header" id="donationHeader">支持</div>
+  <div class="update-header" id="updateHeader">更新</div>
+  <div class="brand-mark" id="brandMark">MT</div>
+  <pre style="position:relative"><code class="code-copy" id="codeCopy">复制</code></pre>
+  <div class="workspace-summary"><span class="ws-chip workspace-default" id="wsChip">默认</span></div>
+  <div class="create-workspace-choices"><button class="active" id="cwc">模板</button></div>
+  <div class="settings-section"><div class="segmented"><button class="active" id="seg">开</button></div></div>
+  <span class="browser-search-hint" id="bsh">搜索</span>
+  <div class="browser-footer"><button class="primary" id="bfp">打开</button></div>
+  <div class="ai-inline-dialog"><button class="ai-inline-submit" id="ais">↵</button></div>
+  <div class="progress"><span id="prog"></span></div>
+  <div class="workspace-item active"><button class="ws-toggle" id="wst">▾</button></div>
+  <span class="markdown-body"><span class="md-tag" id="mdTag">标签</span></span>
+  <table class="markdown-body"><thead><tr><th id="thCell">表头</th></tr></thead></table>
+  <span class="mt-md-wysiwyg markdown-body" id="wys">渲染块</span>
+  <div class="reader-panel"><div class="markdown-body" id="readerBody"><p id="readerP">正文段落</p></div></div>
+  <div id="preview" class="markdown-body"><p id="prevP">预览正文</p></div>
+</div>
+</body>
+</html>
