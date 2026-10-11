@@ -93,6 +93,34 @@ body{
 .quick{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .count-note{font-size:12.5px;color:var(--tx2);text-align:center;margin:14px 0 0}
 .count-note b{color:var(--pri);font-weight:800}
+
+/* ---------- 继续上次练习 ---------- */
+.resume-card{display:flex;align-items:center;gap:12px;margin:0 0 14px;padding:13px 14px;
+  border-radius:var(--r);background:linear-gradient(135deg,#fff1ee,#ffe6e0);
+  border:1.4px solid rgba(192,57,43,.22);box-shadow:var(--shadow-sm);
+  animation:qin .42s cubic-bezier(.22,.61,.36,1)}
+html[data-theme="dark"] .resume-card{background:linear-gradient(135deg,#2b1a1a,#241517);
+  border-color:rgba(192,57,43,.45)}
+.rc-ic{width:42px;height:42px;border-radius:13px;flex:0 0 auto;display:grid;place-items:center;
+  font-size:15px;color:#fff;background:linear-gradient(135deg,var(--pri),var(--pri-d));
+  box-shadow:0 5px 13px rgba(192,57,43,.3)}
+.rc-tx{flex:1;min-width:0}
+.rc-t1{font-size:14.5px;font-weight:800;color:var(--tx);display:flex;align-items:center;gap:6px}
+.rc-t1 .tag{font-size:10.5px;font-weight:700;padding:1.5px 7px;border-radius:6px;
+  background:rgba(192,57,43,.13);color:var(--pri)}
+.rc-t2{font-size:12px;color:var(--tx2);margin-top:4px;line-height:1.55}
+.rc-t2 b{color:var(--pri);font-weight:800}
+.rc-bar{height:5px;border-radius:99px;background:rgba(192,57,43,.14);margin-top:7px;overflow:hidden}
+.rc-bar i{display:block;height:100%;width:0;border-radius:99px;
+  background:linear-gradient(90deg,var(--pri),var(--gold));transition:width .45s cubic-bezier(.22,.61,.36,1)}
+.rc-act{display:flex;flex-direction:column;gap:6px;flex:0 0 auto;align-items:stretch}
+.rc-go{border:none;cursor:pointer;color:#fff;font-size:13px;font-weight:700;
+  padding:8px 15px;border-radius:11px;background:linear-gradient(135deg,var(--pri),var(--pri-d));
+  box-shadow:0 5px 13px rgba(192,57,43,.28);transition:transform .16s ease}
+.rc-go:active{transform:scale(.93)}
+.rc-reset{border:none;background:transparent;color:var(--tx3);font-size:11.5px;
+  padding:0;cursor:pointer;text-align:center;text-decoration:underline;text-underline-offset:2px}
+.rc-reset:active{color:var(--pri)}
 .foot{text-align:center;font-size:11px;color:var(--tx3);margin:18px 0 0;line-height:1.7;padding:0 10px}
 
 /* ---------- 答题页 ---------- */
@@ -266,6 +294,18 @@ body{
     </div>
 
     <div class="wrap">
+      <div class="resume-card hidden" id="resumeCard">
+        <div class="rc-ic">▶</div>
+        <div class="rc-tx">
+          <div class="rc-t1">继续上次练习<span class="tag" id="resumeMode">顺序</span></div>
+          <div class="rc-t2" id="resumeInfo"></div>
+          <div class="rc-bar"><i id="resumeBar"></i></div>
+        </div>
+        <div class="rc-act">
+          <button class="rc-go" id="resumeGo">继续</button>
+          <button class="rc-reset" id="resumeReset">重来</button>
+        </div>
+      </div>
       <div class="card">
         <div class="sec-title"><i></i>来源筛选</div>
         <div class="chips" id="fSrc"></div>
@@ -412,7 +452,7 @@ try{ const raw = localStorage.getItem(LS_KEY); if(raw) store = Object.assign(sto
 function save(){ try{ localStorage.setItem(LS_KEY, JSON.stringify(store)); }catch(e){} }
 
 const S = { mode:'seq', queue:[], idx:0, sel:[], locked:false, sess:{answered:0,correct:0},
-            filter:{ src:'全部', type:'全部', chap:'全部' } };
+            filter:{ src:'全部', type:'全部', chap:'全部' }, persist:true };
 let ROUND_WRONG=new Set();
 let ROUND_ANS={};
 let KPMAP = {};                          // kid -> kp
@@ -467,6 +507,14 @@ function initFilters(){
 }
 
 /* ---------- 首页统计 ---------- */
+function filterLabel(f){
+  const parts=[];
+  if(f.type && f.type!=='全部') parts.push(f.type);
+  if(f.chap && f.chap!=='全部') parts.push(f.chap.length>13? f.chap.slice(0,12)+'…' : f.chap);
+  if(f.src && f.src!=='全部') parts.push(f.src);
+  return parts.join(' · ');
+}
+function posText(p){ return Math.min((p.idx||0)+1, p.queue.length)+'/'+p.queue.length; }
 function renderHome(){
   $('#sTotal').textContent = QUESTIONS.length;
   $('#footTotal').textContent = QUESTIONS.length;
@@ -475,11 +523,92 @@ function renderHome(){
   $('#wrongCnt').textContent = store.wrong.length + ' 题待复习';
   $('#favCnt').textContent = store.fav.length + ' 题已收藏';
   $('#kpStat').textContent = '按章节梳理 ' + KNOWLEDGE.length + ' 个常考知识点';
+
+  // 续练卡片
+  const rp = latestProgress();
+  const card = $('#resumeCard');
+  if(rp){
+    card.classList.remove('hidden');
+    const total = rp.queue.length;
+    const done  = Object.keys(rp.ans||{}).length;
+    const sess  = rp.sess||{answered:0,correct:0};
+    const acc   = sess.answered? Math.round(sess.correct/sess.answered*100) : 0;
+    const fl    = filterLabel(rp.filter||{});
+    $('#resumeMode').textContent = rp.mode==='rand' ? '随机' : '顺序';
+    $('#resumeInfo').innerHTML = '第 <b>'+Math.min((rp.idx||0)+1,total)+'</b> / '+total+' 题'+
+      '　已答 <b>'+done+'</b> 题'+(sess.answered? '　正确率 '+acc+'%':'')+
+      (fl? '<br>范围：'+esc(fl) : '');
+    $('#resumeBar').style.width = (total? (done/total*100) : 0)+'%';
+  } else {
+    card.classList.add('hidden');
+  }
+  // 模式按钮副标题
+  const seqP=findProgress('seq'), randP=findProgress('rand');
+  const seqDs=document.querySelector('.mode-btn[data-mode="seq"] .ds');
+  const randDs=document.querySelector('.mode-btn[data-mode="rand"] .ds');
+  if(seqDs)  seqDs.textContent  = seqP  ? ('上次练到 第'+posText(seqP)+' 题 · 点此继续')  : '按题库顺序逐题精练';
+  if(randDs) randDs.textContent = randP ? ('上次练到 第'+posText(randP)+' 题 · 点此继续') : '打乱顺序，检验真实掌握度';
+}
+
+/* ---------- 练习进度（续练） ---------- */
+function progSig(mode){ return mode+'::'+S.filter.src+'|'+S.filter.type+'|'+S.filter.chap; }
+function hasAns(p){ return p && p.queue && p.queue.length && Object.keys(p.ans||{}).length; }
+function findProgress(mode){ const p=store.prog[progSig(mode)]; return hasAns(p)?p:null; }
+function allProgress(){
+  return Object.keys(store.prog).map(k=>({k,p:store.prog[k]}))
+    .filter(x=>hasAns(x.p))
+    .sort((a,b)=>((b.p.ts||0)-(a.p.ts||0)));
+}
+function latestProgress(){ const a=allProgress(); return a.length?a[0].p:null; }
+function saveProgress(){
+  if(!S.persist) return;
+  if(S.mode!=='seq' && S.mode!=='rand') return;
+  if(!S.queue.length) return;
+  if(!Object.keys(ROUND_ANS).length) return;      // 尚未作答，不记录进度
+  store.prog[progSig(S.mode)] = {
+    mode:S.mode, filter:Object.assign({}, S.filter),
+    queue:S.queue.slice(), idx:S.idx,
+    ans:ROUND_ANS, wrong:[...ROUND_WRONG], sess:Object.assign({}, S.sess),
+    ts:Date.now()
+  };
+  save();
+}
+function clearProgress(mode){
+  Object.keys(store.prog).forEach(k=>{ const p=store.prog[k]; if(p&&p.mode===mode) delete store.prog[k]; });
+  save();
+}
+function applyFilter(f){
+  S.filter = Object.assign({src:'全部',type:'全部',chap:'全部'}, f||{});
+  renderChips($('#fSrc'), [...new Set(QUESTIONS.map(q=>q.src))], 'src');
+  renderChips($('#fType'), ['单选','多选'], 'type');
+  renderChips($('#fChap'), CHAPTERS, 'chap');
+  updateCount();
+}
+function restore(p){
+  S.mode=p.mode; S.persist=true;
+  S.queue = p.queue.filter(id=>QUESTIONS[id]);
+  if(!S.queue.length) return false;
+  S.idx = Math.min(Math.max(0,p.idx||0), S.queue.length-1);
+  ROUND_ANS = p.ans || {};
+  ROUND_WRONG = new Set(p.wrong || []);
+  S.sess = Object.assign({answered:0,correct:0}, p.sess||{});
+  show('quiz'); render();
+  toastNo('已恢复上次进度 · 第 '+(S.idx+1)+'/'+S.queue.length+' 题');
+  return true;
 }
 
 /* ---------- 开始练习 ---------- */
-function start(mode){
-  S.mode=mode;
+function start(mode, opts){
+  opts = opts || {};
+  S.mode = mode; S.persist = (mode==='seq'||mode==='rand');
+  if(!opts.fresh){
+    const p = findProgress(mode);
+    if(p && restore(p)) return;
+  }
+  startFresh(mode);
+}
+function startFresh(mode){
+  S.mode = mode; S.persist = (mode==='seq'||mode==='rand');
   let ids;
   if(mode==='wrong'){ ids = store.wrong.slice(); }
   else if(mode==='fav'){ ids = store.fav.slice(); }
@@ -497,6 +626,12 @@ function start(mode){
   }
   show('quiz');
   render();
+}
+function resumeLatest(){
+  const p = latestProgress();
+  if(!p){ start('seq'); return; }
+  applyFilter(p.filter);
+  if(!restore(p)) startFresh(p.mode);
 }
 function goHome(){ show('home'); renderHome(); }
 
@@ -544,6 +679,7 @@ function render(){
   if(answered){ showExplain(q, eq(S.sel,q.a)); }
   else if(q.t==='多选'){ renderSubmit(true); }
   $('#prevBtn').onclick=prev; $('#nextBtn').onclick=next;
+  saveProgress();
 }
 function renderSubmit(showIt){
   const w=$('#submitWrap');
@@ -588,9 +724,11 @@ function judge(){
     else if(S.sel.includes(i)){ o.classList.add('no'); o.querySelector('.mk').textContent='✕'; }
   });
   renderSubmit(false);
-  $('#pbarIn').style.width=((S.idx+1)/S.queue.length*100)+'%';
+  const doneCnt = S.queue.filter(id=>Object.prototype.hasOwnProperty.call(ROUND_ANS,id)).length;
+  $('#pbarIn').style.width=(doneCnt/S.queue.length*100)+'%';
   showExplain(q, ok);
   if(q.t==='多选'){ const o=$('#subBtn'); if(o) o.disabled=true; }
+  saveProgress();
 }
 function showExplain(q, ok){
   const el=$('#explain');
@@ -623,6 +761,8 @@ function prev(){ if(S.idx>0){ S.idx--; render(); } }
 
 /* ---------- 结算 ---------- */
 function finish(){
+  clearProgress(S.mode);
+  S.persist=false;
   const a=S.sess.answered, c=S.sess.correct;
   const acc = a? Math.round(c/a*100):0;
   $('#rAcc').textContent=acc+'%';
@@ -650,7 +790,7 @@ function finish(){
   list.innerHTML=h;
   const rd=$('#redoWrong');
   if(rd) rd.onclick=()=>{ S.queue=[...ROUND_WRONG].filter(id=>QUESTIONS[id]); S.idx=0;
-    S.sess={answered:0,correct:0}; ROUND_WRONG=new Set(); ROUND_ANS={}; show('quiz'); render(); };
+    S.sess={answered:0,correct:0}; ROUND_WRONG=new Set(); ROUND_ANS={}; S.persist=false; show('quiz'); render(); };
   list.querySelectorAll('.kp-mini').forEach(el=>{ el.onclick=()=>openKp(+el.dataset.kid); });
   show('result');
 }
@@ -776,7 +916,15 @@ $('#learnBack').onclick=goHome;
 $('#kpClose').onclick=closeKp;
 $('#kpModal').onclick=(e)=>{ if(e.target.id==='kpModal') closeKp(); };
 $('#rHome').onclick=goHome;
-$('#rAgain').onclick=()=>start(S.mode);
+$('#rAgain').onclick=()=>start(S.mode, {fresh:true});
+$('#resumeGo').onclick=resumeLatest;
+$('#resumeReset').onclick=()=>{
+  const p=latestProgress(); if(!p) return;
+  if(confirm('确定重新开始「'+(p.mode==='rand'?'随机':'顺序')+'练习」？上次进度将被清空。')){
+    clearProgress(p.mode); applyFilter(p.filter); renderHome();
+    start(p.mode, {fresh:true});
+  }
+};
 $('#resetBtn').onclick=()=>{
   if(confirm('确定清空全部练习记录（错题本、收藏、统计）？此操作不可恢复。')){
     store={stats:{answered:0,correct:0},wrong:[],fav:[],prog:{}}; save(); renderHome();
