@@ -22,6 +22,13 @@ source/ws_*/
 # 站点发布绑定（含本机绝对路径，由发布工具就地生成，不应入库）
 .wbapp_*.genie
 
+# Android 工程（apk/）：签名凭据与构建日志不入库
+# （依赖/构建产物/apk 已由 apk/android/.gitignore 与根 node_modules/ 规则覆盖）
+apk/android/keystore.properties
+apk/build-*.log
+*.jks
+*.keystore
+
 # 日志
 *.log
 npm-debug.log*

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  应用色板。与云端工作台（cloud/styles.css）同一套暖色令牌，
+  避免启动瞬间与网页主题色不一致的割裂感。
+-->
+<resources>
+    <color name="colorPrimary">#6b5f44</color>
+    <color name="colorPrimaryDark">#55492f</color>
+    <color name="colorAccent">#6b5f44</color>
+
+    <!-- 启动画面底色（浅色模式） -->
+    <color name="splash_background">#f6f4ef</color>
+</resources>

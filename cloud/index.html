@@ -7,7 +7,7 @@
 <meta name="theme-color" content="#12100e" media="(prefers-color-scheme: dark)" />
 <title>知识库云端 · MyTemple</title>
 <link rel="manifest" href="/manifest.webmanifest" />
-<link rel="stylesheet" href="/styles.css?v=cloud-1" />
+<link rel="stylesheet" href="/styles.css?v=cloud-2" />
 </head>
 <body>
 <div class="app" id="app">
@@ -167,6 +167,19 @@
           只有你选中的文件会上传。云端按「路径 + 内容指纹」增量比对，内容没变的不重复传输。
         </p>
 
+        <!-- 一键推送：仅当桌面端「云端」面板带着 ?local=http://127.0.0.1:<port> 打开时出现。
+             本机 axum 只对本站域名开放三个只读端点，因此这里只能读、不能写本机。 -->
+        <div id="localImport" class="local-import" hidden>
+          <div class="local-import-head">
+            <span class="local-import-tag">一键推送</span>
+            <strong id="localWsName">本机知识库</strong>
+          </div>
+          <button id="localImportBtn" class="primary-btn primary-btn-sm" type="button">从本机读取并同步</button>
+          <p class="muted local-import-note" id="localImportNote">
+            直接读取本机知识库，按内容指纹只上传有变化的文档；本机原文件不会被修改或删除。
+          </p>
+        </div>
+
         <div id="dropZone" class="dropzone">
           <div class="dropzone-icon" aria-hidden="true">⬆</div>
           <p class="dropzone-title">把文件夹或 .md 文件拖到这里</p>
@@ -232,9 +245,9 @@
   <div id="toast" class="toast" role="status" hidden></div>
 </div>
 
-<script src="/cloud-config.js?v=cloud-1"></script>
+<script src="/cloud-config.js?v=cloud-2"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tencent-ai/workbuddy-cloud-sdk@dev/lib/index.global.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js"></script>
-<script src="/app.js?v=cloud-1" type="module"></script>
+<script src="/app.js?v=cloud-2" type="module"></script>
 </body>
 </html>

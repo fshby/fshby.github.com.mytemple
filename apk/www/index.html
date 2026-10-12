@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>知识库云端</title>
+<link rel="manifest" href="/manifest.webmanifest" />
+<style>
+  :root { color-scheme: light dark; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    display: flex; align-items: center; justify-content: center;
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    background: #f6f4ef; color: #3d3830;
+  }
+  .box { text-align: center; padding: 24px; }
+  .box h1 { font-size: 16px; font-weight: 600; margin: 0 0 8px; }
+  .box p { font-size: 13px; color: #8a8175; margin: 0; }
+  @media (prefers-color-scheme: dark) {
+    body { background: #12100e; color: #e8e2d6; }
+    .box p { color: #9a9184; }
+  }
+</style>
+</head>
+<body>
+  <div class="box">
+    <h1>知识库云端</h1>
+    <p>正在打开…</p>
+  </div>
+  <script>
+    // 正常情况下 WebView 直接加载云端工作台（server.url），本页只在未配置 server.url 时出现。
+    location.replace("https://mytemple-cloud.app.workbuddy.host/");
+  </script>
+</body>
+</html>

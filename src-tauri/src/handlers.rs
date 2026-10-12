@@ -5,8 +5,10 @@
 // Unimplemented endpoints are handled by the sidecar proxy in server.rs.
 
 use axum::{
-    extract::{DefaultBodyLimit, Path, Query, State},
-    http::StatusCode,
+    body::Body,
+    extract::{DefaultBodyLimit, Path, Query, Request, State},
+    http::{header, HeaderName, HeaderValue, Method, StatusCode},
+    middleware::Next,
     response::{IntoResponse, Response},
     routing::{delete, get, post},
     Json, Router,
@@ -112,6 +114,66 @@ fn raw_json<T: Serialize>(data: T) -> Response {
     (StatusCode::OK, Json(data)).into_response()
 }
 
+// ── 云端工作台的只读跨源放行（「一键推送到云端」）────────────────
+//
+// 场景：同一台电脑上，浏览器里打开的云端工作台需要读取本机知识库，
+// 再由它上传到云端（云服务强制「请求来源 == 应用发布域名」，所以上传动作
+// 只能发生在云端页面里，桌面 WebView 的 127.0.0.1 源不在白名单）。
+//
+// 安全边界（刻意收紧到最小）：
+//   1. 只放行**唯一一个**来源（云端工作台的发布域名），不是 "*"；
+//   2. 只挂在**三个只读 GET 端点**上（/api/workspaces、/api/files、/api/files/*path），
+//      所有写端点（save/delete/move/ai/asset…）完全不挂这一层；
+//   3. 本机服务仍只绑定 127.0.0.1，外网无法直接访问。
+// 另外必须回 `Access-Control-Allow-Private-Network: true`：Chrome 的私有网络访问
+// （PNA）策略会拦「公网页面 → 127.0.0.1」的请求，没有这个响应头预检直接失败。
+const CLOUD_WORKBENCH_ORIGIN: &str = "https://mytemple-cloud.app.workbuddy.host";
+
+fn apply_cloud_cors_headers(res: &mut Response, origin: &str) {
+    let h = res.headers_mut();
+    if let Ok(v) = HeaderValue::from_str(origin) {
+        h.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, v);
+    }
+    h.insert(
+        header::ACCESS_CONTROL_ALLOW_METHODS,
+        HeaderValue::from_static("GET, OPTIONS"),
+    );
+    h.insert(
+        header::ACCESS_CONTROL_ALLOW_HEADERS,
+        HeaderValue::from_static("Content-Type"),
+    );
+    h.insert(header::ACCESS_CONTROL_MAX_AGE, HeaderValue::from_static("600"));
+    h.insert(header::VARY, HeaderValue::from_static("Origin"));
+    h.insert(
+        HeaderName::from_static("access-control-allow-private-network"),
+        HeaderValue::from_static("true"),
+    );
+}
+
+/// 只读端点的跨源中间件：来源不匹配时**不加任何头**，行为与改动前逐字节一致。
+async fn cloud_read_cors(req: Request, next: Next) -> Response {
+    let origin = req
+        .headers()
+        .get(header::ORIGIN)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_owned());
+    let allowed = origin.as_deref() == Some(CLOUD_WORKBENCH_ORIGIN);
+
+    if allowed && req.method() == Method::OPTIONS {
+        // 预检：直接回 204，不进业务处理（GET 路由默认对 OPTIONS 回 405）
+        let mut res = Response::new(Body::empty());
+        *res.status_mut() = StatusCode::NO_CONTENT;
+        apply_cloud_cors_headers(&mut res, CLOUD_WORKBENCH_ORIGIN);
+        return res;
+    }
+
+    let mut res = next.run(req).await;
+    if allowed {
+        apply_cloud_cors_headers(&mut res, CLOUD_WORKBENCH_ORIGIN);
+    }
+    res
+}
+
 // ── 路由构建 ──────────────────────────────────────────────
 
 pub fn build_native_router(state: Arc<ServerState>) -> Router {
@@ -124,7 +186,12 @@ pub fn build_native_router(state: Arc<ServerState>) -> Router {
         // 系统路径
         .route("/api/system-paths", get(get_system_paths))
         // 工作区
-        .route("/api/workspaces", get(get_workspaces))
+        // （/api/workspaces 与下面两个 /api/files 只读端点额外挂 cloud_read_cors：
+        //   仅放行云端工作台域名，供「一键推送到云端」读取本机内容；写端点一律不挂。）
+        .route(
+            "/api/workspaces",
+            get(get_workspaces).layer(axum::middleware::from_fn(cloud_read_cors)),
+        )
         .route("/api/workspaces/add", post(add_workspace))
         .route("/api/workspaces/remove", post(remove_workspace))
         .route("/api/workspaces/rename", post(rename_workspace))
@@ -134,8 +201,14 @@ pub fn build_native_router(state: Arc<ServerState>) -> Router {
         // 文件树
         .route("/api/tree", get(get_tree))
         // 文件 CRUD
-        .route("/api/files", get(list_files))
-        .route("/api/files/*path", get(read_file))
+        .route(
+            "/api/files",
+            get(list_files).layer(axum::middleware::from_fn(cloud_read_cors)),
+        )
+        .route(
+            "/api/files/*path",
+            get(read_file).layer(axum::middleware::from_fn(cloud_read_cors)),
+        )
         .route("/api/files", post(save_file))
         .route("/api/files/*path", delete(delete_file))
         // 文档

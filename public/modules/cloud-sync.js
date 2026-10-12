@@ -115,6 +115,7 @@ async function api(path, options) {
 async function gatherFacts() {
   const facts = { workspace: "—", root: "—", count: "—" };
   try {
+    // /api/workspaces 返回裸对象 {workspaces, defaultWorkspaceId, …}（无 ok/data 包装）
     const ws = await api("/api/workspaces");
     const list = Array.isArray(ws?.workspaces) ? ws.workspaces : [];
     const def = list.find((w) => w.id === ws?.defaultWorkspaceId) || list[0];
@@ -124,26 +125,39 @@ async function gatherFacts() {
     }
   } catch (_) { /* 状态读取失败不影响入口可用 */ }
   try {
+    // /api/files 走 success() 包装，是 {ok,data:[FileEntry,…]}，必须取 .data
     const files = await api("/api/files");
-    const arr = Array.isArray(files) ? files : [];
+    const arr = Array.isArray(files?.data) ? files.data : (Array.isArray(files) ? files : []);
     const md = arr.filter((f) => /\.(md|markdown|txt)$/i.test(String(f?.path || "")));
     facts.count = md.length ? `${md.length} 篇 Markdown` : "暂无 Markdown";
   } catch (_) { /* 同上 */ }
   return facts;
 }
 
-async function openWorkbench() {
+/**
+ * 本机服务端口：桌面 WebView 就加载在 http://127.0.0.1:<port>，所以 location.port 即真实端口。
+ * 云端工作台用它拼出 ?local=http://127.0.0.1:<port>，从而能读本机的只读接口。
+ */
+function localPort() {
+  const p = window.location.port;
+  return /^\d{2,5}$/.test(p) ? p : "7321";
+}
+
+async function openWorkbench(withLocal) {
+  const url = withLocal
+    ? `${CLOUD_WORKBENCH_URL}?local=${encodeURIComponent(`http://127.0.0.1:${localPort()}`)}`
+    : CLOUD_WORKBENCH_URL;
   try {
     await api("/api/open-url", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: CLOUD_WORKBENCH_URL }),
+      body: JSON.stringify({ url }),
     });
   } catch (err) {
     try {
-      window.open(CLOUD_WORKBENCH_URL, "_blank", "noopener,noreferrer");
+      window.open(url, "_blank", "noopener,noreferrer");
     } catch (_) {
-      notify("打开浏览器失败：" + CLOUD_WORKBENCH_URL);
+      notify("打开浏览器失败：" + url);
     }
   }
 }
@@ -185,18 +199,19 @@ export async function openCloudPanel() {
           <div class="mt-cloud-fact"><dt>可同步内容</dt><dd data-fact="count">读取中…</dd></div>
         </dl>
         <div class="mt-cloud-actions">
-          <button class="mt-cloud-btn mt-cloud-btn-primary" type="button" data-act="open">打开云端工作台</button>
-          <button class="mt-cloud-btn" type="button" data-act="copy">复制知识库路径</button>
+          <button class="mt-cloud-btn mt-cloud-btn-primary" type="button" data-act="push">一键推送到云端</button>
+          <button class="mt-cloud-btn" type="button" data-act="open">打开云端工作台</button>
+          <button class="mt-cloud-btn" type="button" data-act="copy">复制路径</button>
         </div>
         <ol class="mt-cloud-steps">
-          <li>点「打开云端工作台」，用手机号验证码或微信登录。</li>
-          <li>在工作台点「上传」→「选择文件夹」，选中下面这个本机路径。</li>
-          <li>勾选/确认后开始上传；之后重复上传只会传输内容有变化的文档。</li>
+          <li>点「一键推送到云端」：浏览器打开的云端工作台会直接读取本机知识库。</li>
+          <li>在里面点「从本机读取并同步」——只上传内容有变化的文档。</li>
+          <li>手机上打开同一个网址并登录，即可查看与检索。</li>
         </ol>
-        <p class="mt-cloud-note">上传完全由你决定：不点上传，任何内容都不会离开本机。</p>
+        <p class="mt-cloud-note">上传完全由你决定：不点同步，任何内容都不会离开本机。</p>
         <p class="mt-cloud-warn">
-          需要说明的限制：受云服务的安全策略约束，接入请求必须来自应用的发布域名，
-          因此桌面端不能直接发起上传 —— 上传动作在云端工作台里完成（可在同一台电脑上操作）。
+          需要说明的限制：「一键推送」要求桌面端正在运行、且浏览器与桌面端在同一台电脑上。
+          本机只对云端工作台开放<b>只读</b>接口，写操作一律不开放。
         </p>
       </div>
     </div>`;
@@ -208,8 +223,10 @@ export async function openCloudPanel() {
     if (e.target === backdrop || e.target.closest(".mt-cloud-close")) close();
     const btn = e.target.closest("[data-act]");
     if (!btn) return;
-    if (btn.getAttribute("data-act") === "open") openWorkbench();
-    if (btn.getAttribute("data-act") === "copy") copyRoot(backdrop.querySelector('[data-fact="root"]')?.textContent || "");
+    const act = btn.getAttribute("data-act");
+    if (act === "push") openWorkbench(true);
+    if (act === "open") openWorkbench(false);
+    if (act === "copy") copyRoot(backdrop.querySelector('[data-fact="root"]')?.textContent || "");
   });
   const onKey = (e) => {
     if (e.key === "Escape") { close(); document.removeEventListener("keydown", onKey); }

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 深色模式下的启动底色，与云端工作台深色主题背景一致，避免闪白。 -->
+<resources>
+    <color name="splash_background">#12100e</color>
+</resources>

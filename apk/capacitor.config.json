@@ -1,0 +1,23 @@
+{
+  "appId": "cc.fshby.mytemple.cloud",
+  "appName": "知识库云端",
+  "webDir": "www",
+  "server": {
+    "url": "https://mytemple-cloud.app.workbuddy.host/",
+    "errorPath": "offline.html",
+    "androidScheme": "https",
+    "allowNavigation": [
+      "mytemple-cloud.app.workbuddy.host",
+      "www.workbuddy.cn",
+      "*.workbuddy.cn",
+      "open.weixin.qq.com",
+      "*.weixin.qq.com"
+    ]
+  },
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": false,
+    "backgroundColor": "#f6f4ef"
+  }
+}

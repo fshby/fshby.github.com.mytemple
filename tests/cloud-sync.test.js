@@ -224,7 +224,11 @@ test("静态资源缓存戳三处一致，且改动后已递增", () => {
   const unique = [...new Set(versions)];
   assert.equal(unique.length, 1, `主资源 ?v= 必须完全一致，实测 ${unique.join(" / ")}`);
   assert.match(unique[0], /^2026\d{4}-/, "缓存戳应是日期前缀形式");
-  assert.ok(cloudHtml.includes("?v=cloud-1"), "云端工作台资源应带自己的缓存戳");
+  assert.ok(cloudHtml.includes("?v=cloud-2"), "云端工作台资源应带自己的缓存戳");
+  // 云端三件套（styles.css / cloud-config.js / app.js）必须同版本串，且页面里不残留旧版本
+  const cloudVersions = [...cloudHtml.matchAll(/(?:styles\.css|cloud-config\.js|app\.js)\?v=([^"]+)/g)].map((m) => m[1]);
+  assert.equal(cloudVersions.length, 3, `云页面应有 3 处主资源引用，实测 ${cloudVersions.length}`);
+  assert.equal(new Set(cloudVersions).size, 1, `云页面 ?v= 必须完全一致，实测 ${cloudVersions.join(" / ")}`);
   // 桌面 app.js 内部引用的两个 URL 必须与页面一致，否则 WebView2 会命中旧缓存
   for (const target of ["editor-core.js", "markdown-worker.js"]) {
     const m = appSrc.match(new RegExp(`/${target.replace(".", "\\.")}\\?v=([^"]+)`));

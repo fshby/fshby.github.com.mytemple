@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>无法连接 · 知识库云端</title>
+<style>
+  /* 离线兜底页：仅当主框架加载失败时由 Capacitor 加载（server.errorPath）。
+     它运行在应用内的本地来源上，与应用本体不同源，因此只做「提示 + 重试」。 */
+  :root {
+    color-scheme: light dark;
+    --bg: #f6f4ef; --fg: #3d3830; --muted: #8a8175;
+    --line: rgba(61,56,48,.14); --accent: #6b5f44; --on-accent: #fff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12100e; --fg: #e8e2d6; --muted: #9a9184;
+      --line: rgba(232,226,214,.16); --accent: #cbb98f; --on-accent: #1a1713;
+    }
+  }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg); color: var(--fg);
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    display: flex; align-items: center; justify-content: center;
+    padding: max(24px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom));
+  }
+  .card {
+    width: 100%; max-width: 380px; text-align: center;
+    border: 1px solid var(--line); border-radius: 16px;
+    padding: 26px 22px 22px;
+  }
+  .mark { font-size: 30px; line-height: 1; margin-bottom: 12px; }
+  h1 { font-size: 16.5px; font-weight: 650; margin: 0 0 8px; }
+  p { font-size: 13.5px; line-height: 1.75; color: var(--muted); margin: 0 0 18px; }
+  button {
+    width: 100%; border: none; border-radius: 10px; padding: 12px 16px;
+    font-size: 14.5px; font-weight: 600; cursor: pointer;
+    background: var(--accent); color: var(--on-accent);
+  }
+  button:disabled { opacity: .55; cursor: default; }
+  .status { margin: 12px 0 0; font-size: 12px; color: var(--muted); min-height: 1.2em; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="mark" aria-hidden="true">⚑</div>
+    <h1>暂时连不上云端</h1>
+    <p>需要网络才能打开知识库。请检查 Wi-Fi 或移动数据后重试。</p>
+    <button id="retry" type="button">重新连接</button>
+    <p class="status" id="status"></p>
+  </div>
+  <script>
+    (function () {
+      var SITE = "https://mytemple-cloud.app.workbuddy.host/";
+      var btn = document.getElementById("retry");
+      var status = document.getElementById("status");
+      var timer = null;
+      var tries = 0;
+
+      function go() {
+        clearInterval(timer);
+        status.textContent = "正在打开…";
+        btn.disabled = true;
+        location.replace(SITE);
+      }
+
+      // 用 <img> 探测可达性：图片跨源加载不需要 CORS，失败/成功都能可靠判定。
+      function probe() {
+        if (!navigator.onLine) {
+          status.textContent = "设备当前无网络";
+          return;
+        }
+        status.textContent = "正在尝试连接…";
+        var img = new Image();
+        var done = false;
+        img.onload = function () { if (!done) { done = true; go(); } };
+        img.onerror = function () {
+          if (done) return;
+          done = true;
+          tries += 1;
+          status.textContent = "第 " + tries + " 次重试未成功…";
+        };
+        img.src = SITE + "icon.svg?probe=" + Date.now();
+      }
+
+      btn.addEventListener("click", function () {
+        tries = 0;
+        probe();
+        clearInterval(timer);
+        timer = setInterval(function () {
+          if (tries >= 12) { clearInterval(timer); status.textContent = "多次重试均未成功，请稍后再试。"; return; }
+          probe();
+        }, 4000);
+      });
+
+      window.addEventListener("online", function () { status.textContent = "网络已恢复，正在连接…"; probe(); });
+      window.addEventListener("offline", function () { clearInterval(timer); status.textContent = "设备当前无网络"; });
+
+      // 打开即自动试一次，同时开始自动重试
+      probe();
+      timer = setInterval(function () {
+        if (tries >= 12) { clearInterval(timer); status.textContent = "多次重试均未成功，请稍后再试。"; return; }
+        probe();
+      }, 5000);
+    })();
+  </script>
+</body>
+</html>

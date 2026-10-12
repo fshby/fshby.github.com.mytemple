@@ -406,6 +406,26 @@ details.ws > .doc-list > .doc-item > .doc-link { padding-left: 34px; }
 .dropzone-sub { margin: 0 0 12px; font-size: 12.5px; }
 .dropzone-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
 
+/* 「一键推送」块：桌面端带 ?local= 打开时才出现，排在拖拽区之前（更省事的那条路优先） */
+.local-import {
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 13px 14px; border-radius: var(--radius);
+  border: 1px solid var(--line-strong);
+  background: var(--accent-soft);
+}
+.local-import[hidden] { display: none; }
+.local-import-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.local-import-head strong {
+  font-size: 13.5px; color: var(--text-strong); font-weight: 650;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.local-import-tag {
+  flex: 0 0 auto; font-size: 11px; font-weight: 700; letter-spacing: .04em;
+  color: var(--on-accent); background: var(--accent-solid);
+  border-radius: 99px; padding: 2.5px 9px;
+}
+.local-import-note { margin: 0; font-size: 12px; line-height: 1.65; }
+
 .progress { display: flex; flex-direction: column; gap: 7px; }
 .progress-bar { height: 6px; background: var(--line); border-radius: 99px; overflow: hidden; }
 .progress-fill { height: 100%; width: 0; background: var(--accent); border-radius: 99px; transition: width .2s; }

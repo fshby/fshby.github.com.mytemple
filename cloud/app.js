@@ -56,6 +56,8 @@ const el = {
   docTitle: $("docTitle"), docPath: $("docPath"), docBody: $("docBody"), docDeleteBtn: $("docDeleteBtn"),
   uploadSheet: $("uploadSheet"), dropZone: $("dropZone"), pickFolderBtn: $("pickFolderBtn"),
   pickFilesBtn: $("pickFilesBtn"), folderInput: $("folderInput"), filesInput: $("filesInput"),
+  localImport: $("localImport"), localImportBtn: $("localImportBtn"),
+  localImportNote: $("localImportNote"), localWsName: $("localWsName"),
   wsName: $("wsName"), uploadProgress: $("uploadProgress"), progressFill: $("progressFill"),
   progressLabel: $("progressLabel"), cancelUploadBtn: $("cancelUploadBtn"), uploadResult: $("uploadResult"),
   manageSheet: $("manageSheet"), wsList: $("wsList"), clearAllBtn: $("clearAllBtn"),
@@ -811,6 +813,121 @@ el.refreshBtn.addEventListener("click", async () => {
   toast("已刷新");
 });
 
+/* ══ 从本机导入（一键推送）═══════════════════════════════════
+ *
+ * 为什么需要它：云服务强制「请求来源 == 应用发布域名」（精确 Origin 校验），
+ * 桌面 WebView 的源是 http://127.0.0.1:<port>，不在白名单内 —— 桌面端无法直接上传。
+ * 所以由桌面端「云端」面板带着 ?local=http://127.0.0.1:<port> 打开本页，
+ * 本页（Origin 就是白名单域名）去读本机那三个只读端点，再把内容传上云。
+ *
+ * 安全边界：本机 axum 只对本站域名开放 /api/workspaces、/api/files、/api/files/*path
+ * 三个 GET 端点（见 handlers.rs::cloud_read_cors），写端点完全不开放 —— 这里读得到、改不了。
+ */
+const LOCAL_ORIGIN_RE = /^http:\/\/(?:127\.0\.0\.1|localhost):(\d{1,5})$/;
+
+function localOrigin() {
+  try {
+    const raw = (new URLSearchParams(location.search).get("local") || "").replace(/\/+$/, "");
+    if (!LOCAL_ORIGIN_RE.test(raw)) return null;
+    const port = Number(RegExp.$1);
+    return port >= 1 && port <= 65535 ? raw : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+const LOCAL_ORIGIN = localOrigin();
+
+async function localGet(origin, path) {
+  const res = await fetch(origin + path, { cache: "no-store" });
+  if (!res.ok) throw new Error("本机接口 " + path + " 返回 HTTP " + res.status);
+  return res.json();
+}
+
+/** FileEntry.path 形如 "<workspace_id>/<相对路径>"，云端存的是相对路径。 */
+function relFromRef(ref, wsId) {
+  const p = normPath(ref);
+  return p.startsWith(wsId + "/") ? p.slice(wsId.length + 1) : p;
+}
+
+/** 读取本机工作区与文件清单（不含正文）。 */
+async function readLocalIndex(origin) {
+  const wsRes = await localGet(origin, "/api/workspaces");
+  const list = Array.isArray(wsRes && wsRes.workspaces) ? wsRes.workspaces : [];
+  const def = list.find((w) => w.id === wsRes.defaultWorkspaceId) || list[0];
+  if (!def) throw new Error("本机没有已加载的知识库工作区");
+  const filesRes = await localGet(origin, "/api/files");
+  const arr = Array.isArray(filesRes && filesRes.data)
+    ? filesRes.data
+    : (Array.isArray(filesRes) ? filesRes : []);
+  const md = arr.filter((f) => f && TEXT_EXT.test(String(f.path || "")) && f.workspace_id === def.id);
+  return { ws: def, files: md };
+}
+
+async function runLocalImport() {
+  if (!LOCAL_ORIGIN) return;
+  const btn = el.localImportBtn;
+  const note = el.localImportNote;
+  const setNote = (t) => { note.textContent = t; };
+  btn.disabled = true;
+  try {
+    setNote("正在读取本机知识库索引…");
+    const { ws, files } = await readLocalIndex(LOCAL_ORIGIN);
+    el.localWsName.textContent = ws.name || "本机知识库";
+    if (!files.length) {
+      setNote("本机工作区里没有 Markdown / 文本文件。");
+      return;
+    }
+
+    const cloudWs = el.wsName.value.trim() || ws.name || "我的知识库";
+    el.wsName.value = cloudWs;
+    setNote(`本机 ${files.length} 篇，正在与云端比对…`);
+
+    // 先拿云端指纹：内容一致的连正文都不用读
+    const { data: existing, error: exErr } = await cloud.database
+      .from("documents").select("rel_path, content_sha").eq("workspace", cloudWs);
+    if (exErr) {
+      setNote("读取云端索引失败：" + (exErr.message || "未知错误"));
+      return;
+    }
+    const have = new Map((existing || []).map((r) => [r.rel_path, r.content_sha]));
+
+    const candidates = [];
+    let unchanged = 0;
+    for (let i = 0; i < files.length; i += 1) {
+      const f = files[i];
+      const rel = relFromRef(f.path, ws.id);
+      if (!rel) continue;
+      if (have.get(rel) && have.get(rel) === f.content_sha256) { unchanged += 1; continue; }
+      const enc = rel.split("/").map(encodeURIComponent).join("/");
+      const res = await localGet(LOCAL_ORIGIN, "/api/files/" + enc);
+      const entry = res && res.data ? res.data : res;
+      const text = typeof entry.content === "string" ? entry.content : "";
+      candidates.push({ relPath: rel, text, mtime: entry.modified || null });
+      setNote(`读取本机内容…（${i + 1}/${files.length}，已取 ${candidates.length} 篇）`);
+    }
+
+    if (!candidates.length) {
+      setNote(`已是最新：${files.length} 篇内容均与云端一致，无需上传。`);
+      return;
+    }
+    setNote(`待上传 ${candidates.length} 篇（内容未变 ${unchanged} 篇已跳过），开始同步…`);
+    closeSheet(win);
+    await runUpload(candidates);
+  } catch (err) {
+    const msg = String((err && err.message) || err);
+    setNote("读取本机失败：" + msg +
+      "。请确认桌面端正在运行，并且本页面是在同一台电脑上打开的。");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+if (LOCAL_ORIGIN) {
+  el.localImport.hidden = false;
+  el.localImportBtn.addEventListener("click", runLocalImport);
+}
+
 /* ══ 上传 ═══════════════════════════════════════════════════ */
 const win = el.uploadSheet;
 el.uploadBtn.addEventListener("click", () => {
@@ -967,7 +1084,7 @@ async function runUpload(candidates) {
         content: text,
         content_sha: sha,
         bytes: new TextEncoder().encode(text).length,
-        doc_mtime: c.file ? (c.file.lastModified || null) : null,
+        doc_mtime: c.file ? (c.file.lastModified || null) : (c.mtime || null),
       });
       if (i % 10 === 0 || i === candidates.length - 1) {
         setProgress(`读取文件…（${i + 1}/${job.total}）`, ((i + 1) / job.total) * 25);
