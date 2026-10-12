@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#f6f4ef" media="(prefers-color-scheme: light)" />
+<meta name="theme-color" content="#12100e" media="(prefers-color-scheme: dark)" />
+<title>知识库云端 · MyTemple</title>
+<link rel="manifest" href="/manifest.webmanifest" />
+<link rel="stylesheet" href="/styles.css?v=cloud-1" />
+</head>
+<body>
+<div class="app" id="app">
+
+  <!-- ── 顶栏 ───────────────────────────────────────────── -->
+  <header class="topbar">
+    <button id="backBtn" class="icon-btn" type="button" title="返回" aria-label="返回" hidden>←</button>
+    <div class="brand">
+      <span class="brand-dot" aria-hidden="true"></span>
+      <span class="brand-name">知识库云端</span>
+    </div>
+    <div class="topbar-spacer"></div>
+    <span id="whoami" class="whoami" hidden></span>
+    <button id="logoutBtn" class="ghost-btn" type="button" hidden>退出</button>
+  </header>
+
+  <!-- ── 启动中 ─────────────────────────────────────────── -->
+  <section id="viewBoot" class="view view-boot">
+    <div class="spinner" aria-hidden="true"></div>
+    <p class="muted">正在连接云端…</p>
+  </section>
+
+  <!-- ── 登录 ───────────────────────────────────────────── -->
+  <section id="viewLogin" class="view view-login" hidden>
+    <div class="card card-login">
+      <h1 class="card-title">登录</h1>
+      <p class="muted card-sub">登录后，只有你自己能看到上传到云端的内容。</p>
+
+      <div class="tabs" role="tablist" aria-label="登录方式">
+        <button id="tabEmail" class="tab is-active" type="button" role="tab" aria-selected="true">邮箱</button>
+        <button id="tabPhone" class="tab" type="button" role="tab" aria-selected="false">手机号</button>
+      </div>
+
+      <form id="emailForm" class="form" autocomplete="off" novalidate>
+        <label class="field">
+          <span class="field-label">邮箱</span>
+          <input id="email" class="input" type="email" placeholder="you@example.com"
+                 autocomplete="email" inputmode="email" />
+          <span id="emailFieldError" class="field-error" hidden></span>
+        </label>
+
+        <label class="field">
+          <span class="field-label">验证码</span>
+          <div class="field-row">
+            <input id="emailCode" class="input" type="text" inputmode="numeric" placeholder="邮件里的验证码"
+                   autocomplete="one-time-code" maxlength="8" />
+            <button id="sendEmailCodeBtn" class="ghost-btn ghost-btn-strong" type="button">获取验证码</button>
+          </div>
+        </label>
+
+        <label class="field">
+          <span class="field-label">密码</span>
+          <input id="emailPassword" class="input" type="password" placeholder="至少 8 位"
+                 autocomplete="current-password" />
+          <span class="field-hint" id="emailPasswordHint">首次注册时需设置密码；用密码登录时也填这里。</span>
+        </label>
+
+        <button id="emailSubmit" class="primary-btn" type="submit">登录 / 注册</button>
+        <div class="alt-actions">
+          <button id="emailPasswordLogin" class="link-btn" type="button">用密码登录</button>
+          <button id="forgotBtn" class="link-btn" type="button">忘记密码</button>
+        </div>
+        <p id="resetHint" class="form-note" hidden></p>
+        <p id="emailError" class="form-error" hidden></p>
+      </form>
+
+      <form id="phoneForm" class="form" autocomplete="off" novalidate hidden>
+        <label class="field">
+          <span class="field-label">手机号</span>
+          <input id="phone" class="input" type="tel" inputmode="numeric" placeholder="11 位手机号"
+                 autocomplete="tel" maxlength="11" />
+          <span id="phoneError" class="field-error" hidden></span>
+        </label>
+
+        <label class="field">
+          <span class="field-label">验证码</span>
+          <div class="field-row">
+            <input id="code" class="input" type="text" inputmode="numeric" placeholder="6 位验证码"
+                   autocomplete="one-time-code" maxlength="6" />
+            <button id="sendCodeBtn" class="ghost-btn ghost-btn-strong" type="button">获取验证码</button>
+          </div>
+        </label>
+
+        <div id="passwordField" class="field" hidden>
+          <span class="field-label">设置密码</span>
+          <input id="signupPassword" class="input" type="password" placeholder="首次登录需设置密码"
+                 autocomplete="new-password" />
+          <span class="field-hint">用于以后在新设备上登录，至少 8 位。</span>
+        </div>
+
+        <button id="loginSubmit" class="primary-btn" type="submit">登录 / 注册</button>
+        <p id="loginError" class="form-error" hidden></p>
+      </form>
+
+      <div class="or"><span>或</span></div>
+
+      <button id="wechatBtn" class="wechat-btn" type="button">
+        <span class="wechat-icon" aria-hidden="true">💬</span> 微信登录
+      </button>
+      <p class="muted card-foot">登录即表示你同意仅将所选内容同步到云端。</p>
+    </div>
+  </section>
+
+  <!-- ── 知识库列表 ─────────────────────────────────────── -->
+  <section id="viewList" class="view" hidden>
+    <div class="searchbar">
+      <div class="search-wrap">
+        <span class="search-icon" aria-hidden="true">🔍</span>
+        <input id="q" class="search-input" type="search" placeholder="搜索标题或正文…"
+               autocomplete="off" enterkeyhint="search" />
+        <button id="clearQ" class="icon-btn icon-btn-sm" type="button" title="清空" aria-label="清空" hidden>✕</button>
+      </div>
+      <button id="uploadBtn" class="primary-btn primary-btn-sm" type="button">上传</button>
+    </div>
+
+    <div class="statusline">
+      <span id="stats" class="stats muted">—</span>
+      <div class="statusline-actions">
+        <button id="refreshBtn" class="link-btn" type="button">刷新</button>
+        <button id="manageBtn" class="link-btn" type="button">管理</button>
+      </div>
+    </div>
+
+    <div id="listWrap" class="list-wrap">
+      <div id="emptyState" class="empty" hidden>
+        <p class="empty-title">云端还没有内容</p>
+        <p class="muted">点右上角「上传」，选择你电脑上的知识库文件夹即可。</p>
+      </div>
+      <div id="tree" class="tree"></div>
+      <div id="searchResults" class="tree" hidden></div>
+    </div>
+  </section>
+
+  <!-- ── 阅读 ───────────────────────────────────────────── -->
+  <section id="viewDoc" class="view" hidden>
+    <div class="doc-meta">
+      <h1 id="docTitle" class="doc-title"></h1>
+      <p id="docPath" class="doc-path muted"></p>
+    </div>
+    <article id="docBody" class="markdown-body"></article>
+    <div class="doc-foot">
+      <button id="docDeleteBtn" class="danger-link" type="button">从云端删除这篇</button>
+    </div>
+  </section>
+
+  <!-- ── 上传面板（底部抽屉） ─────────────────────────────── -->
+  <div id="uploadSheet" class="sheet" hidden>
+    <div class="sheet-backdrop" data-close-sheet></div>
+    <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="uploadTitle">
+      <div class="sheet-head">
+        <h2 id="uploadTitle" class="sheet-title">上传知识库到云端</h2>
+        <button class="icon-btn" type="button" data-close-sheet aria-label="关闭">✕</button>
+      </div>
+
+      <div class="sheet-body">
+        <p class="muted sheet-note">
+          只有你选中的文件会上传。云端按「路径 + 内容指纹」增量比对，内容没变的不重复传输。
+        </p>
+
+        <div id="dropZone" class="dropzone">
+          <div class="dropzone-icon" aria-hidden="true">⬆</div>
+          <p class="dropzone-title">把文件夹或 .md 文件拖到这里</p>
+          <p class="muted dropzone-sub">也可以选择下面的方式</p>
+          <div class="dropzone-actions">
+            <button id="pickFolderBtn" class="ghost-btn ghost-btn-strong" type="button">选择文件夹</button>
+            <button id="pickFilesBtn" class="ghost-btn" type="button">选择文件</button>
+          </div>
+          <input id="folderInput" type="file" webkitdirectory directory multiple hidden />
+          <input id="filesInput" type="file" accept=".md,.markdown,.txt,.zip" multiple hidden />
+        </div>
+
+        <label class="field">
+          <span class="field-label">云端分区（工作区名）</span>
+          <input id="wsName" class="input" type="text" placeholder="例如：temple" />
+          <span class="field-hint">同一分区内按相对路径去重，不同分区互不影响。</span>
+        </label>
+
+        <div id="uploadProgress" class="progress" hidden>
+          <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
+          <div class="progress-text">
+            <span id="progressLabel">准备中…</span>
+            <button id="cancelUploadBtn" class="link-btn danger-link" type="button">取消</button>
+          </div>
+        </div>
+
+        <p id="uploadResult" class="form-error" hidden></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 管理面板 ───────────────────────────────────────── -->
+  <div id="manageSheet" class="sheet" hidden>
+    <div class="sheet-backdrop" data-close-sheet></div>
+    <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="manageTitle">
+      <div class="sheet-head">
+        <h2 id="manageTitle" class="sheet-title">管理云端内容</h2>
+        <button class="icon-btn" type="button" data-close-sheet aria-label="关闭">✕</button>
+      </div>
+      <div class="sheet-body">
+        <div id="wsList" class="ws-list"></div>
+        <hr class="sep" />
+        <button id="clearAllBtn" class="danger-btn" type="button">清空我的全部云端副本</button>
+        <p class="muted sheet-note">删除只影响云端副本，不会动你电脑上的原始文件。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 确认对话框 ─────────────────────────────────────── -->
+  <div id="confirmSheet" class="sheet" hidden>
+    <div class="sheet-backdrop" data-close-sheet></div>
+    <div class="sheet-panel sheet-panel-narrow" role="alertdialog" aria-modal="true" aria-labelledby="confirmText">
+      <div class="sheet-body">
+        <p id="confirmText" class="confirm-text"></p>
+        <div class="confirm-actions">
+          <button id="confirmCancel" class="ghost-btn" type="button">取消</button>
+          <button id="confirmOk" class="danger-btn" type="button">确认</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+</div>
+
+<script src="/cloud-config.js?v=cloud-1"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tencent-ai/workbuddy-cloud-sdk@dev/lib/index.global.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js"></script>
+<script src="/app.js?v=cloud-1" type="module"></script>
+</body>
+</html>

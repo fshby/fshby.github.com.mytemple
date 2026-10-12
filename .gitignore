@@ -19,6 +19,9 @@ src-tauri/resources/
 workspaces.json
 source/ws_*/
 
+# 站点发布绑定（含本机绝对路径，由发布工具就地生成，不应入库）
+.wbapp_*.genie
+
 # 日志
 *.log
 npm-debug.log*

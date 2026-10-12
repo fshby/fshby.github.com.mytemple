@@ -1,4 +1,4 @@
-import { createMarkdownEditor } from "/editor-core.js?v=20261009-v5";
+import { createMarkdownEditor } from "/editor-core.js?v=20261012-cloud-1";
 import { getPaperBackgroundUrl } from "./modules/paper-texture.js";
 import { escapeHtml, displayName, displayRelativePath, splitPathRef, joinPathRef, parentPathRef, compactName, splitWorkspaceRef, plainText, headingId } from "./modules/path-utils.js";
 import { extractOutline, addCnEnSpaces } from "./modules/editor-utils.js";
@@ -6,6 +6,7 @@ import { stripFrontmatter, escapeRegex, splitIntoLogicalBlocks, estimateBlockLin
 import { highlightCode } from "./modules/preview-utils.js";
 import { openDrawEditor } from "./modules/draw-editor.js";
 import { createScreenshotEditor } from "./modules/screenshot-editor.js";
+import { initCloudSync } from "./modules/cloud-sync.js";
 
 // ── 全局错误处理器：捕获模块顶层抛出的未处理异常，输出到 console 便于诊断 ──
 window.addEventListener("error", (e) => {
@@ -41,7 +42,7 @@ const LARGE_PREVIEW_DELAY = 700;
 const CHUNKED_RENDER_BYTES = 500 * 1024;
 const CHUNK_RENDER_SLICE_BYTES = 150 * 1024;
 const GRAPH_WORKER_URL = "/graph-worker.js?v=20260810-graph-1";
-const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20261009-v5";
+const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20261012-cloud-1";
 // Markdown 渲染缓存版本戳：解析器或 CSS 规则升级时递增，确保旧缓存不被复用。
 // 2026-08-29 v1.8.102：安装包 resources 包含 public/ 前端静态文件、端口回滚；修正其他电脑安装后 404 白屏。
 const MARKDOWN_RENDER_VERSION = "20260829-v18102-install-static-bundle-port-scan";
@@ -14809,6 +14810,8 @@ els.sidebarResizer.addEventListener("pointercancel", endSidebarResize);
 els.sidebarHideBtn.addEventListener("click", () => setSidebarCollapsed(true));
 els.sidebarShowBtn.addEventListener("click", () => setSidebarCollapsed(!state.sidebarCollapsed));
 els.aiBtn?.addEventListener("click", () => toggleAiDrawer());
+// 云端同步入口：自包含模块，只挂一个按钮的 click，不参与任何既有状态。
+initCloudSync();
 els.aiCloseBtn?.addEventListener("click", () => toggleAiDrawer(false));
 els.aiClearBtn?.addEventListener("click", () => {
   state.ai.messages = [];
