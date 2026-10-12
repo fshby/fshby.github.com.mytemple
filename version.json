@@ -1,7 +1,7 @@
 {
-    "version":  "2.1.38",
+    "version":  "2.1.39",
     "downloadUrl":  "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
-    "latestReleaseNotes":  "三端直连打通：桌面端「云端同步」面板现在可以直接登录云端并双向同步，新增「拉取云端更新」，本机文件永不被静默覆盖（两端都改过时自动保留本机版本、云端版本另存为冲突副本），云端删除不会删本机文件；同步发布 Android 应用 1.1.0，补齐返回键分层回退、分享、复制、导出 .md、断网提示与状态栏配色。",
-    "releaseNotes":  "v2.1.38 release. See changelog for details.",
+    "latestReleaseNotes":  "首轮实机反馈修复：修「可同步内容恒为暂无 Markdown」（后端字段为驼峰命名而前端按旧拼写读取，连带修复拉取冲突检测因此失效的隐患）；云端同步面板显示推送目标、支持选择同步工作区（含各工作区篇数），提示语改为说明具体原因；云端/Android 登录界面重排——验证码为主路径，密码框默认收起，按钮触控目标加大。",
+    "releaseNotes":  "v2.1.39 release. See changelog for details.",
     "releaseDate":  "2026-10-12"
 }

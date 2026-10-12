@@ -24,7 +24,7 @@
         <a href="index.html#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.1.38</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.1.39</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -40,6 +40,7 @@
         <div class="changelog-toc reveal">
           <h3>版本索引</h3>
           <ul>
+            <li><a href="#v2.1.39">v2.1.39</a> — 首轮实机反馈修复：桌面端修「可同步内容恒为暂无 Markdown」（驼峰字段错配，连带修复拉取冲突检测），面板显示推送目标、支持选择同步工作区；云端 / Android 登录界面重排（验证码为主路径，密码框默认收起）</li>
             <li><a href="#v2.1.38">v2.1.38</a> — 三端直连打通：桌面端可直接登录云端并双向同步（新增「拉取云端更新」，本机文件永不被静默覆盖，两端都改过时自动留冲突副本）；Android 应用补齐原生能力（返回键分层回退、分享、复制、导出 .md、断网提示、状态栏配色）并升级到 1.1.0</li>
             <li><a href="#v2.1.37">v2.1.37</a> — 知识库上云 + 手机端：新增云端知识库工作台（邮箱 / 手机号 / 微信登录，三端共用同一份笔记）；桌面端「云同步」面板新增一键推送，先比对内容指纹、只上传改动过的笔记，且桌面端仅向云端开放三个只读接口；同步发布 Android 应用；修复云同步面板「可同步篇数」恒显示为空</li>
             <li><a href="#v2.1.36">v2.1.36</a> — 界面设计系统重制：颜色 / 间距 / 字号收敛为一套设计令牌，四套主题配色全部达到无障碍对比度标准；编辑 / 预览 / 沉浸三视图行高与版心对齐；沉浸模式支持加粗 / 斜体 / 链接 / 删除线 / 高亮等行内标记按最终效果渲染；交互热区与键盘可达性补强</li>
@@ -97,6 +98,26 @@
             <li><a href="#v1.8.93">v1.8.93</a> — 界面与体验升级 + 性能优化</li>
           </ul>
         </div>
+
+        <article class="doc-section reveal" id="v2.1.39">
+          <h3>v2.1.39 · 首轮实机反馈修复</h3>
+          <p>v2.1.38 发布当天收到第一批实机反馈：面板看不到推送到了哪、没法选工作区、明明有笔记却提示「暂无 Markdown」。逐条修掉。</p>
+
+          <h4>桌面端：修「永远 0 篇」，补面板信息</h4>
+          <ul>
+            <li><b>修复「可同步内容恒为暂无 Markdown」</b>：后端字段是驼峰命名（<code>workspaceId</code> / <code>contentSha256</code>），前端按旧拼写读取导致永远匹配出 0 篇，推送自然「没有需要同步的内容」；同时修复了拉取时冲突检测因此整体失效的隐患。实测同一台机器：默认工作区 10 篇、temple 110 篇全部正确读出。</li>
+            <li><b>显示推送目标</b>：面板标明推送到哪个云端、落到哪个分区，不再「点了不知道传去哪」。</li>
+            <li><b>工作区可选</b>：多工作区可下拉选择要同步的工作区（选项里带各工作区篇数），选择会被记住；此前锁死默认工作区，别的库根本推不上去。</li>
+            <li><b>提示语具体化</b>：无事可做时不再笼统一句「没有需要同步的内容」，而是说明原因——例如「云端此分区还是空的：用『推送本机 → 云端』可上传本机 N 篇」「内容已一致（本机 11 篇 = 云端 11 篇）」。</li>
+          </ul>
+
+          <h4>云端 / Android：登录界面重排</h4>
+          <ul>
+            <li><b>验证码是主路径</b>：密码框默认隐藏，只在首次注册、切到密码登录、找回密码三种情形出现；此前验证码、密码、找回三套控件同时摊在一张卡上，看不出该走哪条。</li>
+            <li><b>密码登录入口改为切换</b>：「用密码登录 / 改用验证码登录」一键往返，提交按钮文案随形态变化（登录 / 注册 → 登录 → 确认重置密码）。</li>
+            <li><b>触控目标加大</b>：发送验证码等按钮加高到 42px，间距与聚焦反馈统一。</li>
+          </ul>
+        </article>
 
         <article class="doc-section reveal" id="v2.1.38">
           <h3>v2.1.38 · 三端直连打通</h3>
