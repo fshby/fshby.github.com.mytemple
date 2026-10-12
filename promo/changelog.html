@@ -24,7 +24,7 @@
         <a href="index.html#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.1.37</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.1.38</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -40,6 +40,7 @@
         <div class="changelog-toc reveal">
           <h3>版本索引</h3>
           <ul>
+            <li><a href="#v2.1.38">v2.1.38</a> — 三端直连打通：桌面端可直接登录云端并双向同步（新增「拉取云端更新」，本机文件永不被静默覆盖，两端都改过时自动留冲突副本）；Android 应用补齐原生能力（返回键分层回退、分享、复制、导出 .md、断网提示、状态栏配色）并升级到 1.1.0</li>
             <li><a href="#v2.1.37">v2.1.37</a> — 知识库上云 + 手机端：新增云端知识库工作台（邮箱 / 手机号 / 微信登录，三端共用同一份笔记）；桌面端「云同步」面板新增一键推送，先比对内容指纹、只上传改动过的笔记，且桌面端仅向云端开放三个只读接口；同步发布 Android 应用；修复云同步面板「可同步篇数」恒显示为空</li>
             <li><a href="#v2.1.36">v2.1.36</a> — 界面设计系统重制：颜色 / 间距 / 字号收敛为一套设计令牌，四套主题配色全部达到无障碍对比度标准；编辑 / 预览 / 沉浸三视图行高与版心对齐；沉浸模式支持加粗 / 斜体 / 链接 / 删除线 / 高亮等行内标记按最终效果渲染；交互热区与键盘可达性补强</li>
             <li><a href="#v2.1.35">v2.1.35</a> — 沉浸模式公式与图表修复：段落内公式正常渲染、多块公式 / 图表不再只剩最后一块，图表恢复自然尺寸不再拉满版心</li>
@@ -97,6 +98,35 @@
           </ul>
         </div>
 
+        <article class="doc-section reveal" id="v2.1.38">
+          <h3>v2.1.38 · 三端直连打通</h3>
+          <p>v2.1.37 让笔记上了云，但桌面端自己还连不上云——只能在浏览器里绕一圈。这一版把绕的那一圈去掉了：电脑、手机、网页三端各自直连同一份数据。</p>
+
+          <h4>桌面端：双向同步，本机优先</h4>
+          <ul>
+            <li><b>不用再开浏览器</b>：桌面端「云端同步」面板里直接登录（邮箱验证码 / 手机验证码 / 邮箱密码），登录后即可拉取与推送。</li>
+            <li><b>新增「拉取云端更新」</b>：在手机上改过的笔记，回到电脑点一下就同步下来；此前只能上传、不能拉回。</li>
+            <li><b>本机永不被静默覆盖</b>：同步前先核对"上次同步时的内容指纹"，只有确认本机没动过的文件才会被云端版本替换；写入时再比对一次磁盘内容，中途被外部编辑器改过就自动放弃覆盖。</li>
+            <li><b>两端都改过 → 各留一份</b>：本机内容原样保留，云端那一版另存为 <code>原名.conflict-云-时间.md</code>，两边都不丢。</li>
+            <li><b>删除更安全</b>：云端删除只提示、绝不删本机文件；本机删除则给云端打一个可恢复的删除标记，而不是物理删除。</li>
+          </ul>
+
+          <h4>Android 应用 1.1.0：补齐手机该有的能力</h4>
+          <ul>
+            <li><b>返回键按层级回退</b>：先关弹层，再退出文章，最后才退出应用，不会再一点返回就退出。</li>
+            <li><b>分享 / 复制 / 导出</b>：文章页底部多了一排按钮，可以分享到微信、一键复制正文、把 <code>.md</code> 导出到手机「文档」。</li>
+            <li><b>断网有提示</b>：网络断开时顶部出现提示条，已打开的正文不受影响。</li>
+            <li><b>观感统一</b>：状态栏配色跟随页面的暖色主题与深色模式。</li>
+            <li><b>权限仍然最小</b>：只申请「网络」与「网络状态」两项，不需要存储与相机权限。</li>
+          </ul>
+
+          <h4>其它</h4>
+          <ul>
+            <li><b>旧的浏览器中转路径仍在</b>：桌面端不想直连时，面板里仍可让云端页读取本机（只读接口，写操作不开放）。</li>
+            <li><b>安装包体积</b>：桌面版 6.62 MB；Android 版 2.73 MB。</li>
+          </ul>
+        </article>
+
         <article class="doc-section reveal" id="v2.1.37">
           <h3>v2.1.37 · 知识库上云 + 手机端</h3>
           <p>这一版回答一个此前一直没有答案的问题：笔记能不能不只待在这一台电脑上。新增的云端知识库工作台把工作区搬上了网，电脑和手机上都能接着写；同一个账号下，多端看到的是同一份内容。本地功能一行没动——不上云，它照样是那个纯本地的 Markdown 工作区。</p>
@@ -118,7 +148,7 @@
 
           <h4>Android 应用</h4>
           <ul>
-            <li><b>手机端可用</b>：随本版同步发布配套 Android 应用（1.0.0），安装后相当于把云端工作台随身带着走。可在 <a href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Cloud_1.0.0.apk" download>下载页</a> 获取安装包。</li>
+            <li><b>手机端可用</b>：随本版同步发布配套 Android 应用，安装后相当于把云端工作台随身带着走。可在 <a href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Cloud_1.1.0.apk" download>下载页</a> 获取安装包。</li>
             <li><b>断网有兜底</b>：启动时若网络不通会显示一张离线页并自动重试，不会卡在空白页。</li>
             <li><b>随云端一起升级</b>：应用承载的是云端工作台本身，工作台更新后手机端无需重新安装即可用上新功能。</li>
           </ul>

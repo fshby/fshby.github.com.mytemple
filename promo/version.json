@@ -1,7 +1,7 @@
 {
-    "version":  "2.1.37",
+    "version":  "2.1.38",
     "downloadUrl":  "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
-    "latestReleaseNotes":  "知识库上云 + 手机端：新增云端知识库工作台，支持邮箱 / 手机号 / 微信登录与多端同步；桌面端「云同步」面板新增一键推送，直接读取本机工作区并同步到云端（仅上传内容有改动的笔记）；同步发布 Android 应用；并修复云同步面板「可同步篇数」恒显示为空的问题。",
-    "releaseNotes":  "v2.1.37 release. See changelog for details.",
+    "latestReleaseNotes":  "三端直连打通：桌面端「云端同步」面板现在可以直接登录云端并双向同步，新增「拉取云端更新」，本机文件永不被静默覆盖（两端都改过时自动保留本机版本、云端版本另存为冲突副本），云端删除不会删本机文件；同步发布 Android 应用 1.1.0，补齐返回键分层回退、分享、复制、导出 .md、断网提示与状态栏配色。",
+    "releaseNotes":  "v2.1.38 release. See changelog for details.",
     "releaseDate":  "2026-10-12"
 }
