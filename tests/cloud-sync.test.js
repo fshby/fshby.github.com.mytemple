@@ -20,6 +20,7 @@ const read = (rel) => readFileSync(new URL(rel, ROOT), "utf8");
 
 const cloudHtml = read("cloud/index.html");
 const cloudApp = read("cloud/app.js");
+const cloudCss = read("cloud/styles.css");
 const cloudCfg = read("cloud/cloud-config.js");
 const desktopEntry = read("public/modules/cloud-sync.js");
 const indexHtml = read("public/index.html");
@@ -174,6 +175,27 @@ test("登录界面三种方式并存，且默认落在邮箱", () => {
   assert.match(cloudHtml, /id="wechatBtn"[\s\S]*微信登录/, "必须保留微信登录");
   assert.match(cloudApp, /loginTab:\s*"email"/, "默认落在邮箱方式");
   assert.match(cloudApp, /setLoginTab\(state\.loginTab\)/, "启动时应用默认方式");
+});
+
+test("实机回归：hidden 不被 flex 样式推翻（手机表单 / 密码框曾因此全部铺开）", () => {
+  // 2026-10-12 实机截图：.form{display:flex} / .field{display:flex} 覆盖了浏览器
+  // 对 [hidden] 的默认 display:none，APK 登录页把两套表单 + 密码框全部铺开。
+  // 兜底规则必须存在且带 !important，且要早于任何组件样式（放在 :root 之后）。
+  assert.match(cloudCss, /\[hidden\]\s*\{\s*display:\s*none\s*!important/, "必须有全局 [hidden] 兜底");
+  const guardAt = cloudCss.indexOf("[hidden] { display: none !important");
+  const flexAt = cloudCss.indexOf(".form { display: flex");
+  assert.ok(guardAt > 0 && flexAt > 0 && guardAt < flexAt, "兜底规则必须在 .form 之前声明");
+  // 手机表单与密码框初始都必须带 hidden（靠兜底规则生效）
+  assert.match(cloudHtml, /id="phoneForm"[\s\S]{0,120}hidden/, "手机表单初始必须 hidden");
+  assert.match(cloudHtml, /id="emailPasswordField" hidden/, "邮箱密码框初始必须 hidden");
+  assert.match(cloudHtml, /id="passwordField" class="field" hidden/, "手机密码框初始必须 hidden");
+});
+
+test("APK 里微信登录必须隐藏（网页扫码流程在手机上是自己扫自己）", () => {
+  const native = cloudApp.slice(cloudApp.indexOf("if (NATIVE) {"), cloudApp.indexOf("if (NATIVE) {") + 1600);
+  assert.match(native, /el\.wechatBtn\) el\.wechatBtn\.hidden\s*=\s*true/, "NATIVE 块必须隐藏微信登录入口");
+  assert.match(native, /classList\.contains\("or"\)\)\s*wechatDivider\.hidden\s*=\s*true/, "「或」分隔线必须一并隐藏");
+  // 浏览器侧（非 NATIVE）微信入口保留 —— 上面那条「必须保留微信登录」的 HTML 断言照旧成立
 });
 
 test("微信登录：用 signInWithOAuth 跳转，且回调在任何路由守卫之前无条件执行", () => {

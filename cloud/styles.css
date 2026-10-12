@@ -33,6 +33,11 @@
   color-scheme: light;
 }
 
+/* hidden 属性兜底（必须最先声明）：本表大量 .form / .field 用 display:flex，
+   会覆盖浏览器对 [hidden] 的默认 display:none —— 实机（APK）曾因此把手机登录
+   表单和密码框全部铺开（2026-10-12 截图）。任何元素的 hidden 都不可被推翻。 */
+[hidden] { display: none !important; }
+
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #16150f;

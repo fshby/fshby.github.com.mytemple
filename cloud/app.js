@@ -16,7 +16,7 @@ const UPSERT_BATCH_MAX_DOCS = 20;
 const UPSERT_BATCH_MAX_BYTES = 1_200_000;
 
 /* 静态资源版本戳：改动 cloud/ 下被页面引用的任何文件时，与 index.html 的三件套一起递增。 */
-const ASSET_V = "cloud-5";
+const ASSET_V = "cloud-6";
 
 /* 第三方库一律同源自托管，见 scripts/vendor-cloud.mjs。
  * 绝不改回第三方 CDN —— 见该脚本头部注释：cdn.jsdelivr.net 在部分网络下 TLS 会被重置，
@@ -1317,6 +1317,13 @@ function safeFileName(name) {
 
 if (NATIVE) {
   if (el.nativeActions) el.nativeActions.hidden = false;
+
+  // 0) 微信登录在 APK 里不可用：OAuth 网页扫码流程要求「用另一台设备的微信
+  //    扫当前屏幕上的二维码」，手机上就是自己扫自己，走不通。隐藏入口与
+  //    分隔线，避免给出死路（邮箱 / 手机验证码在 APK 里完全可用）。
+  if (el.wechatBtn) el.wechatBtn.hidden = true;
+  const wechatDivider = el.wechatBtn && el.wechatBtn.previousElementSibling;
+  if (wechatDivider && wechatDivider.classList.contains("or")) wechatDivider.hidden = true;
 
   // 1) 状态栏配色跟随页面主题（浅色主题深色字，深色主题浅色字）
   if (CAP.StatusBar) {
