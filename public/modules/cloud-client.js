@@ -217,22 +217,47 @@ export function relFromRef(ref, wsId) {
 }
 
 /**
+ * ⚠️ FileEntry 的 JSON 序列化是 **camelCase**（Rust 端 `#[serde(rename_all="camelCase")]`，
+ * 2026-10-12 实机确认：/api/files 返回的是 workspaceId / contentSha256，
+ * **没有** workspace_id / content_sha256 字段）。按 snake_case 读会恒为 undefined，
+ * 表现为「可同步内容：暂无 Markdown」「没有需要同步的内容」。
+ * 这里统一收口，两种拼写都认，避免同类静默故障再次发生。
+ */
+function fWs(f) {
+  return (f && (f.workspaceId ?? f.workspace_id)) || null;
+}
+function fSha(f) {
+  return (f && (f.contentSha256 ?? f.content_sha256)) || null;
+}
+
+/**
  * 本机工作区 + 文件清单（不含正文）。
  * /api/workspaces 是**裸对象**，/api/files 走 success() 包装（{ok,data:[…]}）——
  * 两者形状不同，混用会得到「永远读不到文件」这种静默故障。
+ *
+ * @param {string} [wsId] 指定工作区 id；缺省用默认工作区
+ * @returns {ws, workspaces, files, countsByWs}
+ *   files 只含所选工作区的文本类条目；countsByWs 是全部工作区的文本篇数（面板选择器用）。
  */
-export async function readLocalIndex() {
+export async function readLocalIndex(wsId) {
   const wsRes = await localGet("/api/workspaces");
   const list = Array.isArray(wsRes && wsRes.workspaces) ? wsRes.workspaces : [];
+  if (!list.length) throw new Error("本机没有已加载的知识库工作区");
   const def = list.find((w) => w.id === wsRes.defaultWorkspaceId) || list[0];
-  if (!def) throw new Error("本机没有已加载的知识库工作区");
+  const ws = list.find((w) => w.id === wsId) || def;
 
   const filesRes = await localGet("/api/files");
   const arr = Array.isArray(filesRes && filesRes.data)
     ? filesRes.data
     : (Array.isArray(filesRes) ? filesRes : []);
-  const files = arr.filter((f) => f && TEXT_EXT.test(String(f.path || "")) && f.workspace_id === def.id);
-  return { ws: def, files };
+  const counts = new Map();
+  for (const f of arr) {
+    if (!f || !TEXT_EXT.test(String(f.path || ""))) continue;
+    const wid = fWs(f) || "?";
+    counts.set(wid, (counts.get(wid) || 0) + 1);
+  }
+  const files = arr.filter((f) => f && TEXT_EXT.test(String(f.path || "")) && fWs(f) === ws.id);
+  return { ws, workspaces: list, files, countsByWs: counts };
 }
 
 /** 读一篇本机正文（FileEntry.content 为懒加载字段，必须走单篇接口）。 */
@@ -241,7 +266,7 @@ async function readLocalContent(ref) {
   const entry = res && res.data ? res.data : res;
   return {
     content: typeof entry.content === "string" ? entry.content : "",
-    sha: entry.content_sha256 || null,
+    sha: fSha(entry),
     mtime: entry.modified || null,
   };
 }
@@ -442,13 +467,13 @@ export function lastSyncAt(workspace) {
  * @param {(text:string)=>void} opts.onProgress
  * @returns 摘要 { workspace, push, pull, conflict, tombstone, skipped, cloudDeleted, failed, notes[] }
  */
-export async function syncCloud({ mode = "both", onProgress } = {}) {
+export async function syncCloud({ mode = "both", workspaceId, onProgress } = {}) {
   const report = (t) => { try { onProgress && onProgress(t); } catch (_) { /* UI 回调出错不影响同步 */ } };
   const wantPush = mode !== "pull";
   const wantPull = mode !== "push";
 
   report("读取本机知识库索引…");
-  const { ws, files } = await readLocalIndex();
+  const { ws, files } = await readLocalIndex(workspaceId);
   const workspace = ws.name || ws.id || "我的知识库";
 
   report(`读取云端索引（分区「${workspace}」）…`);
@@ -466,9 +491,11 @@ export async function syncCloud({ mode = "both", onProgress } = {}) {
   const next = { ...base };
 
   const summary = {
-    workspace, push: 0, pull: 0, conflict: 0, tombstone: 0,
+    workspace, mode, push: 0, pull: 0, conflict: 0, tombstone: 0,
     skipped: 0, cloudDeleted: 0, failed: 0, notes: [],
   };
+  summary.localCount = localMap.size;
+  summary.cloudCount = [...cloudMap.values()].filter((r) => r && !r.deleted_at).length;
 
   const toPush = [];
   const toPull = [];
@@ -483,15 +510,15 @@ export async function syncCloud({ mode = "both", onProgress } = {}) {
     const cVisible = !!C && !C.deleted_at;
 
     // 1) 两端都有且内容一致：已同步
-    if (L && cVisible && L.content_sha256 === C.content_sha) {
-      next[rel] = L.content_sha256;
+    if (L && cVisible && fSha(L) === C.content_sha) {
+      next[rel] = fSha(L);
       summary.skipped += 1;
       continue;
     }
 
     // 2) 本机有、云端没有（或已被云端软删）
     if (L && !cVisible) {
-      if (C && C.deleted_at && B !== undefined && L.content_sha256 === B) {
+      if (C && C.deleted_at && B !== undefined && fSha(L) === B) {
         // 本机没动过，云端删过 —— 尊重云端删除，但**不删本机**
         summary.cloudDeleted += 1;
         summary.notes.push(`云端已删除，本机保留：${rel}`);
@@ -535,7 +562,7 @@ export async function syncCloud({ mode = "both", onProgress } = {}) {
         if (latest > cloudMs + CONFLICT_WINDOW_MS) toPush.push({ rel, entry: L, resurrect: false });
         else if (cloudMs > latest + CONFLICT_WINDOW_MS) toPull.push({ rel, cloud: C });
         else toConflict.push({ rel, cloud: C, entry: L });
-      } else if (L.content_sha256 === B) {
+      } else if (fSha(L) === B) {
         toPull.push({ rel, cloud: C });
       } else if (C.content_sha === B) {
         toPush.push({ rel, entry: L, resurrect: false });
@@ -559,7 +586,7 @@ export async function syncCloud({ mode = "both", onProgress } = {}) {
       i += 1;
       const ref = item.entry.path;
       let content = typeof item.entry.content === "string" ? item.entry.content : null;
-      let sha = item.entry.content_sha256 || null;
+      let sha = fSha(item.entry);
       let mtime = item.entry.modified || null;
       if (content === null) {
         const got = await readLocalContent(ref);
@@ -611,7 +638,8 @@ export async function syncCloud({ mode = "both", onProgress } = {}) {
       const ref = `${ws.id}/${item.rel}`;
       const local = localMap.get(item.rel);
       try {
-        await writeLocalDoc(ref, row.content, local ? local.content_sha256 : undefined);
+        // baseHash 用本机当前 sha —— camelCase 适配漏掉这里，冲突检测会整体失效
+        await writeLocalDoc(ref, row.content, local ? fSha(local) : undefined);
         summary.pull += 1;
         next[item.rel] = row.content_sha;
       } catch (err) {
@@ -648,10 +676,10 @@ export async function syncCloud({ mode = "both", onProgress } = {}) {
         rel_path: item.rel,
         title: titleFrom(item.entry.content || "", item.rel),
         content: typeof item.entry.content === "string" ? item.entry.content : null,
-        content_sha: item.entry.content_sha256,
+        content_sha: fSha(item.entry),
         doc_mtime: item.entry.modified || null,
       });
-      next[item.rel] = item.entry.content_sha256;
+      next[item.rel] = fSha(item.entry);
     }
     // 把本机版本推上云端，让两端收敛（内容不丢：另一版本已在副本里）
     const prepared = [];
@@ -719,8 +747,30 @@ export function summarize(summary) {
   if (summary.pull) parts.push(`拉取 ${summary.pull}`);
   if (summary.conflict) parts.push(`冲突留副本 ${summary.conflict}`);
   if (summary.tombstone) parts.push(`标记删除 ${summary.tombstone}`);
-  if (summary.cloudDeleted) parts.push(`云端已删保留本机 ${summary.cloudDeleted}`);
-  if (summary.skipped) parts.push(`跳过未变 ${summary.skipped}`);
+  if (summary.cloudDeleted) parts.push(`云端已删、本机保留 ${summary.cloudDeleted}`);
   if (summary.failed) parts.push(`失败 ${summary.failed}`);
-  return parts.length ? parts.join("，") : "没有需要同步的内容";
+  if (parts.length) {
+    if (summary.skipped) parts.push(`未变 ${summary.skipped}`);
+    return parts.join("，");
+  }
+
+  // 没有任何动作时，把「为什么没有」说清楚，而不是一句「没有需要同步的内容」
+  const L = Number(summary.localCount) || 0;
+  const C = Number(summary.cloudCount) || 0;
+  if (!L && !C) return "这个工作区本机和云端都还没有内容";
+  if (summary.mode === "pull") {
+    return C
+      ? `云端 ${C} 篇都已在本地，没有需要拉取的`
+      : "云端此分区还没有内容：可先用「推送本机 → 云端」上传";
+  }
+  if (summary.mode === "push") {
+    return L
+      ? `没有需要上传的改动（本机 ${L} 篇，云端已有 ${C} 篇）`
+      : (C
+        ? `本机此工作区没有 Markdown / 文本文件（云端已有 ${C} 篇，可用「拉取」取回）`
+        : "本机此工作区没有 Markdown / 文本文件，没有可上传的内容");
+  }
+  if (L && !C) return `云端此分区还是空的：用「推送本机 → 云端」可上传本机 ${L} 篇`;
+  if (!L && C) return `本机此工作区是空的：用「拉取云端更新」可取回云端 ${C} 篇`;
+  return `内容已一致（本机 ${L} 篇 = 云端 ${C} 篇）`;
 }

@@ -117,17 +117,20 @@ test("邮箱登录：验证码注册/登录、密码登录、找回密码三条�
   // 1) 验证码路径：email 必须与发码时同一个，提交阶段不得重发
   assert.match(cloudApp, /cloud\.auth\.sendOtp\(\{\s*email\s*\}\)/, "邮箱路径必须用 email 发码");
   assert.match(cloudApp, /pending\.email !== email/, "提交前必须核对收件邮箱未变");
-  const otpFn = cloudApp.slice(cloudApp.indexOf("async function submitEmailOtp"), cloudApp.indexOf("el.emailForm.addEventListener"));
+  const otpFn = cloudApp.slice(cloudApp.indexOf("async function submitEmailOtp"), cloudApp.indexOf("/** 密码登录"));
   assert.match(otpFn, /verificationId:\s*pending\.verificationId/, "verifyOtp 必须带 verificationId");
   assert.match(otpFn, /isExistingUser:\s*pending\.isExistingUser/, "verifyOtp 必须带 isExistingUser");
   assert.match(otpFn, /token:\s*code/, "verifyOtp 必须带用户输入的 token");
   assert.match(otpFn, /password:\s*pending\.isExistingUser\s*\?\s*undefined/, "新邮箱注册才需要密码");
   assert.doesNotMatch(otpFn, /sendOtp/, "提交验证码时不得重新发码");
 
-  // 2) 密码登录
+  // 2) 密码登录（2026-10-12 重构：统一走表单提交，次级链接只负责切换形态）
   assert.match(cloudApp, /cloud\.auth\.signInWithPassword\(\{\s*email,\s*password\s*\}\)/, "必须支持邮箱+密码登录");
-  const pwdFn = cloudApp.slice(cloudApp.indexOf("el.emailPasswordLogin.addEventListener"));
+  const pwdFn = cloudApp.slice(cloudApp.indexOf("async function submitEmailPassword"), cloudApp.indexOf("el.emailPasswordLogin.addEventListener"));
   assert.match(pwdFn.slice(0, 900), /邮箱或密码不正确/, "密码错误提示不得暴露账号是否存在");
+  assert.match(cloudApp, /state\.emailMode = state\.emailMode === "password" \? "otp" : "password"/,
+    "「用密码登录」链接必须能在两种形态间往返");
+  assert.match(cloudApp, /applyEmailMode\(\)/, "形态切换必须经过 applyEmailMode 统一重排");
 
   // 3) 找回密码（有密码登录就必须有找回流程）
   assert.match(cloudApp, /cloud\.auth\.resetPasswordForEmail\(email\)/, "必须支持忘记密码");
@@ -136,6 +139,34 @@ test("邮箱登录：验证码注册/登录、密码登录、找回密码三条�
 
   // 4) 邮箱格式前置校验
   assert.match(cloudApp, /EMAIL_RE\s*=\s*\/\^\[\^\\s@\]\+@/, "必须有邮箱格式校验");
+});
+
+test("登录界面渐进披露：验证码是主路径，密码框默认隐藏（实机反馈：冗余过多）", () => {
+  // 密码框默认 hidden —— 验证码是主路径，只在注册/密码登录/找回时出现
+  assert.match(cloudHtml, /id="emailPasswordField"[^>]*hidden/, "邮箱密码框默认必须隐藏");
+  assert.match(cloudHtml, /id="emailCodeField"/, "验证码行必须可整体切换");
+  assert.match(cloudHtml, /id="emailPasswordLabel"/, "密码标签文案随形态变化（密码/设置密码/新密码）");
+  assert.doesNotMatch(cloudHtml, /首次注册时需设置密码；用密码登录时也填这里/,
+    "旧的常驻混歧提示必须移除");
+  assert.match(cloudApp, /el\.emailCodeField\.hidden = mode === "password"/,
+    "密码形态下验证码整行隐藏");
+  assert.match(cloudApp, /emailMode:\s*"otp"/, "默认落在验证码主路径");
+  assert.match(cloudApp, /el\.emailSubmit\.textContent = reset \? "确认重置密码"/,
+    "找回形态下提交按钮必须改名，避免歧义");
+});
+
+test("桌面同步面板：显示推送目标 + 工作区可选（实机反馈）", () => {
+  assert.match(desktopEntry, /data-fact="target"/, "面板必须显示推送目标（云端地址 + 分区）");
+  assert.match(desktopEntry, /data-el="wsSelect"/, "面板必须提供工作区选择器");
+  assert.match(desktopEntry, /workspaceId: localData && localData\.ws \? localData\.ws\.id : undefined/,
+    "推送/拉取必须带上所选工作区");
+  assert.match(desktopEntry, /WS_KEY = "mtCloudWs\.v1"/, "工作区选择必须被记住");
+  // camelCase 契约收口（实机：FileEntry 是 workspaceId / contentSha256）
+  const clientJs = read("public/modules/cloud-client.js");
+  assert.match(clientJs, /rename_all\s*=\s*"camelCase"|workspaceId \?\? .*workspace_id|fWs\(/,
+    "cloud-client 必须显式适配 camelCase 字段");
+  assert.match(clientJs, /contentSha256 \?\? .*content_sha256|fSha\(/,
+    "sha 字段必须显式适配 camelCase");
 });
 
 test("登录界面三种方式并存，且默认落在邮箱", () => {

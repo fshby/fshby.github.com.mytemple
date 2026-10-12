@@ -138,17 +138,19 @@ function jsonResponse(body, status = 200) {
   return { ok, status, text: async () => JSON.stringify(body) };
 }
 
-function makeLocal(files) {
+function makeLocal(files, opts = {}) {
+  // ⚠️ FileEntry 序列化是 camelCase（Rust #[serde(rename_all="camelCase")]，实机确认）。
+  // 这里必须照抄真实契约 —— 早期版本写成了 workspace_id / content_sha256，
+  // 结果测试全绿但实机「永远 0 篇」，教训：假实现必须照抄真实序列化。
+  const workspaces = opts.workspaces || [{ id: WS_ID, name: WS_NAME, root: "C:/lib" }];
+  const defaultId = opts.defaultWorkspaceId || workspaces[0].id;
   const stats = { listCalls: 0, contentReads: 0, saves: 0 };
   let beforeSave = null;
   const fetchStub = async (url, options = {}) => {
     const u = String(url);
     const method = options.method || "GET";
     if (u === "/api/workspaces") {
-      return jsonResponse({
-        workspaces: [{ id: WS_ID, name: WS_NAME, root: "C:/lib" }],
-        defaultWorkspaceId: WS_ID,
-      });
+      return jsonResponse({ workspaces, defaultWorkspaceId: defaultId });
     }
     if (u === "/api/files" && method === "GET") {
       stats.listCalls += 1;
@@ -156,11 +158,11 @@ function makeLocal(files) {
         ok: true,
         data: [...files.entries()].map(([ref, f]) => ({
           path: ref,
-          workspace_id: WS_ID,
-          workspace_name: WS_NAME,
+          workspaceId: ref.split("/")[0],
+          workspaceName: (workspaces.find((w) => w.id === ref.split("/")[0]) || {}).name || "",
           title: ref,
           content: null, // 列表不带正文（与真实后端一致）
-          content_sha256: sha(f.content),
+          contentSha256: sha(f.content),
           modified: f.modified,
         })),
       });
@@ -172,7 +174,7 @@ function makeLocal(files) {
       if (!f) return jsonResponse({ ok: false, error: "not found" }, 404);
       return jsonResponse({
         ok: true,
-        data: { path: ref, content: f.content, content_sha256: sha(f.content), modified: f.modified },
+        data: { path: ref, workspaceId: ref.split("/")[0], content: f.content, contentSha256: sha(f.content), modified: f.modified },
       });
     }
     if (u === "/api/save" && method === "POST") {
@@ -229,9 +231,9 @@ const mod = await import(pathToFileURL(fileURLToPath(new URL("public/modules/clo
 /* ══ 夹具 ═════════════════════════════════════════════════════ */
 
 /** 每个用例开始前重置三样东西：本机文件、云数据面、同步快照。 */
-function setup({ files = {}, cloud = null } = {}) {
+function setup({ files = {}, cloud = null, localOpts = {} } = {}) {
   const localFiles = new Map(Object.entries(files));
-  const local = makeLocal(localFiles);
+  const local = makeLocal(localFiles, localOpts);
   globalThis.fetch = local.fetchStub;
   activeCloud = cloud || makeCloud();
   storeBackup.clear();
@@ -448,4 +450,81 @@ test("不向云端发送 owner_id（归属由数据库默认值决定）", async
   }
   assert.ok(cloud.tables.kb_meta.length <= 1, "kb_meta 只应有一行（按账号唯一）");
   void prevRel;
+});
+
+/* ══ 实机反馈回归（2026-10-12）：camelCase 与工作区选择 ════════ */
+
+const WS2 = { id: "ws_temple", name: "temple", root: "O:/temple" };
+
+test("FileEntry 契约：仅 camelCase（workspaceId/contentSha256）也能读到文件（实机回归）", async () => {
+  // 2026-10-12 实机：后端 #[serde(rename_all="camelCase")]，按 snake_case 读恒为 undefined，
+  // 表现为「可同步内容：暂无 Markdown」「没有需要同步的内容」。此用例钉死真实序列化。
+  const cloud = makeCloud();
+  setup({
+    files: { [`${WS_ID}/real.md`]: { content: "# 实机契约\n", modified: 1000 } },
+    cloud,
+  });
+  const idx = await mod.readLocalIndex();
+  assert.equal(idx.files.length, 1, `camelCase 列表必须能读到文件，实测 ${idx.files.length} 篇`);
+  assert.ok(idx.files[0].workspaceId === undefined || typeof idx.files[0].workspaceId === "string");
+
+  const s = await mod.syncCloud({});
+  assert.equal(s.push, 1, `必须能把实机 camelCase 列表推上去，实测 push=${s.push} notes=${JSON.stringify(s.notes)}`);
+  assert.equal(s.localCount, 1, "摘要应带本机篇数");
+  assert.equal(cloud.tables.documents.length, 1);
+});
+
+test("readLocalIndex：countsByWs 覆盖全部工作区，选择非默认工作区时只同步它的文件", async () => {
+  const cloud = makeCloud();
+  setup({
+    files: {
+      [`${WS_ID}/default-only.md`]: { content: "# 默认\n", modified: 1000 },
+      [`${WS2.id}/temple-one.md`]: { content: "# 庙 One\n", modified: 2000 },
+      [`${WS2.id}/temple-two.md`]: { content: "# 庙 Two\n", modified: 3000 },
+    },
+    cloud,
+    localOpts: {
+      workspaces: [{ id: WS_ID, name: WS_NAME, root: "C:/dos" }, WS2],
+      defaultWorkspaceId: WS_ID,
+    },
+  });
+
+  const idx = await mod.readLocalIndex();
+  assert.equal(idx.ws.id, WS_ID, "不带参数时落在默认工作区");
+  assert.equal(idx.countsByWs.get(WS_ID), 1);
+  assert.equal(idx.countsByWs.get(WS2.id), 2);
+
+  const s = await mod.syncCloud({ workspaceId: WS2.id });
+  assert.equal(s.workspace, WS2.name, `云端分区必须是所选工作区名，实测 ${s.workspace}`);
+  assert.equal(s.push, 2, `只应上传 temple 的 2 篇，实测 ${s.push}`);
+  assert.ok(cloud.tables.documents.every((r) => r.workspace === WS2.name),
+    "云端不得出现默认工作区的文档");
+  assert.ok(!cloud.tables.documents.some((r) => r.rel_path === "default-only.md"),
+    "默认工作区的文件不得被带入所选分区");
+
+  // 快照按分区隔离：切回默认工作区是「首次接触」，不会把 temple 的墓碑带过去
+  const s2 = await mod.syncCloud({ workspaceId: WS_ID });
+  assert.equal(s2.workspace, WS_NAME);
+  assert.equal(s2.push, 1, "默认工作区单独推送自己的 1 篇");
+});
+
+test("summarize：空转时把「为什么没有」说清楚（实机反馈：只说『没有需要同步的内容』）", async () => {
+  const { summarize } = mod;
+  assert.equal(
+    summarize({ mode: "push", localCount: 0, cloudCount: 0 }),
+    "这个工作区本机和云端都还没有内容",
+  );
+  assert.match(
+    summarize({ mode: "push", localCount: 11, cloudCount: 11 }),
+    /没有需要上传的改动（本机 11 篇，云端已有 11 篇）/,
+  );
+  assert.match(
+    summarize({ mode: "pull", localCount: 5, cloudCount: 0 }),
+    /云端此分区还没有内容/,
+  );
+  assert.match(
+    summarize({ mode: "both", localCount: 5, cloudCount: 5 }),
+    /内容已一致（本机 5 篇 = 云端 5 篇）/,
+  );
+  assert.match(summarize({ mode: "push", push: 3 }), /上传 3/, "有动作时仍报动作");
 });

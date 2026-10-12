@@ -118,12 +118,13 @@ a { color: var(--accent-strong); text-underline-offset: 2px; }
 
 .ghost-btn {
   border: 1px solid var(--line-strong); background: transparent;
-  border-radius: 10px; padding: 8px 13px; font-size: 14px;
+  border-radius: 10px; padding: 10px 14px; font-size: 14px; min-height: 42px;
   color: var(--text); white-space: nowrap; transition: background .15s;
 }
 .ghost-btn:hover { background: var(--accent-soft); }
 .ghost-btn-strong { border-color: color-mix(in srgb, var(--accent) 55%, transparent); color: var(--accent-strong); }
 .ghost-btn:disabled { opacity: .55; cursor: default; }
+.field-row .ghost-btn { flex: none; }
 
 .primary-btn {
   border: none; background: var(--accent-solid); color: var(--on-accent);

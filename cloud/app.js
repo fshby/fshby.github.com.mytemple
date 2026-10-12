@@ -16,7 +16,7 @@ const UPSERT_BATCH_MAX_DOCS = 20;
 const UPSERT_BATCH_MAX_BYTES = 1_200_000;
 
 /* 静态资源版本戳：改动 cloud/ 下被页面引用的任何文件时，与 index.html 的三件套一起递增。 */
-const ASSET_V = "cloud-4";
+const ASSET_V = "cloud-5";
 
 /* 第三方库一律同源自托管，见 scripts/vendor-cloud.mjs。
  * 绝不改回第三方 CDN —— 见该脚本头部注释：cdn.jsdelivr.net 在部分网络下 TLS 会被重置，
@@ -51,7 +51,9 @@ const el = {
   backBtn: $("backBtn"), whoami: $("whoami"), logoutBtn: $("logoutBtn"),
   tabEmail: $("tabEmail"), tabPhone: $("tabPhone"),
   emailForm: $("emailForm"), email: $("email"), emailFieldError: $("emailFieldError"),
+  emailCodeField: $("emailCodeField"),
   emailCode: $("emailCode"), sendEmailCodeBtn: $("sendEmailCodeBtn"),
+  emailPasswordField: $("emailPasswordField"), emailPasswordLabel: $("emailPasswordLabel"),
   emailPassword: $("emailPassword"), emailPasswordHint: $("emailPasswordHint"), emailSubmit: $("emailSubmit"),
   emailPasswordLogin: $("emailPasswordLogin"), forgotBtn: $("forgotBtn"),
   resetHint: $("resetHint"), emailError: $("emailError"),
@@ -85,7 +87,8 @@ const state = {
   pendingOtp: null,      // 手机验证码挑战
   pendingEmailOtp: null, // 邮箱验证码挑战
   resetStarted: null,    // 忘记密码：resetPasswordForEmail 的返回值（携带 updateUser）
-  emailFlow: "login",    // "login" | "reset"
+  emailFlow: "login",    // "login" | "reset"（找回密码流程，优先级高于 emailMode）
+  emailMode: "otp",      // "otp"（验证码，主路径）| "password"（密码登录）
   loginTab: "email",
   upload: null,       // { cancelled, done, total }
   searchToken: 0,
@@ -238,12 +241,14 @@ function setLoginTab(tab) {
   emailError("");
   setPhoneError("");
   setEmailFieldError("");
+  // 切回邮箱页时按当前形态重排（发过验证码的新邮箱仍要露出「设置密码」）
+  if (isEmail) applyEmailMode();
 }
 el.tabEmail.addEventListener("click", () => setLoginTab("email"));
 el.tabPhone.addEventListener("click", () => setLoginTab("phone"));
 setLoginTab(state.loginTab);
 
-/* ── 邮箱：验证码 / 密码 / 找回密码 ─────────────────────────── */
+/* ── 邮箱：验证码（主路径）/ 密码登录 / 找回密码 ─────────────── */
 
 function emailLoginContext() {
   return {
@@ -251,6 +256,35 @@ function emailLoginContext() {
     code: el.emailCode.value.trim(),
     password: el.emailPassword.value,
   };
+}
+
+/**
+ * 邮箱登录的三种界面形态（互斥呈现，解决「验证码 + 密码 + 找回」三套控件
+ * 同时摊开、看不出哪条是主路径的问题）：
+ *   otp      —— 主路径：只露「邮箱 + 验证码」；仅当发码后确认是新邮箱，
+ *               才把「设置密码」补出来（注册必需）。
+ *   password —— 密码登录：验证码整行隐藏，提交按钮变「登录」。
+ *   reset    —— 找回密码：验证码 + 新密码，提交按钮变「确认重置密码」，
+ *               两个次级链接都收起，防误入其它流程。
+ */
+function applyEmailMode() {
+  const reset = state.emailFlow === "reset";
+  const mode = reset ? "reset" : state.emailMode;
+  const otp = mode === "otp";
+  el.emailCodeField.hidden = mode === "password";
+  const newUserPending = !!(state.pendingEmailOtp && !state.pendingEmailOtp.isExistingUser);
+  const pwdVisible = !otp || mode === "password" || reset || newUserPending;
+  el.emailPasswordField.hidden = !pwdVisible;
+  el.emailPasswordLabel.textContent = reset ? "新密码" : (otp ? "设置密码" : "密码");
+  el.emailPasswordHint.hidden = !(otp && newUserPending);
+  if (!el.emailPasswordHint.hidden) {
+    el.emailPasswordHint.textContent = "首次注册，设置密码（至少 8 位）后，以后可在新设备上用密码登录。";
+  }
+  el.emailPassword.autocomplete = mode === "password" ? "current-password" : "new-password";
+  el.emailSubmit.textContent = reset ? "确认重置密码" : (mode === "password" ? "登录" : "登录 / 注册");
+  el.emailPasswordLogin.textContent = mode === "password" ? "改用验证码登录" : "用密码登录";
+  el.forgotBtn.hidden = reset;
+  el.resetHint.hidden = !reset;
 }
 
 el.email.addEventListener("input", () => { setEmailFieldError(""); resetEmailFlow(); });
@@ -277,26 +311,22 @@ el.sendEmailCodeBtn.addEventListener("click", async () => {
       verificationId: sent.data.verificationId,
       isExistingUser: sent.data.isExistingUser,
     };
-    el.emailPasswordHint.textContent = sent.data.isExistingUser
-      ? "已有账号：只填验证码即可直接登录。"
-      : "这是新邮箱：注册需要设置密码（至少 8 位）。";
     startCountdown(el.sendEmailCodeBtn);
-    toast("验证码已发送到邮箱");
+    toast(sent.data.isExistingUser ? "验证码已发送到邮箱" : "验证码已发送，新邮箱需设置密码");
+    applyEmailMode();
   } catch (err) {
     emailError(String(err && err.message || err));
     el.sendEmailCodeBtn.disabled = false;
   }
 });
 
-/** 退出「忘记密码」流程，回到普通登录态。 */
+/** 退出「忘记密码」流程，回到当前登录形态。 */
 function resetEmailFlow() {
   if (state.emailFlow !== "reset") return;
   state.emailFlow = "login";
   state.resetStarted = null;
-  el.emailSubmit.textContent = "登录 / 注册";
-  el.emailPasswordLogin.hidden = false;
-  el.forgotBtn.hidden = false;
   el.resetHint.hidden = true;
+  applyEmailMode();
 }
 
 el.forgotBtn.addEventListener("click", async () => {
@@ -313,11 +343,8 @@ el.forgotBtn.addEventListener("click", async () => {
     if (started.error) { emailError(started.error.message || "重置邮件发送失败"); return; }
     state.emailFlow = "reset";
     state.resetStarted = started;
-    el.emailSubmit.textContent = "确认重置密码";
-    el.emailPasswordLogin.hidden = true;
-    el.forgotBtn.hidden = true;
-    el.resetHint.textContent = "重置邮件已发送。把邮件里的重置码填到上面的「验证码」，新密码填到「密码」，然后点「确认重置密码」。";
-    el.resetHint.hidden = false;
+    el.resetHint.textContent = "重置邮件已发送。把邮件里的重置码填到上面的「验证码」，新密码填到「新密码」，然后点「确认重置密码」。";
+    applyEmailMode();
   } catch (err) {
     emailError(String(err && err.message || err));
   } finally {
@@ -359,39 +386,42 @@ async function submitEmailOtp() {
   await enterApp();
 }
 
+/** 密码登录（次路径）。失败提示不暴露账号是否存在。 */
+async function submitEmailPassword() {
+  const { email, password } = emailLoginContext();
+  if (!EMAIL_RE.test(email)) { setEmailFieldError("请输入正确的邮箱地址"); return; }
+  if (!password) { emailError("请输入密码"); return; }
+  setEmailFieldError("");
+  const res = await cloud.auth.signInWithPassword({ email, password });
+  if (res.error) {
+    // 不暴露账号是否存在，统一提示
+    emailError("邮箱或密码不正确");
+    return;
+  }
+  await enterApp();
+}
+
+/* 次级链接只负责切换形态（password ↔ otp），真正的提交统一走表单按钮 */
+el.emailPasswordLogin.addEventListener("click", () => {
+  if (state.emailFlow === "reset") return;
+  state.emailMode = state.emailMode === "password" ? "otp" : "password";
+  emailError("");
+  setEmailFieldError("");
+  applyEmailMode();
+});
+
 el.emailForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   emailError("");
   el.emailSubmit.disabled = true;
   try {
     if (state.emailFlow === "reset") await submitEmailReset();
+    else if (state.emailMode === "password") await submitEmailPassword();
     else await submitEmailOtp();
   } catch (err) {
     emailError(String(err && err.message || err));
   } finally {
     el.emailSubmit.disabled = false;
-  }
-});
-
-el.emailPasswordLogin.addEventListener("click", async () => {
-  const { email, password } = emailLoginContext();
-  emailError("");
-  if (!EMAIL_RE.test(email)) { setEmailFieldError("请输入正确的邮箱地址"); return; }
-  if (!password) { emailError("请输入密码"); return; }
-  setEmailFieldError("");
-  el.emailPasswordLogin.disabled = true;
-  try {
-    const res = await cloud.auth.signInWithPassword({ email, password });
-    if (res.error) {
-      // 不暴露账号是否存在，统一提示
-      emailError("邮箱或密码不正确");
-      return;
-    }
-    await enterApp();
-  } catch (err) {
-    emailError(String(err && err.message || err));
-  } finally {
-    el.emailPasswordLogin.disabled = false;
   }
 });
 

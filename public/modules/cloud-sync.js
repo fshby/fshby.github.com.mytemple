@@ -16,6 +16,7 @@
 import {
   CLOUD_WORKBENCH_URL,
   cloudReady,
+  cloudEndpoint,
   getSession,
   sendOtp,
   verifyOtp,
@@ -33,6 +34,8 @@ export { CLOUD_WORKBENCH_URL };
 const STYLE_ID = "mt-cloud-entry-style";
 const PANEL_ID = "mtCloudPanel";
 const TOAST_ID = "mtCloudToast";
+/** 面板里选中的本机工作区（localStorage）。同步分区 = 工作区名。 */
+const WS_KEY = "mtCloudWs.v1";
 
 /** 轻量提示：自包含实现，避免依赖 app.js 的模块作用域函数。 */
 let toastTimer = null;
@@ -86,6 +89,12 @@ const CSS = `
 .mt-cloud-fact { display: flex; gap: 10px; }
 .mt-cloud-fact dt { color: var(--muted, #8a8175); min-width: 72px; margin: 0; }
 .mt-cloud-fact dd { margin: 0; flex: 1 1 auto; word-break: break-all; }
+.mt-cloud-select {
+  width: 100%; font: inherit; font-size: 12.5px; color: var(--text, #3d3830);
+  background: transparent; border: 1px solid var(--line, rgba(61,56,48,.2));
+  border-radius: 7px; padding: 3px 6px;
+}
+.mt-cloud-select:focus { outline: 2px solid var(--accent, #6b5f44); outline-offset: -1px; }
 .mt-cloud-actions { display: flex; gap: 9px; flex-wrap: wrap; }
 .mt-cloud-btn {
   border: 1px solid var(--line-strong, rgba(61,56,48,.25));
@@ -294,10 +303,13 @@ export async function openCloudPanel() {
         <section data-sec="main" hidden>
           <dl class="mt-cloud-facts">
             <div class="mt-cloud-fact"><dt>登录账号</dt><dd data-fact="who">读取中…</dd></div>
-            <div class="mt-cloud-fact"><dt>上次同步</dt><dd data-fact="last">尚未同步</dd></div>
-            <div class="mt-cloud-fact"><dt>工作区</dt><dd data-fact="workspace">读取中…</dd></div>
+            <div class="mt-cloud-fact"><dt>推送目标</dt><dd data-fact="target">读取中…</dd></div>
+            <div class="mt-cloud-fact"><dt>同步工作区</dt><dd>
+              <select class="mt-cloud-select" data-el="wsSelect" aria-label="选择要同步的本机工作区"></select>
+            </dd></div>
             <div class="mt-cloud-fact"><dt>本机路径</dt><dd data-fact="root">读取中…</dd></div>
             <div class="mt-cloud-fact"><dt>可同步内容</dt><dd data-fact="count">读取中…</dd></div>
+            <div class="mt-cloud-fact"><dt>上次同步</dt><dd data-fact="last">尚未同步</dd></div>
           </dl>
           <div class="mt-cloud-actions">
             <button class="mt-cloud-btn mt-cloud-btn-primary" type="button" data-act="pull">拉取云端更新</button>
@@ -370,19 +382,45 @@ export async function openCloudPanel() {
     setError("");
   }
 
-  async function gatherFacts() {
-    const facts = { workspace: "—", root: "—", count: "—" };
-    try {
-      const { ws, files } = await readLocalIndex();
-      if (ws) {
-        facts.workspace = ws.name || ws.id || "—";
-        facts.root = ws.root || "—";
-      }
-      facts.count = files.length ? `${files.length} 篇 Markdown / 文本` : "暂无 Markdown";
-    } catch (_) {
-      /* 状态读取失败不影响入口可用 */
+  /* ── 本机工作区与状态展示 ── */
+  let localData = null; // readLocalIndex() 的结果：{ ws, workspaces, files, countsByWs }
+
+  function savedWsId() {
+    try { return localStorage.getItem(WS_KEY) || ""; } catch (_) { return ""; }
+  }
+
+  async function loadLocal() {
+    localData = await readLocalIndex(savedWsId() || undefined);
+    // 记住的选择已不存在 → 回落默认并清掉残留
+    const saved = savedWsId();
+    if (saved && localData.ws.id !== saved) {
+      try { localStorage.setItem(WS_KEY, localData.ws.id); } catch (_) {}
     }
-    return facts;
+  }
+
+  function renderWsSelect() {
+    const sel = $('[data-el="wsSelect"]');
+    if (!sel || !localData) return;
+    sel.textContent = "";
+    for (const w of (localData.workspaces || [])) {
+      const n = (localData.countsByWs && localData.countsByWs.get(w.id)) || 0;
+      const opt = document.createElement("option");
+      opt.value = w.id;
+      opt.textContent = `${w.name || w.id}（${n} 篇）`;
+      if (localData.ws && w.id === localData.ws.id) opt.selected = true;
+      sel.appendChild(opt);
+    }
+  }
+
+  /** 显示用路径：去掉 Windows 扩展路径前缀 \\?\（O:\temple 而不是 \\?\O:\temple）。 */
+  function prettyRoot(root) {
+    return String(root || "—").replace(/^\\\\\?\\/, "") || "—";
+  }
+
+  function pushTarget() {
+    const host = String(cloudEndpoint() || "").replace(/^https?:\/\//, "") || "云端";
+    const part = localData && localData.ws ? (localData.ws.name || localData.ws.id) : "";
+    return part ? `${host} · 分区「${part}」` : host;
   }
 
   async function refresh() {
@@ -397,19 +435,36 @@ export async function openCloudPanel() {
     }
     $('[data-fact="who"]').textContent = maskIdentity(session.user);
     $('[data-fact="port"]').textContent = localPort();
-    const facts = await gatherFacts();
-    if (!document.body.contains(backdrop)) return;
-    for (const [key, value] of Object.entries(facts)) {
-      const node = $(`[data-fact="${key}"]`);
-      if (node) node.textContent = value;
+    $('[data-fact="target"]').textContent = pushTarget();
+    try {
+      await loadLocal();
+    } catch (err) {
+      $('[data-fact="root"]').textContent = "—";
+      $('[data-fact="count"]').textContent = String((err && err.message) || err);
+      return;
     }
-    const last = lastSyncAt(facts.workspace === "—" ? null : facts.workspace) || lastSyncAt(null);
+    if (!document.body.contains(backdrop)) return;
+    renderWsSelect();
+    $('[data-fact="root"]').textContent = prettyRoot(localData.ws && localData.ws.root);
+    $('[data-fact="count"]').textContent = localData.files.length
+      ? `${localData.files.length} 篇 Markdown / 文本`
+      : "此工作区没有 Markdown / 文本文件";
+    const part = localData.ws ? (localData.ws.name || localData.ws.id) : null;
+    const last = lastSyncAt(part) || lastSyncAt(null);
     $('[data-fact="last"]').textContent = last ? fmtTime(last) : "尚未同步";
   }
 
   /* ── 事件 ── */
   // 表单一律拦截原生提交：面板是内联弹层，真提交会把 WebView 导航走
   for (const f of $$("form")) f.addEventListener("submit", (e) => e.preventDefault());
+
+  // 切换同步工作区：记住选择并刷新状态（分区名、本机路径、篇数、上次同步都跟着换）
+  $('[data-el="wsSelect"]').addEventListener("change", () => {
+    try { localStorage.setItem(WS_KEY, $('[data-el="wsSelect"]').value); } catch (_) {}
+    setProgress("");
+    setResult("");
+    refresh().catch((err) => setError(String((err && err.message) || err)));
+  });
 
   backdrop.addEventListener("click", (e) => {
     if (e.target === backdrop || e.target.closest(".mt-cloud-close")) {
@@ -549,6 +604,7 @@ export async function openCloudPanel() {
       try {
         const summary = await syncCloud({
           mode: act === "push" ? "push" : "pull",
+          workspaceId: localData && localData.ws ? localData.ws.id : undefined,
           onProgress: (t) => setProgress(t),
         });
         setProgress("");

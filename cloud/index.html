@@ -7,7 +7,7 @@
 <meta name="theme-color" content="#12100e" media="(prefers-color-scheme: dark)" />
 <title>知识库云端 · MyTemple</title>
 <link rel="manifest" href="/manifest.webmanifest" />
-<link rel="stylesheet" href="/styles.css?v=cloud-4" />
+<link rel="stylesheet" href="/styles.css?v=cloud-5" />
 </head>
 <body>
 <div class="app" id="app">
@@ -49,21 +49,22 @@
           <span id="emailFieldError" class="field-error" hidden></span>
         </label>
 
-        <label class="field">
+        <div class="field" id="emailCodeField">
           <span class="field-label">验证码</span>
           <div class="field-row">
             <input id="emailCode" class="input" type="text" inputmode="numeric" placeholder="邮件里的验证码"
                    autocomplete="one-time-code" maxlength="8" />
             <button id="sendEmailCodeBtn" class="ghost-btn ghost-btn-strong" type="button">获取验证码</button>
           </div>
-        </label>
+        </div>
 
-        <label class="field">
-          <span class="field-label">密码</span>
+        <!-- 密码框默认隐藏：验证码是主路径；仅在新邮箱注册、密码登录、找回密码三种形态出现 -->
+        <div class="field" id="emailPasswordField" hidden>
+          <span class="field-label" id="emailPasswordLabel">密码</span>
           <input id="emailPassword" class="input" type="password" placeholder="至少 8 位"
                  autocomplete="current-password" />
-          <span class="field-hint" id="emailPasswordHint">首次注册时需设置密码；用密码登录时也填这里。</span>
-        </label>
+          <span class="field-hint" id="emailPasswordHint" hidden></span>
+        </div>
 
         <button id="emailSubmit" class="primary-btn" type="submit">登录 / 注册</button>
         <div class="alt-actions">
@@ -255,14 +256,14 @@
   <div id="offlineBar" class="offline-bar" role="status" hidden>当前离线：已打开的笔记仍可正常阅读，上传与同步会在联网后恢复</div>
 </div>
 
-<script src="/cloud-config.js?v=cloud-4"></script>
+<script src="/cloud-config.js?v=cloud-5"></script>
 <!--
   第三方库一律同源自托管（cloud/vendor/，见 scripts/vendor-cloud.mjs）。
   这些库原先取自 cdn.jsdelivr.net，而该主机名在部分网络下 TLS 会被重置；
   登录 SDK 恰好挂在那里，加载失败会导致验证码 / 微信 / 密码登录全部不可用。
 -->
-<script src="/vendor/sdk/workbuddy-cloud-sdk.global.js?v=cloud-4"></script>
-<script src="/vendor/fflate/fflate.min.js?v=cloud-4"></script>
-<script src="/app.js?v=cloud-4" type="module"></script>
+<script src="/vendor/sdk/workbuddy-cloud-sdk.global.js?v=cloud-5"></script>
+<script src="/vendor/fflate/fflate.min.js?v=cloud-5"></script>
+<script src="/app.js?v=cloud-5" type="module"></script>
 </body>
 </html>
