@@ -1,7 +1,7 @@
 {
-    "version":  "2.1.36",
+    "version":  "2.1.37",
     "downloadUrl":  "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
-    "latestReleaseNotes":  "界面设计系统重制：设计令牌统一与四主题配色全面达标（对比度 0 不达标项）、编辑/预览/沉浸三视图排版对齐、沉浸模式行内标记（加粗/斜体/链接/删除线/高亮）按最终效果渲染、交互热区与键盘可达性补强。",
-    "releaseNotes":  "v2.1.36 release. See changelog for details.",
-    "releaseDate":  "2026-10-09"
+    "latestReleaseNotes":  "知识库上云 + 手机端：新增云端知识库工作台，支持邮箱 / 手机号 / 微信登录与多端同步；桌面端「云同步」面板新增一键推送，直接读取本机工作区并同步到云端（仅上传内容有改动的笔记）；同步发布 Android 应用；并修复云同步面板「可同步篇数」恒显示为空的问题。",
+    "releaseNotes":  "v2.1.37 release. See changelog for details.",
+    "releaseDate":  "2026-10-12"
 }
