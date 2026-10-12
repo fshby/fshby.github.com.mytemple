@@ -285,6 +285,29 @@ details.ws > .doc-list > .doc-item > .doc-link { padding-left: 34px; }
 .doc-path { font-size: 12.5px; margin: 0; word-break: break-all; }
 .doc-loading { display: flex; justify-content: center; padding: 48px 0; }
 .doc-foot { margin-top: 40px; padding-top: 18px; border-top: 1px solid var(--line); text-align: center; }
+
+/* ── 原生（Android App）专属：动作条与离线提示 ────────────────
+   网页版不会渲染这两块（元素默认 hidden，只有 window.Capacitor 判定为原生时才显示），
+   所以浏览器里的界面与之前完全一致。 */
+.native-actions {
+  display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;
+  margin-top: 28px; padding-top: 16px; border-top: 1px solid var(--line);
+}
+.native-actions[hidden] { display: none; }
+.native-btn {
+  font: inherit; font-size: 13px; cursor: pointer;
+  color: var(--text); background: var(--bg-elevated);
+  border: 1px solid var(--line-strong); border-radius: 999px;
+  padding: 7px 16px;
+}
+.native-btn:active { background: var(--accent-soft); }
+.offline-bar {
+  position: fixed; left: 0; right: 0; top: 0; z-index: 60;
+  padding: calc(6px + env(safe-area-inset-top)) 14px 6px;
+  text-align: center; font-size: 12.5px;
+  background: var(--accent-solid); color: var(--on-accent, #fff);
+}
+.offline-bar[hidden] { display: none; }
 .fallback-pre {
   white-space: pre-wrap; word-break: break-word; font-family: var(--mono);
   font-size: 13px; background: var(--paper); padding: 14px; border-radius: var(--radius);

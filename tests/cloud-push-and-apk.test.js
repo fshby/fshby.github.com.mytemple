@@ -1,15 +1,18 @@
 // 回归测试：PC ↔ 云端 贯通（只读白名单 CORS）+ Android 客户端工程
 //
-// 背景：云服务强制「请求来源 == 应用发布域名」（精确 Origin 校验），
-// 桌面 WebView 的源是 http://127.0.0.1:<port>，不在白名单内 —— 桌面端无法直接上传。
-// 解法是：桌面端「云端」面板带 ?local=http://127.0.0.1:<port> 打开云端工作台，
-// 由工作台（Origin 就是白名单域名）去读本机**只读**接口，再上传到云端。
+// 背景（2026-10-12 修正）：早期以为云服务强制「请求来源 == 应用发布域名」，
+// 于是让云端页代为读本机只读接口再上传。实测推翻 —— 跨源预检对
+// http://127.0.0.1:<port> 放行，鉴权只看 X-Wb-Webapp-Access-Key + JWT + RLS。
+// 现在桌面端自己直连云数据面（public/modules/cloud-client.js），
+// 而「云端页读本机只读接口」降级为**备用路径**：桌面端面板带
+// ?local=http://127.0.0.1:<port> 打开云端工作台时才会用到。
 //
 // 这里锁住的是「改错了也不报错、但会静默破坏安全」的契约：
 //   - 本机只对**唯一一个**来源开放，且只挂在三个只读 GET 端点上，写端点一律不开放；
 //   - 必须回 Access-Control-Allow-Private-Network，否则 Chrome PNA 会拦掉预检；
 //   - 云端应用只允许读本机，绝不向本机发写请求；
-//   - APK 必须走 server.url 远程加载（不能用 hostname 覆盖，否则 API 被本地资源拦截）。
+//   - APK 必须走 server.url 远程加载（不能用 hostname 覆盖，否则 API 被本地资源拦截）；
+//   - APK 的原生能力必须是**渐进增强**：浏览器里不得产生任何行为或界面差异。
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, existsSync, readdirSync } from "node:fs";
@@ -171,23 +174,30 @@ test("从本机导入失败时给出可操作的提示（桌面端需运行 + �
 
 /* ══ 三、桌面入口 ═══════════════════════════════════════════════ */
 
-test("桌面入口的「一键推送」带上本机端口，普通打开不带", () => {
+test("面板保留两条打开路径：带本机只读地址 / 不带，且端口取自真实 location.port", () => {
   const body = fnBody(cloudSyncJs, "async function openWorkbench");
   assert.match(body, /withLocal/, "必须有「是否带本机地址」的开关");
   assert.match(body, /\?local=\$\{encodeURIComponent\(`http:\/\/127\.0\.0\.1:\$\{localPort\(\)\}`\)\}/, "必须带 ?local=<本机回环地址>");
-  assert.match(body, /_blank/, "仍走系统浏览器打开（Origin 才是白名单域名）");
+  assert.match(body, /_blank/, "浏览器打不开时的回退：新标签打开");
   const portFn = fnBody(cloudSyncJs, "function localPort()");
   assert.match(portFn, /window\.location\.port/, "端口必须取自 WebView 真实端口，不能写死");
-  assert.match(cloudSyncJs, /data-act="push"/, "必须有「一键推送到云端」按钮");
-  assert.match(cloudSyncJs, /if \(act === "push"\) openWorkbench\(true\)/, "按钮必须真的带本机地址打开");
+  // 面板须同时保留「直接同步」(data-act=push/pull) 与「只读备用路径」(open-local)
+  assert.match(cloudSyncJs, /data-act="pull"/, "必须有「拉取云端更新」按钮");
+  assert.match(cloudSyncJs, /data-act="push"/, "必须有「推送本机 → 云端」按钮");
+  assert.match(cloudSyncJs, /act === "open-local"[\s\S]{0,400}openWorkbench\(true\)/, "只读路径必须真的带上本机地址");
 });
 
-test("桌面入口读取 /api/files 必须解包 ok/data（曾漏解包导致篇数恒为空）", () => {
-  const body = fnBody(cloudSyncJs, "async function gatherFacts");
-  assert.match(body, /Array\.isArray\(files\?\.data\) \? files\.data/, "/api/files 是 {ok,data:[…]}");
-  // /api/workspaces 是裸对象，不能再往下解一层
-  assert.match(body, /Array\.isArray\(ws\?\.workspaces\)/, "/api/workspaces 返回裸对象");
-  assert.doesNotMatch(body, /ws\?\.data/, "/api/workspaces 没有 data 包装");
+test("本机接口的解包与冲突语义（曾漏解包导致篇数恒为空；冲突是 200 不是 4xx）", () => {
+  const client = read("public/modules/cloud-client.js");
+  const idx = fnBody(client, "async function readLocalIndex");
+  assert.match(idx, /Array\.isArray\(filesRes && filesRes\.data\)/, "/api/files 是 {ok,data:[…]}，必须解包");
+  assert.match(idx, /Array\.isArray\(wsRes && wsRes\.workspaces\)/, "/api/workspaces 返回裸对象");
+  assert.doesNotMatch(idx, /wsRes\?\.data/, "/api/workspaces 没有 data 包装");
+  // 关键：/api/save 的 baseHash 冲突返回 HTTP 200 + {ok:false,conflict:true}（ipc::save_doc），
+  // 只判 res.ok 会把「拒绝写入」当成写入成功，进而静默覆盖本机。
+  const req = fnBody(client, "async function localRequest");
+  assert.match(req, /body\.ok === false/, "必须把 {ok:false} 当失败，否则冲突会被吞掉");
+  assert.match(req, /err\.conflict = true|conflict = true/, "必须把 conflict 标志透出去");
 });
 
 /* ══ 四、Android 客户端工程 ════════════════════════════════════ */
@@ -261,4 +271,57 @@ test("APK 工程不依赖已提交的构建产物", () => {
   assert.match(androidIgnore, /^build\/$/m, "构建产物目录应被忽略");
   assert.match(androidIgnore, /^local\.properties$/m, "SDK 路径是本机配置，应被忽略");
   assert.match(androidIgnore, /^\*\.apk$/m, "APK 产物应被忽略");
+});
+
+/* ══ 五、APK 原生能力（渐进增强） ═══════════════════════════════
+ * 云端页同时服务浏览器与 APK 的 WebView，所以原生能力只能做成渐进增强：
+ * 判定失败时浏览器侧的行为与界面必须与之前**完全一致**。
+ * 这里锁的是：判定方式、返回键优先级、插件与 Capacitor 大版本一致、
+ * 以及「原生 UI 默认隐藏」。 */
+
+test("原生判定用 Capacitor.isNativePlatform()，不解析 UA", () => {
+  assert.match(cloudApp, /isNativePlatform/, "必须用 Capacitor 官方判定");
+  assert.doesNotMatch(cloudApp, /navigator\.userAgent/, "不得用 UA 判定原生环境（可被伪造）");
+  // 插件实例只能从 Capacitor.Plugins 取，且必须包在 NATIVE 分支里
+  assert.match(cloudApp, /const CAP = \(NATIVE && window\.Capacitor\.Plugins\)/, "插件实例必须来自 Capacitor.Plugins 且受 NATIVE 保护");
+});
+
+test("Android 返回键优先级：先关弹层 → 再退出文档 → 最后才退出应用", () => {
+  const body = fnBody(cloudApp, 'CAP.App.addListener("backButton"');
+  assert.match(body, /closeTopSheet\(\)\) return/, "第一步必须关弹层");
+  assert.match(body, /backToList\(\)/, "第二步必须从文档页回列表");
+  assert.match(body, /exitApp\(\)/, "最终才允许退出应用");
+  const close = fnBody(cloudApp, "function closeTopSheet()");
+  // 确认框必须走它自己的取消按钮：否则 askConfirm 的 Promise 永不 resolve，界面卡死
+  assert.match(close, /confirmCancel\.click\(\)/, "确认框必须点取消按钮而不是直接隐藏");
+});
+
+test("原生专属 UI 默认隐藏，浏览器不会看到任何新元素", () => {
+  assert.match(cloudHtml, /id="nativeActions" class="native-actions" hidden/, "原生动作条必须默认 hidden");
+  assert.match(cloudHtml, /id="offlineBar" class="offline-bar" role="status" hidden/, "离线提示条必须默认 hidden");
+  assert.match(cloudApp, /el\.nativeActions\.hidden = false/, "只有原生分支才把它显示出来");
+  assert.match(read("cloud/styles.css"), /\.native-actions\[hidden\]\s*\{\s*display:\s*none/, "hidden 必须真的不占位");
+});
+
+test("原生插件与 Capacitor 大版本一致，且权限保持最小", () => {
+  const pkg = JSON.parse(read("apk/package.json"));
+  const caps = Object.entries(pkg.dependencies).filter(([k]) => k.startsWith("@capacitor/"));
+  assert.ok(caps.length >= 7, `应声明核心 + 6 个插件，实测 ${caps.length}`);
+  // 插件必须与 @capacitor/core 同一个大版本：混版会在运行时抛 "not implemented"
+  const coreMajor = pkg.dependencies["@capacitor/core"].replace(/^[^\d]*/, "").split(".")[0];
+  for (const [name, range] of caps) {
+    assert.match(range, new RegExp(`\\^${coreMajor}\\.`), `${name} 必须与 @capacitor/core@${coreMajor} 同大版本，实测 ${range}`);
+  }
+  // Gradle 接线必须真的生成（只写 capacitor.plugins.json 是不够的，类不会被编译进来）
+  const settings = read("apk/android/capacitor.settings.gradle");
+  const buildGradle = read("apk/android/app/capacitor.build.gradle");
+  for (const name of ["app", "clipboard", "filesystem", "network", "share", "status-bar"]) {
+    assert.match(settings, new RegExp(`include ':capacitor-${name}'`), `${name} 必须写进 capacitor.settings.gradle`);
+    assert.match(buildGradle, new RegExp(`implementation project\\(':capacitor-${name}'\\)`), `${name} 必须是 Gradle 依赖`);
+  }
+  // 只数真正的 <uses-permission> 声明（注释里提到某个权限名不算申请）
+  const manifest = read("apk/android/app/src/main/AndroidManifest.xml");
+  const declared = [...manifest.matchAll(/<uses-permission[^>]*android:name="([^"]+)"/g)].map((m) => m[1]).sort();
+  assert.deepEqual(declared, ["android.permission.ACCESS_NETWORK_STATE", "android.permission.INTERNET"],
+    "权限必须是「最小集」：导出的 .md 落在应用专属 Documents，不需要外部存储权限；本轮未接入拍照，不需要相机权限");
 });

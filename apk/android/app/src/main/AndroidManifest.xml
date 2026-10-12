@@ -38,4 +38,9 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- @capacitor/network：断网提示条要读连接状态。
+         按最小权限原则，这里不申请存储权限：导出的 .md 落在应用专属的
+         Documents 目录（context.getExternalFilesDir），无需 WRITE_EXTERNAL_STORAGE；
+         分享走系统 Intent；相册/相机本轮未接入。 -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 </manifest>

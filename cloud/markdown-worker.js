@@ -15,6 +15,39 @@ function escapeHtml(value) {
 }
 
 /**
+ * 图表库（Chart.js / ECharts）的加载地址。
+ *
+ * 默认走第三方 CDN；支持同源自托管的站点可以在 Worker URL 上带 `?assets=<目录>` 覆盖，
+ * 例如云端工作台用 `/markdown-worker.js?v=…&assets=/vendor/`，从此完全不吃外部 CDN 的
+ * 可用性风险（cdn.jsdelivr.net 在部分网络下 TLS 会被重置）。
+ * 桌面端不传该参数 → 行为与以前完全一致，继续走 CDN。
+ *
+ * 之所以做成运行时可变而不是两端各写死：本文件与 cloud/markdown-worker.js 必须逐字节
+ * 相同（见 tests/cloud-sync.test.js 的构建同步断言），不能各留一份分叉的实现。
+ */
+const ASSET_BASE = (() => {
+  try {
+    const q = String((self.location && self.location.search) || "");
+    const m = q.match(/[?&]assets=([^&]*)/);
+    return m && m[1] ? decodeURIComponent(m[1]) : "";
+  } catch (_) {
+    return "";
+  }
+})();
+
+function chartLibUrl() {
+  return ASSET_BASE
+    ? ASSET_BASE + "chartjs/chart.umd.js"
+    : "https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js";
+}
+
+function echartsLibUrl() {
+  return ASSET_BASE
+    ? ASSET_BASE + "echarts/echarts.min.js"
+    : "https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js";
+}
+
+/**
  * 检测 Chart.js / ECharts JSON 配置，返回可直接在 srcdoc iframe 中渲染的完整 HTML。
  * 无法识别时返回 null。
  */
@@ -42,7 +75,7 @@ function detectAndBuildChartHtml(content) {
   if (isChartjs) {
     const safeJson = JSON.stringify(cfg).replace(/<\/script/gi, "<\\/script");
     return "<!doctype html><html lang=\"zh\"><head><meta charset=\"utf-8\"/><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"/><title>Chart.js</title>"
-      +"<script src=\"https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js\"><\/script>"
+      +"<script src=\""+chartLibUrl()+"\"><\/script>"
       +"<style>html,body{margin:0;padding:12px;height:100%;box-sizing:border-box;font-family:Arial,sans-serif;background:#fff}#c{width:100%;height:calc(100vh - 24px);min-height:360px}</style>"
       +"</head><body><canvas id=\"c\"></canvas><script>"
       +"try{const CFG="+safeJson+";(CFG.options=CFG.options||{}).responsive=true;CFG.options.maintainAspectRatio=false;new Chart(document.getElementById('c'),CFG);}"
@@ -53,7 +86,7 @@ function detectAndBuildChartHtml(content) {
     const opt = cfg.option ? cfg.option : cfg;
     const safeJson = JSON.stringify(opt).replace(/<\/script/gi, "<\\/script");
     return "<!doctype html><html lang=\"zh\"><head><meta charset=\"utf-8\"/><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"/><title>ECharts</title>"
-      +"<script src=\"https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js\"><\/script>"
+      +"<script src=\""+echartsLibUrl()+"\"><\/script>"
       +"<style>html,body{margin:0;padding:0;height:100%;background:#fff}#c{width:100%;height:100vh;min-height:420px}</style>"
       +"</head><body><div id=\"c\"></div><script>"
       +"try{const ch=echarts.init(document.getElementById('c'));ch.setOption("+safeJson+");window.addEventListener('resize',function(){ch.resize()})}"

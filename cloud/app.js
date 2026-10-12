@@ -14,8 +14,17 @@ const SDK = window.WorkBuddyCloud;
 const TEXT_EXT = /\.(md|markdown|mdown|mkd|txt)$/i;
 const UPSERT_BATCH_MAX_DOCS = 20;
 const UPSERT_BATCH_MAX_BYTES = 1_200_000;
-const MERMAID_CDN = "https://cdn.jsdelivr.net/npm/mermaid@11.12.2/dist/mermaid.min.js";
-const KATEX_VERSION = "0.16.9";
+
+/* 静态资源版本戳：改动 cloud/ 下被页面引用的任何文件时，与 index.html 的三件套一起递增。 */
+const ASSET_V = "cloud-4";
+
+/* 第三方库一律同源自托管，见 scripts/vendor-cloud.mjs。
+ * 绝不改回第三方 CDN —— 见该脚本头部注释：cdn.jsdelivr.net 在部分网络下 TLS 会被重置，
+ * 登录 SDK 曾因此加载失败，导致所有登录方式同时不可用。 */
+const VENDOR = "/vendor";
+const MERMAID_SRC = `${VENDOR}/mermaid/mermaid.min.js?v=${ASSET_V}`;
+const KATEX_CSS = `${VENDOR}/katex/katex.min.css?v=${ASSET_V}`;
+const KATEX_SRC = `${VENDOR}/katex/katex.min.js?v=${ASSET_V}`;
 
 /* ── 客户端初始化（全局唯一实例）────────────────────────────── */
 let cloud = null;
@@ -64,6 +73,7 @@ const el = {
   confirmSheet: $("confirmSheet"), confirmText: $("confirmText"), confirmCancel: $("confirmCancel"),
   confirmOk: $("confirmOk"),
   toast: $("toast"),
+  nativeActions: $("nativeActions"), offlineBar: $("offlineBar"),
 };
 
 const state = {
@@ -79,6 +89,7 @@ const state = {
   loginTab: "email",
   upload: null,       // { cancelled, done, total }
   searchToken: 0,
+  docSource: "",      // 当前打开的文档原文（原生端分享/导出要用）
 };
 
 /* ── 小工具 ────────────────────────────────────────────────── */
@@ -613,7 +624,9 @@ async function runSearch(q) {
 /* ══ 阅读 ═══════════════════════════════════════════════════ */
 function ensureWorker() {
   if (state.worker) return state.worker;
-  const w = new Worker("/markdown-worker.js?v=cloud-1");
+  // assets=/vendor/ 让 worker 从同源自托管目录取图表库，而不是第三方 CDN。
+  // 桌面端不传这个参数（行为与以前一致），所以同一份 worker 能服务两端。
+  const w = new Worker(`/markdown-worker.js?v=${ASSET_V}&assets=/vendor/`);
   state.worker = w;
   return w;
 }
@@ -651,10 +664,10 @@ function loadKatex() {
     if (window.katex) return resolve(window.katex);
     const link = document.createElement("link");
     link.rel = "stylesheet";
-    link.href = `https://cdn.jsdelivr.net/npm/katex@${KATEX_VERSION}/dist/katex.min.css`;
+    link.href = KATEX_CSS;
     document.head.appendChild(link);
     const s = document.createElement("script");
-    s.src = `https://cdn.jsdelivr.net/npm/katex@${KATEX_VERSION}/dist/katex.min.js`;
+    s.src = KATEX_SRC;
     s.onload = () => resolve(window.katex || null);
     s.onerror = () => resolve(null);
     document.head.appendChild(s);
@@ -668,7 +681,7 @@ function loadMermaid() {
   mermaidPromise = new Promise((resolve) => {
     if (window.mermaid) return resolve(window.mermaid);
     const s = document.createElement("script");
-    s.src = MERMAID_CDN;
+    s.src = MERMAID_SRC;
     s.onload = () => resolve(window.mermaid || null);
     s.onerror = () => resolve(null);
     document.head.appendChild(s);
@@ -758,11 +771,13 @@ async function openDoc(id) {
     .from("documents").select("id, title, rel_path, workspace, content, bytes, updated_at")
     .eq("id", id).is("deleted_at", null).maybeSingle();
   if (error || !data) {
+    state.docSource = "";
     el.docBody.innerHTML = `<p class="muted">读取失败：${escapeHtml(error ? (error.message || "未知错误") : "文档不存在")}</p>`;
     return;
   }
   el.docTitle.textContent = data.title || data.rel_path;
   el.docPath.textContent = `${data.workspace} / ${data.rel_path} · ${fmtTime(data.updated_at)}`;
+  state.docSource = data.content || "";
   try {
     const html = await renderMarkdownInWorker(data.content || "");
     el.docBody.innerHTML = html;
@@ -785,11 +800,15 @@ document.addEventListener("click", (e) => {
   }
 });
 
-el.backBtn.addEventListener("click", () => {
+/** 从文档页回到列表（顶栏返回键与 Android 物理返回键共用）。 */
+function backToList() {
   state.currentId = null;
+  state.docSource = "";
   el.docBody.innerHTML = "";
   show("list");
-});
+}
+
+el.backBtn.addEventListener("click", backToList);
 
 el.docDeleteBtn.addEventListener("click", async () => {
   if (!state.currentId) return;
@@ -802,6 +821,7 @@ el.docDeleteBtn.addEventListener("click", async () => {
   }
   state.docs = state.docs.filter((d) => String(d.id) !== String(state.currentId));
   state.currentId = null;
+  state.docSource = "";
   toast("已从云端删除");
   renderTree(); renderStats(); show("list");
 });
@@ -815,10 +835,16 @@ el.refreshBtn.addEventListener("click", async () => {
 
 /* ══ 从本机导入（一键推送）═══════════════════════════════════
  *
- * 为什么需要它：云服务强制「请求来源 == 应用发布域名」（精确 Origin 校验），
- * 桌面 WebView 的源是 http://127.0.0.1:<port>，不在白名单内 —— 桌面端无法直接上传。
- * 所以由桌面端「云端」面板带着 ?local=http://127.0.0.1:<port> 打开本页，
- * 本页（Origin 就是白名单域名）去读本机那三个只读端点，再把内容传上云。
+ * 定位：**备用路径**。桌面端自己已经能直连云服务（见 public/modules/cloud-client.js），
+ * 不需要经过浏览器；这条路保留给「不想让桌面端直连」或「没装桌面端」的场景。
+ *
+ * 历史背景：早期以为云服务强制「请求来源 == 应用发布域名」（精确 Origin 校验），
+ * 桌面 WebView 的源 http://127.0.0.1:<port> 不在白名单内，因此只能由本页代劳。
+ * 该前提在 2026-10-12 被实测推翻 —— 跨源预检对 127.0.0.1 放行，鉴权只看
+ * X-Wb-Webapp-Access-Key + JWT + RLS，与 Origin 无关。
+ *
+ * 用法：桌面端「云端同步」面板带着 ?local=http://127.0.0.1:<port> 打开本页，
+ * 本页去读本机那三个只读端点，再把内容传上云。
  *
  * 安全边界：本机 axum 只对本站域名开放 /api/workspaces、/api/files、/api/files/*path
  * 三个 GET 端点（见 handlers.rs::cloud_read_cors），写端点完全不开放 —— 这里读得到、改不了。
@@ -1227,6 +1253,117 @@ el.clearAllBtn.addEventListener("click", async () => {
   closeSheet(el.manageSheet);
   renderWsList(); renderTree(); renderStats();
 });
+
+/* ══ 原生能力（Android App）═══════════════════════════════════
+ *
+ * 本页同时服务浏览器与 APK 的 WebView（APK 用 server.url 远程加载本页），
+ * 所以原生能力一律做成**渐进增强**：只有 Capacitor 判定为原生时才挂行为，
+ * 浏览器里一个字节都不变 —— 这就是「APK 功能完善 + 网页版界面不变」的做法，
+ * 也避免了维护第二套 UI。
+ *
+ * 判定用 isNativePlatform()（Capacitor 官方语义），不解析 UA：UA 可被伪造。
+ * ------------------------------------------------------------------------- */
+const NATIVE = !!(window.Capacitor
+  && typeof window.Capacitor.isNativePlatform === "function"
+  && window.Capacitor.isNativePlatform());
+const CAP = (NATIVE && window.Capacitor.Plugins) || {};
+
+/**
+ * 关掉最上层的弹层；确认框要走它自己的取消按钮，否则 askConfirm 的 Promise
+ * 永远不 resolve（返回键处理里很容易踩到）。
+ */
+function closeTopSheet() {
+  if (el.confirmSheet && !el.confirmSheet.hidden) { el.confirmCancel.click(); return true; }
+  for (const sheet of [el.uploadSheet, el.manageSheet]) {
+    if (sheet && !sheet.hidden) { closeSheet(sheet); return true; }
+  }
+  return false;
+}
+
+/** 文件名里去掉路径分隔符等在手机上非法的字符。 */
+function safeFileName(name) {
+  return String(name || "note").replace(/[\\/:*?"<>|]+/g, "_").slice(0, 80) || "note";
+}
+
+if (NATIVE) {
+  if (el.nativeActions) el.nativeActions.hidden = false;
+
+  // 1) 状态栏配色跟随页面主题（浅色主题深色字，深色主题浅色字）
+  if (CAP.StatusBar) {
+    const applyStatusBar = () => {
+      const dark = isDark();
+      Promise.resolve(CAP.StatusBar.setBackgroundColor({ color: dark ? "#12100e" : "#f6f4ef" })).catch(() => {});
+      Promise.resolve(CAP.StatusBar.setStyle({ style: dark ? "DARK" : "LIGHT" })).catch(() => {});
+    };
+    applyStatusBar();
+    try {
+      window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyStatusBar);
+    } catch (_) { /* 老 WebView 没有 addEventListener on MediaQueryList */ }
+  }
+
+  // 2) Android 物理返回键：先关弹层，再退出文档，最后才允许退出应用
+  if (CAP.App && typeof CAP.App.addListener === "function") {
+    CAP.App.addListener("backButton", () => {
+      if (closeTopSheet()) return;
+      if (el.views && !el.views.doc.hidden) { backToList(); return; }
+      CAP.App.exitApp();
+    });
+  }
+
+  // 3) 网络状态：断网时顶部提示条（不阻塞阅读 —— 已打开的正文就在内存里）
+  if (CAP.Network && typeof CAP.Network.addListener === "function") {
+    const setOffline = (offline) => { if (el.offlineBar) el.offlineBar.hidden = !offline; };
+    Promise.resolve(CAP.Network.getStatus()).then((s) => setOffline(!(s && s.connected))).catch(() => {});
+    CAP.Network.addListener("networkStatusChange", (s) => setOffline(!(s && s.connected)));
+  }
+
+  // 4) 文档动作条：分享 / 复制 / 导出 .md
+  if (el.nativeActions) {
+    el.nativeActions.addEventListener("click", async (e) => {
+      const btn = e.target.closest("[data-native]");
+      if (!btn) return;
+      const act = btn.dataset.native;
+      const title = el.docTitle.textContent || "笔记";
+      const text = state.docSource || "";
+      if (!text) { toast("这篇还没有内容可操作", "error"); return; }
+
+      if (act === "share") {
+        if (!CAP.Share) { toast("当前环境不支持分享", "error"); return; }
+        try {
+          await CAP.Share.share({ title, text, dialogTitle: "分享笔记" });
+        } catch (err) {
+          // 用户点取消不算错误
+          if (!/cancel/i.test(String((err && err.message) || err))) toast("分享失败", "error");
+        }
+        return;
+      }
+
+      if (act === "copy") {
+        if (!CAP.Clipboard) { toast("当前环境不支持复制", "error"); return; }
+        try {
+          await CAP.Clipboard.write({ string: text });
+          toast("正文已复制");
+        } catch (_) { toast("复制失败", "error"); }
+        return;
+      }
+
+      if (act === "export") {
+        if (!CAP.Filesystem) { toast("当前环境不支持导出", "error"); return; }
+        try {
+          const name = safeFileName(title) + ".md";
+          // Directory.Documents 在 Android 上落在应用专属目录（无需存储权限）
+          await CAP.Filesystem.writeFile({
+            path: name, data: text, directory: "DOCUMENTS", encoding: "utf8", recursive: true,
+          });
+          toast("已导出到「文档」：" + name);
+        } catch (err) {
+          toast("导出失败：" + String((err && err.message) || err), "error");
+        }
+        return;
+      }
+    });
+  }
+}
 
 /* ══ 启动 ═══════════════════════════════════════════════════ */
 async function enterApp() {

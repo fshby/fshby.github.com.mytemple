@@ -7,7 +7,7 @@
 <meta name="theme-color" content="#12100e" media="(prefers-color-scheme: dark)" />
 <title>知识库云端 · MyTemple</title>
 <link rel="manifest" href="/manifest.webmanifest" />
-<link rel="stylesheet" href="/styles.css?v=cloud-2" />
+<link rel="stylesheet" href="/styles.css?v=cloud-4" />
 </head>
 <body>
 <div class="app" id="app">
@@ -148,6 +148,13 @@
       <p id="docPath" class="doc-path muted"></p>
     </div>
     <article id="docBody" class="markdown-body"></article>
+    <!-- 原生能力动作条：仅在 Android/App 里出现（window.Capacitor.isNativePlatform()）。
+         网页版不渲染这一排，保持界面不变。 -->
+    <div id="nativeActions" class="native-actions" hidden>
+      <button class="native-btn" type="button" data-native="share">分享</button>
+      <button class="native-btn" type="button" data-native="copy">复制正文</button>
+      <button class="native-btn" type="button" data-native="export">导出 .md</button>
+    </div>
     <div class="doc-foot">
       <button id="docDeleteBtn" class="danger-link" type="button">从云端删除这篇</button>
     </div>
@@ -243,11 +250,19 @@
   </div>
 
   <div id="toast" class="toast" role="status" hidden></div>
+
+  <!-- 仅原生端使用：断网时的顶部提示条（网页版保持隐藏，界面不变） -->
+  <div id="offlineBar" class="offline-bar" role="status" hidden>当前离线：已打开的笔记仍可正常阅读，上传与同步会在联网后恢复</div>
 </div>
 
-<script src="/cloud-config.js?v=cloud-2"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tencent-ai/workbuddy-cloud-sdk@dev/lib/index.global.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js"></script>
-<script src="/app.js?v=cloud-2" type="module"></script>
+<script src="/cloud-config.js?v=cloud-4"></script>
+<!--
+  第三方库一律同源自托管（cloud/vendor/，见 scripts/vendor-cloud.mjs）。
+  这些库原先取自 cdn.jsdelivr.net，而该主机名在部分网络下 TLS 会被重置；
+  登录 SDK 恰好挂在那里，加载失败会导致验证码 / 微信 / 密码登录全部不可用。
+-->
+<script src="/vendor/sdk/workbuddy-cloud-sdk.global.js?v=cloud-4"></script>
+<script src="/vendor/fflate/fflate.min.js?v=cloud-4"></script>
+<script src="/app.js?v=cloud-4" type="module"></script>
 </body>
 </html>

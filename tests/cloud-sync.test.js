@@ -13,7 +13,7 @@
 //   - 云端与桌面共用同一份 Markdown 渲染器，构建产物不得分叉。
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, statSync } from "node:fs";
 
 const ROOT = new URL("../", import.meta.url);
 const read = (rel) => readFileSync(new URL(rel, ROOT), "utf8");
@@ -48,12 +48,22 @@ test("公开配置只含 publicConfig 的四项，且不含任何长期密钥字
   assert.doesNotMatch(cloudApp, /apikey|Authorization:/i, "不得手写 apikey / Authorization 头");
 });
 
-test("云服务 SDK 通过 CDN 全局形态加载，且初始化在脚本加载之后", () => {
-  const sdkTag = cloudHtml.indexOf("workbuddy-cloud-sdk@dev/lib/index.global.js");
-  assert.ok(sdkTag > 0, "必须使用 @dev 通道的 IIFE 构建（@latest 未维护）");
+test("云服务 SDK 以经典脚本的同源方式加载、暴露全局，且先于应用脚本", () => {
+  // app.js 直接读 window.WorkBuddyCloud，所以 SDK 必须是经典脚本（顶层 var -> 挂到 window）、
+  // 且必须排在 app.js 之前。改成 ES module 引入会静默拿不到全局。
+  const sdkTag = cloudHtml.indexOf("/vendor/sdk/workbuddy-cloud-sdk.global.js");
+  assert.ok(sdkTag > 0, "SDK 必须由同源 /vendor/ 提供（原 CDN 主机名在部分网络下不可达）");
   const appTag = cloudHtml.indexOf('src="/app.js');
   assert.ok(appTag > sdkTag, "应用脚本必须在 SDK 之后加载");
-  assert.doesNotMatch(cloudHtml, /@tencent-ai\/workbuddy-cloud-sdk@latest/, "不得使用 @latest");
+  const tagMatch = cloudHtml.match(/<script[^>]*workbuddy-cloud-sdk\.global\.js[^>]*>/);
+  assert.ok(tagMatch, "找不到 SDK 的 script 标签");
+  assert.doesNotMatch(tagMatch[0], /type="module"/, "SDK 必须是经典脚本，否则不会挂到 window 上");
+  // 真的验一下这个文件确实声明了 app.js 要读的全局名
+  assert.match(
+    read("cloud/vendor/sdk/workbuddy-cloud-sdk.global.js").slice(0, 400),
+    /var\s+WorkBuddyCloud\s*=/,
+    "vendor 里的 SDK 必须声明 var WorkBuddyCloud= 全局（app.js 读的就是它）"
+  );
 });
 
 /* ── 数据隔离：RLS 是唯一边界 ───────────────────────────────── */
@@ -196,17 +206,86 @@ test("不提供「镜像同步」式的隐式删除：删除只发生在用户�
 test("桌面端只增不改：一个新按钮 + 一次 init 调用，且入口自包含", () => {
   assert.match(indexHtml, /<button id="cloudBtn"/, "工具栏必须有云端入口按钮");
   assert.match(appSrc, /import \{ initCloudSync \} from "\.\/modules\/cloud-sync\.js"/, "app.js 必须导入入口模块");
-  assert.match(appSrc, /initCloudSync\(\);/, "必须调用 initCloudSync");
+  assert.match(appSrc, /initCloudSync\(\{ reload:/, "必须调用 initCloudSync，并传入刷新回调（同步写回本机后要重扫文件树）");
   assert.ok(existsSync(new URL("public/modules/cloud-sync.js", ROOT)), "入口模块必须存在");
   // 自包含：样式注入，不修改合并产物 styles.css
   assert.match(desktopEntry, /document\.head\.appendChild\(style\)/, "入口样式应通过 <style> 注入");
   assert.doesNotMatch(desktopEntry, /^import .*from "\.\/toast/m, "入口不得依赖 app.js 作用域内的函数");
 });
 
-test("桌面入口不直接向云数据面发请求（发布域名之外会被服务端 Origin 校验拒绝）", () => {
-  assert.doesNotMatch(desktopEntry, /\.cloud\//, "桌面入口不得直接打 /.cloud/**");
-  assert.doesNotMatch(desktopEntry, /createWorkBuddyCloud/, "桌面入口不初始化云客户端");
-  assert.match(desktopEntry, /CLOUD_WORKBENCH_URL/, "必须以「打开云端工作台」的方式引导用户");
+test("桌面端连云只经 cloud-client.js 一个入口，且复用同源 SDK（不手写 REST）", () => {
+  // 历史：曾认为「云服务强制请求来源 == 发布域名」，于是桌面端只做入口引导。
+  // 2026-10-12 实测推翻（预检对 http://127.0.0.1:<port> 放行 Authorization /
+  // X-Wb-Webapp-Access-Key / Prefer），桌面端因此改为直连。
+  // 但云访问必须**只有一个入口**，否则会话、密钥头、分页规则会各写一套并漂移。
+  const client = read("public/modules/cloud-client.js");
+  assert.match(client, /createWorkBuddyCloud\(\{/, "云客户端必须由 SDK 创建（不得手写 REST）");
+  assert.match(client, /endpoint:\s*CFG\.endpoint/, "endpoint 必须来自 cloud-config（不得取自 location）");
+  assert.match(client, /publishableKey:\s*CFG\.publishableKey/, "必须传 publishableKey");
+  // 面板本身不得再出现云数据面路径与客户端初始化
+  assert.doesNotMatch(desktopEntry, /\.cloud\//, "面板不得直接打 /.cloud/**，必须经 cloud-client");
+  assert.doesNotMatch(desktopEntry, /createWorkBuddyCloud/, "面板不初始化云客户端");
+  assert.match(desktopEntry, /from "\.\/cloud-client\.js"/, "面板必须从 cloud-client 取能力");
+  // 桌面端与云端页必须用同一份 SDK 文件（同 sha），否则行为会分叉
+  const a = read("cloud/vendor/sdk/workbuddy-cloud-sdk.global.js");
+  const b = read("public/vendor/sdk/workbuddy-cloud-sdk.global.js");
+  assert.equal(b, a, "桌面端 SDK 必须与云端页逐字节一致：跑 npm run vendor:cloud");
+  // 桌面端与云端的公开配置必须键值一致（改一处就得重新生成另一处）
+  const keys = ["resourceId", "endpoint", "oauthRelayBaseUrl", "publishableKey"];
+  const pubCfg = read("public/cloud-config.js");
+  for (const k of keys) {
+    const m = cloudCfg.match(new RegExp(`${k}:\\s*"([^"]*)"`));
+    assert.ok(m, `cloud-config.js 缺少 ${k}`);
+    assert.match(pubCfg, new RegExp(`${k}:\\s*"${m[1].replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`),
+      `public/cloud-config.js 的 ${k} 与云端不一致：跑 npm run vendor:cloud`);
+  }
+});
+
+test("桌面端页面引入同源 SDK 与配置，且都先于 app.js（经典脚本）", () => {
+  const sdkTag = indexHtml.indexOf("/vendor/sdk/workbuddy-cloud-sdk.global.js");
+  const cfgTag = indexHtml.indexOf("/cloud-config.js");
+  // 只看真正的 <script src>（顶部还有一条 modulepreload 的 <link href="/app.js?v=…">）
+  const appTag = indexHtml.indexOf('<script src="/app.js');
+  assert.ok(sdkTag > 0, "index.html 必须引入同源 SDK");
+  assert.ok(cfgTag > 0, "index.html 必须引入 cloud-config.js");
+  assert.ok(sdkTag < appTag, "SDK 必须先于 app.js 加载");
+  assert.ok(cfgTag < appTag, "配置必须先于 app.js 加载");
+  for (const name of ["workbuddy-cloud-sdk\\.global\\.js", "cloud-config\\.js"]) {
+    const tag = indexHtml.match(new RegExp(`<script[^>]*${name}[^>]*>`));
+    assert.ok(tag, `找不到 ${name} 的 script 标签`);
+    assert.doesNotMatch(tag[0], /type="module"/, `${name} 必须是经典脚本，否则不会挂到 window`);
+  }
+});
+
+test("桌面端直连押注的 SDK 契约：access-key 头名与客户端形状（换 SDK 版本会静默打断直连）", () => {
+  // 2026-10-12 实测：OPTIONS 预检回的白名单头里含 X-Wb-Webapp-Access-Key，桌面端能否跨源直连
+  // 完全押在这个头名上 —— 一旦换 SDK 版本改了名字，远端会 401，而本机一切照常、只表现为
+  // 「登录不上」。所以把它钉成契约，而不是留一句注释。
+  // 这个测试**不联网**：只加载 vendored SDK 检查其对外形状。
+  const prevWindow = globalThis.window;
+  globalThis.window = globalThis;
+  let sdk;
+  try {
+    sdk = new Function(read("public/vendor/sdk/workbuddy-cloud-sdk.global.js") + "\nreturn WorkBuddyCloud;")();
+    assert.ok(sdk, "SDK 必须声明全局 WorkBuddyCloud（经典脚本，app.js 读的就是它）");
+    assert.equal(sdk.PUBLISHABLE_KEY_HEADER, "x-wb-webapp-access-key",
+      "SDK 的公开键头名必须与云服务预检白名单里的实测值一致，改名会让桌面端直连全部 401");
+    assert.equal(typeof sdk.createWorkBuddyCloud, "function", "必须导出 createWorkBuddyCloud");
+    assert.equal(typeof sdk.createMemoryStorage, "function",
+      "必须导出内存存储实现（桌面端测试环境与无 DOM 场景要用它）");
+    const client = sdk.createWorkBuddyCloud({
+      endpoint: "https://example.invalid",
+      oauthRelayBaseUrl: "https://example.invalid/oauth",
+      publishableKey: "wbpk_contract_probe",
+      storage: sdk.createMemoryStorage(),
+    });
+    for (const m of ["auth", "database"]) {
+      assert.ok(client[m], `云端客户端必须暴露 ${m} 模块（cloud-client.js 依赖它）`);
+    }
+  } finally {
+    if (prevWindow === undefined) delete globalThis.window;
+    else globalThis.window = prevWindow;
+  }
 });
 
 /* ── 两端渲染器同源 ─────────────────────────────────────────── */
@@ -224,15 +303,136 @@ test("静态资源缓存戳三处一致，且改动后已递增", () => {
   const unique = [...new Set(versions)];
   assert.equal(unique.length, 1, `主资源 ?v= 必须完全一致，实测 ${unique.join(" / ")}`);
   assert.match(unique[0], /^2026\d{4}-/, "缓存戳应是日期前缀形式");
-  assert.ok(cloudHtml.includes("?v=cloud-2"), "云端工作台资源应带自己的缓存戳");
+  assert.match(cloudHtml, /\?v=cloud-\d+/, "云端工作台资源应带自己的缓存戳");
   // 云端三件套（styles.css / cloud-config.js / app.js）必须同版本串，且页面里不残留旧版本
   const cloudVersions = [...cloudHtml.matchAll(/(?:styles\.css|cloud-config\.js|app\.js)\?v=([^"]+)/g)].map((m) => m[1]);
   assert.equal(cloudVersions.length, 3, `云页面应有 3 处主资源引用，实测 ${cloudVersions.length}`);
   assert.equal(new Set(cloudVersions).size, 1, `云页面 ?v= 必须完全一致，实测 ${cloudVersions.join(" / ")}`);
+  // app.js 内部的 ASSET_V 必须与页面同串：它拼的是 worker / mermaid / katex 的 URL，
+  // 不一致会变成「页面已更新、子资源还是旧缓存」这种最难查的混合状态。
+  const assetV = cloudApp.match(/const ASSET_V = "([^"]+)"/);
+  assert.ok(assetV, "cloud/app.js 必须有 ASSET_V");
+  assert.equal(assetV[1], cloudVersions[0], "cloud/app.js 的 ASSET_V 必须与页面缓存戳一致");
   // 桌面 app.js 内部引用的两个 URL 必须与页面一致，否则 WebView2 会命中旧缓存
   for (const target of ["editor-core.js", "markdown-worker.js"]) {
     const m = appSrc.match(new RegExp(`/${target.replace(".", "\\.")}\\?v=([^"]+)`));
     assert.ok(m, `app.js 必须引用 ${target}`);
     assert.equal(m[1], unique[0], `app.js 的 ${target} 缓存戳必须与 index.html 一致`);
   }
+});
+
+/* ── 第三方库自托管 ───────────────────────────────────────────
+ * 事故背景：云端工作台的第三方库（含**登录 SDK**）原先全部取自 cdn.jsdelivr.net。
+ * 该主机名在部分网络下 TLS 连接会被重置（实测 curl -> (35) Recv failure:
+ * Connection was reset，而 unpkg / registry.npmjs.org 正常）。SDK 加载失败后
+ * window.WorkBuddyCloud 为 undefined，initClient() 抛错，于是**验证码 / 微信 /
+ * 密码三条登录路径同时失效** —— 表现为「登录完全不能用」。
+ * 所以：库必须由站点同源提供（cloud/vendor/），且版本必须钉死。
+ * ------------------------------------------------------------------------- */
+
+/** 常见第三方 CDN 主机名，出现即视为回退到外部依赖。 */
+const CDN_HOSTS = [
+  "cdn.jsdelivr.net",
+  "fastly.jsdelivr.net",
+  "gcore.jsdelivr.net",
+  "unpkg.com",
+  "cdnjs.cloudflare.com",
+  "cdn.bootcdn.net",
+  "cdn.staticfile.org",
+  "fonts.googleapis.com",
+];
+
+test("云端页面与脚本不再引用任何第三方 CDN（库一律同源自托管）", () => {
+  for (const [name, src] of [["cloud/index.html", cloudHtml], ["cloud/app.js", cloudApp]]) {
+    for (const host of CDN_HOSTS) {
+      // 允许在注释里提及（说明事故背景），但不允许出现在任何 src/href/URL 位置
+      const inCode = new RegExp(`(?:src|href)\\s*=\\s*[\`"'][^\`"']*${host.replace(/\./g, "\\.")}`);
+      const asUrl = new RegExp(`[\`"']https://${host.replace(/\./g, "\\.")}`);
+      assert.ok(!inCode.test(src), `${name} 不应再从 ${host} 加载资源`);
+      assert.ok(!asUrl.test(src), `${name} 不应再出现 ${host} 的 URL`);
+    }
+  }
+});
+
+test("登录 SDK 与 fflate 由同源 vendor 提供，且文件真实存在", () => {
+  // 这两件是登录链路的硬依赖：缺 SDK 则任何登录方式都不可用
+  assert.match(cloudHtml, /<script src="\/vendor\/sdk\/workbuddy-cloud-sdk\.global\.js\?v=/, "登录 SDK 必须走同源 /vendor/");
+  assert.match(cloudHtml, /<script src="\/vendor\/fflate\/fflate\.min\.js\?v=/, "fflate 必须走同源 /vendor/");
+  // SDK 必须在 app.js 之前加载，否则 window.WorkBuddyCloud 还是 undefined
+  assert.ok(
+    cloudHtml.indexOf("/vendor/sdk/workbuddy-cloud-sdk.global.js") < cloudHtml.indexOf("/app.js?v="),
+    "SDK 必须先于 app.js 加载，否则初始化时拿不到 WorkBuddyCloud"
+  );
+
+  const floor = {
+    "cloud/vendor/sdk/workbuddy-cloud-sdk.global.js": 50_000,
+    "cloud/vendor/fflate/fflate.min.js": 20_000,
+    "cloud/vendor/mermaid/mermaid.min.js": 1_000_000,
+    "cloud/vendor/katex/katex.min.js": 100_000,
+    "cloud/vendor/katex/katex.min.css": 10_000,
+    "cloud/vendor/chartjs/chart.umd.js": 150_000,
+    "cloud/vendor/echarts/echarts.min.js": 800_000,
+  };
+  for (const [rel, min] of Object.entries(floor)) {
+    assert.ok(existsSync(new URL(rel, ROOT)), `${rel} 缺失，请跑 npm run vendor:cloud`);
+    const size = statSync(new URL(rel, ROOT)).size;
+    assert.ok(size >= min, `${rel} 体积异常（${size} B < ${min} B），可能是错误页而非真文件`);
+  }
+});
+
+test("katex 样式与其字体保持相对路径关系（换域名也不会失效）", () => {
+  const css = read("cloud/vendor/katex/katex.min.css");
+  const fonts = [...new Set(css.match(/fonts\/[A-Za-z0-9_.-]+\.woff2/g) || [])];
+  assert.ok(fonts.length >= 20, `katex 样式应引用字体，实测 ${fonts.length} 个 woff2`);
+  // CSS 用的是相对路径 fonts/xxx，所以字体必须落在 CSS 同目录下的 fonts/ 里
+  for (const f of fonts) {
+    const rel = `cloud/vendor/katex/${f}`;
+    assert.ok(existsSync(new URL(rel, ROOT)), `${rel} 缺失（CSS 用相对路径引用，缺了公式会掉字形）`);
+  }
+});
+
+test("图表库由云端同源提供，且桌面端行为不受牵连", () => {
+  // markdown-worker 两端共用同一份文件（上面已有字节一致性断言），
+  // 所以不能把库地址写死：云端通过 Worker URL 的 ?assets= 指到 /vendor/，
+  // 桌面端不传该参数，继续走原来的 CDN —— 本轮不动桌面端，不能产生回归。
+  const shared = read("public/markdown-worker.js");
+  assert.match(shared, /\[\?&\]assets=/, "worker 必须支持 ?assets= 覆盖自托管目录");
+  assert.match(shared, /ASSET_BASE\s*\?/, "worker 必须按 ASSET_BASE 分支，不能写死一处地址");
+  // 未传 assets 时的回退值必须还是原来那两个 CDN 地址（桌面端读到的就是这条分支）
+  assert.ok(
+    shared.includes("https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"),
+    "桌面端回退地址必须保持原样（未传 assets 时不得改变既有行为）"
+  );
+  assert.ok(
+    shared.includes("https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"),
+    "桌面端回退地址必须保持原样（未传 assets 时不得改变既有行为）"
+  );
+  // 云端必须真的带上这个参数，否则还是会去请求 CDN
+  assert.match(
+    cloudApp,
+    /new Worker\(`\/markdown-worker\.js\?v=\$\{ASSET_V\}&assets=\/vendor\/`\)/,
+    "云端必须以 assets=/vendor/ 创建渲染 worker"
+  );
+  // 自托管目录里的文件名必须与 worker 拼出来的路径对得上
+  assert.ok(shared.includes('ASSET_BASE + "chartjs/chart.umd.js"'), "worker 的 chart 路径写法变了，需同步 vendor 目录");
+  assert.ok(shared.includes('ASSET_BASE + "echarts/echarts.min.js"'), "worker 的 echarts 路径写法变了，需同步 vendor 目录");
+});
+
+test("自托管脚本钉死精确版本，不得使用浮动 tag", () => {
+  const src = read("scripts/vendor-cloud.mjs");
+  // 原先页面用的是 `@dev` 这种浮动 tag（今天指向 0.1.3-dev.c090db7.…），
+  // 上游一发新版就会静默换掉线上运行的代码。自托管必须钉到精确版本。
+  for (const bad of ["@dev/", "@latest/", "@next/", "@beta/", "@canary/"]) {
+    assert.ok(!src.includes(bad), `vendor 脚本不应使用浮动 tag ${bad}`);
+  }
+  // 每条依赖都必须形如 name@x.y.z（或带 dev 后缀的完整版本号）
+  const pkgs = [...src.matchAll(/pkg:\s*"([^"]+)"/g)].map((m) => m[1]);
+  assert.ok(pkgs.length >= 5, `应声明至少 5 条依赖，实测 ${pkgs.length}`);
+  for (const p of pkgs) {
+    const name = p.startsWith("@") ? p.split("/").slice(0, 2).join("/") : p.split("/")[0];
+    assert.match(name, /@\d+\.\d+\.\d+/, `依赖必须钉死精确版本：${p}`);
+  }
+  // katex 的样式与字体必须同版本，否则 CSS 里声明的字形会对不上字体文件
+  const katexVers = [...new Set((src.match(/katex@[\d.]+/g) || []))];
+  assert.equal(katexVers.length, 1, `katex 版本必须唯一，实测 ${katexVers.join(" / ")}`);
 });
