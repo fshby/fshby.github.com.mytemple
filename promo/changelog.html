@@ -24,7 +24,7 @@
         <a href="index.html#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.2.1</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.2.2</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -40,6 +40,7 @@
         <div class="changelog-toc reveal">
           <h3>版本索引</h3>
           <ul>
+            <li><a href="#v2.2.2">v2.2.2</a> — 独立的 .html 文件也能同步到云端：桌面端一直把 .html 当一等公民（网页预览、去标签检索），只有同步白名单没放行 —— 本机能看、云端永远没有；云端工作台与分享页按扩展名分派渲染（沙箱网页 + 随分享带走的图片）。.json / .csv 仍不同步</li>
             <li><a href="#v2.2.1">v2.2.1</a> — 手机端截图不再「未同步」：桌面端「一键推送」补齐图片 / 视频（此前只传正文）；分享出去的网页不再被压在小窗里；安卓启动第一帧改用品牌方牌（此前是系统占位图标）</li>
             <li><a href="#v2.2.0">v2.2.0</a> — 重命名后缀修复：显式扩展名（如 hello.html）不再被强行改成 hello.html.md；不写扩展名仍自动补 .md；非 Markdown 文件允许移动；「仅显示 md」工作区下的边界行为改为明确提示</li>
             <li><a href="#v2.1.42">v2.1.42</a> — 内嵌网页体验修复：修「点放大没反应」（浮层样式选择器带错前缀，永远匹配不上）；内嵌网页改为按内容高度自适应，整页网页不再挤在固定小窗里（桌面 / 网页 / 手机三端同步）</li>
@@ -103,6 +104,39 @@
             <li><a href="#v1.8.93">v1.8.93</a> — 界面与体验升级 + 性能优化</li>
           </ul>
         </div>
+
+                <article class="doc-section reveal" id="v2.2.2">
+          <h3>v2.2.2 · 独立的 .html 文件同步到云端</h3>
+          <p>实机反馈：工作区里的 <code>hello.html</code> 在桌面端能打开、能预览、能搜到，云端却怎么都找不到。一查，不是同步坏了 —— 是同步的白名单压根没放行 <code>.html</code>。</p>
+
+          <h4>根因：桌面端把 .html 当一等公民，只有同步层没跟上</h4>
+          <ul>
+            <li><b>本机侧一直是支持 html 的</b>：索引照常收录（只要不是二进制类型）、阅读态用沙箱网页渲染、检索会先剥掉标签再匹配。所以你在应用里能看到、能打开、能编辑、能搜到。</li>
+            <li><b>同步侧的扩展名白名单只认 Markdown 与纯文本</b>：<code>.html</code> 从没进过同步判据 —— 不推、不拉，连「失败」都不会报，静默地当作不存在。同一个白名单还在网页端的手动导入、压缩包导入里挡着，所以从网页端选文件也是那句「不是可同步的类型」。</li>
+            <li>实测证据：默认工作区 12 个文件，8 篇 md、2 篇 txt 逐一对上云端，<code>hello.html</code> 与 <code>test/small.json</code> 一个都没有。</li>
+          </ul>
+
+          <h4>桌面端</h4>
+          <ul>
+            <li><b>白名单放行 .html / .htm / .xhtml</b>，它们与 Markdown 一样参与三路同步（推送 / 拉取 / 冲突检测）。</li>
+            <li><b>单个 HTML 文档设 1.2MB 上限</b>：云端正文是一列文本，整页 HTML 不设限会把列表与检索拖慢。超限的文件会跳过并在同步结果里明确报「N 个 HTML 文档过大未上传」，不会悄悄丢掉。</li>
+            <li><b>标题取页面 &lt;title&gt;</b>：HTML 文档的标题不再被正文里的 <code>#</code> 行误判，与桌面端本机的取标题规则一致。</li>
+            <li><b>文档里的图片一起上云</b>：HTML 里 <code>&lt;img&gt;</code> / <code>&lt;video&gt;</code> 引用的本机资源走上一版打通的图片同步链路，缺哪张补哪张。</li>
+          </ul>
+
+          <h4>云端工作台与分享页</h4>
+          <ul>
+            <li><b>按扩展名分派渲染</b>：打开 <code>.html</code> 文档不再被 Markdown 渲染成一堆标签文本，而是装进与本机同款的沙箱网页里原样呈现（脚本能跑、表单能用，但读不到你的登录态与知识库）。</li>
+            <li><b>图片引用在入帧前改写</b>：沙箱网页是独立来源，外层碰不到帧内内容，所以图片地址在塞进去之前就替换好 —— 工作台换成云存储的短期签名地址，分享页换成随分享快照一起带走的图片。</li>
+            <li><b>检索片段先剥标签</b>：HTML 文档的搜索结果不再是一屏 <code>&lt;div&gt;</code> 噪声。</li>
+            <li><b>导出按原后缀</b>：导出 HTML 文档得到的是 <code>.html</code>，不再一律给 <code>.md</code>。</li>
+          </ul>
+
+          <h4>为什么 .json / .csv 仍然不同步</h4>
+          <ul>
+            <li>工作区里的 <code>.json</code> 常常是配置文件（插件设置、令牌、密钥），一旦随工作区自动上云就是一条泄漏通道；权限隔离只认账号，分享出去或账号失窃都会外泄。本轮按「只放开网页文件」的范围收口，<code>.json</code> / <code>.csv</code> 保持不同步，并有测试锁死这条边界。</li>
+          </ul>
+        </article>
 
                 <article class="doc-section reveal" id="v2.2.1">
           <h3>v2.2.1 · 手机端截图不再是「未同步」</h3>

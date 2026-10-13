@@ -1,7 +1,7 @@
 {
-    "version":  "2.2.1",
+    "version":  "2.2.2",
     "downloadUrl":  "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
-    "latestReleaseNotes":  "手机端截图不再「未同步」：桌面端「一键推送」补齐图片 / 视频（此前只搬正文，推上去的库文档在、图片全缺，手机与网页只能显示「未同步」占位）；正文没变时也会按引用补齐历史缺失的图片，云端已有则只探针不重传。分享出去的网页补上内嵌卡片样式与高度自适应，不再被压在 300×150 小窗里。安卓启动第一帧改为品牌方牌与品牌底色（此前是系统占位图标），启动屏受控收起。Android 客户端 1.1.2。",
-    "releaseNotes":  "v2.2.1 release. See changelog for details.",
+    "latestReleaseNotes":  "独立的 .html 文件也能同步到云端：桌面端一直把 .html 当一等公民（网页预览、去标签检索），只有同步白名单没放行 —— 本机能看、云端永远没有。现已放行 .html/.htm/.xhtml 参与三路同步；云端工作台与分享页按扩展名分派渲染（沙箱网页原样呈现，图片随分享一起带走），单篇设 1.2MB 上限、超限明确报数；文档里的图片走上一版打通的图片同步链路一起上云。.json / .csv 仍不同步（工作区里的配置文件常含密钥，自动上云等于泄漏）。",
+    "releaseNotes":  "v2.2.2 release. See changelog for details.",
     "releaseDate":  "2026-10-13"
 }
