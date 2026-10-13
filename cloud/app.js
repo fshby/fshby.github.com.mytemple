@@ -51,7 +51,7 @@ const UPSERT_BATCH_MAX_DOCS = 20;
 const UPSERT_BATCH_MAX_BYTES = 1_200_000;
 
 /* 静态资源版本戳：改动 cloud/ 下被页面引用的任何文件时，与 index.html 的三件套一起递增。 */
-const ASSET_V = "cloud-15";
+const ASSET_V = "cloud-16";
 
 /* 第三方库一律同源自托管，见 scripts/vendor-cloud.mjs。
  * 绝不改回第三方 CDN —— 见该脚本头部注释：cdn.jsdelivr.net 在部分网络下 TLS 会被重置，
@@ -1006,6 +1006,7 @@ function renderWsChips() {
 /** 视图切换：同时负责清空搜索态，避免「搜索中切视图」留下半截结果。 */
 function applyView() {
   const isTree = state.view === "tree";
+  clearTimeout(searchTimer);          // 清空输入后别再让挂起的检索把结果刷回来
   el.tree.hidden = !isTree;
   el.cards.hidden = isTree;
   el.searchResults.hidden = true;
@@ -1101,14 +1102,85 @@ function scoreDoc(d, lc, hasSnippet) {
   return s;
 }
 
+/* 检索触发：这一层必须在**真机输入法**下工作，不能只靠 input 事件。
+ * Android WebView 实测差异（2026-10-13 真浏览器复现）：
+ *   1) 中文输入法拼字过程中 input 会带 isComposing=true —— 此时值是拼音串（如 "kaoyan"），
+ *      拿它去检索只会得到「没有匹配 kaoyan」；而部分 WebView 在选字上屏后**不再补发 input**，
+ *      画面就永久停在那个「没有匹配」上 —— 用户看到的现象正是「检索不生效」。
+ *   2) type="search" 的原生清除按钮 / 软键盘「搜索」键走的可能是 search / change 事件，
+ *      而软键盘通常**不派发 keyup**。
+ * 所以：拼字中跳过；compositionend / change / search / Enter 各兜一遍；最后再有一层
+ * 「聚焦期间比对值变化」的轮询兜底，覆盖任何不按规范派发事件的输入法。 */
+const CJK_RE = /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\u3040-\u30ff\uac00-\ud7af]/;
+/** 云端正文检索的最短长度：中文一个字就是一个词，门槛必须比拉丁文低。 */
+function remoteMinLen(q) { return CJK_RE.test(q) ? 1 : 2; }
+
 let searchTimer = null;
-el.q.addEventListener("input", () => {
+const SEARCH_DEBOUNCE = 280;
+/** 输入法拼字中：此间 el.q.value 是拼音串（"kaoyan"），搜了只会得到「没有匹配 kaoyan」。
+ *  用 compositionstart/end 显式跟踪，而不只依赖 input.isComposing —— 事件派发顺序在
+ *  各 WebView 上并不一致，且轮询兜底不看 isComposing。5s 超时防止 compositionend 丢失后卡死。 */
+let composingQuery = false;
+let composingTimer = null;
+function scheduleSearch(delay) {
+  if (composingQuery) return;
   const v = el.q.value.trim();
   el.clearQ.hidden = !v;
   clearTimeout(searchTimer);
-  searchTimer = setTimeout(() => runSearch(v), 280);
+  searchTimer = setTimeout(() => runSearch(v), typeof delay === "number" ? delay : SEARCH_DEBOUNCE);
+}
+
+let polledValue = "";
+let qPoll = null;
+function startQueryPoll() {
+  if (qPoll) return;
+  polledValue = el.q.value;
+  qPoll = setInterval(() => {
+    if (composingQuery) return;                     // 拼字中不打扰
+    if (el.q.value !== polledValue) { polledValue = el.q.value; scheduleSearch(120); }
+  }, 320);
+}
+function stopQueryPoll() { if (qPoll) { clearInterval(qPoll); qPoll = null; } }
+
+el.q.addEventListener("compositionstart", () => {
+  composingQuery = true;
+  clearTimeout(composingTimer);
+  composingTimer = setTimeout(() => { composingQuery = false; scheduleSearch(0); }, 5000);
 });
-el.clearQ.addEventListener("click", applyView);
+el.q.addEventListener("compositionend", () => {
+  composingQuery = false;
+  clearTimeout(composingTimer);
+  scheduleSearch(60);
+});
+el.q.addEventListener("input", (e) => {
+  if ((e && e.isComposing) || composingQuery) return;
+  scheduleSearch();
+});
+el.q.addEventListener("change", () => scheduleSearch(0));
+el.q.addEventListener("search", () => scheduleSearch(0));
+el.q.addEventListener("keydown", (e) => {
+  if (e.key !== "Enter") return;
+  e.preventDefault();
+  clearTimeout(searchTimer);
+  runSearch(el.q.value.trim());
+  el.q.blur();
+});
+el.q.addEventListener("focus", startQueryPoll);
+el.q.addEventListener("blur", () => {
+  composingQuery = false;
+  clearTimeout(composingTimer);
+  setTimeout(stopQueryPoll, 800);
+});
+el.clearQ.addEventListener("click", () => { clearTimeout(searchTimer); applyView(); });
+
+/** 长列表滚到下方后再检索时，结果区可能整个落在视口之外（手机小屏尤其明显），
+ *  看起来就像「点了没反应」。只在完全不可见时滚到最近边缘，避免输入过程中抖动。 */
+function revealResults() {
+  try {
+    const r = el.searchResults.getBoundingClientRect();
+    if (r.bottom < 0 || r.top > window.innerHeight) el.searchResults.scrollIntoView({ block: "nearest" });
+  } catch (_) { /* 取不到布局就算了，不影响检索本身 */ }
+}
 
 async function runSearch(q) {
   if (!q) { applyView(); return; }
@@ -1130,8 +1202,10 @@ async function runSearch(q) {
   }
 
   // 3) 云端正文检索：只选元数据列，正文不随响应回来
+  //    失败必须**可见** —— 否则用户看到「没有匹配」会以为内容没同步上去，而不是网络/权限出错。
   let remote = [];
-  if (q.length >= 2) {
+  let remoteError = "";
+  if (q.length >= remoteMinLen(q)) {
     try {
       const { data, error } = await cloud.database
         .from("documents")
@@ -1140,8 +1214,9 @@ async function runSearch(q) {
         .ilike("content", `%${q.replace(/[%_\\]/g, (m) => "\\" + m)}%`)
         .order("updated_at", { ascending: false })
         .limit(60);
-      if (!error && Array.isArray(data)) remote = data;
-    } catch (_) { /* 正文检索失败时仍展示本地命中 */ }
+      if (error) remoteError = error.message || "云端检索失败";
+      else if (Array.isArray(data)) remote = data;
+    } catch (err) { remoteError = String((err && err.message) || err); }
   }
   if (token !== state.searchToken) return;
 
@@ -1183,16 +1258,29 @@ async function runSearch(q) {
   el.tree.hidden = true;
   el.cards.hidden = true;
   el.searchResults.hidden = false;
+  // 云端检索失败时明确说出来：用户看到「没有匹配」会以为内容没同步上去，
+  // 而不是网络 / 权限出问题 —— 这正是「检索不生效」最常见的误判来源。
+  const warn = remoteError
+    ? `<p class="sr-warn">云端正文检索未完成：${escapeHtml(remoteError)}<br>结果可能不完整，网络恢复后重试一次即可。</p>`
+    : "";
   if (!merged.length) {
-    el.searchResults.innerHTML = `<p class="empty-inline muted">没有匹配「${escapeHtml(q)}」的内容。<br>试试更短的关键词，或确认这篇是否已上传到云端。</p>`;
+    // 带上「当前账号下有多少篇参与检索」：一句话就能区分「确实没有这篇」和
+    // 「登录的不是同一个账号 / 内容还没同步上去」——这两种困惑以前长得一模一样。
+    const scope = state.docs.length
+      ? `当前账号下 ${state.docs.length} 篇已参与检索（标题 / 路径 / 正文）。`
+      : "当前账号下还没有同步的内容。";
+    el.searchResults.innerHTML = warn
+      + `<p class="empty-inline muted">没有匹配「${escapeHtml(q)}」的内容。<br>${scope}<br>试试更短的关键词，或确认这篇是否已上传到云端。</p>`;
+    revealResults();
     return;
   }
   const bodyHits = [...snippets.keys()].filter((id) => merged.some((d) => String(d.id) === id)).length;
-  el.searchResults.innerHTML =
-    `<p class="sr-head"><strong>${merged.length}</strong> 篇命中`
+  el.searchResults.innerHTML = warn
+    + `<p class="sr-head"><strong>${merged.length}</strong> 篇命中`
     + (bodyHits ? ` · <strong>${bodyHits}</strong> 篇含正文匹配` : "")
     + `</p>`
     + merged.map((d) => docCard(d, { q, snippet: snippets.get(String(d.id)) })).join("");
+  revealResults();
 }
 
 /* ══ 阅读 ═══════════════════════════════════════════════════ */

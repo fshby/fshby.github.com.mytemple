@@ -605,6 +605,38 @@ test("检索三层递进：本地标题/路径 + 云端正文（只取元数据�
   assert.match(fn, /token !== state\.searchToken/, "必须保留搜索竞态保护");
 });
 
+test("检索触发必须覆盖真机输入法：拼字中不检索、上屏后必检索", () => {
+  // 背景（2026-10-13 实机反馈）：APK（Android WebView）里中文检索「不生效」。
+  // 真浏览器复现结论：输入法拼字期间 input 带 isComposing=true、值是拼音串（"kaoyan"），
+  // 而部分 WebView 在选字上屏后**不再补发 input** —— 只监听 input 就永久漏掉检索。
+  assert.match(cloudApp, /el\.q\.addEventListener\("compositionstart"/, "必须跟踪拼字开始");
+  assert.match(cloudApp, /el\.q\.addEventListener\("compositionend"/, "必须监听 compositionend（上屏即检索，不依赖 WebView 补发 input）");
+  assert.match(cloudApp, /composingQuery/, "必须有「拼字中」标志，避免拿拼音串去检索");
+  assert.match(cloudApp, /isComposing/, "input 事件必须检查 isComposing");
+  assert.match(cloudApp, /el\.q\.addEventListener\("change"/, "必须兜 change（原生清除按钮 / 失焦提交）");
+  assert.match(cloudApp, /el\.q\.addEventListener\("search"/, "必须兜 search 事件");
+  assert.match(cloudApp, /e\.key !== "Enter"/, "必须兜软键盘「搜索」键（Enter）");
+  assert.match(cloudApp, /startQueryPoll/, "必须有值变化轮询兜底（个别 WebView 连 change 都不发）");
+  assert.match(cloudApp, /function scheduleSearch\(/, "触发必须收敛到一个入口，避免各事件重复实现");
+});
+
+test("中文单字也要走云端正文检索（门槛按字符类型定，不按长度写死）", () => {
+  const fn = cloudApp.slice(cloudApp.indexOf("async function runSearch"), cloudApp.indexOf("/* ══ 阅读"));
+  assert.match(cloudApp, /function remoteMinLen\(/, "必须有按字符类型决定的最短长度");
+  assert.match(cloudApp, /CJK_RE/, "必须能识别 CJK 字符");
+  assert.match(fn, /q\.length >= remoteMinLen\(q\)/, "云端正文检索必须用 remoteMinLen，不能写死 >= 2");
+  assert.doesNotMatch(fn, /q\.length >= 2\b/, "写死长度会把中文单字（一个字就是一个词）排除在正文检索外");
+});
+
+test("云端正文检索失败必须可见，不能谎报「没有匹配」", () => {
+  const fn = cloudApp.slice(cloudApp.indexOf("async function runSearch"), cloudApp.indexOf("/* ══ 阅读"));
+  assert.match(fn, /remoteError/, "必须记录云端检索错误");
+  assert.match(fn, /if \(error\) remoteError/, "error 不得再被静默吞掉");
+  assert.match(cloudApp, /sr-warn/, "失败必须在结果区显示出来");
+  assert.match(cloudCss, /\.sr-warn\s*\{/, "告警样式必须存在（cloud/styles.css）");
+  assert.match(cloudApp, /function revealResults\(/, "结果必须滚进视口（长列表滚动后检索会看不见）");
+});
+
 test("打开文档的正文会进内存缓存，供列表页片段与秒开复用", () => {
   assert.match(cloudApp, /function rememberDoc\(/, "必须有正文缓存写入函数");
   assert.match(cloudApp, /rememberDoc\(id, state\.docSource\)/, "openDoc 成功后必须写缓存");
