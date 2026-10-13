@@ -24,7 +24,7 @@
         <a href="index.html#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.1.42</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.2.0</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -40,6 +40,7 @@
         <div class="changelog-toc reveal">
           <h3>版本索引</h3>
           <ul>
+            <li><a href="#v2.2.0">v2.2.0</a> — 重命名后缀修复：显式扩展名（如 hello.html）不再被强行改成 hello.html.md；不写扩展名仍自动补 .md；非 Markdown 文件允许移动；「仅显示 md」工作区下的边界行为改为明确提示</li>
             <li><a href="#v2.1.42">v2.1.42</a> — 内嵌网页体验修复：修「点放大没反应」（浮层样式选择器带错前缀，永远匹配不上）；内嵌网页改为按内容高度自适应，整页网页不再挤在固定小窗里（桌面 / 网页 / 手机三端同步）</li>
             <li><a href="#v2.1.41">v2.1.41</a> — HTML 文件渲染：打开 .html 就像打开网页（编辑态左源码、阅读态整页渲染，可放大全屏）；重新收紧沙箱——网页里的脚本已无法读取你的登录态与知识库；搜索索引不再命中标签噪音</li>
             <li><a href="#v2.1.40">v2.1.40</a> — 图片同步补齐：桌面端「一键推送」把笔记里引用的本机截图 / 视频一并同步到云端（此前只传文本，手机端与网页端图片全是裂图）；正文没变时也会补齐缺失的图片，按体积做增量、图片没变 / 上传失败 / 超过 12MB 分别报数；Android 客户端 1.1.1 图标与启动图重制</li>
@@ -102,7 +103,26 @@
           </ul>
         </div>
 
-                <article class="doc-section reveal" id="v2.1.42">
+                <article class="doc-section reveal" id="v2.2.0">
+          <h3>v2.2.0 · 重命名后缀修复</h3>
+          <p>实机反馈：把 <code>hello.md</code> 重命名成 <code>hello.html</code>，落盘却成了 <code>hello.html.md</code> —— 输入的扩展名被静默改写。本轮把它修掉，并顺带放宽同类的移动限制。</p>
+
+          <h4>桌面端</h4>
+          <ul>
+            <li><b>显式扩展名被尊重</b>：重命名时写了后缀就按写的来（<code>hello.html</code> → <code>hello.html</code>）；此前后端对文件名一刀切，凡不以 <code>.md</code> 结尾一律追加 <code>.md</code>。</li>
+            <li><b>裸名字行为不变</b>：不写扩展名时仍自动补 <code>.md</code>（输入 <code>hello</code> 得 <code>hello.md</code>），旧习惯不受影响；目录重命名永不补后缀。</li>
+            <li><b>移动限制同步放宽</b>：此前非 Markdown 文件一律禁止移动（「Only .md files can be moved」），而 .html 等文件自 2.1.41 起本就进索引、可渲染 —— 现允许移动。</li>
+            <li><b>「仅显示 md」的边界改为明确提示</b>：该开关是视图过滤，在这类工作区里把文件改成其它后缀会导致它从列表消失（文件仍在磁盘）。重命名 / 移动时会明确拒绝并指路（设置 → 工作区 取消勾选「仅显示 md」），不再静默改写输入。</li>
+            <li><b>健壮性细节</b>：非法字符净化后处理结尾的点，绝不产生 <code>hello..md</code> 这类名字；扩展名判定大小写不敏感（<code>.HTML</code> 与 <code>.html</code> 等价）。</li>
+          </ul>
+
+          <h4>同批包含 2.1.42 的内容</h4>
+          <ul>
+            <li>内嵌网页体验修复：修「点放大没反应」（浮层样式选择器带错前缀，永远匹配不上）；内嵌网页按内容高度自适应，整页网页不再挤在固定小窗里嵌套滚动。</li>
+          </ul>
+        </article>
+
+        <article class="doc-section reveal" id="v2.1.42">
           <h3>v2.1.42 · 内嵌网页体验修复</h3>
           <p>v2.1.41 上线内嵌网页渲染后收到两条实机反馈：点「放大」没反应；网页只显示顶上一条、要在一个小窗里套着滚动。逐条修掉，三端（桌面 / 网页 / 手机）同步生效。</p>
 

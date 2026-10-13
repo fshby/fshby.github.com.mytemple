@@ -1,7 +1,7 @@
 {
-    "version":  "2.1.42",
+    "version":  "2.2.0",
     "downloadUrl":  "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
-    "latestReleaseNotes":  "内嵌网页体验修复：修「点放大没反应」（全屏浮层样式选择器带错前缀，永远匹配不上）；内嵌网页改为按内容高度自适应，整页网页不再挤在固定小窗里嵌套滚动，桌面 / 网页 / 手机三端同步。",
-    "releaseNotes":  "v2.1.42 release. See changelog for details.",
+    "latestReleaseNotes":  "重命名后缀修复：重命名时显式写的扩展名（如 hello.html）不再被强行改成 hello.html.md；不写扩展名仍自动补 .md；非 Markdown 文件允许移动；「仅显示 md」工作区下的边界行为改为明确提示。同批包含 2.1.42 的内嵌网页体验修复。",
+    "releaseNotes":  "v2.2.0 release. See changelog for details.",
     "releaseDate":  "2026-10-13"
 }
