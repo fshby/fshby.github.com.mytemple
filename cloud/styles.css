@@ -222,9 +222,11 @@ body[data-view="doc"] .view { padding-bottom: calc(48px + env(safe-area-inset-bo
 .or { display: flex; align-items: center; gap: 10px; margin: 18px 0; color: var(--muted); font-size: 12.5px; }
 .or::before, .or::after { content: ""; height: 1px; background: var(--line); flex: 1; }
 
-/* ── 登录方式切换 ─────────────────────────────────────── */
+/* ── 登录方式切换 ───────────────────────────────────────
+ * 三层语义视觉递减：主意图（登录/注册）用胶囊 .tabs（最醒目）；
+ * 联系方式与登录方式用下划线式 .tabs-sub（轻量），不抢主意图的层级。 */
 .tabs {
-  display: flex; gap: 4px; padding: 4px; margin: 0 0 18px;
+  display: flex; gap: 4px; padding: 4px; margin: 0 0 12px;
   background: var(--bg); border: 1px solid var(--line); border-radius: 11px;
 }
 .tab {
@@ -233,6 +235,24 @@ body[data-view="doc"] .view { padding-bottom: calc(48px + env(safe-area-inset-bo
 }
 .tab.is-active { background: var(--surface); color: var(--text-strong); font-weight: 600; box-shadow: var(--shadow-sm); }
 .tabs + .form[hidden] { display: none; }
+.tabs-sub {
+  display: flex; gap: 18px; margin: 0 0 16px;
+  border-bottom: 1px solid var(--line);
+}
+.tab-sub {
+  border: none; background: none; padding: 6px 2px 8px; font-size: 13.5px;
+  color: var(--muted); position: relative; transition: color .15s;
+}
+.tab-sub::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px;
+  background: transparent; border-radius: 1px; transition: background .15s;
+}
+.tab-sub.is-active { color: var(--text-strong); font-weight: 600; }
+.tab-sub.is-active::after { background: var(--accent); }
+.tabs-way { gap: 14px; margin-top: -4px; }
+.tabs-way .tab-sub { font-size: 13px; }
+/* 轻量分段与表单相邻时的间距 */
+.field-label + .tabs-sub { margin-top: 2px; }
 .alt-actions { display: flex; justify-content: space-between; gap: 12px; margin-top: 2px; }
 .form-note {
   margin: 0; font-size: 12.5px; line-height: 1.7; color: var(--accent-strong);

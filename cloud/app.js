@@ -35,7 +35,7 @@ const UPSERT_BATCH_MAX_DOCS = 20;
 const UPSERT_BATCH_MAX_BYTES = 1_200_000;
 
 /* 静态资源版本戳：改动 cloud/ 下被页面引用的任何文件时，与 index.html 的三件套一起递增。 */
-const ASSET_V = "cloud-9";
+const ASSET_V = "cloud-10";
 
 /* 第三方库一律同源自托管，见 scripts/vendor-cloud.mjs。
  * 绝不改回第三方 CDN —— 见该脚本头部注释：cdn.jsdelivr.net 在部分网络下 TLS 会被重置，
@@ -68,13 +68,17 @@ const $ = (id) => document.getElementById(id);
 const el = {
   views: { boot: $("viewBoot"), login: $("viewLogin"), list: $("viewList"), doc: $("viewDoc") },
   backBtn: $("backBtn"), whoami: $("whoami"), logoutBtn: $("logoutBtn"),
+  authLogin: $("authLogin"), authRegister: $("authRegister"),
+  authTitle: $("authTitle"), authSub: $("authSub"),
   tabEmail: $("tabEmail"), tabPhone: $("tabPhone"),
   emailForm: $("emailForm"), email: $("email"), emailFieldError: $("emailFieldError"),
+  emailWaySeg: $("emailWaySeg"), wayOtp: $("wayOtp"), wayPassword: $("wayPassword"),
   emailCodeField: $("emailCodeField"),
   emailCode: $("emailCode"), sendEmailCodeBtn: $("sendEmailCodeBtn"),
   emailPasswordField: $("emailPasswordField"), emailPasswordLabel: $("emailPasswordLabel"),
   emailPassword: $("emailPassword"), emailPasswordHint: $("emailPasswordHint"), emailSubmit: $("emailSubmit"),
-  emailPasswordLogin: $("emailPasswordLogin"), forgotBtn: $("forgotBtn"),
+  intentSwitch: $("intentSwitch"), intentSwitchPhone: $("intentSwitchPhone"),
+  forgotBtn: $("forgotBtn"),
   resetHint: $("resetHint"), emailError: $("emailError"),
   phoneForm: $("phoneForm"), phone: $("phone"), phoneError: $("phoneError"),
   code: $("code"), sendCodeBtn: $("sendCodeBtn"), passwordField: $("passwordField"),
@@ -109,6 +113,7 @@ const state = {
   resetStarted: null,    // 忘记密码：resetPasswordForEmail 的返回值（携带 updateUser）
   emailFlow: "login",    // "login" | "reset"（找回密码流程，优先级高于 emailMode）
   emailMode: "otp",      // "otp"（验证码，主路径）| "password"（密码登录）
+  authIntent: "login",   // "login" | "register"（主意图，邮箱/手机共用）
   loginTab: "email",
   upload: null,       // { cancelled, done, total }
   searchToken: 0,
@@ -426,12 +431,38 @@ function setLoginTab(tab) {
   setEmailFieldError("");
   // 切回邮箱页时按当前形态重排（发过验证码的新邮箱仍要露出「设置密码」）
   if (isEmail) applyEmailMode();
+  applyPhoneMode();
 }
 el.tabEmail.addEventListener("click", () => setLoginTab("email"));
 el.tabPhone.addEventListener("click", () => setLoginTab("phone"));
+el.authLogin.addEventListener("click", () => setAuthIntent("login"));
+el.authRegister.addEventListener("click", () => setAuthIntent("register"));
 setLoginTab(state.loginTab);
+setAuthIntent(state.authIntent);
 
-/* ── 邮箱：验证码（主路径）/ 密码登录 / 找回密码 ─────────────── */
+/* ── 主意图（登录 / 注册）────────────────────────────────────
+ * 「登录」和「注册」是两件事，必须让用户先选；注册不再是隐式行为
+ * （旧版只有填了新邮箱发码后密码框才冒出来，新用户找不到注册入口）。 */
+function setAuthIntent(intent) {
+  state.authIntent = intent;
+  const reg = intent === "register";
+  el.authLogin.classList.toggle("is-active", !reg);
+  el.authRegister.classList.toggle("is-active", reg);
+  el.authLogin.setAttribute("aria-selected", String(!reg));
+  el.authRegister.setAttribute("aria-selected", String(reg));
+  el.authTitle.textContent = reg ? "创建账号" : "登录";
+  el.authSub.textContent = reg
+    ? "注册后，这个邮箱或手机号就是你的私人知识库账号。"
+    : "登录后，只有你自己能看到上传到云端的内容。";
+  emailError("");
+  loginError("");
+  setEmailFieldError("");
+  setPhoneError("");
+  applyEmailMode();
+  applyPhoneMode();
+}
+
+/* ── 邮箱：登录（验证码主路径 / 密码）/ 注册 / 找回密码 ───────── */
 
 function emailLoginContext() {
   return {
@@ -442,32 +473,63 @@ function emailLoginContext() {
 }
 
 /**
- * 邮箱登录的三种界面形态（互斥呈现，解决「验证码 + 密码 + 找回」三套控件
- * 同时摊开、看不出哪条是主路径的问题）：
- *   otp      —— 主路径：只露「邮箱 + 验证码」；仅当发码后确认是新邮箱，
- *               才把「设置密码」补出来（注册必需）。
- *   password —— 密码登录：验证码整行隐藏，提交按钮变「登录」。
- *   reset    —— 找回密码：验证码 + 新密码，提交按钮变「确认重置密码」，
- *               两个次级链接都收起，防误入其它流程。
+ * 邮箱表单按「主意图 × 登录方式 × 找回流程」三维互斥排布：
+ *   登录 + 验证码 —— 主路径：只露「邮箱 + 验证码」，提交按钮「登录」。
+ *                     发码后确认是新邮箱 → 密码框补出来兜底（SDK 契约：
+ *                     新用户注册必须设密码），同时主分段已自动切到注册。
+ *   登录 + 密码   —— 验证码整行隐藏，「忘记密码？」只在这时出现
+ *                     （验证码登录没有密码可忘）。
+ *   注册          —— 验证码 + 设置密码都直接摊开，提交按钮「注册」。
+ *   找回密码      —— 验证码 + 新密码，提交按钮「确认重置密码」，
+ *                     方式分段与次级链接都收起，防误入其它流程。
  */
 function applyEmailMode() {
   const reset = state.emailFlow === "reset";
-  const mode = reset ? "reset" : state.emailMode;
-  const otp = mode === "otp";
-  el.emailCodeField.hidden = mode === "password";
+  const reg = !reset && state.authIntent === "register";
+  const mode = state.emailMode;
+  el.emailWaySeg.hidden = reset || reg;
+  el.wayOtp.classList.toggle("is-active", mode === "otp");
+  el.wayOtp.setAttribute("aria-selected", String(mode === "otp"));
+  el.wayPassword.classList.toggle("is-active", mode === "password");
+  el.wayPassword.setAttribute("aria-selected", String(mode === "password"));
+
+  // 注册只走验证码（方式分段此时已隐藏），emailMode 的残留只在登录态生效
+  el.emailCodeField.hidden = !reset && !reg && mode === "password";
   const newUserPending = !!(state.pendingEmailOtp && !state.pendingEmailOtp.isExistingUser);
-  const pwdVisible = !otp || mode === "password" || reset || newUserPending;
+  const pwdVisible = reg || reset || mode === "password" || newUserPending;
   el.emailPasswordField.hidden = !pwdVisible;
-  el.emailPasswordLabel.textContent = reset ? "新密码" : (otp ? "设置密码" : "密码");
-  el.emailPasswordHint.hidden = !(otp && newUserPending);
+  el.emailPasswordLabel.textContent = reset ? "新密码" : (reg ? "设置密码" : "密码");
+  el.emailPasswordHint.hidden = !(reg || newUserPending);
   if (!el.emailPasswordHint.hidden) {
-    el.emailPasswordHint.textContent = "首次注册，设置密码（至少 8 位）后，以后可在新设备上用密码登录。";
+    el.emailPasswordHint.textContent = reg
+      ? "密码至少 8 位。设置后，以后可在新设备上用密码登录。"
+      : "首次注册，设置密码（至少 8 位）后，以后可在新设备上用密码登录。";
   }
-  el.emailPassword.autocomplete = mode === "password" ? "current-password" : "new-password";
-  el.emailSubmit.textContent = reset ? "确认重置密码" : (mode === "password" ? "登录" : "登录 / 注册");
-  el.emailPasswordLogin.textContent = mode === "password" ? "改用验证码登录" : "用密码登录";
-  el.forgotBtn.hidden = reset;
+  el.emailPassword.autocomplete = !reg && mode === "password" ? "current-password" : "new-password";
+  el.emailSubmit.textContent = reset ? "确认重置密码" : (reg ? "注册" : "登录");
+  el.intentSwitch.textContent = reg ? "已有账号？去登录" : "没有账号？去注册";
+  el.forgotBtn.hidden = reset || reg || mode !== "password";
   el.resetHint.hidden = !reset;
+}
+
+/** 手机表单按主意图排布（手机没有密码登录态：验证码是唯一方式）。 */
+function applyPhoneMode() {
+  const reg = state.authIntent === "register";
+  const newUserPending = !!(state.pendingOtp && !state.pendingOtp.isExistingUser);
+  el.passwordField.hidden = !(reg || newUserPending);
+  el.loginSubmit.textContent = reg ? "注册" : "登录";
+  el.intentSwitchPhone.textContent = reg ? "已有账号？去登录" : "没有账号？去注册";
+}
+
+/** 发码回调共用：按「SDK 说的注册状态」校正主分段，别让用户输完码才发现走错门。 */
+function reconcileIntent(sentIsExisting, pendingField) {
+  if (state.authIntent === "login" && !sentIsExisting) {
+    setAuthIntent("register");
+    toast("这个账号还没注册，已切换到注册：设置密码后即完成注册");
+  } else if (state.authIntent === "register" && sentIsExisting) {
+    setAuthIntent("login");
+    (pendingField === "phone" ? loginError : emailError)("该账号已注册，验证码可直接登录");
+  }
 }
 
 el.email.addEventListener("input", () => { setEmailFieldError(""); resetEmailFlow(); });
@@ -495,7 +557,10 @@ el.sendEmailCodeBtn.addEventListener("click", async () => {
       isExistingUser: sent.data.isExistingUser,
     };
     startCountdown(el.sendEmailCodeBtn);
-    toast(sent.data.isExistingUser ? "验证码已发送到邮箱" : "验证码已发送，新邮箱需设置密码");
+    // 主意图与 SDK 说的注册状态不一致时自动校正（内含说明与提示），一致时只报发码成功
+    const consistent = (state.authIntent === "login") === sent.data.isExistingUser;
+    if (consistent) toast("验证码已发送到邮箱");
+    reconcileIntent(sent.data.isExistingUser, "email");
     applyEmailMode();
   } catch (err) {
     emailError(String(err && err.message || err));
@@ -552,7 +617,7 @@ async function submitEmailOtp() {
   if (!pending || pending.email !== email) { emailError("请先为当前邮箱获取验证码"); return; }
   if (!code) { emailError("请输入验证码"); return; }
   if (!pending.isExistingUser && (!password || password.length < 8)) {
-    emailError("首次注册需要设置密码（至少 8 位）");
+    emailError(state.authIntent === "register" ? "请设置密码（至少 8 位）" : "首次注册需要设置密码（至少 8 位）");
     return;
   }
   const res = await cloud.auth.verifyOtp({
@@ -584,13 +649,27 @@ async function submitEmailPassword() {
   await enterApp();
 }
 
-/* 次级链接只负责切换形态（password ↔ otp），真正的提交统一走表单按钮 */
-el.emailPasswordLogin.addEventListener("click", () => {
-  if (state.emailFlow === "reset") return;
-  state.emailMode = state.emailMode === "password" ? "otp" : "password";
+/* 登录方式分段（验证码 ↔ 密码）与主意图互换按钮，只负责重排；真正的提交统一走表单按钮 */
+el.wayOtp.addEventListener("click", () => {
+  if (state.emailMode === "otp") return;
+  state.emailMode = "otp";
   emailError("");
   setEmailFieldError("");
   applyEmailMode();
+});
+el.wayPassword.addEventListener("click", () => {
+  if (state.emailMode === "password") return;
+  state.emailMode = "password";
+  emailError("");
+  setEmailFieldError("");
+  applyEmailMode();
+});
+el.intentSwitch.addEventListener("click", () => {
+  resetEmailFlow();
+  setAuthIntent(state.authIntent === "register" ? "login" : "register");
+});
+el.intentSwitchPhone.addEventListener("click", () => {
+  setAuthIntent(state.authIntent === "register" ? "login" : "register");
 });
 
 el.emailForm.addEventListener("submit", async (e) => {
@@ -599,6 +678,7 @@ el.emailForm.addEventListener("submit", async (e) => {
   el.emailSubmit.disabled = true;
   try {
     if (state.emailFlow === "reset") await submitEmailReset();
+    else if (state.authIntent === "register") await submitEmailOtp();
     else if (state.emailMode === "password") await submitEmailPassword();
     else await submitEmailOtp();
   } catch (err) {
@@ -631,10 +711,12 @@ el.sendCodeBtn.addEventListener("click", async () => {
       verificationId: sent.data.verificationId,
       isExistingUser: sent.data.isExistingUser,
     };
-    // 新用户必须设置密码（SDK 契约），只在此时露出密码框
-    el.passwordField.hidden = Boolean(sent.data.isExistingUser);
     startCountdown(el.sendCodeBtn);
-    toast("验证码已发送");
+    // 主意图与 SDK 说的注册状态不一致时自动校正（内含说明与提示），一致时只报发码成功
+    const consistent = (state.authIntent === "login") === sent.data.isExistingUser;
+    if (consistent) toast("验证码已发送");
+    reconcileIntent(sent.data.isExistingUser, "phone");
+    applyPhoneMode();
   } catch (err) {
     loginError(String(err && err.message || err));
     el.sendCodeBtn.disabled = false;
@@ -653,7 +735,7 @@ el.phoneForm.addEventListener("submit", async (e) => {
   }
   if (!token) { loginError("请输入验证码"); return; }
   if (!pending.isExistingUser && !el.signupPassword.value) {
-    loginError("首次登录需要设置密码（至少 8 位）");
+    loginError(state.authIntent === "register" ? "请设置密码（至少 8 位）" : "首次注册需要设置密码（至少 8 位）");
     return;
   }
   el.loginSubmit.disabled = true;

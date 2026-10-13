@@ -126,13 +126,34 @@ test("邮箱登录：验证码注册/登录、密码登录、找回密码三条�
   assert.match(otpFn, /password:\s*pending\.isExistingUser\s*\?\s*undefined/, "新邮箱注册才需要密码");
   assert.doesNotMatch(otpFn, /sendOtp/, "提交验证码时不得重新发码");
 
-  // 2) 密码登录（2026-10-12 重构：统一走表单提交，次级链接只负责切换形态）
+  // 2) 密码登录（2026-10-12 重构：统一走表单提交；2026-10-13 起由「登录方式分段」切换形态）
   assert.match(cloudApp, /cloud\.auth\.signInWithPassword\(\{\s*email,\s*password\s*\}\)/, "必须支持邮箱+密码登录");
-  const pwdFn = cloudApp.slice(cloudApp.indexOf("async function submitEmailPassword"), cloudApp.indexOf("el.emailPasswordLogin.addEventListener"));
+  const pwdFn = cloudApp.slice(cloudApp.indexOf("async function submitEmailPassword"), cloudApp.indexOf("el.wayOtp.addEventListener"));
   assert.match(pwdFn.slice(0, 900), /邮箱或密码不正确/, "密码错误提示不得暴露账号是否存在");
-  assert.match(cloudApp, /state\.emailMode = state\.emailMode === "password" \? "otp" : "password"/,
-    "「用密码登录」链接必须能在两种形态间往返");
+  assert.match(cloudApp, /el\.wayOtp\.addEventListener[\s\S]*?state\.emailMode = "otp"/,
+    "「验证码登录」分段必须能切回验证码形态");
+  assert.match(cloudApp, /el\.wayPassword\.addEventListener[\s\S]*?state\.emailMode = "password"/,
+    "「密码登录」分段必须能切入密码形态");
   assert.match(cloudApp, /applyEmailMode\(\)/, "形态切换必须经过 applyEmailMode 统一重排");
+
+  // 2.5) 主意图分段（2026-10-13：登录 / 注册必须是两个明确的门，注册不再是隐式行为）
+  assert.match(cloudHtml, /id="authLogin"[\s\S]*id="authRegister"/, "必须有「登录 | 注册」主意图分段");
+  assert.match(cloudHtml, /id="authLogin"[\s\S]*id="tabEmail"/, "主意图分段必须排在联系方式之前");
+  assert.match(cloudApp, /authIntent:\s*"login"/, "默认落在登录门");
+  assert.match(cloudApp, /el\.authTitle\.textContent = reg \? "创建账号" : "登录"/, "标题必须跟随主意图");
+  assert.match(cloudApp, /el\.emailSubmit\.textContent = reset \? "确认重置密码" : \(reg \? "注册" : "登录"\)/,
+    "提交按钮必须只写当前动作，不得再出现「登录 / 注册」双义文案");
+  assert.doesNotMatch(cloudHtml, /登录 \/ 注册/, "「登录 / 注册」双义按钮必须移除");
+  assert.match(cloudApp, /el\.emailWaySeg\.hidden = reset \|\| reg/,
+    "登录方式分段只在登录态出现（注册/找回的字段是固定的）");
+  assert.match(cloudApp, /el\.forgotBtn\.hidden = reset \|\| reg \|\| mode !== "password"/,
+    "忘记密码只在密码登录态出现（验证码登录没有密码可忘）");
+  assert.match(cloudApp, /function reconcileIntent/, "发码回调必须按 SDK 返回的注册状态校正主意图");
+  assert.match(cloudApp, /setAuthIntent\("register"\)[\s\S]{0,200}?还没注册/,
+    "登录态遇到新账号必须自动切到注册并说明");
+  assert.match(cloudApp, /setAuthIntent\("login"\)[\s\S]{0,200}?已注册/,
+    "注册态遇到已有账号必须自动切回登录并说明");
+  assert.doesNotMatch(cloudHtml, /id="emailPasswordLogin"/, "旧的「用密码登录」底部链接必须移除");
 
   // 3) 找回密码（有密码登录就必须有找回流程）
   assert.match(cloudApp, /cloud\.auth\.resetPasswordForEmail\(email\)/, "必须支持忘记密码");
@@ -150,8 +171,8 @@ test("登录界面渐进披露：验证码是主路径，密码框默认隐藏�
   assert.match(cloudHtml, /id="emailPasswordLabel"/, "密码标签文案随形态变化（密码/设置密码/新密码）");
   assert.doesNotMatch(cloudHtml, /首次注册时需设置密码；用密码登录时也填这里/,
     "旧的常驻混歧提示必须移除");
-  assert.match(cloudApp, /el\.emailCodeField\.hidden = mode === "password"/,
-    "密码形态下验证码整行隐藏");
+  assert.match(cloudApp, /el\.emailCodeField\.hidden = !reset && !reg && mode === "password"/,
+    "密码形态下验证码整行隐藏（找回与注册形态保留验证码行）");
   assert.match(cloudApp, /emailMode:\s*"otp"/, "默认落在验证码主路径");
   assert.match(cloudApp, /el\.emailSubmit\.textContent = reset \? "确认重置密码"/,
     "找回形态下提交按钮必须改名，避免歧义");

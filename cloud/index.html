@@ -8,7 +8,7 @@
 <title>知识库云端 · MyTemple</title>
 <link rel="manifest" href="/manifest.webmanifest" />
 <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-<link rel="stylesheet" href="/styles.css?v=cloud-9" />
+<link rel="stylesheet" href="/styles.css?v=cloud-10" />
 </head>
 <body>
 <div class="app" id="app">
@@ -58,12 +58,18 @@
         </span>
       </div>
 
-      <h1 class="card-title">登录</h1>
-      <p class="muted card-sub">登录后，只有你自己能看到上传到云端的内容。</p>
+      <!-- 三层语义从上到下依次减弱：主意图（登录/注册）→ 联系方式（邮箱/手机号）→ 登录方式（验证码/密码，仅登录态） -->
+      <h1 class="card-title" id="authTitle">登录</h1>
+      <p class="muted card-sub" id="authSub">登录后，只有你自己能看到上传到云端的内容。</p>
 
-      <div class="tabs" role="tablist" aria-label="登录方式">
-        <button id="tabEmail" class="tab is-active" type="button" role="tab" aria-selected="true">邮箱</button>
-        <button id="tabPhone" class="tab" type="button" role="tab" aria-selected="false">手机号</button>
+      <div class="tabs" role="tablist" aria-label="登录或注册">
+        <button id="authLogin" class="tab is-active" type="button" role="tab" aria-selected="true">登录</button>
+        <button id="authRegister" class="tab" type="button" role="tab" aria-selected="false">注册</button>
+      </div>
+
+      <div class="tabs-sub" role="tablist" aria-label="联系方式">
+        <button id="tabEmail" class="tab-sub is-active" type="button" role="tab" aria-selected="true">邮箱</button>
+        <button id="tabPhone" class="tab-sub" type="button" role="tab" aria-selected="false">手机号</button>
       </div>
 
       <form id="emailForm" class="form" autocomplete="off" novalidate>
@@ -74,6 +80,12 @@
           <span id="emailFieldError" class="field-error" hidden></span>
         </label>
 
+        <!-- 登录方式分段：注册与找回密码态不显示（它们的字段是固定的） -->
+        <div class="tabs-sub tabs-way" id="emailWaySeg" role="tablist" aria-label="登录方式">
+          <button id="wayOtp" class="tab-sub is-active" type="button" role="tab" aria-selected="true">验证码登录</button>
+          <button id="wayPassword" class="tab-sub" type="button" role="tab" aria-selected="false">密码登录</button>
+        </div>
+
         <div class="field" id="emailCodeField">
           <span class="field-label">验证码</span>
           <div class="field-row">
@@ -83,7 +95,7 @@
           </div>
         </div>
 
-        <!-- 密码框默认隐藏：验证码是主路径；仅在新邮箱注册、密码登录、找回密码三种形态出现 -->
+        <!-- 密码框默认隐藏：验证码是主路径；注册、密码登录、找回密码三种形态出现 -->
         <div class="field" id="emailPasswordField" hidden>
           <span class="field-label" id="emailPasswordLabel">密码</span>
           <input id="emailPassword" class="input" type="password" placeholder="至少 8 位"
@@ -91,10 +103,11 @@
           <span class="field-hint" id="emailPasswordHint" hidden></span>
         </div>
 
-        <button id="emailSubmit" class="primary-btn" type="submit">登录 / 注册</button>
-        <div class="alt-actions">
-          <button id="emailPasswordLogin" class="link-btn" type="button">用密码登录</button>
-          <button id="forgotBtn" class="link-btn" type="button">忘记密码</button>
+        <button id="emailSubmit" class="primary-btn" type="submit">登录</button>
+        <div class="alt-actions" id="altActions">
+          <button id="intentSwitch" class="link-btn" type="button">没有账号？去注册</button>
+          <!-- 忘记密码只在密码登录态出现：验证码登录没有密码可忘 -->
+          <button id="forgotBtn" class="link-btn" type="button" hidden>忘记密码？</button>
         </div>
         <p id="resetHint" class="form-note" hidden></p>
         <p id="emailError" class="form-error" hidden></p>
@@ -117,14 +130,18 @@
           </div>
         </label>
 
+        <!-- 注册态（或发码后确认是新号码）才露出：SDK 契约是新用户注册必须设密码 -->
         <div id="passwordField" class="field" hidden>
           <span class="field-label">设置密码</span>
-          <input id="signupPassword" class="input" type="password" placeholder="首次登录需设置密码"
+          <input id="signupPassword" class="input" type="password" placeholder="首次注册需设置密码"
                  autocomplete="new-password" />
           <span class="field-hint">用于以后在新设备上登录，至少 8 位。</span>
         </div>
 
-        <button id="loginSubmit" class="primary-btn" type="submit">登录 / 注册</button>
+        <button id="loginSubmit" class="primary-btn" type="submit">登录</button>
+        <div class="alt-actions">
+          <button id="intentSwitchPhone" class="link-btn" type="button">没有账号？去注册</button>
+        </div>
         <p id="loginError" class="form-error" hidden></p>
       </form>
 
@@ -301,14 +318,14 @@
   <div id="offlineBar" class="offline-bar" role="status" hidden>当前离线：已打开的笔记仍可正常阅读，上传与同步会在联网后恢复</div>
 </div>
 
-<script src="/cloud-config.js?v=cloud-9"></script>
+<script src="/cloud-config.js?v=cloud-10"></script>
 <!--
   第三方库一律同源自托管（cloud/vendor/，见 scripts/vendor-cloud.mjs）。
   这些库原先取自 cdn.jsdelivr.net，而该主机名在部分网络下 TLS 会被重置；
   登录 SDK 恰好挂在那里，加载失败会导致验证码 / 微信 / 密码登录全部不可用。
 -->
-<script src="/vendor/sdk/workbuddy-cloud-sdk.global.js?v=cloud-9"></script>
-<script src="/vendor/fflate/fflate.min.js?v=cloud-9"></script>
-<script src="/app.js?v=cloud-9" type="module"></script>
+<script src="/vendor/sdk/workbuddy-cloud-sdk.global.js?v=cloud-10"></script>
+<script src="/vendor/fflate/fflate.min.js?v=cloud-10"></script>
+<script src="/app.js?v=cloud-10" type="module"></script>
 </body>
 </html>
