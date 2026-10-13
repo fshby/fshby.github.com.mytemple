@@ -16,9 +16,23 @@
 
     <!-- 启动主题：纯色底（values/ 与 values-night/ 各一份）+ 居中矢量图标。
          不再使用模板自带的位图启动图；深色模式底色由 values-night/colors.xml 覆盖，
-         避免启动瞬间闪白。 -->
+         避免启动瞬间闪白。
+
+         windowSplashScreenBackground / windowSplashScreenAnimatedIcon 这两项**必须**
+         显式覆盖：基类 Theme.SplashScreen 的默认值是
+             windowSplashScreenBackground   = ?android:colorBackground（系统的，不是我们的）
+             windowSplashScreenAnimatedIcon = @android:drawable/sym_def_app_icon（占位图标！）
+         而 core-splashscreen 在 values-v31 里把系统属性映射到了这两个 androidx 属性上：
+             android:windowSplashScreenAnimatedIcon ← ?windowSplashScreenAnimatedIcon
+             android:windowSplashScreenBackground   ← ?windowSplashScreenBackground
+         也就是说，不覆盖的话 Android 12+ 会画出系统占位图标、底色也不是品牌色 ——
+         这正是 2026-10-13 实机截图里「启动第一帧一个系统图标」的来源
+         （装上 @capacitor/splash-screen 之后，Android 11- 的 androidx 兼容实现
+         也会读到同一份默认值，所以这里必须覆盖）。 -->
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
         <item name="android:background">@drawable/splash</item>
         <item name="android:windowBackground">@drawable/splash</item>
+        <item name="windowSplashScreenBackground">@color/splash_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_icon</item>
     </style>
 </resources>

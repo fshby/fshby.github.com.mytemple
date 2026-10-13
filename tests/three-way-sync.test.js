@@ -9,6 +9,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { pathToFileURL, fileURLToPath } from "node:url";
 
 const WS_ID = "ws_test1";
@@ -94,6 +95,10 @@ class FakeQuery {
 function makeCloud() {
   const cloud = {
     tables: { documents: [], kb_meta: [] },
+    // 云存储：对象全路径 → {bytes, contentType}；uploads 记录每一次真实上传（用于
+    // 断言「已有对象不重传」——只看最终 objects 是分辨不出来的）。
+    objects: new Map(),
+    uploads: [],
     nextId: 1,
     writes: 0,
     query(table) {
@@ -144,11 +149,28 @@ function makeLocal(files, opts = {}) {
   // 结果测试全绿但实机「永远 0 篇」，教训：假实现必须照抄真实序列化。
   const workspaces = opts.workspaces || [{ id: WS_ID, name: WS_NAME, root: "C:/lib" }];
   const defaultId = opts.defaultWorkspaceId || workspaces[0].id;
-  const stats = { listCalls: 0, contentReads: 0, saves: 0 };
+  // 本机 source/ 目录里的资源字节：相对路径（如 "source/x.webp"）→ Uint8Array。
+  // 真实后端是 Rust 的 /source/*path（axum get 同时吃 HEAD），命中则带 content-length。
+  const sources = new Map(Object.entries(opts.sources || {}).map(([k, v]) => [k, Buffer.from(v)]));
+  const stats = { listCalls: 0, contentReads: 0, saves: 0, sourceHeads: 0, sourceGets: 0 };
   let beforeSave = null;
   const fetchStub = async (url, options = {}) => {
     const u = String(url);
     const method = options.method || "GET";
+    if (u.startsWith("/source/")) {
+      // 前端把 "source/x.webp" 拼成 "/source/source/x.webp"，去掉第一个 "/source/" 后
+      // 也可能仍带一层 "source/" —— 两种写法都按「相对工作区根」解析（与 Rust 一致）。
+      let rel = decodeURIComponent(u.slice("/source/".length));
+      const cands = [rel, rel.replace(/^source\//, "")];
+      const hit = cands.map((c) => sources.get(c)).find(Boolean);
+      if (!hit) return { ok: false, status: 404, headers: { get: () => null }, text: async () => "Not Found" };
+      if (method === "HEAD") {
+        stats.sourceHeads += 1;
+        return { ok: true, status: 200, headers: { get: (n) => (n.toLowerCase() === "content-length" ? String(hit.byteLength) : null) }, blob: async () => new Blob([hit]) };
+      }
+      stats.sourceGets += 1;
+      return new Response(hit, { status: 200, headers: { "content-length": String(hit.byteLength) } });
+    }
     if (u === "/api/workspaces") {
       return jsonResponse({ workspaces, defaultWorkspaceId: defaultId });
     }
@@ -212,13 +234,37 @@ globalThis.window = {
   },
   crypto: globalThis.crypto,
   WorkBuddyCloud: {
+    // ⚠️ SDK 的 storage 面照抄真实契约（见 cloud/vendor 里的 SDK 类型声明）：
+    //    userPath(uid, path) → 对象全路径；exists(path) → HEAD 探针 {data:bool}；
+    //    upload(path, blob, {contentType, upsert, cacheControl}) → {data, error}。
+    // 写成别的形状（比如让 exists 抛异常）会让「探针失败按缺失处理」的分支假绿。
     createWorkBuddyCloud: () => ({
       database: { from: (t) => activeCloud.query(t) },
-      auth: {},
+      auth: { getSession: async () => ({ data: activeSession, error: null }) },
+      storage: {
+        // 真实 SDK：userPath(uid, path) → `users/<uid>/<path>`（**无**前导斜杠），
+        // 且会校验路径必须以 users/<uid>/ 开头（见 cloud/vendor/sdk 的 scopedPath）。
+        userPath: (uid, path) => {
+          if (!uid || /[\\/]/.test(uid)) throw new Error("owner/user id is not a valid storage path segment.");
+          const p = String(path).replace(/^\/+|\/+$/g, "");
+          if (!p || p.includes("\\") || p.includes("//") || p.split("/").some((s) => s === "" || s === "." || s === "..")) {
+            throw new Error("Storage path is not a safe relative object path.");
+          }
+          return `users/${uid}/${p}`;
+        },
+        exists: async (p) => ({ data: activeCloud.objects.has(p), error: null }),
+        upload: async (p, blob, opts = {}) => {
+          const buf = Buffer.from(await blob.arrayBuffer());
+          activeCloud.objects.set(p, { bytes: buf, contentType: opts.contentType || "" });
+          activeCloud.uploads.push({ path: p, size: buf.byteLength, contentType: opts.contentType || "" });
+          return { data: { path: p }, error: null };
+        },
+      },
     }),
   },
 };
 let activeCloud = null;
+let activeSession = null;
 globalThis.localStorage = {
   _m: storeBackup,
   getItem(k) { return this._m.has(k) ? this._m.get(k) : null; },
@@ -231,11 +277,12 @@ const mod = await import(pathToFileURL(fileURLToPath(new URL("public/modules/clo
 /* ══ 夹具 ═════════════════════════════════════════════════════ */
 
 /** 每个用例开始前重置三样东西：本机文件、云数据面、同步快照。 */
-function setup({ files = {}, cloud = null, localOpts = {} } = {}) {
+function setup({ files = {}, cloud = null, localOpts = {}, uid = "uid_test" } = {}) {
   const localFiles = new Map(Object.entries(files));
   const local = makeLocal(localFiles, localOpts);
   globalThis.fetch = local.fetchStub;
   activeCloud = cloud || makeCloud();
+  activeSession = uid ? { user: { id: uid } } : null;
   storeBackup.clear();
   return { localFiles, local, cloud: activeCloud };
 }
@@ -276,7 +323,7 @@ test("首次同步：云端有、本机没有 → 拉取到本机（含子目录
   assert.equal(localFiles.get(`${WS_ID}/note/x.md`).content, "# 云端笔记\n来自云端\n");
 });
 
-test("两端内容一致时跳过，且**不读正文**（增量同步的关键）", async () => {
+test("两端内容一致时跳过，且不改写本机；图片核对只做一次（增量同步的关键）", async () => {
   const content = "# 同款\n";
   const cloud = makeCloud();
   cloud.seed("same.md", content);
@@ -290,9 +337,21 @@ test("两端内容一致时跳过，且**不读正文**（增量同步的关键�
   assert.equal(s.skipped, 1, "应判为已同步");
   assert.equal(s.push, 0);
   assert.equal(s.pull, 0);
-  assert.equal(local.stats.contentReads, 0, "内容一致时不应读取本机正文");
   assert.equal(local.stats.saves, 0, "内容一致时不应写本机");
   assert.equal(localFiles.get(`${WS_ID}/same.md`).content, content);
+
+  // 正文只在**图片核对**时被读过一次：文档同步本身不读正文（增量同步的关键），
+  // 但「这篇引用的图片在不在云端」必须看正文才知道（见 public/modules/cloud-client.js
+  // 的图片同步说明）。读完会落下「核对戳」，所以第二次同步一次都不该再读。
+  assert.equal(local.stats.contentReads, 1,
+    `首次同步只应为图片核对读 1 次正文，实测 ${local.stats.contentReads}`);
+
+  const before = local.stats.contentReads;
+  const s2 = await mod.syncCloud({});
+  assert.equal(s2.skipped, 1);
+  assert.equal(local.stats.contentReads, before,
+    `核对戳命中后不应再读正文，实测多了 ${local.stats.contentReads - before} 次`);
+  assert.equal(local.stats.saves, 0);
 });
 
 test("只有本机改过 → 推送覆盖云端（不触碰本机）", async () => {
@@ -527,4 +586,169 @@ test("summarize：空转时把「为什么没有」说清楚（实机反馈：�
     /内容已一致（本机 5 篇 = 云端 5 篇）/,
   );
   assert.match(summarize({ mode: "push", push: 3 }), /上传 3/, "有动作时仍报动作");
+});
+
+/* ══ 图片 / 视频同步（2026-10-13 实机反馈：APK 侧截图全「未同步」）════
+ *
+ * 根因：推送同步只搬正文，图片字节从来没人传过 —— 云端有文档、没图片。
+ * 下面这几个用例把「按引用扫描 → 缺哪张补哪张」的行为钉死，并顺带锁住
+ * 两端（桌面内核 / 云端工作台）必须同规则的对象路径。
+ */
+
+const IMG_UID = "uid_test";
+const IMG_OBJ = `users/${IMG_UID}/assets/${WS_NAME}/source/shot.webp`;
+const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
+const DOC_WITH_IMG = "# 带图笔记\n\n看这个：\n\n![截图](source/shot.webp)\n";
+
+test("推送：文档引用的本机图片会被补进云存储（路径与文档 rel_path 同构）", async () => {
+  const cloud = makeCloud();
+  const { local, cloud: c } = setup({
+    files: { [`${WS_ID}/note.md`]: { content: DOC_WITH_IMG, modified: 1000 } },
+    cloud,
+    localOpts: { sources: { "source/shot.webp": PNG } },
+  });
+
+  const s = await mod.syncCloud({ mode: "push" });
+
+  assert.equal(s.push, 1, "文档本身应上传");
+  assert.equal(s.assetPush, 1, `应补传 1 张图，实测 ${s.assetPush}（missing=${s.assetMissing} failed=${s.assetFailed}）`);
+  assert.equal(s.assetFailed, 0);
+  assert.equal(s.assetMissing, 0, "本机存在的引用不该判为缺失");
+  assert.deepEqual(c.uploads.map((u) => u.path), [IMG_OBJ],
+    "对象路径必须是 users/<uid>/assets/<分区>/<工作区相对路径>");
+  assert.equal(c.uploads[0].contentType, "image/webp", "必须带正确的 contentType，否则浏览器不内联渲染");
+  assert.deepEqual([...c.objects.get(IMG_OBJ).bytes], [...PNG], "上传的字节必须与本机一致");
+  assert.ok(local.stats.sourceHeads >= 1, "存在性先看本机（HEAD）再探云端");
+});
+
+test("推送：云端已有该对象时只探针、不重传（老库重复同步不产生流量）", async () => {
+  const cloud = makeCloud();
+  cloud.objects.set(IMG_OBJ, { bytes: PNG, contentType: "image/webp" });
+  const { local } = setup({
+    files: { [`${WS_ID}/note.md`]: { content: DOC_WITH_IMG, modified: 1000 } },
+    cloud,
+    localOpts: { sources: { "source/shot.webp": PNG } },
+  });
+
+  const s = await mod.syncCloud({ mode: "push" });
+
+  assert.equal(s.assetPush, 0, "已有对象不该重传");
+  assert.equal(s.assetExists, 1, `应记为「云端已有 1 张」，实测 ${s.assetExists}`);
+  assert.equal(cloud.uploads.length, 0, "不得产生任何上传");
+  assert.ok(local.stats.sourceHeads >= 1, "仍要看本机是否存在（引用失效与已同步要能区分）");
+});
+
+test("历史库修复：正文两端一致（文档同步跳过）时，缺的图片仍会被补上", async () => {
+  // 这是本次实机问题的核心场景：老库用「只推正文」的逻辑推过云端，
+  // 文档 content_sha 完全一致 → 文档环节 skipped，图片却一张都没有。
+  // 图片同步必须独立于文档指纹，否则这种库永远修不回来。
+  const cloud = makeCloud();
+  cloud.seed("note.md", DOC_WITH_IMG);
+  const { local } = setup({
+    files: { [`${WS_ID}/note.md`]: { content: DOC_WITH_IMG, modified: 1000 } },
+    cloud,
+    localOpts: { sources: { "source/shot.webp": PNG } },
+  });
+
+  const s = await mod.syncCloud({});
+
+  assert.equal(s.skipped, 1, "正文一致，文档环节应跳过");
+  assert.equal(s.push, 0);
+  assert.equal(s.assetPush, 1, `正文跳过也必须补图，实测 ${s.assetPush}`);
+  assert.ok(cloud.objects.has(IMG_OBJ));
+
+  // 再同步一次：不该重复上传（核对戳生效）
+  const s2 = await mod.syncCloud({});
+  assert.equal(s2.assetPush, 0, "第二次同步不该重复上传");
+  assert.equal(local.stats.contentReads, 1, `正文只应在首次核对时读一次，实测 ${local.stats.contentReads}`);
+});
+
+test("引用在本机找不到（图片被删 / 路径写错）→ 记为缺失而不是失败", async () => {
+  const cloud = makeCloud();
+  const { } = setup({
+    files: { [`${WS_ID}/note.md`]: { content: DOC_WITH_IMG, modified: 1000 } },
+    cloud,
+    localOpts: { sources: {} },   // 本机没有 source/shot.webp
+  });
+
+  const s = await mod.syncCloud({});
+  assert.equal(s.assetPush, 0);
+  assert.equal(s.assetMissing, 1, `应记为 1 张缺失，实测 ${s.assetMissing}`);
+  assert.equal(s.assetFailed, 0);
+  assert.equal(cloud.uploads.length, 0);
+});
+
+test("拉取模式不碰图片上传（本机没有新东西要推）", async () => {
+  const cloud = makeCloud();
+  const { } = setup({
+    files: { [`${WS_ID}/note.md`]: { content: DOC_WITH_IMG, modified: 1000 } },
+    cloud,
+    localOpts: { sources: { "source/shot.webp": PNG } },
+  });
+
+  await mod.syncCloud({ mode: "pull" });
+  assert.equal(cloud.uploads.length, 0, "pull 模式不得上传任何对象");
+});
+
+test("summarize：把图片结果说清楚（含「图片也都在云端」的空转解释）", () => {
+  const { summarize } = mod;
+  assert.match(summarize({ mode: "push", assetPush: 3 }), /补传图片 3 张/);
+  assert.match(summarize({ mode: "push", assetMissing: 2 }), /2 张引用在本机找不到/);
+  assert.match(summarize({ mode: "push", assetTooBig: 1 }), /超过 12MB/);
+  assert.match(
+    summarize({ mode: "both", localCount: 2, cloudCount: 2, assetExists: 5 }),
+    /5 张引用图片也都在云端/,
+    "全部已同步但要解释「为什么什么都没做」",
+  );
+});
+
+
+test("引用写成本文档同目录的相对路径时，候选要依次试而不是只看第一个", async () => {
+  // 笔记里写 `![](shot.webp)` 时，第一候选是「工作区根/shot.webp」，第二候选才是
+  // 「文档所在目录/shot.webp」。只试第一候选会把后者误报成「本机找不到」——
+  // 用户看到的是「图片明明在，却一直提示缺失」。
+  const cloud = makeCloud();
+  const { } = setup({
+    files: { [`${WS_ID}/note/inner.md`]: { content: "# 子目录笔记\n\n![图](shot.webp)\n", modified: 1000 } },
+    cloud,
+    localOpts: { sources: { "note/shot.webp": PNG } },
+  });
+
+  const s = await mod.syncCloud({ mode: "push" });
+  assert.equal(s.assetMissing, 0, `不该误报缺失，实测 missing=${s.assetMissing}`);
+  assert.equal(s.assetPush, 1, `应补传 1 张，实测 ${s.assetPush}`);
+  assert.deepEqual(cloud.uploads.map((u) => u.path),
+    [`users/${IMG_UID}/assets/${WS_NAME}/note/shot.webp`],
+    "对象路径要用真正命中的那个候选");
+});
+
+/* ── 两端同规则（静态契约）────────────────────────────────────
+ * 同一篇笔记在桌面内核与云端工作台必须解析出**同一个**对象路径，否则会出现
+ * 「桌面推到 A、云端找 B」的互相看不见。这里把两个文件里的实现抽出来逐字比对。 */
+
+function extractFn(src, name) {
+  const i = src.indexOf(`function ${name}(`);
+  assert.ok(i >= 0, `未找到函数 ${name}`);
+  let depth = 0, started = false;
+  for (let j = i; j < src.length; j += 1) {
+    const ch = src[j];
+    if (ch === "{") { depth += 1; started = true; }
+    else if (ch === "}") { depth -= 1; if (started && depth === 0) return src.slice(i, j + 1); }
+  }
+  throw new Error(`函数 ${name} 不闭合`);
+}
+
+const normFn = (s) => s
+  .replace(/\/\*[\s\S]*?\*\//g, "")      // 块注释
+  .replace(/\/\/[^\n]*/g, "")            // 行注释
+  .replace(/\s+/g, " ")                  // 空白
+  .trim();
+
+test("对象路径规则两端逐字一致（assetWsSegment / extractAssetRefs / assetRelCandidates）", () => {
+  const desk = readFileSync(new URL("../public/modules/cloud-client.js", import.meta.url), "utf8");
+  const web = readFileSync(new URL("../cloud/app.js", import.meta.url), "utf8");
+  for (const fn of ["assetWsSegment", "extractAssetRefs", "assetRelCandidates", "normPath"]) {
+    assert.equal(normFn(extractFn(desk, fn)), normFn(extractFn(web, fn)),
+      `${fn} 在桌面内核与云端工作台之间已经分叉 —— 两端会算出不同的对象路径`);
+  }
 });

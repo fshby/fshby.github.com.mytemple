@@ -15,7 +15,7 @@
   "use strict";
 
   var CFG = window.__MT_CLOUD__ || {};
-  var ASSET_V = "cloud-13";
+  var ASSET_V = "cloud-14";
   var ENDPOINT = String(CFG.endpoint || "").replace(/\/+$/, "");
   var REST = ENDPOINT + "/.cloud/database/rest/v1";
   var HDR = { apikey: CFG.publishableKey || "", "X-Wb-Webapp-Access-Key": CFG.publishableKey || "" };
@@ -130,6 +130,27 @@
       w.postMessage({ seq: seq, source: source, searchTerm: "", includeHtml: true, includeOutline: false });
     });
   }
+
+  /* ── 内嵌网页卡片：帧内上报内容高度，这里把 iframe 撑到内容高度 ─────
+   * worker 渲染的 ```html / chart 围栏 iframe 会在 srcdoc 最前置一段上报脚本。
+   * 工作台侧（cloud/app.js 的 installHtmlFrameAutoHeight）一直有这段监听，
+   * 分享页此前没有 —— iframe 保持浏览器默认 300×150，长网页只能在小窗里
+   * 嵌套滚动（实机截图「显示不全」）。必须校验 event.source === frame.contentWindow，
+   * 只认自家帧；高度 clamp 防异常值。 */
+  (function installHtmlFrameAutoHeight() {
+    window.addEventListener("message", function (event) {
+      var d = event.data;
+      if (!d || d.type !== "mt-html-frame-height") return;
+      var h = Number(d.h);
+      if (!isFinite(h) || h <= 0) return;
+      var frames = document.querySelectorAll("iframe.html-inline-frame");
+      Array.prototype.forEach.call(frames, function (frame) {
+        if (!frame.isConnected || frame.contentWindow !== event.source) return;
+        var clamped = Math.min(Math.max(Math.ceil(h) + 12, 240), 20000);
+        frame.style.height = clamped + "px";
+      });
+    });
+  })();
 
   /* ── 数学 / 图表：与工作台同一套自托管库 ───────────────── */
   function loadScript(src) {

@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 12+ 系统启动屏用的图标（launch theme 的 windowSplashScreenAnimatedIcon）。
+
+  为什么要单独做一个 288dp 画布的资源，而不是直接用 ic_logo_tile：
+    · Android 12+ 的系统启动屏把图标画在 288dp 的方形区域内；
+    · Android 11 及以下的 androidx 兼容实现（core-splashscreen）把图标放进
+      ?attr/splashScreenIconSize 的 ImageView（Theme.SplashScreen 默认也是 288dp）；
+    · 两种机制都按 drawable 的**固有尺寸**布局，所以只要声明成 288dp 并把方牌
+      缩到内圈 192dp（Google 模板的 2/3 规则），两端观感就完全一致 ——
+      直接用 64dp 的 ic_logo_tile 会在 12+ 上被撑成满屏大方块、在 11- 上又变小。
+
+  背景色由基类 Theme.SplashScreen 的默认值 ?android:colorBackground 提供，
+  已在 styles.xml 里显式覆盖为 @color/splash_background（含深色模式变体）。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="288dp"
+    android:height="288dp"
+    android:viewportWidth="288"
+    android:viewportHeight="288">
+
+    <!-- 64 视口的品牌方牌放大 3 倍（→192dp），再平移 48dp 居中到 288 画布 -->
+    <group
+        android:scaleX="3"
+        android:scaleY="3"
+        android:translateX="48"
+        android:translateY="48">
+
+        <path
+            android:pathData="M15,0 L49,0 A15,15 0 0 1 64,15 L64,49 A15,15 0 0 1 49,64 L15,64 A15,15 0 0 1 0,49 L0,15 A15,15 0 0 1 15,0 Z"
+            android:fillColor="#6b5f44" />
+
+        <path
+            android:pathData="M11,25.5 Q32,9.5 53,25.5"
+            android:fillColor="#00000000"
+            android:strokeColor="#f4ead6"
+            android:strokeWidth="3.8"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+
+        <path
+            android:pathData="M17,44 L32,51.5 L47,44"
+            android:fillColor="#00000000"
+            android:strokeColor="#f4ead6"
+            android:strokeWidth="3.8"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+
+        <path
+            android:pathData="M32,35.5 m-4.3,0 a4.3,4.3 0 1,0 8.6,0 a4.3,4.3 0 1,0 -8.6,0"
+            android:fillColor="#f4ead6" />
+    </group>
+</vector>

@@ -191,6 +191,15 @@ body {
 .markdown-body .mermaid-container svg { max-width: 100%; height: auto; }
 .markdown-body .katex-display { overflow-x: auto; overflow-y: hidden; padding: 2px 0; }
 
+/* 内嵌网页卡片（```html 围栏）：worker 两端输出同一份结构，这里必须与工作台
+   cloud/styles.css 的同名规则保持一致 —— 缺了它 iframe 会落到浏览器默认
+   300×150，长网页只能在小窗里嵌套滚动（分享页曾如此，实机截图「显示不全」）。 */
+.markdown-body .html-inline-block { margin: 1.2em 0; }
+.markdown-body .html-inline-frame {
+  width: 100%; min-height: 320px; border: 1px solid var(--line);
+  border-radius: var(--radius); background: #fff;
+}
+
 /* 图片占位：拉取中 / 未随分享一起带走 */
 .asset-pending {
   display: block;

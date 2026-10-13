@@ -56,6 +56,195 @@ const CLIENT_VER = "exe";
 const STATE_KEY = "mtCloudSync.v1";
 const DEVICE_KEY = "mtCloudDevice.v1";
 
+/* ── 图片 / 视频资产 ─────────────────────────────────────────
+ * 文档正文里的截图写成 `![](source/x.webp)`，字节存在云存储：
+ *   users/<uid>/assets/<分区>/<工作区相对路径>
+ * 「文档同步」只搬文本 —— 早期面板推送因此出现「有文档、没图片」，
+ * 手机 / 网页打开就是一片「未同步」占位（2026-10-13 实机反馈）。
+ * 这里按**引用**逐篇扫描本机文档，云端缺哪张才补哪张：
+ *   · 不信本地清单：存在性以云端为准（storage.exists 是 HEAD 探针）。
+ *     历史上传失败或换账号登录都会留下「清单说有、云端没有」的死记录，
+ *     只按清单跳过会让图片永远修不回来。
+ *   · 与云端页（cloud/app.js 的 extractAssetRefs / assetRelCandidates /
+ *     assetObjectPath / assetWsSegment）必须同规则：同一篇笔记在两端解析出
+ *     的对象路径必须一致，否则会「本机一条路径、云端另一条路径」地互相看不见。
+ *     改动请同步两处，并跑 tests/three-way-sync.test.js 的同规则断言。
+ */
+const ASSET_EXT = /\.(png|jpe?g|jfif|gif|webp|avif|bmp|ico|svg|mp4|m4v|webm|mov|ogv)$/i;
+const ASSET_MAX_BYTES = 12 * 1024 * 1024;
+const ASSET_MAX_COUNT = 400;
+const ASSET_CONCURRENCY = 4;
+
+const MIME_BY_EXT = {
+  png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", jfif: "image/jpeg",
+  gif: "image/gif", webp: "image/webp", avif: "image/avif", bmp: "image/bmp",
+  ico: "image/x-icon", svg: "image/svg+xml",
+  mp4: "video/mp4", m4v: "video/x-m4v", webm: "video/webm", mov: "video/quicktime", ogv: "video/ogg",
+};
+
+function mimeOf(rel) {
+  const ext = String(rel || "").split(".").pop().toLowerCase();
+  return MIME_BY_EXT[ext] || "application/octet-stream";
+}
+
+/** 工作区分段名：与云端页同规则（路径分隔符换成下划线，避免多层目录）。 */
+function assetWsSegment(ws) {
+  return String(ws || "默认工作区").replace(/[\\/]+/g, "_").replace(/^\.+$/, "_").trim() || "默认工作区";
+}
+
+/** 云存储对象路径；路径非法（含 .. 等）时 SDK 会抛错，这里返回空串让调用方跳过。 */
+function assetObjectPath(uid, ws, rel) {
+  try {
+    return cloudClient().storage.userPath(uid, `assets/${assetWsSegment(ws)}/${rel}`);
+  } catch (_) {
+    return "";
+  }
+}
+
+/** 本机资源 URL：笔记里写 `source/x.webp`，本机就是 `/source/x.webp`（本机只读路由）。 */
+function assetLocalUrl(rel) {
+  return "/source/" + String(rel || "").split("/").map(encodeURIComponent).join("/");
+}
+
+/** 从 Markdown 原文取出本机资源引用（`![]()`、`<img|video|source src>` 四种写法）。 */
+function extractAssetRefs(md) {
+  const src = String(md || "");
+  const out = [];
+  const re = /!\[[^\]]*\]\(\s*<?([^)>\s]+)[^)]*\)|<(?:img|video|source)\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/gi;
+  let m;
+  while ((m = re.exec(src)) !== null) {
+    const u = m[1] || m[2];
+    if (u) out.push(u);
+  }
+  return out;
+}
+
+/** 引用 → 候选相对路径（含 `ws-asset/<id>/...` 新写法与同目录相对引用）。 */
+function assetRelCandidates(ref, docRel) {
+  const raw = String(ref || "").trim();
+  if (!raw || /^(https?:|data:|blob:|mailto:|javascript:)/i.test(raw)) return [];
+  let p = raw.split("#")[0].split("?")[0];
+  try { p = decodeURIComponent(p); } catch (_) { /* 保留原样 */ }
+  p = normPath(p);
+  if (!p) return [];
+
+  const out = [];
+  const wsAsset = p.match(/^ws-asset\/[^/]+\/(.+)$/);
+  if (wsAsset) out.push(normPath(`source/${wsAsset[1]}`));
+  out.push(p);
+
+  const dir = normPath(docRel || "").split("/").slice(0, -1).join("/");
+  if (dir) out.push(normPath(`${dir}/${p}`));
+
+  return [...new Set(out.filter((x) => x && !x.split("/").some((s) => s === ".." || s === ".")))];
+}
+
+/** 本机是否存在该文件（HEAD 只看头，不下载整张图）。 */
+async function localAssetSize(rel) {
+  try {
+    const res = await fetch(assetLocalUrl(rel), { method: "HEAD", cache: "no-store" });
+    if (!res.ok) return -1;
+    const n = Number(res.headers.get("content-length") || 0);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  } catch (_) {
+    return -1;
+  }
+}
+
+/**
+ * 把本机文档引用的图片 / 视频补到云存储。
+ * 只处理「引用得到、本机读得到、云端又没有」的对象；已有对象只花一次 HEAD 探针。
+ */
+async function pushLocalAssets({ docs, ws, uid, onProgress }) {
+  const report = (t) => { try { onProgress && onProgress(t); } catch (_) { /* UI 回调出错不影响同步 */ } };
+  const out = { sent: 0, exists: 0, missing: 0, tooBig: 0, failed: 0 };
+
+  // 1) 收集「每个引用一组候选路径」（去重，避免同一张图被多篇文档重复处理）
+  const jobs = [];
+  const seenRef = new Set();
+  for (const entry of docs) {
+    const rel = relFromRef(entry.path, ws.id);
+    if (!rel) continue;
+    for (const ref of extractAssetRefs(entry.content || "")) {
+      const cands = assetRelCandidates(ref, rel).filter((p) => ASSET_EXT.test(p));
+      if (!cands.length) continue;
+      const key = cands.join("|");
+      if (seenRef.has(key)) continue;
+      seenRef.add(key);
+      jobs.push(cands);
+      if (jobs.length >= ASSET_MAX_COUNT) break;
+    }
+    if (jobs.length >= ASSET_MAX_COUNT) break;
+  }
+  if (!jobs.length) return out;
+
+  report(`核对笔记引用的图片（0/${jobs.length}）…`);
+  const client = cloudClient();
+  const queue = [];
+  const handled = new Set();   // 已解析成功的本机路径（多个引用可能指向同一张图）
+
+  // 2) 逐个确认「本机有 + 云端没有」
+  //    候选要**依次试**：笔记写 `![](x.webp)` 时既可能是工作区根下的 source/，
+  //    也可能是文档同目录下的 —— 只看第一个候选会把后者误报成「本机找不到」。
+  for (let i = 0; i < jobs.length; i += 1) {
+    if (i % 5 === 0 || i === jobs.length - 1) report(`核对笔记引用的图片（${i + 1}/${jobs.length}）…`);
+    let target = null;
+    let tooBig = false;
+    let dup = false;
+    for (const cand of jobs[i]) {
+      if (handled.has(cand)) { dup = true; break; }      // 同一张图已被别的引用处理
+      const size = await localAssetSize(cand);
+      if (size < 0) continue;                            // 这个候选本机没有 → 试下一个
+      if (size > ASSET_MAX_BYTES) { tooBig = true; break; }
+      target = { rel: cand, size };
+      break;
+    }
+    if (tooBig) { out.tooBig += 1; continue; }
+    if (dup) continue;
+    if (!target) { out.missing += 1; continue; }         // 候选全都不在本机（引用失效）
+    handled.add(target.rel);
+
+    const obj = assetObjectPath(uid, ws.name, target.rel);
+    if (!obj) { out.failed += 1; continue; }
+    let present = false;
+    try {
+      const r = await client.storage.exists(obj);
+      present = !!(r && r.data);
+    } catch (_) { present = false; }
+    if (present) { out.exists += 1; continue; }
+    queue.push({ rel: target.rel, obj, size: target.size });
+  }
+  if (!queue.length) return out;
+
+  // 3) 缺的才上传（4 并发，与云端页同一批量策略）
+  let done = 0;
+  for (let i = 0; i < queue.length; i += ASSET_CONCURRENCY) {
+    const slice = queue.slice(i, i + ASSET_CONCURRENCY);
+    const results = await Promise.all(slice.map(async (t) => {
+      try {
+        const res = await fetch(assetLocalUrl(t.rel), { cache: "no-store" });
+        if (!res.ok) return { t, ok: false, why: "local" };
+        const blob = await res.blob();
+        const { error } = await client.storage.upload(t.obj, blob, {
+          contentType: mimeOf(t.rel), upsert: true, cacheControl: "31536000",
+        });
+        return { t, ok: !error };
+      } catch (_) {
+        return { t, ok: false };
+      }
+    }));
+    for (const r of results) {
+      done += 1;
+      if (r.ok) out.sent += 1;
+      else if (r.why === "local") out.missing += 1;
+      else out.failed += 1;
+    }
+    report(`上传图片 / 视频（${done}/${queue.length}）…`);
+  }
+  return out;
+}
+
+
 /* ── 客户端引导 ────────────────────────────────────────────── */
 
 let _client = null;
@@ -431,15 +620,19 @@ function deviceTag() {
 function loadState() {
   try {
     const raw = localStorage.getItem(STATE_KEY);
-    if (!raw) return { workspace: null, lastSyncAt: null, files: {} };
+    if (!raw) return { workspace: null, lastSyncAt: null, files: {}, assets: {} };
     const parsed = JSON.parse(raw);
     return {
       workspace: parsed && parsed.workspace ? parsed.workspace : null,
       lastSyncAt: parsed && parsed.lastSyncAt ? parsed.lastSyncAt : null,
       files: parsed && parsed.files && typeof parsed.files === "object" ? parsed.files : {},
+      // 图片核对戳：{rel_path: 该篇的本地内容 sha}，含义是「这个内容版本引用的图片
+      // 已确认都在云端」。有它才不会每次同步都把整个库的正文与云端探针重跑一遍。
+      // 内容一变（推 / 拉 / 本机编辑）sha 就对不上，自动重新核对。
+      assets: parsed && parsed.assets && typeof parsed.assets === "object" ? parsed.assets : {},
     };
   } catch (_) {
-    return { workspace: null, lastSyncAt: null, files: {} };
+    return { workspace: null, lastSyncAt: null, files: {}, assets: {} };
   }
 }
 
@@ -488,11 +681,17 @@ export async function syncCloud({ mode = "both", workspaceId, onProgress } = {})
 
   const st = loadState();
   const base = st.workspace === workspace ? (st.files || {}) : {};
+  const baseAssets = st.workspace === workspace ? (st.assets || {}) : {};
   const next = { ...base };
+  // 本次真正核对过的图片戳（rel → 内容 sha）；只有成功跑完一轮才写回
+  const assetStamps = {};
 
   const summary = {
     workspace, mode, push: 0, pull: 0, conflict: 0, tombstone: 0,
     skipped: 0, cloudDeleted: 0, failed: 0, notes: [],
+    // 图片 / 视频：即使这一轮没扫（核对戳命中）也是 0，而不是 undefined ——
+    // 面板与 summarize 直接读这几个字段做判断，缺字段会变成「undefined 张」。
+    assetPush: 0, assetExists: 0, assetMissing: 0, assetTooBig: 0, assetFailed: 0,
   };
   summary.localCount = localMap.size;
   summary.cloudCount = [...cloudMap.values()].filter((r) => r && !r.deleted_at).length;
@@ -621,6 +820,45 @@ export async function syncCloud({ mode = "both", workspaceId, onProgress } = {})
     modeNote(toPush.length, "待上传");
   }
 
+  /* ── 图片 / 视频（推送方向）───────────────────────────────────
+   * 文档同步只搬文本，图片字节必须单独补：发布面板推送过的库因此「正文在、
+   * 图片缺」，手机 / 网页打开就是「未同步」。按引用扫描本机文档，云端缺哪张补哪张。
+   * 这一步失败不影响文档同步结果（正文同步成功就该报成功）。
+   *
+   * 只扫「内容版本没核对过」的文档（baseAssets 里存的是上次核对时的正文 sha）：
+   * 否则每次同步都要读遍全库正文 + 给每张图打一次云端 HEAD 探针，库越大越慢。 */
+  if (wantPush && localMap.size) {
+    try {
+      const session = await getSession();
+      const uid = session && session.user && session.user.id;
+      if (uid) {
+        const entries = [...localMap.values()];
+        const docs = [];
+        for (const e of entries) {
+          const rel = relFromRef(e.path, ws.id);
+          if (!rel) continue;
+          const stamp = fSha(e);
+          if (stamp && baseAssets[rel] === stamp) continue;   // 这个内容版本已核对过
+          if (typeof e.content === "string") { docs.push({ ...e, __rel: rel }); continue; }
+          try {
+            const r = await readLocalContent(e.path);
+            docs.push({ ...e, content: r.content, __rel: rel });
+          } catch (_) { /* 单篇读不到就跳过，不影响其它文档的图片 */ }
+        }
+        if (docs.length) {
+          report(`核对笔记引用的图片（${docs.length} 篇）…`);
+          const ar = await pushLocalAssets({ docs, ws, uid, onProgress: report });
+          summary.assetPush = ar.sent;
+          summary.assetExists = ar.exists;
+          summary.assetMissing = ar.missing;
+          summary.assetTooBig = ar.tooBig;
+          summary.assetFailed = ar.failed;
+          for (const d of docs) assetStamps[d.__rel] = fSha(d);
+        }
+      }
+    } catch (_) { /* 图片环节出错不改变文档同步的结论，也不写戳（下次重试） */ }
+  }
+
   /* ── 拉取 ── */
   if (wantPull && toPull.length) {
     report(`读取云端正文（0/${toPull.length}）…`);
@@ -714,7 +952,14 @@ export async function syncCloud({ mode = "both", workspaceId, onProgress } = {})
     for (const rel of toTombstone) delete next[rel];
   }
 
-  saveState({ workspace, lastSyncAt: new Date().toISOString(), files: next });
+  // 图片核对戳只对「本机当前仍存在的文档」保留，避免删库后残留一堆死记录
+  const nextAssets = {};
+  for (const rel of localMap.keys()) {
+    const v = assetStamps[rel] !== undefined ? assetStamps[rel] : baseAssets[rel];
+    if (v) nextAssets[rel] = v;
+  }
+
+  saveState({ workspace, lastSyncAt: new Date().toISOString(), files: next, assets: nextAssets });
   if (pushedCount) await writeMeta(localMap.size);
 
   return summary;
@@ -748,6 +993,10 @@ export function summarize(summary) {
   if (summary.conflict) parts.push(`冲突留副本 ${summary.conflict}`);
   if (summary.tombstone) parts.push(`标记删除 ${summary.tombstone}`);
   if (summary.cloudDeleted) parts.push(`云端已删、本机保留 ${summary.cloudDeleted}`);
+  if (summary.assetPush) parts.push(`补传图片 ${summary.assetPush} 张`);
+  if (summary.assetMissing) parts.push(`${summary.assetMissing} 张引用在本机找不到`);
+  if (summary.assetTooBig) parts.push(`${summary.assetTooBig} 张超过 12MB 未上传`);
+  if (summary.assetFailed) parts.push(`图片失败 ${summary.assetFailed} 张`);
   if (summary.failed) parts.push(`失败 ${summary.failed}`);
   if (parts.length) {
     if (summary.skipped) parts.push(`未变 ${summary.skipped}`);
@@ -758,6 +1007,8 @@ export function summarize(summary) {
   const L = Number(summary.localCount) || 0;
   const C = Number(summary.cloudCount) || 0;
   if (!L && !C) return "这个工作区本机和云端都还没有内容";
+  // 文档没动但核对过图片：把图片的结论也说出来，否则会以为「什么都没做」
+  if (summary.assetExists) return `内容已一致，${summary.assetExists} 张引用图片也都在云端`;
   if (summary.mode === "pull") {
     return C
       ? `云端 ${C} 篇都已在本地，没有需要拉取的`

@@ -2,7 +2,9 @@
 <!--
   启动画面（launch theme 的 windowBackground）。
   纯色底 + 居中的品牌方牌，避免模板自带的位图启动图（已删除，随 minSdk 26 改为纯矢量）。
-  Android 12+ 由系统用自己的 splash 机制在同一底色上绘制应用图标。
+  Android 12+ 由系统自己的 splash 机制在同一底色上绘制启动图标 ——
+  图标与底色由 styles.xml 的 windowSplashScreenAnimatedIcon / Background 指定
+  （@drawable/ic_splash_icon + @color/splash_background），与本文件保持同一枚方牌。
 
   注意用的是 ic_logo_tile（带品牌色底）而不是只带线条的 ic_launcher_foreground：
   标记是米色 #f4ead6，浅色底 #f6f4ef 上直接放会几乎看不见（旧版就是这个毛病）。

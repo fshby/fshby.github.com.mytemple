@@ -8,7 +8,63 @@
 <title>知识库云端 · MyTemple</title>
 <link rel="manifest" href="/manifest.webmanifest" />
 <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-<link rel="stylesheet" href="/styles.css?v=cloud-13" />
+<link rel="stylesheet" href="/styles.css?v=cloud-14" />
+<!-- 关键 CSS（内联，必须留在 <head>）：
+     styles.css 是外链，冷启动时 HTML 先到、样式后到，中间会有一帧「未套样式」
+     的页面 —— APK 里表现为「系统启动屏图标 + 错乱首帧」叠加（2026-10-13 实机截图）。
+     这里把首屏会看到的骨架（底色 / 字体 / 顶栏 / 启动视图 / spinner / hidden 兜底）
+     按与外链表**完全相同**的值内联一份，等外链到位后由它接管，期间零跳变。
+     改动此块时务必同步 styles.css 的对应值。 -->
+<style>
+  :root {
+    --bg: #faf7f2; --bg-elevated: #fffdf8; --surface: #ffffff; --text: #3d3830;
+    --muted: #8a8175; --line: rgba(61, 56, 48, 0.13); --line-strong: rgba(61, 56, 48, 0.24);
+    --accent: #8a7c5c; --topbar-h: 52px;
+    --font: "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", "Source Han Sans SC",
+            -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16150f; --bg-elevated: #1d1b15; --surface: #201e17; --text: #d5cec1;
+      --muted: #928b7d; --line: rgba(213, 206, 193, 0.14); --line-strong: rgba(213, 206, 193, 0.26);
+      --accent: #c9b183; color-scheme: dark;
+    }
+  }
+  /* hidden 兜底与外链表同规则：外链未到时也不许任何 display 覆盖 hidden */
+  [hidden] { display: none !important; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text); font-family: var(--font);
+    font-size: 16px; line-height: 1.6; -webkit-text-size-adjust: 100%;
+  }
+  .app { max-width: 860px; margin: 0 auto; min-height: 100dvh; display: flex; flex-direction: column; background: var(--bg); }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 10px;
+    height: calc(var(--topbar-h) + env(safe-area-inset-top));
+    padding: env(safe-area-inset-top) 12px 0;
+    /* 先给纯色兜底（老 WebView 不认 color-mix），再给与外链表同值的半透明。
+       注意：这个 <style> 在 <link> **之后**，同特异度下它赢，所以这两条不是「临时
+       兜底」而是**最终值** —— 必须与 styles.css 完全一致（.verify/check-cloud-critical-css.mjs 会拦）。 */
+    background: var(--bg);
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter: saturate(180%) blur(14px);
+    border-bottom: 1px solid var(--line);
+  }
+  .brand { display: flex; align-items: center; gap: 8px; }
+  .view { flex: 1 1 auto; padding: 18px 16px calc(32px + env(safe-area-inset-bottom)); }
+  .view-boot {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px; min-height: 60dvh;
+  }
+  .spinner {
+    width: 26px; height: 26px; border-radius: 50%;
+    border: 2.5px solid var(--line-strong); border-top-color: var(--accent);
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
 </head>
 <body>
 <div class="app" id="app">
@@ -335,14 +391,31 @@
   <div id="offlineBar" class="offline-bar" role="status" hidden>当前离线：已打开的笔记仍可正常阅读，上传与同步会在联网后恢复</div>
 </div>
 
-<script src="/cloud-config.js?v=cloud-13"></script>
+<script src="/cloud-config.js?v=cloud-14"></script>
 <!--
   第三方库一律同源自托管（cloud/vendor/，见 scripts/vendor-cloud.mjs）。
   这些库原先取自 cdn.jsdelivr.net，而该主机名在部分网络下 TLS 会被重置；
   登录 SDK 恰好挂在那里，加载失败会导致验证码 / 微信 / 密码登录全部不可用。
 -->
-<script src="/vendor/sdk/workbuddy-cloud-sdk.global.js?v=cloud-13"></script>
-<script src="/vendor/fflate/fflate.min.js?v=cloud-13"></script>
-<script src="/app.js?v=cloud-13" type="module"></script>
+<script src="/vendor/sdk/workbuddy-cloud-sdk.global.js?v=cloud-14"></script>
+<script src="/vendor/fflate/fflate.min.js?v=cloud-14"></script>
+<script src="/app.js?v=cloud-14" type="module"></script>
+<script>
+  /* 启动屏兜底（原生端才有）：正常情况下由 app.js 在首个视图就绪后调用
+     SplashScreen.hide()（见 cloud/app.js NATIVE 段）。原生侧还有一层保险 ——
+     apk/capacitor.config.json 的 SplashScreen.launchShowDuration = 5000，到点
+     系统自己收屏。这里再加一层，用于 app.js 模块本身加载失败（脚本 404 / 语法
+     错误）的情况，避免用户永远停在启动屏。 */
+  (function () {
+    var cap = window.Capacitor;
+    if (!cap || typeof cap.isNativePlatform !== "function" || !cap.isNativePlatform()) return;
+    setTimeout(function () {
+      var p = cap.Plugins && cap.Plugins.SplashScreen;
+      if (p && typeof p.hide === "function") {
+        try { Promise.resolve(p.hide()).catch(function () {}); } catch (_) { /* 忽略 */ }
+      }
+    }, 6000);
+  })();
+</script>
 </body>
 </html>

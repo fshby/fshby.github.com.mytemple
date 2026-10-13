@@ -51,6 +51,18 @@
     <p class="status" id="status"></p>
   </div>
   <script>
+    // 本页由 Capacitor 在主框架加载失败时接管（server.errorPath）。系统启动屏
+    // 是「等页面就绪」才收的（capacitor.config.json：launchAutoHide=true +
+    // launchShowDuration=5000），而这一页没有云端页那套收屏逻辑 —— 不主动收，
+    // 用户就要对着启动屏多等最多 5 秒才看到「暂时连不上云端」。
+    (function () {
+      try {
+        var cap = window.Capacitor;
+        var p = cap && cap.Plugins && cap.Plugins.SplashScreen;
+        if (p && typeof p.hide === "function") Promise.resolve(p.hide()).catch(function () {});
+      } catch (_) { /* 插件未就绪：交给原生侧的 launchShowDuration 兜底 */ }
+    })();
+
     (function () {
       var SITE = "https://mytemple-cloud.app.workbuddy.host/";
       var btn = document.getElementById("retry");

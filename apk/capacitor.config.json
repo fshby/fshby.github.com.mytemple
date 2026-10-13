@@ -14,6 +14,16 @@
       "*.weixin.qq.com"
     ]
   },
+  "plugins": {
+    "SplashScreen": {
+      "launchAutoHide": true,
+      "launchShowDuration": 5000,
+      "launchFadeOutDuration": 200,
+      "backgroundColor": "#f6f4ef",
+      "showSpinner": false,
+      "useDialog": false
+    }
+  },
   "android": {
     "allowMixedContent": false,
     "captureInput": true,

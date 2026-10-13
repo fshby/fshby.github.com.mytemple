@@ -35,7 +35,7 @@ const UPSERT_BATCH_MAX_DOCS = 20;
 const UPSERT_BATCH_MAX_BYTES = 1_200_000;
 
 /* 静态资源版本戳：改动 cloud/ 下被页面引用的任何文件时，与 index.html 的三件套一起递增。 */
-const ASSET_V = "cloud-13";
+const ASSET_V = "cloud-14";
 
 /* 第三方库一律同源自托管，见 scripts/vendor-cloud.mjs。
  * 绝不改回第三方 CDN —— 见该脚本头部注释：cdn.jsdelivr.net 在部分网络下 TLS 会被重置，
@@ -170,6 +170,8 @@ function show(id) {
   el.logoutBtn.hidden = !signedIn;
   el.whoami.hidden = !signedIn;
   document.body.dataset.view = id;
+  // 原生端：首个视图真正渲染出来后才收起系统启动屏（见 NATIVE 段的说明）
+  if (window.__mtRevealSplash) window.__mtRevealSplash();
 }
 function askConfirm(text) {
   return new Promise((resolve) => {
@@ -1667,7 +1669,25 @@ async function uploadAssets(job, ws, assets, setProgress) {
     const obj = rel ? assetObjectPath(uid, ws, rel) : "";
     if (!obj) { job.assetFailed += 1; continue; }
     if (size > ASSET_MAX_BYTES) { job.assetTooBig += 1; continue; }
-    if (state.assetManifest.get(assetManifestKey(ws, rel)) === size) { job.assetSkipped += 1; continue; }
+    if (state.assetManifest.get(assetManifestKey(ws, rel)) === size) {
+      // 本地清单只记「传过没」，**云端才是事实源**：历史上传失败、换账号登录、
+      // 对象被清掉，都会留下「清单说有、云端没有」的死记录 —— 只按清单跳过，
+      // 这些图永远修不回来（手机 / 网页一直显示「未同步」）。这里补一次 HEAD 探针。
+      let present = false;
+      try { const r = await cloud.storage.exists(obj); present = !!(r && r.data); } catch (_) { /* 探针失败按缺失处理 */ }
+      if (present) { job.assetSkipped += 1; continue; }
+      // 确缺：清单命中时 collectLocalAssets 不会取字节，这里补取再上传
+      if (!a.file && !a.bytes && a.relPath) {
+        try {
+          const got = await fetch(localAssetUrl(a.relPath), { cache: "no-store" });
+          if (got && got.ok) {
+            a.bytes = new Uint8Array(await got.arrayBuffer());
+            a.size = a.bytes.byteLength;
+          }
+        } catch (_) { /* 下面按失败计 */ }
+      }
+      if (!a.file && !a.bytes) { job.assetFailed += 1; continue; }
+    }
     todo.push({ entry: a, rel, size, obj });
   }
   if (!todo.length) return;
@@ -2291,6 +2311,26 @@ function safeFileName(name) {
 
 if (NATIVE) {
   if (el.nativeActions) el.nativeActions.hidden = false;
+
+  // ── 启动屏 ────────────────────────────────────────────────
+  // apk/capacitor.config.json：SplashScreen.launchAutoHide = true +
+  // launchShowDuration = 5000。系统启动屏（纯色底 + 居中品牌方牌）会一直盖着，
+  // 直到**首个视图真正渲染出来**（show() 首次调用）才收起 —— 首帧内容是从网络
+  // 加载的远程页，样式未到就被系统收屏，会留下「系统图标 + 未套样式首帧」叠在
+  // 一起的错乱第一屏（2026-10-13 实机截图）。
+  // 这里 5000ms 与原生 launchShowDuration 对齐，是**双保险**；之所以不去用
+  // launchAutoHide = false（那样更纯粹），是因为一旦远程页完全加载失败（无网络
+  // 时连 offline.html 都进不来），没人能再调 hide()，App 会永久卡在启动屏只能强杀 ——
+  // 宁可多显示一会儿启动屏，也不能出现「打不开」。
+  let splashHidden = false;
+  window.__mtRevealSplash = () => {
+    if (splashHidden) return;
+    splashHidden = true;
+    if (CAP.SplashScreen && typeof CAP.SplashScreen.hide === "function") {
+      Promise.resolve(CAP.SplashScreen.hide()).catch(() => { /* 插件未就绪时忽略 */ });
+    }
+  };
+  setTimeout(() => { if (window.__mtRevealSplash) window.__mtRevealSplash(); }, 5000);
 
   // 0) 微信登录在 APK 里不可用：OAuth 网页扫码流程要求「用另一台设备的微信
   //    扫当前屏幕上的二维码」，手机上就是自己扫自己，走不通。隐藏入口与
