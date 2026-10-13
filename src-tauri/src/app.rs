@@ -1256,11 +1256,7 @@ impl AppState {
 
             entry.content_sha256 = hash.clone();
 
-            entry.plain = if normalized.relative.ends_with(".md") || normalized.relative.ends_with(".markdown") {
-                strip_markdown(content)
-            } else {
-                content.to_string()
-            };
+            entry.plain = plain_text_for(&normalized.relative, content);
 
             entry.modified = chrono::Utc::now().timestamp_millis() as u64;
 
@@ -1436,11 +1432,7 @@ impl AppState {
                 cache_entry.content_sha256 = entry.content_sha256.clone();
                 cache_entry.encoding = encoding_detected;
                 cache_entry.modified = chrono::Utc::now().timestamp_millis() as u64;
-                cache_entry.plain = if final_normalized.relative.ends_with(".md") || final_normalized.relative.ends_with(".markdown") {
-                    strip_markdown(&content)
-                } else {
-                    content.to_string()
-                };
+                cache_entry.plain = plain_text_for(&final_normalized.relative, &content);
             }
         }
 
@@ -1939,7 +1931,9 @@ impl AppState {
 
         let title = extract_title(content, normalized.relative.as_str());
 
-        let plain = strip_markdown(content);
+        // 同样按扩展名分派：此前这里无条件 strip_markdown，会把代码文件里的
+        // `*` `_` `[` `]` `#` `!` 全当 Markdown 标记抹成空格，搜索命中被破坏。
+        let plain = plain_text_for(&normalized.relative, content);
 
         let hash = format!("{:x}", sha2::Sha256::digest(content.as_bytes()));
 
@@ -2594,8 +2588,10 @@ async fn scan_workspace(ws: &Workspace, td: &TokenDictionary) -> Vec<FileEntry> 
 
         let title = extract_title(&content, rel_str.as_str());
 
-        let is_md = ext == "md" || ext == "markdown";
-        let plain = if is_md { strip_markdown(&content) } else { content.clone() };
+        // 检索用纯文本按扩展名分派：md 去 Markdown 语法、html 去标签、其他原样。
+        // 早期这里只判 md，导致 .html 带着 `<div class="...">` 原样进倒排索引，
+        // 全局搜索会命中成片的标签噪音。
+        let plain = plain_text_for(&rel_str, &content);
 
         let hash = format!("{:x}", sha2::Sha256::digest(content.as_bytes()));
 
@@ -2889,13 +2885,44 @@ fn sort_tree(node: &mut TreeNode) {
 
 fn extract_title(content: &str, fallback: &str) -> String {
 
-    for line in content.lines() {
+    // 标题来源按扩展名分派：HTML 取 <title>，Markdown / 其他取一级标题。
+    // 不分派的话，HTML 里 `<pre># 用法</pre>` 这类行会被误当成 Markdown 标题，
+    // 而 html 文件真正的页面名（<title>）反而被忽略。
+    let ext = Path::new(fallback)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
 
-        let trimmed = line.trim();
+    if matches!(ext.as_str(), "html" | "htm" | "xhtml") {
 
-        if trimmed.starts_with("# ") {
+        if let Ok(re) = regex::Regex::new(r"(?is)<title[^>]*>(.*?)</title\s*>") {
 
-            return trimmed[2..].trim().to_string();
+            if let Some(caps) = re.captures(content) {
+
+                let cleaned = strip_html(caps.get(1).map(|m| m.as_str()).unwrap_or(""));
+
+                if !cleaned.is_empty() {
+
+                    return cleaned;
+
+                }
+
+            }
+
+        }
+
+    } else {
+
+        for line in content.lines() {
+
+            let trimmed = line.trim();
+
+            if trimmed.starts_with("# ") {
+
+                return trimmed[2..].trim().to_string();
+
+            }
 
         }
 
@@ -2967,6 +2994,92 @@ fn strip_markdown(content: &str) -> String {
 
 
 
+/// HTML → 纯文本，供倒排索引与全文检索使用。
+///
+/// 目的：html 文件不应把 `<div class="x">`、CSS 规则、JS 源码当成可检索正文。
+/// 顺序：先整块删掉 script/style/注释，再剥标签，最后解实体并压缩空白。
+fn strip_html(content: &str) -> String {
+
+    let mut s = content.to_string();
+
+    // 整块移除：这些块的内容不是「正文」
+    for pat in [
+        r"(?is)<script\b[^>]*>.*?</script\s*>",
+        r"(?is)<style\b[^>]*>.*?</style\s*>",
+        r"(?is)<noscript\b[^>]*>.*?</noscript\s*>",
+        r"(?is)<!--.*?-->",
+        r"(?is)<!\[CDATA\[.*?\]\]>",
+    ] {
+        if let Ok(re) = regex::Regex::new(pat) {
+            s = re.replace_all(&s, " ").to_string();
+        }
+    }
+
+    // 剥掉剩余标签，保留标签之间的文本
+    if let Ok(re) = regex::Regex::new(r"(?is)<[^>]*>") {
+        s = re.replace_all(&s, " ").to_string();
+    }
+
+    // 常见命名实体
+    for (from, to) in [
+        ("&nbsp;", " "),
+        ("&ensp;", " "),
+        ("&emsp;", " "),
+        ("&thinsp;", " "),
+        ("&amp;", "&"),
+        ("&lt;", "<"),
+        ("&gt;", ">"),
+        ("&quot;", "\""),
+        ("&#39;", "'"),
+        ("&apos;", "'"),
+        ("&middot;", "·"),
+        ("&mdash;", "—"),
+        ("&ndash;", "–"),
+        ("&hellip;", "…"),
+    ] {
+        if s.contains(from) {
+            s = s.replace(from, to);
+        }
+    }
+
+    // 数字实体：没有解码表，直接丢弃，避免 `&#12290;` 变成检索词
+    if let Ok(re) = regex::Regex::new(r"&#\d+;|&#[xX][0-9a-fA-F]+;") {
+        s = re.replace_all(&s, " ").to_string();
+    }
+
+    if let Ok(re) = regex::Regex::new(r"\s+") {
+        s = re.replace_all(&s, " ").trim().to_string();
+    }
+
+    s
+
+}
+
+
+
+/// 产出「用于检索的纯文本」，按扩展名分派：
+/// md/markdown → 去 Markdown 语法；html/htm/xhtml → 去标签与脚本样式；其他（代码/纯文本/配置）→ 原样。
+///
+/// 统一入口的意义：所有写入 `FileEntry.plain` 的地方（扫描、保存、单文件构建）
+/// 必须走同一条判定，否则同一篇文档的搜索命中会随「它是怎么进来的」而不同。
+fn plain_text_for(relative: &str, content: &str) -> String {
+
+    let ext = std::path::Path::new(relative)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+
+    match ext.as_str() {
+        "md" | "markdown" => strip_markdown(content),
+        "html" | "htm" | "xhtml" => strip_html(content),
+        _ => content.to_string(),
+    }
+
+}
+
+
+
 fn extract_tags(content: &str) -> Vec<String> {
 
     if let Ok(re) = regex::Regex::new(r"(?:^|\s)#([\p{L}\p{N}_-]+)") {
@@ -3019,4 +3132,74 @@ fn document_template(title: &str) -> String {
 
     )
 
+}
+
+
+
+#[cfg(test)]
+mod plain_text_tests {
+
+    use super::{extract_title, plain_text_for, strip_html};
+
+    #[test]
+    fn strip_html_keeps_body_drops_scripts_styles_and_tags() {
+        let src = r#"<!doctype html>
+<html><head>
+  <title>光猫手册 &amp; 参数</title>
+  <style>body{color:#333333}</style>
+  <script>var x = "不是正文";</script>
+</head>
+<body>
+  <h1>江西电信 光猫配置</h1>
+  <!-- 注释不该进索引 -->
+  <p>登录 <code>192.168.1.1</code> 后修改 VLAN。</p>
+</body></html>"#;
+        let plain = strip_html(src);
+        assert!(plain.contains("江西电信"), "正文应保留：{plain}");
+        assert!(plain.contains("192.168.1.1"), "行内代码文本应保留：{plain}");
+        assert!(!plain.contains('#'), "CSS 不该进索引：{plain}");
+        assert!(!plain.contains("不是正文"), "脚本内容不该进索引：{plain}");
+        assert!(!plain.contains("注释不该进索引"), "注释不该进索引：{plain}");
+        assert!(!plain.contains('<'), "不应残留标签：{plain}");
+        assert!(plain.contains('&'), "命名实体应被解码：{plain}");
+    }
+
+    #[test]
+    fn plain_text_for_dispatches_by_extension() {
+        let md = "# 标题\n\n**加粗**与`代码`";
+        let md_plain = plain_text_for("a/b/笔记.md", md);
+        assert!(!md_plain.contains('#'), "Markdown 应去语法：{md_plain}");
+        assert!(md_plain.contains("标题"));
+
+        let html = "<h1>章节</h1><div class=\"box\">内容</div>";
+        let html_plain = plain_text_for("a/b/page.HTML", html);
+        assert!(
+            html_plain.contains("章节") && html_plain.contains("内容"),
+            "{html_plain}"
+        );
+        assert!(!html_plain.contains('<'), "HTML 应去标签：{html_plain}");
+        assert!(!html_plain.contains("class"), "标签属性不该进索引：{html_plain}");
+        assert!(!html_plain.contains("div"), "标签名不该进索引：{html_plain}");
+
+        // 代码文件必须原样保留：早期 build_file_entry 无条件 strip_markdown，
+        // 会把 `*` `[` `]` `#` 全抹成空格，搜索命中被破坏。
+        let code = "const a = [1, 2]; // *重要*";
+        assert_eq!(plain_text_for("a/b/main.js", code), code, "代码应原样保留");
+    }
+
+    #[test]
+    fn extract_title_dispatches_by_extension() {
+        assert_eq!(extract_title("# 一级标题\n正文", "a/note.md"), "一级标题");
+        assert_eq!(
+            extract_title(
+                "<html><head><title>光猫手册</title></head><body># 不是标题</body></html>",
+                "a/page.html"
+            ),
+            "光猫手册"
+        );
+        assert_eq!(
+            extract_title("<html><body>无标题</body></html>", "a/b/fallback.html"),
+            "fallback"
+        );
+    }
 }

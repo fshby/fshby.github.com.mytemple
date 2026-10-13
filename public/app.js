@@ -1,4 +1,4 @@
-import { createMarkdownEditor } from "/editor-core.js?v=20261012-cloud-4";
+import { createMarkdownEditor } from "/editor-core.js?v=20261013-html-1";
 import { getPaperBackgroundUrl } from "./modules/paper-texture.js";
 import { escapeHtml, displayName, displayRelativePath, splitPathRef, joinPathRef, parentPathRef, compactName, splitWorkspaceRef, plainText, headingId } from "./modules/path-utils.js";
 import { extractOutline, addCnEnSpaces } from "./modules/editor-utils.js";
@@ -42,7 +42,7 @@ const LARGE_PREVIEW_DELAY = 700;
 const CHUNKED_RENDER_BYTES = 500 * 1024;
 const CHUNK_RENDER_SLICE_BYTES = 150 * 1024;
 const GRAPH_WORKER_URL = "/graph-worker.js?v=20260810-graph-1";
-const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20261012-cloud-4";
+const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20261013-html-1";
 // Markdown 渲染缓存版本戳：解析器或 CSS 规则升级时递增，确保旧缓存不被复用。
 // 2026-08-29 v1.8.102：安装包 resources 包含 public/ 前端静态文件、端口回滚；修正其他电脑安装后 404 白屏。
 const MARKDOWN_RENDER_VERSION = "20260829-v18102-install-static-bundle-port-scan";
@@ -84,6 +84,9 @@ const state = {
   currentDocCreated: 0,
   currentEncoding: "utf-8",
   currentIsMarkdown: true,
+  // 当前文档是否按「网页」渲染（.html/.htm/.xhtml）。
+  // 与 currentIsMarkdown 互斥：html 走独立沙箱 iframe，不参与 Markdown 渲染管线。
+  currentIsHtml: false,
   mode: "view",
   graph: { nodes: [], edges: [] },
   graphSource: null,
@@ -1911,6 +1914,7 @@ function showBackupPreviewDoc() {
   state.currentDocCreated = 0;
   state.currentEncoding = "utf-8";
   state.currentIsMarkdown = true;
+  state.currentIsHtml = false;
   state.lastSavedContent = BACKUP_PREVIEW_DOC;
   state.selectedNode = "";
   state.selectedFolder = "";
@@ -1973,6 +1977,7 @@ async function handleDocsClosed(closedPaths = []) {
   state.currentVersion = "";
   state.currentEncoding = "utf-8";
   state.currentIsMarkdown = false;
+  state.currentIsHtml = false;
   state.lastSavedContent = "";
   state.previewLastContent = "";
   els.docPath.textContent = "docs";
@@ -3955,6 +3960,103 @@ function canPreviewAsJson() {
   return false;
 }
 
+/* ── 本机 HTML 文档渲染 ──────────────────────────────────────────────
+ * 定位：`.html/.htm/.xhtml` 在「编辑」态仍以源码呈现（可改、可 Ctrl+S 保存），
+ * 「阅读」态与编辑态右侧预览把它们按网页画出来 —— 与 JSON 的「编辑=源码 /
+ * 预览=树形」双轨保持一致。
+ *
+ * 安全边界（与 Markdown 里用户自写的 html 围栏的关键差别）：
+ *   打开一个从网上下载的 .html 是**不可信输入**，所以沙箱**不含 allow-same-origin**，
+ *   帧内落到独立 opaque origin：读不到 parent、读不到主站 localStorage/cookie，
+ *   也调不动 /api/save、/api/files 与 IPC 桥。同时不给 allow-popups /
+ *   allow-top-navigation，避免帧内脚本弹窗或把整个应用导航走。
+ *
+ * 已知限制：srcdoc 的解析基准是 about:srcdoc，`./style.css`、`./img/a.png` 这类
+ * 相对路径必然 404（只有 Markdown 的 `![](source/x.webp)` 有专门通道）。
+ * 页面上给出明确提示，避免被误判成「渲染坏了」。
+ */
+const HTML_DOC_EXT_RE = /\.(html?|xhtml)$/i;
+// 内嵌网页统一沙箱策略（本机 .html 文档预览 + Markdown 里的 html 围栏 / chart 自包含页）。
+// 关键是**不给 allow-same-origin**：allow-scripts 与 allow-same-origin 同时给等于没有沙箱
+// （OWASP 明确列为反模式）—— 帧内脚本会拿到与本页同源的权限，能读 parent.document、
+// 读 localStorage 里的登录态，也能直接同源请求 /api/*。
+// 去掉后帧内落到独立 opaque origin，只保留脚本执行、表单与模态框。
+const HTML_DOC_SANDBOX = "allow-scripts allow-forms allow-modals";
+
+function isHtmlDocPath(p) {
+  return HTML_DOC_EXT_RE.test(String(p || ""));
+}
+
+function canPreviewAsHtml() {
+  if (state.currentIsMarkdown) return false;
+  return isHtmlDocPath(state.currentPath);
+}
+
+// 内容指纹：编辑态预览每次刷新都会重渲染，用指纹保证「内容没变就不重建 iframe」，
+// 否则帧内脚本会被反复执行（副作用 + 卡顿）。
+function htmlDocDigest(text) {
+  const s = String(text || "");
+  let h = 5381;
+  for (let i = 0; i < s.length; i += 1) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return `${s.length}:${(h >>> 0).toString(36)}`;
+}
+
+/**
+ * 把 HTML 文档渲染为沙箱 iframe。
+ * @param {HTMLElement} container 目标容器（编辑态预览 / 阅读态正文）
+ * @param {string} source HTML 源码
+ * @param {{defer?: boolean, force?: boolean}} [options] defer=true 时先不装载 srcdoc，等容器可见再激活；
+ *        force=true 时即使内容未变也重建（用于卸载后台 iframe）
+ */
+function renderHtmlPreview(container, source, options = {}) {
+  if (!container) return;
+  const content = String(source ?? "");
+  const key = htmlDocDigest(content);
+  const prev = container.querySelector(":scope > .html-doc-block");
+  if (!options.force && prev && prev.dataset.htmlKey === key) return; // 内容未变：复用现有 iframe
+  const block = document.createElement("div");
+  block.className = "html-doc-block";
+  block.dataset.htmlKey = key;
+
+  const bar = document.createElement("div");
+  bar.className = "html-doc-bar";
+  const label = document.createElement("span");
+  label.className = "html-doc-label";
+  label.textContent = "网页预览";
+  const hint = document.createElement("span");
+  hint.className = "html-doc-hint";
+  hint.textContent = "按网页原样加载（脚本在沙箱内运行）；相对路径资源不可用";
+  bar.append(label, hint);
+
+  const frame = document.createElement("iframe");
+  frame.className = "html-inline-frame html-doc-frame";
+  frame.setAttribute("sandbox", HTML_DOC_SANDBOX);
+  frame.setAttribute("referrerpolicy", "no-referrer");
+  frame.setAttribute("title", "HTML 文档预览");
+
+  block.append(bar, frame);
+  container.classList.remove("empty-state");
+  container.replaceChildren(block);
+  decorateHtmlInlineBlocks(container);
+
+  if (options.defer) {
+    // 阅读态容器先不装 srcdoc：等切到阅读模式再激活。
+    // 否则同一篇文档会同时存在两个 iframe，脚本被跑两遍（且第 2 个还在后台）。
+    container.__pendingHtml = { frame, content };
+  } else {
+    frame.srcdoc = content;
+  }
+}
+
+/** 激活延时装载的 HTML 预览（切到阅读模式时调用）。 */
+function activateDeferredHtml(container) {
+  const pending = container && container.__pendingHtml;
+  if (!pending || !pending.frame) return;
+  container.__pendingHtml = null;
+  if (!pending.frame.isConnected) return;
+  try { pending.frame.srcdoc = pending.content; } catch (_) {}
+}
+
 // 把容器中所有 .json-code-block 替换为 bejson 风格树形视图
 // 用于 Markdown 渲染后处理（阅读模式 + 编辑模式预览 + chunked 分片渲染）
 function processJsonCodeBlocks(container) {
@@ -4631,18 +4733,18 @@ function renderMarkdown(source, options = {}) {
           // Chart.js / ECharts JSON：识别后转自包含 iframe，识别失败 fallback 为 JSON 代码块
           const chartHtml = detectAndBuildChartHtml(raw);
           if (chartHtml) {
-            html.push(`<div class="html-inline-block"><iframe class="html-inline-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-popups" srcdoc="${escapeHtml(chartHtml)}"></iframe></div>`);
+            html.push(`<div class="html-inline-block"><iframe class="html-inline-frame" sandbox="${HTML_DOC_SANDBOX}" srcdoc="${escapeHtml(chartHtml)}"></iframe></div>`);
           } else {
             html.push(`<div class="code-block" data-language="chart"><span class="code-language">chart JSON</span><button class="code-copy" type="button">\u590d\u5236</button><pre><code class="language-json">${escapeHtml(raw)}</code></pre></div>`);
           }
         } else if (normalizedLang === "html-inline" || normalizedLang === "raw-html" || (normalizedLang === "html" && /^\s*<!doctype\s+html|<html[\s>]|<!DOCTYPE\s+HTML/i.test(raw))) {
           // html fence 若包含完整 HTML 文档结构（DOCTYPE / <html>），当作 iframe 内嵌渲染；普通 html 片段仍走高亮
-          html.push(`<div class="html-inline-block"><iframe class="html-inline-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-popups" srcdoc="${escapeHtml(raw)}"></iframe></div>`);
+          html.push(`<div class="html-inline-block"><iframe class="html-inline-frame" sandbox="${HTML_DOC_SANDBOX}" srcdoc="${escapeHtml(raw)}"></iframe></div>`);
         } else if (normalizedLang === "html-web") {
           const url = String(raw || "").trim().split("\n")[0].trim();
           const safeUrl = /^https?:\/\//i.test(url) ? url : "";
           if (safeUrl) {
-            html.push(`<div class="html-inline-block"><iframe class="html-inline-frame" src="${escapeHtml(safeUrl)}" sandbox="allow-scripts allow-same-origin allow-forms allow-popups" loading="lazy"></iframe></div>`);
+            html.push(`<div class="html-inline-block"><iframe class="html-inline-frame" src="${escapeHtml(safeUrl)}" sandbox="${HTML_DOC_SANDBOX}" loading="lazy"></iframe></div>`);
           } else {
             html.push(`<div class="code-block"><pre><code class="language-text">html-web 需要一个有效 URL：https://example.com</code></pre></div>`);
           }
@@ -5694,6 +5796,11 @@ function setMode(mode, { deferReaderRender = false } = {}) {
   els.graphBtn.classList.toggle("active", mode === "graph");
   updateMultiCursorDisplay();
   if (mode === "edit") {
+    // HTML 文档：阅读态那份 iframe 退到后台就卸掉（换成延时占位），
+    // 保证同一时刻只有「可见的那一处」在跑脚本，避免后台帧持续消耗与副作用。
+    if (state.currentIsHtml && els.markdownView.querySelector(".html-doc-block")) {
+      renderHtmlPreview(els.markdownView, state.currentContent, { defer: true, force: true });
+    }
     syncPreviewToEditor();
     renderCurrentPreviewNow(state.currentContent);
     setEditorOutlineVisible(state.editorOutlineVisible);
@@ -5735,6 +5842,8 @@ function setMode(mode, { deferReaderRender = false } = {}) {
       // （会输出纯 <pre><code> 覆盖掉已渲染的 JSON 树形）
       const isNonMarkdown = !state.currentIsMarkdown && state.currentPath;
       if (isNonMarkdown && els.markdownView.children.length > 0) {
+        // HTML 文档的阅读态 iframe 是延时装载的，切过来的这一刻才真正加载
+        if (state.currentIsHtml) activateDeferredHtml(els.markdownView);
         const restoreReaderScroll = () => {
           const readerMax = Math.max(1, els.markdownView.scrollHeight - els.markdownView.clientHeight);
           els.markdownView.scrollTop = Math.round(readerMax * (state.editorScrollRatio ?? state.readerScrollRatio ?? 0));
@@ -5911,6 +6020,7 @@ async function openDoc(docPath, options = {}) {
   state.currentDocCreated = doc.created || item?.created || 0;
   state.currentEncoding = doc.encoding || "utf-8";
   state.currentIsMarkdown = /\.md$/i.test(doc.path || "");
+  state.currentIsHtml = !state.currentIsMarkdown && isHtmlDocPath(doc.path);
   updateLargeDocumentState(doc.content, true);
   state.selectedNode = doc.path;
   state.selectedFolder = doc.path.includes("/") ? doc.path.split("/").slice(0, -1).join("/") : "";
@@ -5961,8 +6071,26 @@ async function openDoc(docPath, options = {}) {
     // readerPanel 里仍然渲染预览（JSON 用 bejson 风格树形视图，其他用语法高亮代码预览）
     els.markdownView.innerHTML = "";
     const ext = (doc.path || "").split(".").pop()?.toLowerCase() || "txt";
-    // JSON 文件：优先尝试 bejson 风格树形视图
-    if (/^json(c|5)?$/.test(ext) || (/^txt|text|log$/.test(ext) && looksLikeJson(doc.content || ""))) {
+    if (state.currentIsHtml) {
+      // HTML 文档：编辑态仍是源码（可改可 Ctrl+S），右侧预览按网页渲染。
+      // 阅读态容器延时装载 srcdoc，等真正切到阅读模式再激活，避免同一文档跑两份脚本。
+      renderHtmlPreview(els.preview, doc.content);
+      renderHtmlPreview(els.markdownView, doc.content, { defer: true });
+      renderOutlineItems([]);
+      if (state.mode !== "edit") setMode("edit");
+      if (els.saveBtn) {
+        els.saveBtn.disabled = false;
+        els.saveBtn.removeAttribute("title");
+        els.saveBtn.title = "保存 (Ctrl+S)";
+        els.saveBtn.classList.remove("readonly", "disabled", "unsupported");
+      }
+      if (els.editor.value === (doc.content || "")) {
+        setSaveStatus("\u4fdd\u5b58", false);
+      } else {
+        setSaveStatus("\u672a\u4fdd\u5b58", true);
+        scheduleAutoSave();
+      }
+    } else if (/^json(c|5)?$/.test(ext) || (/^txt|text|log$/.test(ext) && looksLikeJson(doc.content || ""))) {
       const jsonTree = renderJsonTree(doc.content || "");
       if (jsonTree) {
         els.preview.replaceChildren();
@@ -6042,8 +6170,8 @@ async function openDoc(docPath, options = {}) {
     state.previewLastContent = "";
     if (state.previewVisible) setPreviewVisible(false, { automatic: true });
   } else if (!state.currentIsMarkdown) {
-    // 非 Markdown 文档：JSON 内容保留预览面板（树形视图/代码高亮），其他内容清空隐藏
-    if (canPreviewAsJson()) {
+    // 非 Markdown 文档：JSON 树形 / HTML 网页保留预览面板，其他内容清空隐藏
+    if (canPreviewAsJson() || canPreviewAsHtml()) {
       state.previewLastContent = doc.content;
       if (!state.previewVisible) setPreviewVisible(true, { automatic: true });
     } else {
@@ -6084,6 +6212,11 @@ async function openDoc(docPath, options = {}) {
     els.saveBtn.removeAttribute("title");
     els.saveBtn.title = "保存 (Ctrl+S)";
     els.saveBtn.classList.remove("readonly", "disabled", "unsupported");
+  }
+  // 沉浸模式下切换文档：块级渲染只对 Markdown 生效，非 Markdown 要即时关掉，
+  // 否则打开代码/HTML 时会沿用上一篇 md 的渲染扩展。
+  if (state.immersive) {
+    try { els.editor.setWysiwygEnabled?.(state.currentIsMarkdown); } catch (_) {}
   }
   syncTreeSelectionState();
   // 二次校验：确保编辑器内容与当前文档一致（CodeMirror setter 可能异步或被覆盖）
@@ -8342,13 +8475,21 @@ async function renderChartsInPreview(container) {
   }
 
   // html-inline iframe 图表：添加全屏放大按钮
-  const htmlInlineBlocks = container.querySelectorAll(".html-inline-block");
-  htmlInlineBlocks.forEach((block) => {
+  decorateHtmlInlineBlocks(container);
+}
+
+/* 为内嵌网页 iframe 挂「放大」按钮。
+ * Markdown 里用户自写的 HTML 围栏块（.html-inline-block）与本机 HTML 文档预览
+ * （.html-doc-block）共用同一套按钮与全屏浮层，避免两处各写一份。 */
+function decorateHtmlInlineBlocks(container) {
+  if (!container || typeof container.querySelectorAll !== "function") return;
+  container.querySelectorAll(".html-inline-block, .html-doc-block").forEach((block) => {
     if (block.querySelector(".html-inline-fullscreen-btn")) return;
     const iframe = block.querySelector("iframe.html-inline-frame");
     if (!iframe) return;
     const btn = document.createElement("button");
     btn.className = "html-inline-fullscreen-btn";
+    btn.type = "button";
     btn.textContent = "放大";
     btn.addEventListener("click", (e) => {
       e.preventDefault();
@@ -8364,7 +8505,13 @@ async function renderChartsInPreview(container) {
       });
       const fullIframe = document.createElement("iframe");
       fullIframe.srcdoc = iframe.srcdoc || iframe.getAttribute("srcdoc") || "";
-      fullIframe.sandbox = iframe.sandbox.value;
+      // 全屏帧沿用同一沙箱：不允许借「放大」绕过限制。
+      // 注意 sandbox="" 必须原样保留（那是最严格档），不能因为「空值」回退到放宽策略。
+      const inheritedSandbox = iframe.getAttribute("sandbox");
+      fullIframe.setAttribute(
+        "sandbox",
+        inheritedSandbox === null ? HTML_DOC_SANDBOX : inheritedSandbox,
+      );
       overlay.appendChild(fullIframe);
       overlay.appendChild(closeBtn);
       document.body.appendChild(overlay);
@@ -8531,6 +8678,15 @@ function swapPreviewHtml(html) {
 function renderCurrentPreviewNow(content = state.currentContent) {
   if (!state.previewVisible || state.mode !== "edit") return;
   const nextContent = String(content || els.editor.value || state.currentContent || "");
+  // HTML 文档：按网页渲染（内容指纹未变时内部直接复用，不重跑脚本）
+  if (!state.currentIsMarkdown && canPreviewAsHtml()) {
+    renderHtmlPreview(els.preview, nextContent);
+    renderOutlineItems([]);
+    els.preview.classList.remove("preview-pending");
+    state.previewLastContent = nextContent;
+    syncPreviewToEditor();
+    return;
+  }
   // JSON 文件：直接渲染树形视图，不走 Markdown 渲染
   if (!state.currentIsMarkdown && canPreviewAsJson()) {
     const jsonTree = renderJsonTree(nextContent);
@@ -8559,6 +8715,15 @@ async function renderCurrentPreviewAsync(content = state.currentContent, seq = +
   content = String(content || els.editor.value || state.currentContent || "");
   if (state.previewLastContent === content) {
     els.preview.classList.remove("preview-pending");
+    syncPreviewToEditor();
+    return;
+  }
+  // HTML 内容：渲染为沙箱 iframe（不走 Markdown 渲染）
+  if (!state.currentIsMarkdown && canPreviewAsHtml()) {
+    renderHtmlPreview(els.preview, content);
+    renderOutlineItems([]);
+    els.preview.classList.remove("preview-pending");
+    state.previewLastContent = content;
     syncPreviewToEditor();
     return;
   }
@@ -8670,7 +8835,8 @@ function replaceFencedBlockInEditor(lang, oldContent, newBlock) {
 
 function setPreviewVisible(visible, { automatic = false } = {}) {
   // 非 Markdown 文档不支持预览，避免按 Markdown 语法解析引起卡顿或错位
-  if (visible && state.currentPath && !state.currentIsMarkdown && !canPreviewAsJson()) {
+  // 例外：JSON（树形视图）与 HTML（沙箱网页）有各自的渲染分支
+  if (visible && state.currentPath && !state.currentIsMarkdown && !canPreviewAsJson() && !canPreviewAsHtml()) {
     visible = false;
     state.previewAutoHidden = true;
   }
@@ -8685,9 +8851,9 @@ function setPreviewVisible(visible, { automatic = false } = {}) {
   els.editorPanel.classList.toggle("preview-hidden", !state.previewVisible);
   els.previewToggleBtn.textContent = state.previewVisible
     ? "\u9690\u85cf\u9884\u89c8"
-    : state.largeDocument ? "\u663e\u793a\u9884\u89c8\uff08\u5927\u6587\u6863\uff09" : (!state.currentIsMarkdown ? "\u9884\u89c8\u4e0d\u53ef\u7528" : "\u663e\u793a\u9884\u89c8");
+    : state.largeDocument ? "\u663e\u793a\u9884\u89c8\uff08\u5927\u6587\u6863\uff09" : ((!state.currentIsMarkdown && !canPreviewAsHtml()) ? "\u9884\u89c8\u4e0d\u53ef\u7528" : "\u663e\u793a\u9884\u89c8");
   els.previewToggleBtn.setAttribute("aria-pressed", String(state.previewVisible));
-  els.previewToggleBtn.disabled = !state.currentIsMarkdown && !canPreviewAsJson() && !!state.currentPath;
+  els.previewToggleBtn.disabled = !state.currentIsMarkdown && !canPreviewAsJson() && !canPreviewAsHtml() && !!state.currentPath;
   if (state.previewVisible) {
     if (state.largeDocument) schedulePreviewUpdate();
     else requestAnimationFrame(() => schedulePreviewUpdate({ immediate: true }));
@@ -8802,7 +8968,9 @@ function setImmersiveEditing(enabled) {
       state.previewTimer = 0;
     }
     // 开启所见即所得渲染：光标所在块保持源码，其余块渲染为最终效果。
-    try { els.editor.setWysiwygEnabled?.(true); } catch (_) {}
+    // 仅对 Markdown 语义有效：html / 代码 / JSON 文档仍可进入沉浸（界面照旧精简），
+    // 但不启用块级渲染 —— 否则会把源码按 Markdown 语义误解析，反而看不清原文。
+    try { els.editor.setWysiwygEnabled?.(state.immersive && state.currentIsMarkdown); } catch (_) {}
     requestAnimationFrame(() => els.editor.focus());
   } else if (wasImmersive) {
     // 退出沉浸：先关掉所见即所得渲染，再恢复完整功能。

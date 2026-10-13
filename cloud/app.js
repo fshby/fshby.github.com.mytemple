@@ -35,7 +35,7 @@ const UPSERT_BATCH_MAX_DOCS = 20;
 const UPSERT_BATCH_MAX_BYTES = 1_200_000;
 
 /* 静态资源版本戳：改动 cloud/ 下被页面引用的任何文件时，与 index.html 的三件套一起递增。 */
-const ASSET_V = "cloud-10";
+const ASSET_V = "cloud-11";
 
 /* 第三方库一律同源自托管，见 scripts/vendor-cloud.mjs。
  * 绝不改回第三方 CDN —— 见该脚本头部注释：cdn.jsdelivr.net 在部分网络下 TLS 会被重置，

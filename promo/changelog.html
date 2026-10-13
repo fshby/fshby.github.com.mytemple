@@ -24,7 +24,7 @@
         <a href="index.html#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.1.40</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.1.41</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -40,6 +40,7 @@
         <div class="changelog-toc reveal">
           <h3>版本索引</h3>
           <ul>
+            <li><a href="#v2.1.41">v2.1.41</a> — HTML 文件渲染：打开 .html 就像打开网页（编辑态左源码、阅读态整页渲染，可放大全屏）；重新收紧沙箱——网页里的脚本已无法读取你的登录态与知识库；搜索索引不再命中标签噪音</li>
             <li><a href="#v2.1.40">v2.1.40</a> — 图片同步补齐：桌面端「一键推送」把笔记里引用的本机截图 / 视频一并同步到云端（此前只传文本，手机端与网页端图片全是裂图）；正文没变时也会补齐缺失的图片，按体积做增量、图片没变 / 上传失败 / 超过 12MB 分别报数；Android 客户端 1.1.1 图标与启动图重制</li>
             <li><a href="#v2.1.39">v2.1.39</a> — 首轮实机反馈修复：桌面端修「可同步内容恒为暂无 Markdown」（驼峰字段错配，连带修复拉取冲突检测），面板显示推送目标、支持选择同步工作区；云端 / Android 登录界面重排（验证码为主路径，密码框默认收起）</li>
             <li><a href="#v2.1.38">v2.1.38</a> — 三端直连打通：桌面端可直接登录云端并双向同步（新增「拉取云端更新」，本机文件永不被静默覆盖，两端都改过时自动留冲突副本）；Android 应用补齐原生能力（返回键分层回退、分享、复制、导出 .md、断网提示、状态栏配色）并升级到 1.1.0</li>
@@ -99,6 +100,41 @@
             <li><a href="#v1.8.93">v1.8.93</a> — 界面与体验升级 + 性能优化</li>
           </ul>
         </div>
+
+                <article class="doc-section reveal" id="v2.1.41">
+          <h3>v2.1.41 · HTML 文件渲染</h3>
+          <p>知识库里常有些从浏览器另存的 .html：抓下来的技术文档、导出的报告、单页小工具。此前打开它们只能看到源码，要看得见效果就得切到浏览器。这一版把编辑 / 阅读两种形态都补齐，同时收紧了渲染所依赖的安全边界、修掉了 HTML 带来的检索噪音。</p>
+
+          <h4>打开 .html 就像打开网页</h4>
+          <ul>
+            <li><b>双轨与 Markdown 一致</b>：打开仍是编辑态（左栏源码可改可存），右侧预览把网页画出来；切到阅读态则整页渲染。保持「打开即编辑」的既有心智，不引入新的操作路径。</li>
+            <li><b>可放大全屏</b>：预览右上角「放大」按钮复用既有的全屏浮层，长页面与小屏都看得舒服。</li>
+            <li><b>内容没变不重跑脚本</b>：预览按内容指纹去重，编辑时输入不会让页面里的脚本反复执行一遍。</li>
+            <li><b>阅读态延时装载</b>：只有真正切到阅读态才装入页面，因此同一篇文档不会同时跑两份脚本；切回编辑态会自动卸掉后台那一份。</li>
+            <li><b>相对资源说明，不假装渲染坏了</b>：内嵌渲染的解析基准没有目录，<code>./style.css</code>、<code>./img/a.png</code> 这类同目录引用取不到，页面顶部会明确提示「相对路径资源不可用」；指向外部的 <code>http(s)</code> 样式、脚本与图片照常加载。</li>
+          </ul>
+
+          <h4>安全：渲染不可信网页不能等于放权</h4>
+          <ul>
+            <li><b>去掉同源授权</b>：渲染容器此前同时开启了脚本执行与同源（<code>allow-scripts</code> + <code>allow-same-origin</code>），这两项同给等于沙箱失效 —— 网页里的脚本可以直接访问宿主页面、读取登录状态、调用应用能力。现在只保留脚本执行，同源被摘掉，脚本能跑但拿不到宿主。</li>
+            <li><b>实测验证</b>：真浏览器对照测试，新策略下网页内的 <code>parent.document</code>、<code>localStorage</code>、应用能力入口全部被拒（SecurityError），宿主也读不到容器内部文档；旧策略下这三项全部可达。</li>
+            <li><b>Markdown 里的 HTML 代码块同步收紧</b>：同样的容器也用在 Markdown 的 HTML 围栏上，一并按新策略处理，不让旧组合留在别处。</li>
+          </ul>
+
+          <h4>检索不再被标签噪音淹没</h4>
+          <ul>
+            <li><b>按文件类型产出纯文本</b>：索引取词改为按扩展名分派 —— Markdown 去语法、HTML 去标签与脚本样式、其余格式原文保留。此前 HTML 是带着标签整段入库的，全局搜索会命中一堆 <code>&lt;div class="..."&gt;</code>。</li>
+            <li><b>实体与注释一并处理</b>：<code>&amp;nbsp;</code> 这类转义会还原成字符，注释与 <code>style</code> / <code>script</code> 内容不进索引。</li>
+            <li><b>标题取 &lt;title&gt;</b>：HTML 文档的标题改为读取页面 <code>&lt;title&gt;</code>，不再被正文里恰好以 <code># </code> 开头的一行误判。</li>
+            <li><b>顺带修掉一处既有缺陷</b>：代码类文件此前会被无条件按 Markdown 去语法，把 <code>*</code> <code>[ ]</code> <code>#</code> 等符号抹成空格，导致搜索这类符号时命中不准；现在非 Markdown 文件原文保留。</li>
+          </ul>
+
+          <h4>沉浸模式与云同步不受牵连</h4>
+          <ul>
+            <li><b>沉浸模式的块级渲染只对 Markdown 生效</b>：HTML / 代码 / JSON 仍可进入沉浸（界面照旧精简），但不会把源码按 Markdown 语义解析 —— 否则标签会被当成语法渲染坏掉。</li>
+            <li><b>HTML 不进入云文档表</b>：云同步的文本类型本来就只有 Markdown 与纯文本，HTML 不会写进云端文档内容列、不会撑大体积，本次以测试锁定该边界，防止将来误加。</li>
+          </ul>
+        </article>
 
                 <article class="doc-section reveal" id="v2.1.40">
           <h3>v2.1.40 · 图片同步补齐（手机端截图不再是裂图）</h3>

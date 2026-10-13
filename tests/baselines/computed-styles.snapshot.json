@@ -218,9 +218,9 @@
         "marginBottom": "0px",
         "borderTopColor": "rgb(61, 56, 48)",
         "borderBottomWidth": "0px",
-        "width": "308.25px",
+        "width": "374.25px",
         "display": "flex",
-        "rectW": 308,
+        "rectW": 374,
         "rectH": 38
       },
       "--status": {
@@ -520,9 +520,9 @@
         "marginBottom": "0px",
         "borderTopColor": "rgb(61, 56, 48)",
         "borderBottomWidth": "0px",
-        "width": "308.25px",
+        "width": "374.25px",
         "display": "flex",
-        "rectW": 308,
+        "rectW": 374,
         "rectH": 38
       },
       "--status": {
@@ -1124,9 +1124,9 @@
         "marginBottom": "0px",
         "borderTopColor": "rgb(197, 191, 178)",
         "borderBottomWidth": "0px",
-        "width": "308.25px",
+        "width": "374.25px",
         "display": "flex",
-        "rectW": 308,
+        "rectW": 374,
         "rectH": 38
       },
       "--status": {
@@ -1426,9 +1426,9 @@
         "marginBottom": "0px",
         "borderTopColor": "rgb(197, 191, 178)",
         "borderBottomWidth": "0px",
-        "width": "308.25px",
+        "width": "374.25px",
         "display": "flex",
-        "rectW": 308,
+        "rectW": 374,
         "rectH": 38
       },
       "--status": {
@@ -2030,9 +2030,9 @@
         "marginBottom": "0px",
         "borderTopColor": "rgb(45, 55, 41)",
         "borderBottomWidth": "0px",
-        "width": "308.25px",
+        "width": "374.25px",
         "display": "flex",
-        "rectW": 308,
+        "rectW": 374,
         "rectH": 38
       },
       "--status": {
@@ -2332,9 +2332,9 @@
         "marginBottom": "0px",
         "borderTopColor": "rgb(45, 55, 41)",
         "borderBottomWidth": "0px",
-        "width": "308.25px",
+        "width": "374.25px",
         "display": "flex",
-        "rectW": 308,
+        "rectW": 374,
         "rectH": 38
       },
       "--status": {
@@ -2936,9 +2936,9 @@
         "marginBottom": "0px",
         "borderTopColor": "rgb(45, 55, 41)",
         "borderBottomWidth": "0px",
-        "width": "308.25px",
+        "width": "374.25px",
         "display": "flex",
-        "rectW": 308,
+        "rectW": 374,
         "rectH": 38
       },
       "--status": {
@@ -3238,9 +3238,9 @@
         "marginBottom": "0px",
         "borderTopColor": "rgb(45, 55, 41)",
         "borderBottomWidth": "0px",
-        "width": "308.25px",
+        "width": "374.25px",
         "display": "flex",
-        "rectW": 308,
+        "rectW": 374,
         "rectH": 38
       },
       "--status": {

@@ -8,7 +8,7 @@
 <title>知识库云端 · MyTemple</title>
 <link rel="manifest" href="/manifest.webmanifest" />
 <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-<link rel="stylesheet" href="/styles.css?v=cloud-10" />
+<link rel="stylesheet" href="/styles.css?v=cloud-11" />
 </head>
 <body>
 <div class="app" id="app">
@@ -318,14 +318,14 @@
   <div id="offlineBar" class="offline-bar" role="status" hidden>当前离线：已打开的笔记仍可正常阅读，上传与同步会在联网后恢复</div>
 </div>
 
-<script src="/cloud-config.js?v=cloud-10"></script>
+<script src="/cloud-config.js?v=cloud-11"></script>
 <!--
   第三方库一律同源自托管（cloud/vendor/，见 scripts/vendor-cloud.mjs）。
   这些库原先取自 cdn.jsdelivr.net，而该主机名在部分网络下 TLS 会被重置；
   登录 SDK 恰好挂在那里，加载失败会导致验证码 / 微信 / 密码登录全部不可用。
 -->
-<script src="/vendor/sdk/workbuddy-cloud-sdk.global.js?v=cloud-10"></script>
-<script src="/vendor/fflate/fflate.min.js?v=cloud-10"></script>
-<script src="/app.js?v=cloud-10" type="module"></script>
+<script src="/vendor/sdk/workbuddy-cloud-sdk.global.js?v=cloud-11"></script>
+<script src="/vendor/fflate/fflate.min.js?v=cloud-11"></script>
+<script src="/app.js?v=cloud-11" type="module"></script>
 </body>
 </html>

@@ -215,9 +215,15 @@ test("挂载钩子必须逐卡片注入，而非全局共享单例", () => {
   assert.match(ext, /const mount = \(\) =>/, "应由 onWidgetMount 派生 mount 工厂");
 });
 
-test("退出沉浸必须关闭所见即所得渲染", () => {
+test("退出沉浸必须关闭所见即所得渲染（且块级渲染只对 Markdown 生效）", () => {
   const body = fnBody(appSrc, "function setImmersiveEditing(enabled)");
-  assert.match(body, /setWysiwygEnabled\?\.\(true\)/, "进入沉浸应开启渲染");
+  // 2026-10-13 起：html / 代码 / JSON 文档也能进沉浸（界面照旧精简），
+  // 但块级渲染只对 Markdown 语义有效 —— 对源码误用会把原文解析坏。
+  assert.match(
+    body,
+    /setWysiwygEnabled\?\.\(state\.immersive && state\.currentIsMarkdown\)/,
+    "进入沉浸时块级渲染须绑定 Markdown",
+  );
   assert.match(body, /setWysiwygEnabled\?\.\(false\)/, "退出沉浸应关闭渲染");
 });
 

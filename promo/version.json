@@ -1,7 +1,7 @@
 {
-    "version":  "2.1.40",
+    "version":  "2.1.41",
     "downloadUrl":  "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
-    "latestReleaseNotes":  "桌面端「一键推送」会把笔记里引用的本机截图 / 视频一并同步到云端（此前只推文本，手机端图片全是裂图）；文档正文没变时也会补齐缺失的图片。",
-    "releaseNotes":  "v2.1.40 release. See changelog for details.",
+    "latestReleaseNotes":  "HTML 文件渲染：打开 .html 像打开网页（编辑态左源码可改可存、侧边实时预览，阅读态整页渲染并可放大全屏）；同时收紧渲染安全边界——网页内脚本已无法访问宿主页面、登录态与知识库；搜索索引按文件类型分派纯文本，不再命中 HTML 标签噪音。",
+    "releaseNotes":  "v2.1.41 release. See changelog for details.",
     "releaseDate":  "2026-10-13"
 }

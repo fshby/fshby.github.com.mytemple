@@ -48,6 +48,20 @@ function echartsLibUrl() {
 }
 
 /**
+ * 内嵌网页（Markdown 里的 ```html 完整文档 / chart 自包含页 / html-web 外部页）的沙箱策略。
+ *
+ * 不含 allow-same-origin：`allow-scripts` 与 `allow-same-origin` 同时给等于没有沙箱
+ * （OWASP 明确列为反模式）—— 帧内脚本会拿到与本页同源的权限，可以读 parent.document、
+ * 读 localStorage 里的登录态，也能直接同源请求 /api/*。去掉后帧内落到独立 opaque
+ * origin，只保留脚本执行、表单与模态框。
+ *
+ * 相关限制（去掉 same-origin 带来的真实差别很小）：srcdoc 的解析基准是
+ * about:srcdoc，相对路径资源本来就取不到；外部 CDN 的 <script>/<link>/<img>
+ * 属 no-cors 请求，不受影响。
+ */
+const HTML_DOC_SANDBOX = "allow-scripts allow-forms allow-modals";
+
+/**
  * 检测 Chart.js / ECharts JSON 配置，返回可直接在 srcdoc iframe 中渲染的完整 HTML。
  * 无法识别时返回 null。
  */
@@ -598,20 +612,20 @@ function renderMarkdown(source, options = {}) {
           // 识别失败则 fallback 为普通代码块展示 JSON
           const chartHtml = detectAndBuildChartHtml(raw);
           if (chartHtml) {
-            html.push(`<div class="html-inline-block"><iframe class="html-inline-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-popups" srcdoc="${escapeHtml(chartHtml)}"></iframe></div>`);
+            html.push(`<div class="html-inline-block"><iframe class="html-inline-frame" sandbox="${HTML_DOC_SANDBOX}" srcdoc="${escapeHtml(chartHtml)}"></iframe></div>`);
           } else {
             html.push(`<div class="code-block" data-language="chart"><span class="code-language">chart JSON</span><button class="code-copy" type="button">复制</button><pre><code class="language-json">${escapeHtml(raw)}</code></pre></div>`);
           }
         } else if (normalizedLang === "html-inline" || normalizedLang === "raw-html" || (normalizedLang === "html" && /^\s*<!doctype\s+html|<html[\s>]|<!DOCTYPE\s+HTML/i.test(raw))) {
           // 内嵌 HTML 网页：srcdoc 模式（HTML 内容直接内嵌）
-          // allow-scripts + sandbox 隔离：脚本可运行但无法访问父 DOM
-          html.push(`<div class="html-inline-block"><iframe class="html-inline-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-popups" srcdoc="${escapeHtml(raw)}"></iframe></div>`);
+          // 沙箱隔离：脚本可运行，但帧内是独立 opaque origin，访问不到父 DOM 与同源存储
+          html.push(`<div class="html-inline-block"><iframe class="html-inline-frame" sandbox="${HTML_DOC_SANDBOX}" srcdoc="${escapeHtml(raw)}"></iframe></div>`);
         } else if (normalizedLang === "html-web") {
           // iframe URL 模式：加载外部网页
           const url = String(raw || "").trim().split("\n")[0].trim();
           const safeUrl = /^https?:\/\//i.test(url) ? url : "";
           if (safeUrl) {
-            html.push(`<div class="html-inline-block"><iframe class="html-inline-frame" src="${escapeHtml(safeUrl)}" sandbox="allow-scripts allow-same-origin allow-forms allow-popups" loading="lazy"></iframe></div>`);
+            html.push(`<div class="html-inline-block"><iframe class="html-inline-frame" src="${escapeHtml(safeUrl)}" sandbox="${HTML_DOC_SANDBOX}" loading="lazy"></iframe></div>`);
           } else {
             html.push(`<div class="code-block"><pre><code class="language-text">html-web 需要一个有效 URL：https://example.com</code></pre></div>`);
           }
