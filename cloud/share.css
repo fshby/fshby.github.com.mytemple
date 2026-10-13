@@ -200,6 +200,35 @@ body {
   border-radius: var(--radius); background: #fff;
 }
 
+/* 独立 HTML 文档块（.html-doc-*）：与工作台 cloud/styles.css 同名规则同值 ——
+   同步上来的 .html 文档在分享页也按网页原样装进沙箱 iframe。 */
+.html-doc-block {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin: 1.2em 0;
+  background: var(--paper, #fff);
+}
+.html-doc-bar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px; line-height: 1.5;
+}
+.html-doc-label { flex: none; font-weight: 500; }
+.html-doc-hint {
+  flex: 1; min-width: 0; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+  color: var(--muted);
+}
+.html-doc-frame {
+  display: block; width: 100%;
+  height: clamp(320px, 60vh, 720px);
+  min-height: 320px;
+  border: none;
+  background: #fff;
+}
+
 /* 图片占位：拉取中 / 未随分享一起带走 */
 .asset-pending {
   display: block;

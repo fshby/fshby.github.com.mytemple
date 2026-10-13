@@ -11,8 +11,9 @@
 //   2. 不给 allow-popups / allow-top-navigation，帧内不能弹窗或把整个应用导航走。
 //   3. 检索用纯文本按扩展名分派（html 去标签），否则 `<div class="...">` 会成片
 //      进入倒排索引，全局搜索全是标签噪音。
-//   4. 沉浸模式的块级渲染只对 Markdown 生效；html 不进云同步（整页 HTML 会把
-//      documents.content 撑大）。
+//   4. 沉浸模式的块级渲染只对 Markdown 生效。html **进云同步**，但必须带正文
+//      大小上限，且云端按扩展名分派渲染（沙箱 iframe，不是 markdown 渲染）；
+//      json / csv 仍排除（工作区里的 json 常是含 token 的配置文件）。
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -27,6 +28,8 @@ const cssSrc = read("public/styles.css");
 const appRs = read("src-tauri/src/app.rs");
 const cloudApp = read("cloud/app.js");
 const cloudClient = read("public/modules/cloud-client.js");
+const shareSrc = read("cloud/share.js");
+const shareCss = read("cloud/share.css");
 
 // 朴素花括号计数会被字符串/模板字符串/正则里的花括号骗到
 // （如 `<span style="color:${value}">` 与 /^\{(\d+)\}|/），这里按 JS 词法跳过这些区段。
@@ -266,15 +269,98 @@ test("HTML 文档标题取 <title>，不被正文里的 # 行误判", () => {
   assert.match(titleFn, /if trimmed\.starts_with\("# "\)/, "Markdown 仍走一级标题");
 });
 
-test("HTML 不进入云同步，避免整页 HTML 撑大 documents.content", () => {
+test("HTML 文档进入云同步；json / csv 仍排除，且整页 HTML 有正文上限", () => {
+  // 2026-10-13 用户决策：桌面端本就把 .html 当一等公民（沙箱预览 + 去标签检索），
+  // 同步白名单不跟上就会出现「本机能看、云端永远没有」。json 反向排除：工作区里的
+  // json 常是含 token / 密钥的配置文件，自动上云等于开一条泄漏通道。
   for (const [name, src] of [
     ["cloud/app.js", cloudApp],
     ["public/modules/cloud-client.js", cloudClient],
   ]) {
     const m = /const TEXT_EXT = (\/[^\n]*?\/i);/.exec(src);
     assert.ok(m, `${name} 应有 TEXT_EXT 白名单`);
-    assert.ok(!/html/.test(m[1]), `${name} 的同步白名单不得含 html（${m[1]}）`);
     assert.match(m[1], /md/, `${name} 仍须同步 Markdown`);
+    assert.match(m[1], /html\?/, `${name} 的同步白名单必须放行 html（${m[1]}）`);
+    assert.match(m[1], /xhtml/, `${name} 要连 .xhtml 一起放行（${m[1]}）`);
+    assert.doesNotMatch(m[1], /json/, `${name} 不得放行 json：可能是含密钥的配置（${m[1]}）`);
+    assert.doesNotMatch(m[1], /csv/, `${name} 不得放行 csv（${m[1]}）`);
+    assert.match(src, /const HTML_DOC_EXT = \/\\\.\(html\?\|xhtml\)\$\/i;/,
+      `${name} 需要独立的 HTML 文档判定（渲染分派用）`);
+  }
+
+  // 正文上限：documents.content 是 text 列，一篇几十 MB 的整页 HTML 会拖死列表与检索
+  assert.match(cloudClient, /const HTML_DOC_MAX_BYTES = [\d_]+;/,
+    "桌面内核必须有 HTML 正文上限");
+  assert.match(cloudClient, /HTML_DOC_EXT\.test\(item\.rel\) && bytes > HTML_DOC_MAX_BYTES/,
+    "超限的 HTML 必须在上传前拦掉，而不是传上去再说");
+  assert.match(cloudClient, /HTML_DOC_MAX_BYTES \/ 1024/, "摘要里要报出上限值，便于用户判断");
+});
+
+test("云端两处 HTML 文档渲染：沙箱令牌与桌面端一致，且都用字符串级资源改写", () => {
+  // 沙箱帧是 opaque origin → 父页摸不到帧内 DOM。markdown 正文那套「渲染后替换
+  // img.src」对 HTML 文档**做不到**，只能塞进 srcdoc 之前做字符串级改写。
+  const sandboxOf = (src) => {
+    const m = /(?:const|var) HTML_DOC_SANDBOX = "([^"]+)";/.exec(src);
+    assert.ok(m, "应有 HTML_DOC_SANDBOX 常量");
+    return m[1];
+  };
+  const desk = sandboxOf(appSrc);
+  assert.doesNotMatch(desk, /allow-same-origin/, "桌面端沙箱绝不含 allow-same-origin");
+  for (const [name, src] of [["cloud/app.js", cloudApp], ["cloud/share.js", shareSrc]]) {
+    assert.equal(sandboxOf(src), desk, `${name} 的沙箱令牌必须与桌面端逐字一致`);
+    assert.match(src, /(?:const|var) HTML_FRAME_RESIZE_SCRIPT = '<script>/, `${name} 要注入高度上报脚本`);
+    assert.match(src, /HTML_FRAME_RESIZE_SCRIPT \+ content/, `${name} 的 srcdoc 必须前置上报脚本`);
+    assert.match(src, /function rewriteHtmlAssetSrc\(html, lookup\)/, `${name} 必须做字符串级资源改写`);
+    assert.ok(src.includes("(?:img|video|source)"), `${name} 改写的标签集合要与 extractAssetRefs 一致`);
+    assert.match(src, /iframe\.html-doc-frame/, `${name} 的高度监听要认 .html-doc-frame`);
+  }
+  // 样式：两处都要有 .html-doc-* 规则，否则 iframe 落到浏览器默认 300×150
+  for (const [name, css] of [["cloud/styles.css", read("cloud/styles.css")], ["cloud/share.css", shareCss]]) {
+    for (const cls of ["html-doc-block", "html-doc-bar", "html-doc-frame"]) {
+      assert.match(css, new RegExp(`\\.${cls} \\{`), `${name} 缺 .${cls} 样式`);
+    }
+  }
+});
+
+/** 把某个文件里的「正则常量 + rewriteHtmlAssetSrc」抽出来单独求值（两个文件都是 IIFE，不能直接 import）。 */
+function loadRewriter(src) {
+  const i = src.indexOf("HTML_ASSET_SRC_RE = ");
+  const j = src.indexOf("function rewriteHtmlAssetSrc");
+  assert.ok(i >= 0 && j > i, "找不到 HTML_ASSET_SRC_RE / rewriteHtmlAssetSrc");
+  const constLine = src.slice(i, src.indexOf("\n", i));
+  // 花括号计数取函数全文：函数体里没有带花括号的字符串或正则，朴素计数即可
+  let depth = 0, k = src.indexOf("{", j);
+  for (let p = k; p < src.length; p += 1) {
+    if (src[p] === "{") depth += 1;
+    else if (src[p] === "}") { depth -= 1; if (depth === 0) { k = p; break; } }
+  }
+  const fnText = src.slice(j, k + 1);
+  return new Function(`${constLine}\n${fnText}\nreturn rewriteHtmlAssetSrc;`)();
+}
+
+test("资源改写函数：两端行为一致，且不碰外链 / 不改写未命中的引用", () => {
+  const work = loadRewriter(cloudApp);
+  const share = loadRewriter(shareSrc);
+  const resolve = (ref) => (ref === "source/shot.webp" ? "https://cdn.example.test/sig/x.webp" : "");
+
+  const cases = [
+    ['<img src="source/shot.webp">', '<img src="https://cdn.example.test/sig/x.webp">'],
+    ["<img src='source/shot.webp'>", "<img src='https://cdn.example.test/sig/x.webp'>"],
+    ['<video src="source/shot.webp" controls>', '<video src="https://cdn.example.test/sig/x.webp" controls>'],
+    // 外链 / 未命中（本机没有这张图）必须原样保留：看不出改了，也不至于把内容改坏
+    ['<img src="https://other.test/a.png">', '<img src="https://other.test/a.png">'],
+    ['<img src="source/404.webp">', '<img src="source/404.webp">'],
+    // 单双引号必须原样回填，否则 HTML 结构会被破坏
+    ['<img alt="a" src="source/shot.webp" class="b">',
+      '<img alt="a" src="https://cdn.example.test/sig/x.webp" class="b">'],
+  ];
+  for (const [input, want] of cases) {
+    assert.equal(work(input, resolve), want, `工作台改写错误：${input}`);
+    assert.equal(share(input, resolve), want, `分享页改写错误：${input}`);
+  }
+  // 两端逐例结果完全一致（同一篇笔记在两处渲染出同一个页面）
+  for (const [input] of cases) {
+    assert.equal(work(input, resolve), share(input, resolve), `两端改写结果分叉：${input}`);
   }
 });
 

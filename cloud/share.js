@@ -15,7 +15,7 @@
   "use strict";
 
   var CFG = window.__MT_CLOUD__ || {};
-  var ASSET_V = "cloud-14";
+  var ASSET_V = "cloud-15";
   var ENDPOINT = String(CFG.endpoint || "").replace(/\/+$/, "");
   var REST = ENDPOINT + "/.cloud/database/rest/v1";
   var HDR = { apikey: CFG.publishableKey || "", "X-Wb-Webapp-Access-Key": CFG.publishableKey || "" };
@@ -94,6 +94,79 @@
       .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
 
+  /* ── 独立 HTML 文档（.html/.htm/.xhtml）─────────────────────
+   * 同步上来的网页文档不走 markdown 渲染，而是按原样装进沙箱 iframe。三条与工作台
+   * 逐字同源的约束（改动任何一条都要同步改 cloud/app.js）：
+   *   1) 沙箱令牌只保留脚本/表单/模态框，**绝不含 allow-same-origin**；
+   *   2) srcdoc 前置高度上报脚本，否则长网页挤在固定小窗里嵌套滚动；
+   *   3) 资源引用只能**字符串级**改写 —— 沙箱帧是 opaque origin，父页摸不到帧内 DOM。
+   * 分享页的图片是随快照一起落在 shared_assets 里的 base64（云存储对匿名访客不可读），
+   * 所以这里先把该分享的全部资源行取回来建 rel_path → data URL 映射，再改写。 */
+  var HTML_DOC_EXT = /\.(html?|xhtml)$/i;
+  var HTML_DOC_SANDBOX = "allow-scripts allow-forms allow-modals";
+  var HTML_FRAME_RESIZE_SCRIPT = '<script>(function(){function p(){var d=document.documentElement,b=document.body;var h=Math.max(d?d.scrollHeight:0,b?b.scrollHeight:0);try{parent.postMessage({type:"mt-html-frame-height",h:Math.ceil(h)},"*")}catch(_){}}function s(){p();if(window.ResizeObserver){try{new ResizeObserver(p).observe(document.documentElement)}catch(_){}}else{setInterval(p,500)}}if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",s)}else{s()}})();</script>';
+  var HTML_ASSET_SRC_RE = /(<\s*(?:img|video|source)\b[^>]*?\bsrc\s*=\s*)(["'])([^"']+)\2/gi;
+
+  /** 引用 → 绝对地址；返回空串表示放弃改写（保持原样）。与工作台 rewriteHtmlAssetSrc 同源。 */
+  function rewriteHtmlAssetSrc(html, lookup) {
+    return String(html || "").replace(HTML_ASSET_SRC_RE, function (all, pre, q, val) {
+      var url = "";
+      try { url = lookup(val) || ""; } catch (_) { url = ""; }
+      return url ? pre + q + url + q : all;
+    });
+  }
+
+  /** 把这篇分享带走的全部图片读成 rel_path → data URL（一次请求，最多 60 张）。 */
+  async function loadShareAssetMap(id) {
+    var map = {};
+    try {
+      var rows = await rest("/shared_assets?share_id=eq." + qs(id)
+        + "&select=rel_path,mime,bytes_b64&limit=" + ASSET_NODE_MAX);
+      (rows || []).forEach(function (r) {
+        if (r && r.rel_path && r.bytes_b64) {
+          map[r.rel_path] = "data:" + (r.mime || "image/webp") + ";base64," + r.bytes_b64;
+        }
+      });
+    } catch (_) { /* 取不到就保持相对引用（必然 404），不阻断阅读 */ }
+    return map;
+  }
+
+  function renderHtmlDoc(container, source, docRel, assetMap) {
+    var block = document.createElement("div");
+    block.className = "html-doc-block";
+    var bar = document.createElement("div");
+    bar.className = "html-doc-bar";
+    var label = document.createElement("span");
+    label.className = "html-doc-label";
+    label.textContent = "网页预览";
+    var hint = document.createElement("span");
+    hint.className = "html-doc-hint";
+    var hasAsset = false;
+    for (var k in assetMap) { if (Object.prototype.hasOwnProperty.call(assetMap, k)) { hasAsset = true; break; } }
+    hint.textContent = hasAsset
+      ? "按网页原样加载；随分享带走的图片可正常显示"
+      : "按网页原样加载；相对路径资源不可用";
+    bar.appendChild(label);
+    bar.appendChild(hint);
+
+    var frame = document.createElement("iframe");
+    frame.className = "html-doc-frame";
+    frame.setAttribute("sandbox", HTML_DOC_SANDBOX);
+    frame.setAttribute("referrerpolicy", "no-referrer");
+    frame.setAttribute("title", "HTML 文档预览");
+    var content = rewriteHtmlAssetSrc(source, function (ref) {
+      var cands = assetCandidates(ref, docRel);
+      for (var i = 0; i < cands.length; i++) {
+        if (assetMap[cands[i]]) return assetMap[cands[i]];
+      }
+      return "";
+    });
+    frame.srcdoc = HTML_FRAME_RESIZE_SCRIPT + content;
+    block.appendChild(bar);
+    block.appendChild(frame);
+    container.replaceChildren(block);
+  }
+
   /* ── Markdown：与工作台同一份 worker ───────────────────── */
   var worker = null;
   function ensureWorker() {
@@ -143,7 +216,7 @@
       if (!d || d.type !== "mt-html-frame-height") return;
       var h = Number(d.h);
       if (!isFinite(h) || h <= 0) return;
-      var frames = document.querySelectorAll("iframe.html-inline-frame");
+      var frames = document.querySelectorAll("iframe.html-inline-frame, iframe.html-doc-frame");
       Array.prototype.forEach.call(frames, function (frame) {
         if (!frame.isConnected || frame.contentWindow !== event.source) return;
         var clamped = Math.min(Math.max(Math.ceil(h) + 12, 240), 20000);
@@ -353,6 +426,18 @@
     if (row.owner_name) bits.push("由 " + row.owner_name + " 分享");
     el.meta.textContent = bits.join(" · ");
 
+    el.loading.hidden = true;
+    el.stage.hidden = false;
+
+    if (HTML_DOC_EXT.test(row.rel_path || "")) {
+      // 独立 HTML 文档：按网页原样装进沙箱 iframe。图片是随快照带走的 base64，
+      // 所以先把整份资源表取回来再改写（沙箱帧内父页摸不到 DOM，只能字符串级改）。
+      var assetMap = await loadShareAssetMap(id);
+      el.body.innerHTML = "";
+      renderHtmlDoc(el.body, row.content || "", row.rel_path || "", assetMap);
+      return;
+    }
+
     var html;
     try {
       html = await renderMarkdown(row.content || "");
@@ -360,8 +445,6 @@
       html = '<pre class="fallback-pre">' + escapeHtml(row.content || "") + "</pre>";
     }
     el.body.innerHTML = html;
-    el.loading.hidden = true;
-    el.stage.hidden = false;
 
     await decorate(el.body);
     wireAssets(el.body, id, row.rel_path || "");

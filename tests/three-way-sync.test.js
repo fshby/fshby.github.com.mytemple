@@ -722,6 +722,102 @@ test("引用写成本文档同目录的相对路径时，候选要依次试而�
     "对象路径要用真正命中的那个候选");
 });
 
+/* ══ 独立 HTML 文档同步（2026-10-13 用户决策：放开 html，json/csv 仍排除）════
+ *
+ * 背景：桌面端本就把 .html 当一等公民（沙箱预览、去标签检索、索引收录），
+ * 只有同步白名单没跟上 → 「本机能看、云端永远没有」。放开后必须同时锁住三件事：
+ *   1) 正文按原样同步、标题取 <title>（不是正文里的 # 行）；
+ *   2) 文档里 <img src> 引用的本机图片一起补传（否则云端是一堆破图）；
+ *   3) 超大的整页 HTML 不许上传（documents.content 是 text，一篇能拖死列表与检索）。
+ */
+
+const HTML_DOC = [
+  "<!doctype html>",
+  "<html><head><title>网页笔记标题</title></head>",
+  "<body><h1>这是正文里的一级标题，不该当文档标题</h1>",
+  "<img src=\"source/shot.webp\" alt=\"截图\"></body></html>",
+  "",
+].join("\n");
+
+test("推送：.html 文档与 Markdown 一视同仁地同步，标题取 <title>", async () => {
+  const cloud = makeCloud();
+  const { } = setup({
+    files: { [`${WS_ID}/hello.html`]: { content: HTML_DOC, modified: 1000 } },
+    cloud,
+  });
+
+  const s = await mod.syncCloud({ mode: "push" });
+
+  assert.equal(s.push, 1, `html 文档应上传，实测 push=${s.push}`);
+  const row = cloud.row("hello.html");
+  assert.ok(row, "云端应有 hello.html 一行");
+  assert.equal(row.title, "网页笔记标题", "<title> 优先于正文里的 # 行");
+  assert.equal(row.content, HTML_DOC, "正文按原样同步，不做格式转换");
+});
+
+test("推送：html 文档里 <img src> 引用的本机图片也会补传（否则云端全是破图）", async () => {
+  const cloud = makeCloud();
+  const { } = setup({
+    files: { [`${WS_ID}/hello.html`]: { content: HTML_DOC, modified: 1000 } },
+    cloud,
+    localOpts: { sources: { "source/shot.webp": PNG } },
+  });
+
+  const s = await mod.syncCloud({ mode: "push" });
+
+  assert.equal(s.push, 1);
+  assert.equal(s.assetPush, 1, `应补传 1 张，实测 ${s.assetPush}（missing=${s.assetMissing}）`);
+  assert.deepEqual(cloud.uploads.map((u) => u.path), [IMG_OBJ]);
+});
+
+test("拉取：云端新增的 .html 文档会写回本机", async () => {
+  const cloud = makeCloud();
+  cloud.seed("docs/hello.html", HTML_DOC);
+  const { localFiles } = setup({ files: {}, cloud });
+
+  const s = await mod.syncCloud({});
+
+  assert.equal(s.pull, 1, `应拉取 1 篇，实测 ${s.pull}`);
+  assert.equal(
+    localFiles.get(`${WS_ID}/docs/hello.html`).content,
+    HTML_DOC,
+    "子目录里的 html 也要落到同一相对路径",
+  );
+});
+
+test("超过上限的 HTML 文档：跳过并计数，不把云端正文撑爆", async () => {
+  const cloud = makeCloud();
+  const huge = "<html><body>" + "x".repeat(1_300_000) + "</body></html>";
+  const { } = setup({
+    files: { [`${WS_ID}/big.html`]: { content: huge, modified: 1000 } },
+    cloud,
+  });
+
+  const s = await mod.syncCloud({ mode: "push" });
+
+  assert.equal(s.push, 0, "超限不该上传");
+  assert.equal(s.docTooBig, 1, `应记为 1 个超限，实测 ${s.docTooBig}`);
+  assert.equal(cloud.row("big.html"), undefined, "云端不该出现这一行");
+  assert.match(mod.summarize(s), /1 个 HTML 文档过大未上传/);
+});
+
+test("json / csv 仍不上云（工作区里的 json 常是含密钥的配置文件）", async () => {
+  const cloud = makeCloud();
+  const { } = setup({
+    files: {
+      [`${WS_ID}/config.json`]: { content: "{\"token\":\"secret\"}", modified: 1000 },
+      [`${WS_ID}/data.csv`]: { content: "a,b\n1,2\n", modified: 1000 },
+    },
+    cloud,
+  });
+
+  const s = await mod.syncCloud({ mode: "push" });
+
+  assert.equal(s.push, 0, "json / csv 不该进同步集合");
+  assert.equal(s.localCount, 0, `白名单里不该含 json/csv，实测 localCount=${s.localCount}`);
+  assert.equal(cloud.tables.documents.length, 0);
+});
+
 /* ── 两端同规则（静态契约）────────────────────────────────────
  * 同一篇笔记在桌面内核与云端工作台必须解析出**同一个**对象路径，否则会出现
  * 「桌面推到 A、云端找 B」的互相看不见。这里把两个文件里的实现抽出来逐字比对。 */

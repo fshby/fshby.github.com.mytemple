@@ -42,7 +42,24 @@ const CFG = (typeof window !== "undefined" && window.__MT_CLOUD__) || {};
 /** 云端工作台地址（与 cloud-config.js 的 endpoint 同源）。 */
 export const CLOUD_WORKBENCH_URL = "https://mytemple-cloud.app.workbuddy.host/";
 
-const TEXT_EXT = /\.(md|markdown|mdown|mkd|txt)$/i;
+/* 文档类白名单（**两端逐字同源**：cloud/app.js 顶部有一份完全相同的拷贝，
+ *  tests/three-way-sync.test.js 会逐字比对，防两端算出不同的可同步集合）。
+ *
+ * 为什么单列 html（2026-10-13 用户决策）：桌面端早就把独立 HTML 文档当一等公民
+ * —— 沙箱 iframe 预览（app.js HTML_DOC_SANDBOX）、去标签检索（app.rs plain_text_for）、
+ * 索引照常收录。只有这份白名单没跟上，于是「本机能看、云端永远没有」。
+ * 云端已按扩展名分派渲染（markdown 走 worker，html 走沙箱 iframe），故放开。
+ *
+ * json / csv 仍**刻意排除**：工作区里的 .json 常是含 token / 密钥的配置文件，
+ * 自动上云等于开一条泄漏通道（RLS 只按 owner 隔离，分享或失号即外泄）；
+ * csv 没有阅读端渲染分支，放上去只是一堆逗号文本。
+ */
+const TEXT_EXT = /\.(md|markdown|mdown|mkd|txt|html?|xhtml)$/i;
+/** 独立 HTML 文档：渲染方式与 Markdown 不同（沙箱 iframe，不是 markdown 渲染）。 */
+const HTML_DOC_EXT = /\.(html?|xhtml)$/i;
+/** 独立 HTML 文档的正文上限。整页 HTML 可能几十 MB，而 documents.content 是 text ——
+ *  一篇就能把云端列表与检索拖死（本机索引对 >10MB 的文件本来也不收录，这里更严）。 */
+const HTML_DOC_MAX_BYTES = 1_200_000;
 const UPSERT_BATCH_MAX_DOCS = 20;
 const UPSERT_BATCH_MAX_BYTES = 1_200_000;
 const INDEX_PAGE = 1000;
@@ -593,7 +610,17 @@ async function sha256Hex(text) {
 }
 
 function titleFrom(text, relPath) {
-  const m = /^\s*#{1,6}\s+(.+?)\s*$/m.exec(text || "");
+  const src = String(text || "");
+  // 独立 HTML 文档的标题在 <title> 里；正文里的 `# 一级标题` 多半是注释或示例代码，
+  // 优先级必须低于 <title>（与桌面端 app.rs extract_title 同一分派原则）。
+  if (HTML_DOC_EXT.test(relPath)) {
+    const t = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(src);
+    if (t) {
+      const name = t[1].replace(/\s+/g, " ").trim();
+      if (name) return name.slice(0, 120);
+    }
+  }
+  const m = /^\s*#{1,6}\s+(.+?)\s*$/m.exec(src);
   if (m) return m[1].replace(/[*_`~[\]]/g, "").slice(0, 120);
   const base = String(relPath).split("/").pop() || relPath;
   return base.replace(/\.[^.]+$/, "");
@@ -689,6 +716,8 @@ export async function syncCloud({ mode = "both", workspaceId, onProgress } = {})
   const summary = {
     workspace, mode, push: 0, pull: 0, conflict: 0, tombstone: 0,
     skipped: 0, cloudDeleted: 0, failed: 0, notes: [],
+    // 超过上限被跳过的独立 HTML 文档数（Markdown 不受此限）。
+    docTooBig: 0,
     // 图片 / 视频：即使这一轮没扫（核对戳命中）也是 0，而不是 undefined ——
     // 面板与 summarize 直接读这几个字段做判断，缺字段会变成「undefined 张」。
     assetPush: 0, assetExists: 0, assetMissing: 0, assetTooBig: 0, assetFailed: 0,
@@ -800,6 +829,13 @@ export async function syncCloud({ mode = "both", workspaceId, onProgress } = {})
         // 索引与正文之间被别处同步过，跳过
         next[item.rel] = sha;
         summary.skipped += 1;
+        continue;
+      }
+      // 独立 HTML 文档的正文上限：整页 HTML 可能几十 MB，而我方 documents.content
+      // 是 text —— 放上去会把云端列表与检索一起拖慢（Markdown 不设限，保持既有行为）。
+      if (HTML_DOC_EXT.test(item.rel) && bytes > HTML_DOC_MAX_BYTES) {
+        summary.docTooBig += 1;
+        summary.notes.push(`HTML 文档超过 ${Math.round(HTML_DOC_MAX_BYTES / 1024)}KB 未上传：${item.rel}`);
         continue;
       }
       prepared.push({
@@ -997,6 +1033,7 @@ export function summarize(summary) {
   if (summary.assetMissing) parts.push(`${summary.assetMissing} 张引用在本机找不到`);
   if (summary.assetTooBig) parts.push(`${summary.assetTooBig} 张超过 12MB 未上传`);
   if (summary.assetFailed) parts.push(`图片失败 ${summary.assetFailed} 张`);
+  if (summary.docTooBig) parts.push(`${summary.docTooBig} 个 HTML 文档过大未上传`);
   if (summary.failed) parts.push(`失败 ${summary.failed}`);
   if (parts.length) {
     if (summary.skipped) parts.push(`未变 ${summary.skipped}`);
@@ -1018,8 +1055,8 @@ export function summarize(summary) {
     return L
       ? `没有需要上传的改动（本机 ${L} 篇，云端已有 ${C} 篇）`
       : (C
-        ? `本机此工作区没有 Markdown / 文本文件（云端已有 ${C} 篇，可用「拉取」取回）`
-        : "本机此工作区没有 Markdown / 文本文件，没有可上传的内容");
+        ? `本机此工作区没有可同步的文档（云端已有 ${C} 篇，可用「拉取」取回）`
+        : "本机此工作区没有可同步的文档，没有可上传的内容");
   }
   if (L && !C) return `云端此分区还是空的：用「推送本机 → 云端」可上传本机 ${L} 篇`;
   if (!L && C) return `本机此工作区是空的：用「拉取云端更新」可取回云端 ${C} 篇`;

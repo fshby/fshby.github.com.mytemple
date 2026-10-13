@@ -447,8 +447,8 @@ export async function openCloudPanel() {
     renderWsSelect();
     $('[data-fact="root"]').textContent = prettyRoot(localData.ws && localData.ws.root);
     $('[data-fact="count"]').textContent = localData.files.length
-      ? `${localData.files.length} 篇 Markdown / 文本`
-      : "此工作区没有 Markdown / 文本文件";
+      ? `${localData.files.length} 篇可同步文档`
+      : "此工作区没有可同步的文档";
     const part = localData.ws ? (localData.ws.name || localData.ws.id) : null;
     const last = lastSyncAt(part) || lastSyncAt(null);
     $('[data-fact="last"]').textContent = last ? fmtTime(last) : "尚未同步";

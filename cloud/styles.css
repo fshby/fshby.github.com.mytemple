@@ -478,6 +478,37 @@ details.ws > .doc-list > .doc-item > .doc-link { padding-left: 34px; }
   border: 1px solid var(--line);
 }
 
+/* ── 独立 HTML 文档块（.html-doc-*）─────────────────────────────
+ * 同步上来的 .html 文档不走 markdown 渲染，而是按网页原样装进沙箱 iframe。
+ * 高度靠帧内 postMessage 上报撑开（cloud/app.js 的 installHtmlFrameAutoHeight），
+ * 这里的 height 只是脚本尚未上报时的兜底视口。 */
+.html-doc-block {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--bg-elevated);
+}
+.html-doc-bar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+  background: var(--paper);
+  font-size: 12px; line-height: 1.5;
+}
+.html-doc-label { flex: none; font-weight: 500; color: var(--text); }
+.html-doc-hint {
+  flex: 1; min-width: 0; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+  color: var(--muted);
+}
+.html-doc-frame {
+  display: block; width: 100%;
+  height: clamp(320px, 60vh, 720px);
+  min-height: 320px;
+  border: none;
+  background: #fff;
+}
+
 /* ── Markdown 正文排版 ────────────────────────────────── */
 .markdown-body {
   font-size: 16.5px;

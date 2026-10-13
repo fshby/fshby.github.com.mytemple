@@ -11,9 +11,25 @@
 
 const CFG = window.__MT_CLOUD__ || {};
 const SDK = window.WorkBuddyCloud;
-const TEXT_EXT = /\.(md|markdown|mdown|mkd|txt)$/i;
-/* 文档里 `![](source/x.webp)` 引用的静态资源。图片走云存储，文档正文仍只存文本 ——
- * 否则一篇带 20 张截图的笔记会把 content 撑成几十兆，列表与检索都会被拖死。 */
+/* 文档类白名单（**两端逐字同源**：public/modules/cloud-client.js 顶部有一份完全相同的
+ * 拷贝，tests/three-way-sync.test.js 逐字比对，防两端算出不同的可同步集合）。
+ *
+ * 独立 HTML 文档（.html/.htm/.xhtml）在云端**不走 markdown 渲染**，而是包进沙箱 iframe
+ * 按网页原样加载（见 renderHtmlDocRow）；桌面端本就把它们当一等公民（沙箱预览 + 去标签
+ * 检索），放开同步是为了消除「本机能看、云端永远没有」的割裂感（2026-10-13 用户决策）。
+ *
+ * json / csv 仍**刻意排除**：工作区里的 .json 常是含 token / 密钥的配置文件，自动上云
+ * 等于开一条泄漏通道；csv 也没有阅读端渲染分支。 */
+const TEXT_EXT = /\.(md|markdown|mdown|mkd|txt|html?|xhtml)$/i;
+/** 独立 HTML 文档：渲染方式与 Markdown 不同（沙箱 iframe）。 */
+const HTML_DOC_EXT = /\.(html?|xhtml)$/i;
+/** 沙箱令牌与桌面端 app.js 的 HTML_DOC_SANDBOX 逐字一致：只保留脚本执行、表单与
+ *  模态框。**绝不含 allow-same-origin** —— 与 allow-scripts 同给等于没沙箱
+ *  （帧内可读 parent / localStorage / 应用桥）。 */
+const HTML_DOC_SANDBOX = "allow-scripts allow-forms allow-modals";
+/** 注入到 srcdoc 最前面的高度上报脚本（与桌面端 app.js 逐字同源）：沙箱帧是 opaque
+ *  origin，父页量不到内容高度，只能由帧内自己把 scrollHeight postMessage 出来。 */
+const HTML_FRAME_RESIZE_SCRIPT = '<script>(function(){function p(){var d=document.documentElement,b=document.body;var h=Math.max(d?d.scrollHeight:0,b?b.scrollHeight:0);try{parent.postMessage({type:"mt-html-frame-height",h:Math.ceil(h)},"*")}catch(_){}}function s(){p();if(window.ResizeObserver){try{new ResizeObserver(p).observe(document.documentElement)}catch(_){}}else{setInterval(p,500)}}if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",s)}else{s()}})();</script>';
 const ASSET_EXT = /\.(png|jpe?g|jfif|gif|webp|avif|bmp|ico|svg|mp4|m4v|webm|mov|ogv)$/i;
 const VIDEO_EXT = /\.(mp4|m4v|webm|mov|ogv)$/i;
 const SKIP_DIR = /(^|\/)(__MACOSX|\.git|node_modules|\.obsidian|\.trash)(\/|$)/i;
@@ -35,7 +51,7 @@ const UPSERT_BATCH_MAX_DOCS = 20;
 const UPSERT_BATCH_MAX_BYTES = 1_200_000;
 
 /* 静态资源版本戳：改动 cloud/ 下被页面引用的任何文件时，与 index.html 的三件套一起递增。 */
-const ASSET_V = "cloud-14";
+const ASSET_V = "cloud-15";
 
 /* 第三方库一律同源自托管，见 scripts/vendor-cloud.mjs。
  * 绝不改回第三方 CDN —— 见该脚本头部注释：cdn.jsdelivr.net 在部分网络下 TLS 会被重置，
@@ -329,6 +345,29 @@ function extractAssetRefs(md) {
 /** 本机资源 URL：与桌面端同语义 —— 笔记里写 `source/x.webp`，本机就是 `/<root>/source/x.webp`。 */
 function localAssetUrl(rel) {
   return LOCAL_ORIGIN + "/" + String(rel).split("/").map(encodeURIComponent).join("/");
+}
+
+/** HTML 文档里的资源属性（与 extractAssetRefs 的标签集合必须一致：**上传什么就改写什么**，
+ *  否则会出现「图传到云了，页面里还是相对路径」或反过来）。 */
+const HTML_ASSET_SRC_RE = /(<\s*(?:img|video|source)\b[^>]*?\bsrc\s*=\s*)(["'])([^"']+)\2/gi;
+
+/**
+ * 把 HTML 文档正文里的相对资源引用换成可直接加载的绝对地址。
+ *
+ * 为什么必须**字符串级**改写、不能像 markdown 那样渲染后再改 DOM：
+ * 独立 HTML 文档渲染在沙箱 iframe（opaque origin）里，父页 `querySelector` 摸不到
+ * 帧内节点（这正是沙箱的意义），所以只能在塞进 srcdoc 之前先改。
+ * 没有命中的引用原样保留 —— 相对路径在云端必然 404，但至少不掩盖原始内容。
+ *
+ * @param {string} html 原始 HTML 源码
+ * @param {(ref:string)=>string} lookup 引用 → 绝对地址；返回空串表示放弃改写
+ */
+function rewriteHtmlAssetSrc(html, lookup) {
+  return String(html || "").replace(HTML_ASSET_SRC_RE, (all, pre, q, val) => {
+    let url = "";
+    try { url = lookup(val) || ""; } catch (_) { url = ""; }
+    return url ? pre + q + url + q : all;
+  });
 }
 
 /**
@@ -1027,9 +1066,20 @@ function rememberDoc(id, content) {
   }
 }
 
+/** 独立 HTML 文档取检索片段前先剥掉标签与脚本样式（与桌面端 app.rs strip_html 同意图）：
+ *  否则片段里全是 `<div class=…>` 噪声，看不出命中在哪句话上。 */
+function stripTagsForSearch(s) {
+  return String(s || "")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/gi, " ");
+}
+
 /** 取正文里第一处命中的上下文，命中词用 <mark> 标出；markdown 标记先抹平。 */
-function buildSnippet(content, q) {
-  const flat = String(content || "").replace(/\r\n?/g, "\n");
+function buildSnippet(content, q, isHtml) {
+  const flat = (isHtml ? stripTagsForSearch(content) : String(content || "")).replace(/\r\n?/g, "\n");
   const at = flat.toLowerCase().indexOf(q.toLowerCase());
   if (at < 0) return "";
   const WIN_BEFORE = 34, WIN_AFTER = 62;
@@ -1075,7 +1125,7 @@ async function runSearch(q) {
   for (const d of state.docs) {
     const cached = state.docCache.get(String(d.id));
     if (cached && cached.toLowerCase().includes(lc)) {
-      snippets.set(String(d.id), buildSnippet(cached, q));
+      snippets.set(String(d.id), buildSnippet(cached, q, HTML_DOC_EXT.test(d.rel_path || "")));
     }
   }
 
@@ -1117,7 +1167,9 @@ async function runSearch(q) {
         const content = got.get(id);
         if (typeof content !== "string") continue;
         rememberDoc(id, content);
-        if (content.toLowerCase().includes(lc)) snippets.set(id, buildSnippet(content, q));
+        if (content.toLowerCase().includes(lc)) {
+          snippets.set(id, buildSnippet(content, q, HTML_DOC_EXT.test(d.rel_path || "")));
+        }
       }
     } catch (_) { /* 补拉失败就只显示标题，不阻断搜索 */ }
   }
@@ -1179,8 +1231,9 @@ function renderMarkdownInWorker(source) {
   });
 }
 
-/* 沙箱帧高度自适应：worker 渲染的 html / chart 围栏 iframe 会在 srcdoc 最前置一段上报脚本，
- * 帧内把 scrollHeight postMessage 出来，这里把对应 iframe 撑到内容高度。
+/* 沙箱帧高度自适应：worker 渲染的 html / chart 围栏 iframe、以及独立 HTML 文档预览
+ * （.html-doc-frame）都会在 srcdoc 最前置一段上报脚本，帧内把 scrollHeight postMessage
+ * 出来，这里把对应 iframe 撑到内容高度。
  * 必须校验 event.source === frame.contentWindow，只认自家帧；高度 clamp 防异常值。 */
 (function installHtmlFrameAutoHeight() {
   if (window.__mtHtmlFrameAutoHeightInstalled) return;
@@ -1190,7 +1243,7 @@ function renderMarkdownInWorker(source) {
     if (!d || d.type !== "mt-html-frame-height") return;
     const h = Number(d.h);
     if (!Number.isFinite(h) || h <= 0) return;
-    document.querySelectorAll("iframe.html-inline-frame").forEach((frame) => {
+    document.querySelectorAll("iframe.html-inline-frame, iframe.html-doc-frame").forEach((frame) => {
       if (!frame.isConnected || frame.contentWindow !== event.source) return;
       const clamped = Math.min(Math.max(Math.ceil(h) + 12, 240), 20000);
       frame.style.height = clamped + "px";
@@ -1320,6 +1373,18 @@ async function openDoc(id) {
   el.docPath.textContent = `${data.workspace} / ${data.rel_path} · ${fmtTime(data.updated_at)}`;
   state.docSource = data.content || "";
   rememberDoc(id, state.docSource);
+  // 按扩展名分派渲染：独立 HTML 文档不能走 markdown 渲染（整页标签会被当正文
+  // 渲染成一段乱码文本），改用沙箱 iframe 按网页原样加载（与桌面端同款沙箱）。
+  if (HTML_DOC_EXT.test(data.rel_path || "")) {
+    try {
+      await renderHtmlDocRow(data);
+      return;
+    } catch (err) {
+      el.docBody.innerHTML = `<pre class="fallback-pre">${escapeHtml(data.content || "")}</pre>`;
+      toast("网页预览失败，已降级为源码：" + String(err && err.message || err), "error");
+      return;
+    }
+  }
   try {
     const html = await renderMarkdownInWorker(data.content || "");
     el.docBody.innerHTML = html;
@@ -1330,6 +1395,68 @@ async function openDoc(id) {
     el.docBody.innerHTML = `<pre class="fallback-pre">${escapeHtml(data.content || "")}</pre>`;
     toast("渲染降级为纯文本：" + String(err && err.message || err), "error");
   }
+}
+
+/**
+ * 渲染独立 HTML 文档：沙箱 iframe + 说明栏。
+ *
+ * 两条不可省的约束：
+ *   1) srcdoc 前置高度上报脚本，父页把帧撑到内容高度（否则整页网页挤在固定小窗里）；
+ *   2) 资源引用必须先做**字符串级**改写再塞进去 —— 沙箱帧是 opaque origin，父页
+ *      摸不到帧内 DOM，做不到「渲染后再替换 src」（markdown 那条路可以，这条不行）。
+ */
+async function renderHtmlDocRow(row) {
+  const uid = state.session && state.session.user && state.session.user.id;
+  const docRel = row.rel_path || "";
+  const source = row.content || "";
+
+  // 先把引用逐个解析成云存储对象路径，再一次性批量签名（逐个签名会打爆请求数）。
+  const plan = new Map();
+  const allPaths = new Set();
+  for (const ref of extractAssetRefs(source)) {
+    if (plan.has(ref)) continue;
+    const paths = assetRelCandidates(ref, docRel)
+      .filter((p) => ASSET_EXT.test(p))
+      .map((rel) => ({ rel, obj: assetObjectPath(uid, row.workspace, rel) }))
+      .filter((x) => x.obj);
+    if (!paths.length) continue;
+    paths.forEach((x) => allPaths.add(x.obj));
+    plan.set(ref, paths);
+  }
+  let signed = new Map();
+  if (uid && allPaths.size) {
+    try { signed = await signAssets([...allPaths]); } catch (_) { signed = new Map(); }
+  }
+  const content = rewriteHtmlAssetSrc(source, (ref) => {
+    const paths = plan.get(ref);
+    if (!paths) return "";
+    const hit = paths.find((x) => signed.has(x.obj));
+    return hit ? signed.get(hit.obj) : "";
+  });
+
+  const block = document.createElement("div");
+  block.className = "html-doc-block";
+  const bar = document.createElement("div");
+  bar.className = "html-doc-bar";
+  const label = document.createElement("span");
+  label.className = "html-doc-label";
+  label.textContent = "网页预览";
+  const hint = document.createElement("span");
+  hint.className = "html-doc-hint";
+  hint.textContent = plan.size
+    ? "按网页原样加载（脚本在沙箱内运行）；已随云同步的图片可正常显示"
+    : "按网页原样加载（脚本在沙箱内运行）；相对路径资源不可用";
+  bar.append(label, hint);
+
+  const frame = document.createElement("iframe");
+  frame.className = "html-doc-frame";
+  frame.setAttribute("sandbox", HTML_DOC_SANDBOX);
+  frame.setAttribute("referrerpolicy", "no-referrer");
+  frame.setAttribute("title", "HTML 文档预览");
+  frame.srcdoc = HTML_FRAME_RESIZE_SCRIPT + content;
+
+  block.append(bar, frame);
+  el.docBody.replaceChildren(block);
 }
 
 document.addEventListener("click", (e) => {
@@ -2432,7 +2559,11 @@ if (NATIVE) {
       if (act === "export") {
         if (!CAP.Filesystem) { toast("当前环境不支持导出", "error"); return; }
         try {
-          const name = safeFileName(title) + ".md";
+          // 独立 HTML 文档按 .html 导出（沿用原文后缀），Markdown 笔记仍按 .md ——
+          // 否则导出的 .md 里装着一整页 HTML，任何编辑器都打不开。
+          const cur = state.docs.find((d) => String(d.id) === String(state.currentId));
+          const ext = HTML_DOC_EXT.test((cur && cur.rel_path) || "") ? ".html" : ".md";
+          const name = safeFileName(title) + ext;
           // Directory.Documents 在 Android 上落在应用专属目录（无需存储权限）
           await CAP.Filesystem.writeFile({
             path: name, data: text, directory: "DOCUMENTS", encoding: "utf8", recursive: true,
