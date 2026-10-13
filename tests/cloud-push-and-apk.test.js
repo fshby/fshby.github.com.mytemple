@@ -158,14 +158,21 @@ test("从本机导入：索引解包正确、按工作区过滤、只取文本�
   assert.match(body, /wsRes\.workspaces/, "工作区列表取 .workspaces");
   assert.match(body, /wsRes\.defaultWorkspaceId/, "优先取默认工作区");
   assert.match(body, /filesRes\.data/, "文件列表是 {ok,data:[…]}，必须解包 .data");
-  assert.match(body, /TEXT_EXT\.test/, "只收 Markdown / 文本");
-  assert.match(body, /f\.workspace_id === def\.id/, "必须按工作区过滤，避免串到别的库");
+  assert.match(body, /TEXT_EXT\.test/, "只收文本类（md / txt / html）");
+  // ⚠️ 走 fWs()：/api/files 的 FileEntry 是 camelCase（workspaceId）。
+  //    直接读 f.workspace_id 恒 undefined → 过滤结果恒空 →
+  //    「一键推送」就地早退（「本机工作区里没有可同步的文档」），一篇都传不上去。
+  assert.match(body, /fWs\(f\) === def\.id/, "必须按工作区过滤，且按 camelCase 契约读（走 fWs）");
+  assert.doesNotMatch(body, /f\.workspace_id\s*===/, "不得直接比 snake_case 字段");
 });
 
 test("从本机导入：指纹一致就不重复上传；图片则必须逐篇扫引用（正文没变≠图片已上云）", () => {
   assert.match(cloudApp, /function relFromRef\(ref, wsId\)/, "FileEntry.path 形如 <wsId>/<相对路径>，要剥前缀");
   const body = fnBody(cloudApp, "async function runLocalImport");
-  assert.match(body, /have\.get\(rel\) === f\.content_sha256/, "本机已给指纹，一致就不上传");
+  // 同理：指纹字段是 contentSha256，直接读 f.content_sha256 恒 undefined
+  // → 云端指纹比对永不命中 → 每篇正文都被重读重传（增量形同虚设）
+  assert.match(body, /have\.get\(rel\) === fSha\(f\)/, "本机已给指纹，一致就不上传（走 fSha 读 camelCase）");
+  assert.doesNotMatch(body, /===\s*f\.content_sha256\b/, "不得直接读 snake_case 指纹字段");
   assert.match(body, /candidates\.push\(\{ relPath: rel, text, mtime: entry\.modified \|\| null \}\)/, "带 mtime 便于云端侧比对");
   assert.match(body, /\.select\("rel_path, content_sha"\)/, "先取云端指纹再决定传什么");
   assert.doesNotMatch(body, /\.delete\(\)|\.insert\(|\.update\(/, "本机导入流程不得直接操作云端表（交给 runUpload 统一 upsert）");

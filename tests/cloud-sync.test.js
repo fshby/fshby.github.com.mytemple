@@ -827,3 +827,56 @@ test("APK 动作条：分享给出的是链接，并可从「分享管理」撤�
   // 图没带全要说出来，不能静默丢
   assert.match(app, /张未同步|张过大未带走/, "带不走的图要如实报数");
 });
+
+/* ── 云端页「一键推送」读本机 FileEntry 的字段契约 ──────────────
+ *
+ * 本机 `/api/files` 的 FileEntry 是 **camelCase**（Rust 侧
+ * `#[serde(rename_all = "camelCase")]`）：`workspaceId` / `contentSha256`。
+ * cloud/app.js 曾经写死 snake_case，后果是**静默**的：
+ *   · `f.workspace_id === def.id` 恒 false → 过滤结果恒为空数组 →
+ *     点「一键推送」直接早退，提示「本机工作区里没有可同步的文档」——
+ *     用户看到的就是「推送失败」，且一篇都传不上去；
+ *   · `f.content_sha256` 恒 undefined → 云端指纹比对永不命中 →
+ *     每篇正文都被重读、重传一遍（增量形同虚设）。
+ * 桌面端 cloud-client.js 早有 fWs()/fSha() 归一化，这里是云端页补齐同一契约。 */
+
+test("云端页「一键推送」必须按 camelCase 读本机 FileEntry（写成 snake_case 会恒空、直接早退）", () => {
+  const src = read("cloud/app.js");
+
+  // ① 必须有与桌面端同款的归一化访问器，两种拼写都认
+  const helperBlock = `${src.match(/function fWs\(f\) \{[\s\S]*?\n\}/)[0]}\n${src.match(/function fSha\(f\) \{[\s\S]*?\n\}/)[0]}`;
+  const { fWs, fSha } = new Function(`${helperBlock}\nreturn { fWs, fSha };`)();
+  const camel = { workspaceId: "default", contentSha256: "s1" };    // 真实序列化形状
+  const snake = { workspace_id: "default", content_sha256: "s1" };  // 旧形状（测试桩 / 历史数据）
+  for (const [name, e] of [["camelCase", camel], ["snake_case", snake]]) {
+    assert.equal(fWs(e), "default", `fWs 必须认 ${name}`);
+    assert.equal(fSha(e), "s1", `fSha 必须认 ${name}`);
+  }
+
+  // ② 过滤与指纹比对都必须走访问器（锁死这一次的回归）
+  assert.doesNotMatch(src, /f\.workspace_id\s*===/,
+    "工作区过滤必须走 fWs()：直接比 f.workspace_id 恒 false → 一键推送读不到任何本机文件");
+  assert.doesNotMatch(src, /===\s*f\.content_sha256\b/,
+    "指纹比对必须走 fSha()：直接读 f.content_sha256 恒 undefined → 每篇都重读重传");
+  assert.match(src, /fWs\(f\) === def\.id/, "过滤表达式要走 fWs()");
+  assert.match(src, /===\s*fSha\(f\)/, "指纹比对要走 fSha()");
+
+  // ③ 行为：真实形状的 FileEntry 必须能穿过过滤，否则就地早退
+  const TEXT_EXT = new Function(`${src.match(/const TEXT_EXT = .*?;/)[0]}\nreturn TEXT_EXT;`)();
+  const rows = [
+    { path: "default/15040p.html", workspaceId: "default", contentSha256: "s1" },  // 本次案例
+    { path: "default/测试.md", workspaceId: "default", contentSha256: "s2" },
+    { path: "default/忽略.json", workspaceId: "default", contentSha256: "s3" },    // 仍须排除
+    { path: "ws_other/x.md", workspaceId: "ws_other", contentSha256: "s4" },       // 别人的工作区
+  ];
+  const hit = rows.filter((f) => f && TEXT_EXT.test(String(f.path || "")) && fWs(f) === "default");
+  assert.deepEqual(hit.map((f) => f.path), ["default/15040p.html", "default/测试.md"],
+    "默认工作区的 md/html 必须命中，json 与其他工作区必须排除");
+
+  // ④ 两端同一契约：桌面端同名访问器不得改名 / 改语义
+  const client = read("public/modules/cloud-client.js");
+  for (const fn of ["fWs", "fSha"]) {
+    assert.match(client, new RegExp(`function ${fn}\\(f\\)`), `桌面端也必须有 ${fn}()（两端同一契约）`);
+  }
+});
+

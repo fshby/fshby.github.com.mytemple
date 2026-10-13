@@ -51,7 +51,7 @@ const UPSERT_BATCH_MAX_DOCS = 20;
 const UPSERT_BATCH_MAX_BYTES = 1_200_000;
 
 /* 静态资源版本戳：改动 cloud/ 下被页面引用的任何文件时，与 index.html 的三件套一起递增。 */
-const ASSET_V = "cloud-16";
+const ASSET_V = "cloud-17";
 
 /* 第三方库一律同源自托管，见 scripts/vendor-cloud.mjs。
  * 绝不改回第三方 CDN —— 见该脚本头部注释：cdn.jsdelivr.net 在部分网络下 TLS 会被重置，
@@ -1629,6 +1629,19 @@ async function localGet(origin, path) {
   return res.json();
 }
 
+/**
+ * FileEntry 的字段是 **camelCase**（Rust 侧 `#[serde(rename_all = "camelCase")]`）：
+ * `/api/files` 回的是 `workspaceId` / `contentSha256`。
+ * 这里两种拼写都认 —— 写死 snake_case 会让过滤恒为空（「一键推送」直接早退报
+ * 「本机工作区里没有 Markdown / 文本文件」），与桌面端 cloud-client.js 的 fWs/fSha 同一契约。
+ */
+function fWs(f) {
+  return (f && (f.workspaceId ?? f.workspace_id)) || null;
+}
+function fSha(f) {
+  return (f && (f.contentSha256 ?? f.content_sha256)) || null;
+}
+
 /** FileEntry.path 形如 "<workspace_id>/<相对路径>"，云端存的是相对路径。 */
 function relFromRef(ref, wsId) {
   const p = normPath(ref);
@@ -1645,7 +1658,9 @@ async function readLocalIndex(origin) {
   const arr = Array.isArray(filesRes && filesRes.data)
     ? filesRes.data
     : (Array.isArray(filesRes) ? filesRes : []);
-  const md = arr.filter((f) => f && TEXT_EXT.test(String(f.path || "")) && f.workspace_id === def.id);
+  // ⚠️ 必须用 fWs() 读工作区 id：写成 f.workspace_id 会恒为 undefined，
+  // 过滤结果永远是空数组，「一键推送」就地早退。
+  const md = arr.filter((f) => f && TEXT_EXT.test(String(f.path || "")) && fWs(f) === def.id);
   return { ws: def, files: md };
 }
 
@@ -1660,7 +1675,7 @@ async function runLocalImport() {
     const { ws, files } = await readLocalIndex(LOCAL_ORIGIN);
     el.localWsName.textContent = ws.name || "本机知识库";
     if (!files.length) {
-      setNote("本机工作区里没有 Markdown / 文本文件。");
+      setNote("本机工作区里没有可同步的文档（.md / .txt / .html）。");
       return;
     }
 
@@ -1689,7 +1704,9 @@ async function runLocalImport() {
       const entry = res && res.data ? res.data : res;
       const text = typeof entry.content === "string" ? entry.content : "";
       scanned.push({ rel, text });
-      if (have.get(rel) && have.get(rel) === f.content_sha256) { unchanged += 1; continue; }
+      // 指纹同样走 fSha()：content_sha256 是 undefined，比对永远不命中 →
+      // 每篇正文都会被重读、重传一遍。
+      if (have.get(rel) && have.get(rel) === fSha(f)) { unchanged += 1; continue; }
       candidates.push({ relPath: rel, text, mtime: entry.modified || null });
       setNote(`读取本机内容…（${i + 1}/${files.length}，待上传 ${candidates.length} 篇）`);
     }
@@ -1846,7 +1863,7 @@ async function handleEntries(entries) {
   const { docs, assets, ignored } = splitEntries(entries);
   if (!docs.length && !assets.length) {
     el.uploadResult.textContent = ignored
-      ? `选中的 ${ignored} 个文件都不是可同步的类型（支持 .md / .markdown / .txt 与常见图片、视频）`
+      ? `选中的 ${ignored} 个文件都不是可同步的类型（支持 .md / .txt / .html 与常见图片、视频）`
       : "没有找到可同步的文件";
     el.uploadResult.hidden = false;
     return;
