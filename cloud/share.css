@@ -1,0 +1,277 @@
+/**
+ * 分享页样式：微信 / 移动端优先。
+ *
+ * 独立于工作台的 styles.css —— 分享页的访客只做一件事：把这篇看完。
+ * 所以这里不带登录卡、列表、抽屉等任何工作台样式，首屏体积最小。
+ * 正文排版刻意与工作台阅读区保持一致（同一份 markdown-worker 的输出），
+ * 让「在 App 里看」与「在微信里看」是同一套观感。
+ */
+
+:root {
+  --bg: #f6f4ef;
+  --surface: #fffdf8;
+  --text: #241f18;
+  --text-strong: #16120d;
+  --muted: #8b8272;
+  --line: #e6e0d2;
+  --line-strong: #d5c9b2;
+  --brand: #6b5f45;
+  --brand-soft: #7a6c4d;
+  --cream: #f4ead6;
+  --radius: 12px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #12100e;
+    --surface: #1b1815;
+    --text: #e8e1d3;
+    --text-strong: #f6f1e6;
+    --muted: #a49b88;
+    --line: #2e2a24;
+    --line-strong: #403a31;
+    --brand: #7a6c4d;
+    --brand-soft: #8d7d5a;
+    --cream: #f4ead6;
+  }
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  font-size: 16px;
+  line-height: 1.78;
+  /* 给底部常驻推广条留出空间，正文不会被压住 */
+  padding-bottom: calc(52px + env(safe-area-inset-bottom));
+}
+
+/* ── 顶部品牌条 ─────────────────────────────────────────── */
+.brand-bar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 16px calc(10px + env(safe-area-inset-top) * 0) 16px;
+  padding-top: calc(10px + env(safe-area-inset-top));
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: saturate(1.2) blur(8px);
+  border-bottom: 1px solid var(--line);
+}
+.brand-tile {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--brand);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.brand-tile svg { display: block; width: 19px; height: 19px; }
+.brand-name { font-size: 14px; font-weight: 600; color: var(--text-strong); }
+.brand-cta {
+  margin-left: auto;
+  font-size: 12.5px;
+  color: var(--brand-soft);
+  text-decoration: none;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  padding: 4px 10px;
+  white-space: nowrap;
+}
+
+/* ── 正文 ───────────────────────────────────────────────── */
+.wrap { max-width: 760px; margin: 0 auto; padding: 18px 16px 26px; }
+
+.doc-title {
+  margin: 2px 0 6px;
+  font-size: 23px;
+  line-height: 1.35;
+  font-weight: 650;
+  color: var(--text-strong);
+  letter-spacing: .01em;
+}
+.doc-meta {
+  margin: 0 0 18px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.share-body { position: relative; }
+
+/* 正文右下角淡印：截图被二次转发也带走署名与官网短链 */
+.doc-watermark {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  margin: 26px 0 0;
+  padding-top: 14px;
+  border-top: 1px dashed var(--line);
+  font-size: 12px;
+  color: var(--muted);
+  opacity: .78;
+}
+.doc-watermark a { color: var(--muted); text-decoration: none; }
+.doc-watermark svg { display: block; width: 15px; height: 15px; opacity: .75; }
+
+.markdown-body { word-wrap: break-word; }
+.markdown-body > :first-child { margin-top: 0; }
+.markdown-body h1, .markdown-body h2, .markdown-body h3,
+.markdown-body h4, .markdown-body h5, .markdown-body h6 {
+  color: var(--text-strong);
+  line-height: 1.4;
+  margin: 1.6em 0 .6em;
+  font-weight: 650;
+}
+.markdown-body h1 { font-size: 21px; }
+.markdown-body h2 { font-size: 19px; }
+.markdown-body h3 { font-size: 17px; }
+.markdown-body h4, .markdown-body h5, .markdown-body h6 { font-size: 16px; }
+.markdown-body p { margin: 0 0 1em; }
+.markdown-body a { color: var(--brand-soft); text-underline-offset: 3px; }
+.markdown-body ul, .markdown-body ol { padding-left: 1.35em; margin: 0 0 1em; }
+.markdown-body li { margin: .3em 0; }
+.markdown-body blockquote {
+  margin: 1em 0;
+  padding: .2em 0 .2em 14px;
+  border-left: 3px solid var(--line-strong);
+  color: var(--muted);
+}
+.markdown-body code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .88em;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  border-radius: 5px;
+  padding: .15em .4em;
+}
+.markdown-body pre {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.markdown-body pre code { background: none; padding: 0; }
+.markdown-body hr { border: none; border-top: 1px solid var(--line); margin: 1.8em 0; }
+.markdown-body img, .markdown-body video {
+  max-width: 100%;
+  height: auto;
+  border-radius: 10px;
+  display: block;
+  margin: 1em auto;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+.markdown-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1em 0;
+  font-size: 14.5px;
+  display: block;
+  overflow-x: auto;
+}
+.markdown-body th, .markdown-body td {
+  border: 1px solid var(--line);
+  padding: 7px 10px;
+  text-align: left;
+}
+.markdown-body th { background: color-mix(in srgb, var(--text) 5%, transparent); font-weight: 600; }
+.markdown-body .chart-block { margin: 1.2em 0; overflow-x: auto; }
+.markdown-body .mermaid-container svg { max-width: 100%; height: auto; }
+.markdown-body .katex-display { overflow-x: auto; overflow-y: hidden; padding: 2px 0; }
+
+/* 图片占位：拉取中 / 未随分享一起带走 */
+.asset-pending {
+  display: block;
+  min-height: 90px;
+  border-radius: 10px;
+  margin: 1em auto;
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--text) 5%, transparent),
+    color-mix(in srgb, var(--text) 9%, transparent),
+    color-mix(in srgb, var(--text) 5%, transparent));
+  background-size: 200% 100%;
+  animation: assetShimmer 1.3s linear infinite;
+}
+@keyframes assetShimmer { to { background-position: -200% 0; } }
+.asset-missing {
+  display: block;
+  border: 1px dashed var(--line-strong);
+  border-radius: 10px;
+  padding: 16px;
+  margin: 1em 0;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* ── 底部常驻推广条 ─────────────────────────────────────── */
+.promo-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px calc(9px + env(safe-area-inset-bottom));
+  background: var(--brand);
+  color: var(--cream);
+  font-size: 12.5px;
+}
+.promo-bar svg { display: block; width: 16px; height: 16px; flex: none; }
+.promo-bar a {
+  margin-left: auto;
+  color: var(--cream);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  white-space: nowrap;
+}
+
+/* ── 状态页 ─────────────────────────────────────────────── */
+.state {
+  max-width: 520px;
+  margin: 14vh auto 0;
+  padding: 0 24px;
+  text-align: center;
+}
+.state h2 { margin: 0 0 10px; font-size: 17px; color: var(--text-strong); font-weight: 600; }
+.state p { margin: 0 0 8px; font-size: 14px; color: var(--muted); }
+.state a.go {
+  display: inline-block;
+  margin-top: 14px;
+  font-size: 14px;
+  color: var(--cream);
+  background: var(--brand);
+  text-decoration: none;
+  border-radius: 9px;
+  padding: 9px 16px;
+}
+
+.spinner {
+  width: 24px;
+  height: 24px;
+  margin: 0 auto 12px;
+  border-radius: 50%;
+  border: 2.5px solid var(--line-strong);
+  border-top-color: var(--brand);
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (min-width: 700px) {
+  .doc-title { font-size: 26px; }
+  .wrap { padding: 26px 20px 34px; }
+}

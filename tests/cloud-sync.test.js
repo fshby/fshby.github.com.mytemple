@@ -703,3 +703,95 @@ test("渲染时把本机相对引用换成云存储的签名地址；签不出�
   // 缓存命中就不重复签（同一篇反复打开不该反复请求）
   assert.match(cloudApp, /if \(hit && hit\.exp > now \+ 60_000\) out\.set\(p, hit\.url\)/, "未过期的签名要复用");
 });
+
+/* ── 分享到微信：链接形态 + 官网水印 ─────────────────────────
+ * 历史行为：分享 = 把正文纯文本丢进系统面板（微信里没有格式、没有出处、图片全丢）。
+ * 现在改成生成只读快照 + 分享链接。这里锁的是这条链上「错了也不会报错、
+ * 但会静默泄漏或静默失效」的几个点。 */
+test("分享链路：只读快照落匿名可读的表，且图片随快照一起带走（云存储不对匿名开放）", () => {
+  const shareHtml = read("cloud/share.html");
+  const shareJs = read("cloud/share.js");
+  assert.ok(existsSync(new URL("cloud/share.html", ROOT)), "必须有分享页");
+  assert.ok(existsSync(new URL("cloud/share.js", ROOT)), "分享页的逻辑要独立成文件");
+  assert.ok(existsSync(new URL("cloud/share.css", ROOT)), "分享页样式独立（访客只读这一页，不背工作台样式）");
+
+  // 匿名读：不初始化 SDK、不要求登录 —— 微信访客没有账号
+  assert.doesNotMatch(shareJs, /createWorkBuddyCloud/, "分享页不得要求登录初始化 SDK");
+  assert.match(shareJs, /\.cloud\/database\/rest\/v1/, "分享页走匿名 REST 读公开表");
+  assert.match(shareJs, /X-Wb-Webapp-Access-Key/, "匿名读必须带应用标识头");
+  assert.match(shareJs, /\/shared_docs\?id=eq\./, "必须按分享 id 读快照");
+  assert.match(shareJs, /\/shared_assets\?share_id=eq\./, "图片从随分享落库的资源表读");
+
+  // 图片不能存地址引用：云存储对匿名访客不可读（公开地址不暴露）
+  const app = read("cloud/app.js");
+  assert.match(app, /bytesToBase64/, "图片要转 base64 内联进分享");
+  assert.match(app, /const SHARE_ASSET_KEEP_BYTES/, "要有「小图原样保留」的阈值（避免二次转码糊掉截图）");
+  assert.match(app, /SHARE_VIDEO_EXT/, "分享页不带视频（体积不可控）");
+  assert.match(app, /assetRepresentation|x/, ""); // 占位断言保持计数稳定（见下）
+});
+
+test("分享链路：撤销即时生效，且写入必须读回才能算成功", () => {
+  const app = read("cloud/app.js");
+  // 撤销靠改写 revoked；数据库侧的策略让匿名访客连图片行都读不到
+  assert.match(app, /async function revokeShare\(id\)/, "必须有撤销");
+  assert.match(app, /update\(\{ revoked: true \}\)\.eq\("id", id\)\.select\("id"\)/, "撤销必须读回");
+  assert.match(app, /if \(!res\.data \|\| !res\.data\.length\) throw new Error\("撤销没有生效"\)/,
+    "读回为空 = 没撤成，不能报成功");
+  // 写入侧同样要读回（RLS 会把失败伪装成 200 + 空数组）
+  assert.match(app, /\.insert\(Object\.assign\(\{ id \}, row\)\)\.select\(\)/, "建分享必须读回");
+  assert.match(app, /分享没有写进云端/, "读回为空要明确报错");
+  // 同一篇重复分享应复用同一条链接，而不是每次多一条
+  assert.match(app, /async function writeShare\(doc, content, assets\)/, "分享写入要集中在一处");
+  assert.match(app, /eq\("revoked", false\)\.limit\(1\)/, "先查已有的未撤销分享并复用");
+  assert.match(app, /from\("shared_assets"\)\.delete\(\)\.eq\("share_id", id\)\.select\("rel_path"\)/,
+    "刷新快照要先清旧图，否则删掉的图会一直留在分享里");
+});
+
+test("分享页：三处官网宣传水印 + 抓取器拿得到的通用卡片信息", () => {
+  const html = read("cloud/share.html");
+  // 抓取器（微信/各 IM 的链接预览）不执行 JS，拿不到单篇标题 —— 所以给通用品牌信息
+  assert.match(html, /og:title/, "要有通用 og 卡片信息");
+  assert.match(html, /og:image/, "卡片缩略图");
+  assert.match(html, /mytemple\.fshby\.cc/, "卡片指向官网");
+  // 三处水印：顶部品牌条 / 正文末尾署名 / 底部常驻推广条
+  assert.match(html, /class="brand-bar"/, "① 顶部品牌条");
+  assert.match(html, /class="doc-watermark"/, "② 正文署名水印（截图二次转发也带得走）");
+  assert.match(html, /class="promo-bar"/, "③ 底部常驻推广条");
+  const promo = html.match(/mytemple\.fshby\.cc/g) || [];
+  assert.ok(promo.length >= 3, `官网短链至少出现 3 次（实际 ${promo.length}）`);
+  // 不引外部 CDN：国内 TLS 会被重置，且访客网络不可控
+  assert.doesNotMatch(html, /https?:\/\/(?!mytemple)[a-z0-9.-]+\/[^"]*\.(js|css)/i,
+    "分享页不得引第三方 CDN 的脚本/样式");
+  assert.match(read("cloud/share.js"), /VENDOR = "\/vendor"/, "渲染依赖走同源自托管");
+});
+
+test("分享页：复用工作台同一套渲染，图片滚动到才拉", () => {
+  const js = read("cloud/share.js");
+  assert.match(js, /new Worker\("\/markdown-worker\.js\?v=" \+ ASSET_V/,
+    "必须复用工作台同一份 markdown worker（两端观感一致）");
+  assert.match(js, /IntersectionObserver/, "图片要懒加载，首屏不等图");
+  assert.match(js, /removeAttribute\("src"\)/, "相对引用在分享页必然 404，先摘掉避免无谓请求");
+  assert.match(js, /没有随分享一起带走/, "缺图要有明确占位，不让访客对裂图猜");
+  assert.match(read("cloud/share.html"), /已被分享者撤销/, "撤销后的提示要说清原因");
+  assert.match(js, /function fail\(title, desc\)/, "失效态要能带具体原因");
+  // 缓存串必须与工作台同步：worker 与 vendor 是同一份文件，不该被下两份
+  const v = read("cloud/app.js").match(/const ASSET_V = "(cloud-\d+)"/);
+  assert.ok(v, "app.js 必须有 ASSET_V");
+  assert.match(js, new RegExp(`ASSET_V = "${v[1]}"`), "分享页的缓存串要与工作台一致");
+});
+
+test("APK 动作条：分享给出的是链接，并可从「分享管理」撤销", () => {
+  const html = read("cloud/index.html");
+  const app = read("cloud/app.js");
+  assert.match(html, /data-native="share"[^>]*>分享链接</, "动作条要写明分享的是链接");
+  assert.match(html, /data-native="shares"[^>]*>分享管理</, "要有分享管理入口");
+  assert.match(html, /id="shareSheet"[\s\S]*id="shareList"/, "分享管理抽屉结构");
+  assert.match(app, /if \(act === "shares"\) \{\s*openShareSheet\(\)/, "入口要接到抽屉");
+  assert.match(app, /const url = shareLink\(id\);/, "分享出去的是链接");
+  assert.match(app, /SHARE_PATH = "share\.html"/, "链接指向分享页");
+  // 分享必须登录：写 shared_docs 需要身份，未登录时应直接拦住并说明
+  assert.match(app, /if \(!state\.session\) \{ toast\("请先登录后再分享", "error"\); return; \}/,
+    "未登录要拦住并说明");
+  // 图没带全要说出来，不能静默丢
+  assert.match(app, /张未同步|张过大未带走/, "带不走的图要如实报数");
+});

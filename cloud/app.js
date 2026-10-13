@@ -35,7 +35,7 @@ const UPSERT_BATCH_MAX_DOCS = 20;
 const UPSERT_BATCH_MAX_BYTES = 1_200_000;
 
 /* 静态资源版本戳：改动 cloud/ 下被页面引用的任何文件时，与 index.html 的三件套一起递增。 */
-const ASSET_V = "cloud-11";
+const ASSET_V = "cloud-12";
 
 /* 第三方库一律同源自托管，见 scripts/vendor-cloud.mjs。
  * 绝不改回第三方 CDN —— 见该脚本头部注释：cdn.jsdelivr.net 在部分网络下 TLS 会被重置，
@@ -100,6 +100,7 @@ const el = {
   confirmOk: $("confirmOk"),
   toast: $("toast"),
   nativeActions: $("nativeActions"), offlineBar: $("offlineBar"),
+  shareSheet: $("shareSheet"), shareList: $("shareList"),
 };
 
 const state = {
@@ -1993,6 +1994,251 @@ el.clearAllBtn.addEventListener("click", async () => {
   renderWsList(); renderTree(); renderStats();
 });
 
+/* ══ 分享链接（只读快照 + 匿名可读）═══════════════════════════
+ * 过去分享是把正文纯文本丢进系统面板：微信里是一大段没有格式、没有出处、
+ * 图片全丢的文字。现在改成生成一条**只读快照**并分享链接 —— 访客点开就是
+ * 渲染好的移动端页面，带三处官网品牌水印。
+ *
+ * 为什么必须做快照、而不是让访客直接读原表：
+ *   1) `documents` 是 owner-only RLS，微信访客没有账号，一行都读不到；
+ *   2) 云存储也不对匿名开放 —— 官方明确「Storage is for signed-in users.
+ *      Public Bucket/public URL access is not exposed.」，实测各路由无凭据
+ *      返回 MISSING_CREDENTIALS。所以图片字节只能**随快照一起**落在匿名可读的
+ *      `shared_assets` 里（base64），不能存地址。
+ * 实测：匿名读 shared_docs / shared_assets 均 HTTP 200；把 revoked 置 true 后
+ * 两张表立刻都返回空 —— 这正是「永久有效 + 可随时撤销」依赖的机制。
+ * ------------------------------------------------------------------------- */
+const SHARE_PATH = "share.html";
+/** 单篇最多带走的图片数。再多就该直接给原文了，硬塞只会拖慢首屏。 */
+const SHARE_ASSET_MAX = 20;
+/** 原图小于此值就原样带上：不做二次转码，截图上的小字才不会被转糊。 */
+const SHARE_ASSET_KEEP_BYTES = 260 * 1024;
+/** 压缩后仍大于此值的图放弃带走（页面显示占位，不静默丢）。 */
+const SHARE_ASSET_MAX_BYTES = 420 * 1024;
+/** 压缩目标：移动端阅读分辨率，再宽是浪费流量。 */
+const SHARE_MAX_WIDTH = 1080;
+const SHARE_QUALITY = 0.72;
+/** 分享页不带视频：体积不可控，微信里多半也是跳转播放。 */
+const SHARE_VIDEO_EXT = /\.(mp4|m4v|webm|mov|ogv)$/i;
+
+function newShareId() {
+  const b = new Uint8Array(9);
+  if (window.crypto && typeof window.crypto.getRandomValues === "function") {
+    window.crypto.getRandomValues(b);
+  } else {
+    for (let i = 0; i < b.length; i++) b[i] = Math.floor(Math.random() * 256);
+  }
+  return Array.from(b, (x) => x.toString(36).padStart(2, "0")).join("");
+}
+
+/** 分享链接用当前站点域名：分享页就部署在同一个源下，不引外部域名。 */
+function shareLink(id) {
+  const base = (location.origin || CFG.endpoint || "").replace(/\/+$/, "");
+  return `${base}/${SHARE_PATH}?d=${id}`;
+}
+
+function bytesToBase64(buf) {
+  const bytes = new Uint8Array(buf);
+  let out = "";
+  const CHUNK = 0x8000; // 分块，避免 apply 参数过多爆栈
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    out += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(out);
+}
+
+/**
+ * 把一张图处理成可内联的 base64。
+ * 小图**原样保留**（不重编码）—— 既保清晰度，也省掉 canvas 往返。
+ * 大图等比缩到 SHARE_MAX_WIDTH 并转 WebP；仍超限返回 null，交给调用方放弃。
+ */
+async function shrinkImageForShare(blob, fallbackMime) {
+  const mime = blob.type || fallbackMime || "image/png";
+  if (!/^image\//i.test(mime)) return null;
+  if (blob.size <= SHARE_ASSET_KEEP_BYTES) {
+    return { mime, b64: bytesToBase64(await blob.arrayBuffer()) };
+  }
+  try {
+    const bmp = await createImageBitmap(blob);
+    const scale = Math.min(1, SHARE_MAX_WIDTH / (bmp.width || 1));
+    const w = Math.max(1, Math.round((bmp.width || 1) * scale));
+    const h = Math.max(1, Math.round((bmp.height || 1) * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    canvas.getContext("2d").drawImage(bmp, 0, 0, w, h);
+    if (bmp.close) bmp.close();
+    const out = await new Promise((r) => canvas.toBlob(r, "image/webp", SHARE_QUALITY));
+    if (!out || out.size > SHARE_ASSET_MAX_BYTES) return null;
+    return { mime: "image/webp", b64: bytesToBase64(await out.arrayBuffer()) };
+  } catch (_) {
+    return null;
+  }
+}
+
+/**
+ * 收集这篇笔记引用的图片并压好。
+ * 与上传侧同一套引用解析（extractAssetRefs + assetRelCandidates），
+ * 「笔记里写了什么」与「分享时带走什么」不会出现两套判据。
+ */
+async function collectShareAssets(doc) {
+  const uid = state.session && state.session.user && state.session.user.id;
+  const result = { assets: [], missing: 0, tooBig: 0 };
+  const groups = [];
+  const allPaths = new Set();
+  for (const ref of extractAssetRefs(doc.content || "")) {
+    if (groups.length >= SHARE_ASSET_MAX) break;
+    const metas = assetRelCandidates(ref, doc.rel_path || "")
+      .filter((p) => ASSET_EXT.test(p) && !SHARE_VIDEO_EXT.test(p))
+      .map((rel) => ({ rel, obj: assetObjectPath(uid, doc.workspace, rel) }))
+      .filter((x) => x.obj);
+    if (!metas.length) continue;
+    metas.forEach((m) => allPaths.add(m.obj));
+    groups.push(metas);
+  }
+  if (!groups.length) return result;
+
+  const signed = await signAssets([...allPaths]);
+  for (const metas of groups) {
+    const hit = metas.find((m) => signed.has(m.obj));
+    if (!hit) { result.missing += 1; continue; }
+    let blob = null;
+    try {
+      const res = await fetch(signed.get(hit.obj), { cache: "no-store", referrerPolicy: "no-referrer" });
+      if (res.ok) blob = await res.blob();
+    } catch (_) { /* 下面统一按 missing 计 */ }
+    if (!blob) { result.missing += 1; continue; }
+    const shrunk = await shrinkImageForShare(blob, mimeOf(hit.rel));
+    if (!shrunk) { result.tooBig += 1; continue; }
+    result.assets.push({ rel_path: hit.rel, mime: shrunk.mime, bytes_b64: shrunk.b64 });
+  }
+  return result;
+}
+
+/** 写一条分享快照。同一篇已有未撤销的分享就**复用并刷新**，避免点一次多一条链接。 */
+async function writeShare(doc, content, assets) {
+  const db = cloud.database;
+  const rel = doc.rel_path || "";
+  const row = {
+    workspace: doc.workspace,
+    rel_path: rel,
+    title: doc.title || rel.split("/").pop() || "笔记",
+    content,
+    asset_count: assets.length,
+    owner_name: (state.session && state.session.user && state.session.user.name) || null,
+  };
+
+  let id = null;
+  try {
+    const found = await db.from("shared_docs").select("id")
+      .eq("workspace", doc.workspace).eq("rel_path", rel).eq("revoked", false).limit(1);
+    if (!found.error && found.data && found.data.length) id = found.data[0].id;
+  } catch (_) { /* 查不到就新建 */ }
+
+  if (id) {
+    const up = await db.from("shared_docs").update(row).eq("id", id).select();
+    if (up.error) throw up.error;
+    // 覆盖式刷新：先清旧图再插新的，否则刚删掉的图会一直留在分享里
+    await db.from("shared_assets").delete().eq("share_id", id).select("rel_path");
+  } else {
+    id = newShareId();
+    const ins = await db.from("shared_docs").insert(Object.assign({ id }, row)).select();
+    if (ins.error) throw ins.error;
+    // 写操作必须读回：返回空数组说明被 RLS 拦了，不能当成功（历史踩过的坑）
+    if (!ins.data || !ins.data.length) throw new Error("分享没有写进云端（可能被权限拦下）");
+  }
+
+  if (assets.length) {
+    const ins2 = await db.from("shared_assets")
+      .insert(assets.map((a) => Object.assign({ share_id: id }, a))).select("share_id");
+    if (ins2.error) throw ins2.error;
+  }
+  return id;
+}
+
+async function readMyShares() {
+  const res = await cloud.database.from("shared_docs")
+    .select("id,title,workspace,rel_path,created_at,asset_count")
+    .eq("revoked", false).order("created_at", { ascending: false }).limit(50);
+  if (res.error) throw res.error;
+  return res.data || [];
+}
+
+async function revokeShare(id) {
+  const res = await cloud.database.from("shared_docs")
+    .update({ revoked: true }).eq("id", id).select("id");
+  if (res.error) throw res.error;
+  // 读回为空 = 没撤成（被 RLS 拦下或不是自己的），不能报成功
+  if (!res.data || !res.data.length) throw new Error("撤销没有生效");
+}
+
+function shareErrMsg(err) {
+  return String((err && (err.message || err.error_description)) || err || "未知错误");
+}
+
+/** 「我的分享」抽屉：列出未撤销的分享，可复制链接 / 撤销 */
+async function openShareSheet() {
+  el.shareSheet.hidden = false;
+  el.shareList.innerHTML = '<p class="muted">正在读取…</p>';
+  try {
+    const rows = await readMyShares();
+    if (!rows.length) {
+      el.shareList.innerHTML = '<p class="muted">还没有分享出去的笔记。在阅读页点「分享链接」即可生成。</p>';
+      return;
+    }
+    el.shareList.innerHTML = rows.map((r) => {
+      const where = [r.workspace, r.rel_path].filter(Boolean).join(" / ");
+      const imgs = r.asset_count ? ` · ${r.asset_count} 张图` : "";
+      return `<div class="share-item" data-share="${escapeHtml(r.id)}">
+        <div class="share-item-main">
+          <strong class="share-item-title">${escapeHtml(r.title || "（无标题）")}</strong>
+          <span class="share-item-meta">${escapeHtml(where)} · ${escapeHtml(fmtTime(r.created_at))}${imgs}</span>
+        </div>
+        <div class="share-item-actions">
+          <button class="link-btn" type="button" data-share-act="copy">复制链接</button>
+          <button class="link-btn danger-link" type="button" data-share-act="revoke">撤销</button>
+        </div>
+      </div>`;
+    }).join("");
+  } catch (err) {
+    el.shareList.innerHTML = `<p class="muted">读取失败：${escapeHtml(shareErrMsg(err))}</p>`;
+  }
+}
+
+if (el.shareSheet) {
+  el.shareSheet.addEventListener("click", async (e) => {
+    if (e.target.closest("[data-close-sheet]")) { el.shareSheet.hidden = true; return; }
+    const btn = e.target.closest("[data-share-act]");
+    if (!btn) return;
+    const item = btn.closest("[data-share]");
+    const id = item && item.dataset.share;
+    if (!id) return;
+    if (btn.dataset.shareAct === "copy") {
+      const url = shareLink(id);
+      try {
+        if (CAP.Clipboard) await CAP.Clipboard.write({ string: url });
+        else if (navigator.clipboard) await navigator.clipboard.writeText(url);
+        else { toast("当前环境不支持复制，链接：" + url); return; }
+        toast("链接已复制");
+      } catch (_) { toast("复制失败，链接：" + url, "error"); }
+      return;
+    }
+    if (btn.dataset.shareAct === "revoke") {
+      const ok = await askConfirm("撤销这条分享？访客会立刻打不开，链接里的图片也一并不可读。");
+      if (!ok) return;
+      btn.disabled = true;
+      try {
+        await revokeShare(id);
+        item.remove();
+        toast("已撤销");
+      } catch (err) {
+        btn.disabled = false;
+        toast("撤销失败：" + shareErrMsg(err), "error");
+      }
+    }
+  });
+}
+
 /* ══ 原生能力（Android App）═══════════════════════════════════
  *
  * 本页同时服务浏览器与 APK 的 WebView（APK 用 server.url 远程加载本页），
@@ -2074,13 +2320,44 @@ if (NATIVE) {
       if (!text) { toast("这篇还没有内容可操作", "error"); return; }
 
       if (act === "share") {
-        if (!CAP.Share) { toast("当前环境不支持分享", "error"); return; }
+        // 分享的是**链接**，不是正文纯文本：访客点开即渲染好（带官网水印）。
+        const doc = state.docs.find((d) => String(d.id) === String(state.currentId));
+        if (!doc) { toast("没找到这篇的元信息，请重新打开一次", "error"); return; }
+        if (!state.session) { toast("请先登录后再分享", "error"); return; }
+        btn.disabled = true;
         try {
-          await CAP.Share.share({ title, text, dialogTitle: "分享笔记" });
+          const picked = await collectShareAssets(Object.assign({}, doc, { content: text }));
+          const id = await writeShare(doc, text, picked.assets);
+          const url = shareLink(id);
+          const parts = [];
+          if (picked.assets.length) parts.push(`${picked.assets.length} 张图`);
+          if (picked.missing) parts.push(`${picked.missing} 张未同步`);
+          if (picked.tooBig) parts.push(`${picked.tooBig} 张过大未带走`);
+          const tail = parts.length ? `（${parts.join("，")}）` : "";
+          if (CAP.Share) {
+            await CAP.Share.share({
+              title: `${doc.title || "笔记"} · MyTemple 知识库`,
+              text: `用 MyTemple 知识库分享的笔记：${doc.title || ""}`,
+              url,
+              dialogTitle: "分享到",
+            });
+            toast("分享链接已生成" + tail);
+          } else if (CAP.Clipboard) {
+            await CAP.Clipboard.write({ string: url });
+            toast("分享链接已复制" + tail);
+          } else {
+            toast("链接：" + url);
+          }
         } catch (err) {
-          // 用户点取消不算错误
-          if (!/cancel/i.test(String((err && err.message) || err))) toast("分享失败", "error");
+          toast("生成分享链接失败：" + shareErrMsg(err), "error");
+        } finally {
+          btn.disabled = false;
         }
+        return;
+      }
+
+      if (act === "shares") {
+        openShareSheet();
         return;
       }
 

@@ -423,6 +423,19 @@ details.ws > .doc-list > .doc-item > .doc-link { padding-left: 34px; }
   padding: 7px 16px;
 }
 .native-btn:active { background: var(--accent-soft); }
+
+/* ── 我的分享列表 ─────────────────────────────────────── */
+.share-list { display: flex; flex-direction: column; gap: 10px; }
+.share-item {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--bg-elevated);
+}
+.share-item-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1 1 auto; }
+.share-item-title { font-size: 14px; color: var(--text-strong); word-break: break-all; }
+.share-item-meta { font-size: 12px; color: var(--muted); word-break: break-all; }
+.share-item-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex: none; }
+.share-item-actions .link-btn { font-size: 12.5px; padding: 2px 0; }
 .offline-bar {
   position: fixed; left: 0; right: 0; top: 0; z-index: 60;
   padding: calc(6px + env(safe-area-inset-top)) 14px 6px;
