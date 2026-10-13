@@ -12,11 +12,30 @@
 const CFG = window.__MT_CLOUD__ || {};
 const SDK = window.WorkBuddyCloud;
 const TEXT_EXT = /\.(md|markdown|mdown|mkd|txt)$/i;
+/* 文档里 `![](source/x.webp)` 引用的静态资源。图片走云存储，文档正文仍只存文本 ——
+ * 否则一篇带 20 张截图的笔记会把 content 撑成几十兆，列表与检索都会被拖死。 */
+const ASSET_EXT = /\.(png|jpe?g|jfif|gif|webp|avif|bmp|ico|svg|mp4|m4v|webm|mov|ogv)$/i;
+const VIDEO_EXT = /\.(mp4|m4v|webm|mov|ogv)$/i;
+const SKIP_DIR = /(^|\/)(__MACOSX|\.git|node_modules|\.obsidian|\.trash)(\/|$)/i;
+/** 单个资源上限：超过就跳过并计数，避免把手机流量和存储配额一次打满。 */
+const ASSET_MAX_BYTES = 12 * 1024 * 1024;
+/** 存储布局：users/<uid>/assets/<分区>/<工作区相对路径>，与文档的 rel_path 同构，
+ *  这样文档里写 `source/x.webp` 就能直接对上，不需要额外的映射表。 */
+const ASSET_ROOT = "assets";
+/** 签名 URL 默认 600s；这里取 SDK 上限 1h，够看完一篇长文，且不把 URL 长期留在内存。 */
+const SIGN_TTL = 3600;
+/** 批量签名失败后逐个兜底签的数量上限（多见于文档引用了没上传的图）。 */
+const SIGN_FALLBACK_MAX = 30;
+/** 资源上传的并发数与单批字节上限。 */
+const ASSET_CONCURRENCY = 4;
+const ASSET_BATCH_BYTES = 16 * 1024 * 1024;
+/** 资源清单（本地记住已上传过的「路径:体积」）存这里，用来做增量。 */
+const ASSET_MANIFEST_KEY = "mtCloudAssets.v1";
 const UPSERT_BATCH_MAX_DOCS = 20;
 const UPSERT_BATCH_MAX_BYTES = 1_200_000;
 
 /* 静态资源版本戳：改动 cloud/ 下被页面引用的任何文件时，与 index.html 的三件套一起递增。 */
-const ASSET_V = "cloud-6";
+const ASSET_V = "cloud-9";
 
 /* 第三方库一律同源自托管，见 scripts/vendor-cloud.mjs。
  * 绝不改回第三方 CDN —— 见该脚本头部注释：cdn.jsdelivr.net 在部分网络下 TLS 会被重置，
@@ -63,6 +82,7 @@ const el = {
   wechatBtn: $("wechatBtn"),
   q: $("q"), clearQ: $("clearQ"), uploadBtn: $("uploadBtn"), refreshBtn: $("refreshBtn"),
   manageBtn: $("manageBtn"), stats: $("stats"), tree: $("tree"), searchResults: $("searchResults"),
+  cards: $("cards"), viewSwitch: $("viewSwitch"), wsChips: $("wsChips"),
   emptyState: $("emptyState"),
   docTitle: $("docTitle"), docPath: $("docPath"), docBody: $("docBody"), docDeleteBtn: $("docDeleteBtn"),
   uploadSheet: $("uploadSheet"), dropZone: $("dropZone"), pickFolderBtn: $("pickFolderBtn"),
@@ -93,6 +113,11 @@ const state = {
   upload: null,       // { cancelled, done, total }
   searchToken: 0,
   docSource: "",      // 当前打开的文档原文（原生端分享/导出要用）
+  docCache: new Map(),// id -> 正文（打开过或搜过的文档，用于秒开与出命中片段）
+  view: "tree",       // 列表视图："tree"（目录）| "recent"（最近）| "all"（全部）
+  wsFilter: null,     // 分区筛选，null = 不筛
+  signedAssets: new Map(), // 存储对象路径 -> { url, exp } 已签名的图片地址（随会话失效）
+  assetManifest: new Map(),// "分区/相对路径" -> 字节数，本地记住已上传过的资源，用于增量跳过
 };
 
 /* ── 小工具 ────────────────────────────────────────────────── */
@@ -166,6 +191,8 @@ for (const sheet of [el.uploadSheet, el.manageSheet, el.confirmSheet]) {
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     closeSheet(el.uploadSheet); closeSheet(el.manageSheet); closeSheet(el.confirmSheet);
+    // 列表页里 Esc 退出搜索态（回到当前视图），并交出焦点
+    if (el.q.value || document.activeElement === el.q) { el.q.blur(); applyView(); }
   }
 });
 
@@ -188,6 +215,162 @@ function titleFrom(text, relPath) {
 }
 function normPath(p) {
   return String(p || "").replace(/\\/g, "/").replace(/^\.\//, "").replace(/^\/+/, "");
+}
+
+/* ══ 图片 / 视频资源（文档里的 source/… 引用）══════════════════════
+ *
+ * 背景：文档正文里的截图写成 `![](source/x.webp)`（工作区根相对），桌面端由
+ * Rust 的 /source/* 路由直接读磁盘，所以本机一直正常；云端没有这个路由，
+ * 相对路径按云域解析必然 404 —— 这就是「手机端截图不显示」的根因。
+ *
+ * 做法：图片**不进 documents.content**（否则一篇 20 图的笔记会把正文撑到几十兆，
+ * 列表和检索都会被拖死），而是按「分区 + 工作区相对路径」原样存进云存储：
+ *     users/<uid>/assets/<分区>/source/x.webp
+ * 键与文档的 rel_path 同构，所以文档里写什么路径就能直接对上，不需要映射表。
+ * 读取时按需签发短期 URL（存储桶不暴露公开地址），签不出来的就是「云端没有这张图」。
+ * ----------------------------------------------------------------- */
+
+/** 分区名要进对象路径，得先过 SDK 的路径校验：去掉分隔符、空段与首尾空白。 */
+function assetWsSegment(ws) {
+  return String(ws || "默认工作区").replace(/[\\/]+/g, "_").replace(/^\.+$/, "_").trim() || "默认工作区";
+}
+function assetPrefix(uid, ws) {
+  return `users/${uid}/${ASSET_ROOT}/${assetWsSegment(ws)}`;
+}
+/** 拼完整对象路径；路径非法（含 .. 等）时 SDK 会抛错，这里直接返回空串让调用方跳过。 */
+function assetObjectPath(uid, ws, rel) {
+  try { return cloud.storage.userPath(uid, `${ASSET_ROOT}/${assetWsSegment(ws)}/${rel}`); }
+  catch (_) { return ""; }
+}
+function assetManifestKey(ws, rel) { return assetWsSegment(ws) + "/" + rel; }
+
+/** 清单只在本地做「同一路径、体积没变就跳过上传」的增量判断，读不到就当空。 */
+function loadAssetManifest() {
+  try {
+    const raw = window.localStorage.getItem(ASSET_MANIFEST_KEY);
+    const obj = raw ? JSON.parse(raw) : null;
+    state.assetManifest = new Map(obj && typeof obj === "object" ? Object.entries(obj) : []);
+  } catch (_) { state.assetManifest = new Map(); }
+}
+function saveAssetManifest() {
+  try {
+    window.localStorage.setItem(ASSET_MANIFEST_KEY, JSON.stringify(Object.fromEntries(state.assetManifest)));
+  } catch (_) { /* 隐私模式下写不进去：只影响下次增量，不影响功能 */ }
+}
+/** 作废某个分区的上传清单（删除分区 / 清空之后调用）。 */
+function forgetAssetManifest(ws) {
+  const prefix = assetWsSegment(ws) + "/";
+  for (const k of [...state.assetManifest.keys()]) {
+    if (k.startsWith(prefix)) state.assetManifest.delete(k);
+  }
+  saveAssetManifest();
+}
+
+function mimeOf(rel) {
+  const e = String(rel).toLowerCase().split(".").pop();
+  return ({
+    png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", jfif: "image/jpeg",
+    gif: "image/gif", webp: "image/webp", avif: "image/avif", bmp: "image/bmp",
+    ico: "image/x-icon", svg: "image/svg+xml",
+    mp4: "video/mp4", m4v: "video/mp4", webm: "video/webm", mov: "video/quicktime", ogv: "video/ogg",
+  })[e] || "application/octet-stream";
+}
+
+/**
+ * 把文档里的一条引用解析成**候选的存储相对路径**（按优先级排列）。
+ * 依次尝试：① 工作区根相对（桌面端语义）② 文档同目录相对。
+ * 外部链接（http/data/blob）不是本地资源，返回空数组。
+ */
+function assetRelCandidates(ref, docRel) {
+  const raw = String(ref || "").trim();
+  if (!raw || /^(https?:|data:|blob:|mailto:|javascript:)/i.test(raw)) return [];
+  let p = raw.split("#")[0].split("?")[0];
+  try { p = decodeURIComponent(p); } catch (_) { /* 保留原样 */ }
+  p = normPath(p);
+  if (!p) return [];
+
+  const out = [];
+  // 新版写法 `ws-asset/<ws_id>/source/x.png` 指向工作区 source/ 下的文件
+  const wsAsset = p.match(/^ws-asset\/[^/]+\/(.+)$/);
+  if (wsAsset) out.push(normPath(`source/${wsAsset[1]}`));
+  out.push(p);
+
+  const dir = normPath(docRel || "").split("/").slice(0, -1).join("/");
+  if (dir) out.push(normPath(`${dir}/${p}`));
+
+  return [...new Set(out.filter((x) => x && !x.split("/").some((s) => s === ".." || s === ".")))];
+}
+
+/**
+ * 从 Markdown 原文里取出所有「本机资源引用」（图片 / 视频）。
+ * 覆盖 `![alt](url)`、`<img src>`、`<video src>`、`<source src>` 四种写法；
+ * 外链在下一步会被一起过滤掉（assetRelCandidates 对外链返回空）。
+ */
+function extractAssetRefs(md) {
+  const src = String(md || "");
+  const out = [];
+  const re = /!\[[^\]]*\]\(\s*<?([^)>\s]+)[^)]*\)|<(?:img|video|source)\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/gi;
+  let m;
+  while ((m = re.exec(src)) !== null) {
+    const u = m[1] || m[2];
+    if (u) out.push(u);
+  }
+  return out;
+}
+
+/** 本机资源 URL：与桌面端同语义 —— 笔记里写 `source/x.webp`，本机就是 `/<root>/source/x.webp`。 */
+function localAssetUrl(rel) {
+  return LOCAL_ORIGIN + "/" + String(rel).split("/").map(encodeURIComponent).join("/");
+}
+
+/**
+ * 从本机读取笔记引用的图片 / 视频，供「一键推送」一并上云。
+ *
+ * 为什么必须**逐篇**扫引用：文档内容没变 ≠ 它引用的截图已经在云端。
+ * 「图片同步」上线之前推送过的笔记全都正文一致、图片全缺，只按内容指纹判断
+ * 就永远修不回来。所以这里读遍所有本机文档的正文（本机读取，代价可忽略）。
+ *
+ * 取字节：先发 HEAD 拿体积，体积与上传清单一致就不下载（省掉整张图的传输）；
+ * 体积变了或清单里没有才真正 GET。返回的条目直接喂给 uploadAssets。
+ */
+async function collectLocalAssets(docs, ws, setNote) {
+  const refs = [];
+  for (const d of docs) {
+    for (const ref of extractAssetRefs(d.text)) {
+      const cands = assetRelCandidates(ref, d.rel).filter((p) => ASSET_EXT.test(p));
+      if (cands.length) refs.push(cands);
+    }
+  }
+  if (!refs.length) return [];
+
+  const assets = [];
+  const seen = new Set();
+  for (let i = 0; i < refs.length; i += 1) {
+    if (i % 5 === 0 || i === refs.length - 1) setNote(`核对引用的图片…（${i + 1}/${refs.length}）`);
+    // 候选按优先级排列：第一个能读到的就是它（与桌面端渲染时同一套解析顺序）
+    for (const rel of refs[i]) {
+      if (seen.has(rel)) break;
+      seen.add(rel);
+      let head;
+      try { head = await fetch(localAssetUrl(rel), { method: "HEAD", cache: "no-store" }); }
+      catch (_) { break; }
+      if (!head || !head.ok) continue;
+      const size = Number(head.headers.get("content-length") || 0);
+      if (size > ASSET_MAX_BYTES) break;
+      if (size > 0 && state.assetManifest.get(assetManifestKey(ws, rel)) === size) {
+        assets.push({ relPath: rel, size, skipFetch: true });
+        break;
+      }
+      try {
+        const got = await fetch(localAssetUrl(rel), { cache: "no-store" });
+        if (!got || !got.ok) break;
+        const bytes = new Uint8Array(await got.arrayBuffer());
+        assets.push({ relPath: rel, bytes, size: bytes.byteLength });
+      } catch (_) { /* 单张读不到就跳过，不影响其它图片与文档 */ }
+      break;
+    }
+  }
+  return assets;
 }
 
 /* ══ 认证 ═══════════════════════════════════════════════════ */
@@ -510,8 +693,15 @@ el.logoutBtn.addEventListener("click", async () => {
   try { await cloud.auth.signOut(); } catch (_) {}
   state.session = null; state.docs = []; state.loaded = false;
   state.pendingOtp = null; state.pendingEmailOtp = null;
+  state.docCache.clear(); state.wsFilter = null; state.view = "tree";
+  // 换账号必须清掉资源缓存与上传清单：签名 URL 属于上一个账号，
+  // 清单更是「这个分区已经传过哪些图」的账本，留着会让新账号的图被误判为已传。
+  state.signedAssets.clear();
+  state.assetManifest = new Map();
+  saveAssetManifest();
   resetEmailFlow();
-  el.tree.innerHTML = ""; el.searchResults.innerHTML = "";
+  el.tree.innerHTML = ""; el.searchResults.innerHTML = ""; el.cards.innerHTML = "";
+  el.wsChips.hidden = true; el.wsChips.innerHTML = "";
   el.q.value = ""; el.clearQ.hidden = true;
   show("login");
 });
@@ -539,8 +729,7 @@ async function loadDocs() {
   }
   state.docs = all;
   state.loaded = true;
-  renderTree();
-  renderStats();
+  renderList();
 }
 
 function renderStats() {
@@ -561,8 +750,63 @@ function groupByWorkspace(docs) {
   return map;
 }
 
+/** 文档名：rel_path 的尾段（比 title 更稳定，title 可能为空）。 */
+function docName(d) {
+  return String(d.rel_path || "").split("/").pop() || d.title || "未命名";
+}
+
+/** 相对时间：刚刚 / N 分钟前 / N 小时前 / N 天前 / 日期。 */
+function fmtRelative(v) {
+  if (!v) return "";
+  const t = new Date(v).getTime();
+  if (Number.isNaN(t)) return "";
+  const diff = Date.now() - t;
+  if (diff < 0) return fmtTime(v).slice(0, 10);
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return "刚刚";
+  if (min < 60) return min + " 分钟前";
+  const hour = Math.floor(min / 60);
+  if (hour < 24) return hour + " 小时前";
+  const day = Math.floor(hour / 24);
+  if (day < 30) return day + " 天前";
+  return fmtTime(v).slice(0, 10);
+}
+
+/** 把已转义文本里的命中词包成 <mark>（关键词也先转义，用户输入永远不当 HTML）。 */
+function markHits(escapedText, q) {
+  if (!q) return escapedText;
+  const needle = escapeHtml(q);
+  if (!needle) return escapedText;
+  const safe = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return escapedText.replace(new RegExp(safe, "gi"), (m) => `<mark>${m}</mark>`);
+}
+
+/**
+ * 文档卡片：「最近」「全部」「搜索结果」三处共用同一个组件，
+ * 只靠 opts 调时间显示方式与是否带命中片段。列表里**不取正文**，
+ * 避免为了看一眼目录把整库内容拉下来。
+ */
+function docCard(d, opts) {
+  const o = opts || {};
+  const q = o.q || "";
+  const name = docName(d);
+  const parts = [];
+  if (d.workspace) parts.push(`<span class="dc-badge">${escapeHtml(d.workspace)}</span>`);
+  const dir = String(d.rel_path || "").split("/").slice(0, -1).join("/");
+  if (dir) parts.push(`<span class="dc-path">${escapeHtml(dir)}</span>`);
+  parts.push(`<span>${fmtBytes(d.bytes)}</span>`);
+  const when = o.relative ? fmtRelative(d.updated_at) : fmtTime(d.updated_at);
+  if (when) parts.push(`<span>${escapeHtml(when)}</span>`);
+  const snippet = o.snippet ? `<span class="sr-snippet">${o.snippet}</span>` : "";
+  return `<button class="doc-card" type="button" data-id="${d.id}">
+    <span class="dc-title">${markHits(escapeHtml(d.title || name), q)}</span>
+    <span class="dc-sub">${parts.join('<span class="dc-sep">·</span>')}</span>
+    ${snippet}
+  </button>`;
+}
+
 function docLeaf(d) {
-  const name = String(d.rel_path).split("/").pop();
+  const name = docName(d);
   return `<li class="doc-item"><button class="doc-link" type="button" data-id="${d.id}">
     <span class="doc-name">${escapeHtml(d.title || name)}</span>
     <span class="doc-sub">${escapeHtml(name)} · ${fmtBytes(d.bytes)}</span>
@@ -570,13 +814,9 @@ function docLeaf(d) {
 }
 
 function buildTreeHtml(docs) {
+  // 树只表达结构（分区 → 目录 → 文档）；时效性交给「最近」视图，不再在这里重复一遍。
   const groups = groupByWorkspace(docs);
   const out = [];
-  const recent = [...docs].sort((a, b) => String(b.updated_at || "").localeCompare(String(a.updated_at || ""))).slice(0, 8);
-  if (recent.length > 1) {
-    out.push(`<details class="ws" open><summary class="ws-summary"><span class="ws-name">最近更新</span><span class="ws-count">${recent.length}</span></summary>
-      <ul class="doc-list">${recent.map(docLeaf).join("")}</ul></details>`);
-  }
   for (const ws of [...groups.keys()].sort((a, b) => a.localeCompare(b, "zh"))) {
     const rows = groups.get(ws);
     const dirs = new Map();
@@ -597,10 +837,135 @@ function buildTreeHtml(docs) {
 }
 
 function renderTree() {
-  el.tree.innerHTML = buildTreeHtml(state.docs);
+  el.tree.innerHTML = buildTreeHtml(visibleDocs());
 }
 
-/* ── 搜索：本地标题/路径即时筛 + 云端正文 ilike 补充 ────────── */
+/* ══ 三种视图（目录 / 最近 / 全部）══════════════════════════
+ * 一个分段控件换三种「整体看全整库」的方式：
+ *   目录 = 分区 → 目录 → 文档（结构）
+ *   最近 = 按更新时间倒序的卡片流（时效）
+ *   全部 = 按标题排序的卡片网格（找一篇已知名字的）
+ * 三者共用同一种卡片/叶子样式，所以视觉噪音不随视图数增长。 */
+
+/** 当前分区筛选下可见的文档。 */
+function visibleDocs() {
+  if (!state.wsFilter) return state.docs;
+  return state.docs.filter((d) => d.workspace === state.wsFilter);
+}
+
+function renderCards() {
+  if (!state.docs.length) { el.cards.innerHTML = ""; return; }
+  const rows = visibleDocs();
+  const list = state.view === "recent"
+    ? [...rows].sort((a, b) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")))
+    : [...rows].sort((a, b) => String(a.title || a.rel_path || "")
+        .localeCompare(String(b.title || b.rel_path || ""), "zh"));
+  el.cards.innerHTML = list.length
+    ? list.map((d) => docCard(d, { relative: state.view === "recent" })).join("")
+    : `<p class="empty-inline muted">这个分区还没有内容。</p>`;
+}
+
+/** 分区筛选条：只有多于一个分区时才出现（单分区下纯属噪音）。 */
+function renderWsChips() {
+  const counts = new Map();
+  for (const d of state.docs) counts.set(d.workspace, (counts.get(d.workspace) || 0) + 1);
+  if (counts.size < 2) { el.wsChips.hidden = true; el.wsChips.innerHTML = ""; return; }
+  const chip = (ws, label, n) =>
+    `<button class="chip${(state.wsFilter || "") === ws ? " is-active" : ""}" type="button" data-ws="${escapeHtml(ws)}">`
+    + `${escapeHtml(label)}<span class="chip-count">${n}</span></button>`;
+  el.wsChips.innerHTML = chip("", "全部", state.docs.length)
+    + [...counts.keys()].sort((a, b) => a.localeCompare(b, "zh"))
+        .map((ws) => chip(ws, ws, counts.get(ws))).join("");
+  el.wsChips.hidden = false;
+}
+
+/** 视图切换：同时负责清空搜索态，避免「搜索中切视图」留下半截结果。 */
+function applyView() {
+  const isTree = state.view === "tree";
+  el.tree.hidden = !isTree;
+  el.cards.hidden = isTree;
+  el.searchResults.hidden = true;
+  el.searchResults.innerHTML = "";
+  el.q.value = "";
+  el.clearQ.hidden = true;
+  for (const btn of el.viewSwitch.querySelectorAll(".vs-btn")) {
+    const on = btn.dataset.view === state.view;
+    btn.classList.toggle("is-active", on);
+    btn.setAttribute("aria-selected", on ? "true" : "false");
+  }
+  renderTree();
+  renderCards();
+}
+
+/** 列表页统一重绘入口（加载 / 刷新 / 删除后调用）。 */
+function renderList() {
+  renderStats();
+  renderWsChips();
+  renderTree();
+  renderCards();
+}
+
+el.viewSwitch.addEventListener("click", (e) => {
+  const btn = e.target.closest(".vs-btn");
+  if (!btn || btn.dataset.view === state.view) return;
+  state.view = btn.dataset.view;
+  applyView();
+});
+
+el.wsChips.addEventListener("click", (e) => {
+  const c = e.target.closest(".chip");
+  if (!c) return;
+  state.wsFilter = c.dataset.ws || null;
+  renderWsChips();
+  renderTree();
+  renderCards();
+});
+
+/* ══ 检索 ═══════════════════════════════════════════════════
+ * 三层递进，兼顾「快」与「准」：
+ *   1) 本地标题 / 路径即时筛 —— 不联网，输入即命中；
+ *   2) 本地正文缓存命中 —— 打开过或搜过的文档能立即出片段；
+ *   3) 云端正文 ilike —— 只取元数据列（不带 content），避免为了搜索把整库正文拉下来；
+ *   4) 给排名靠前、还没有片段的结果按 id 批量补拉正文，生成命中上下文。
+ * 第 4 步的条数有硬上限（SNIPPET_DOCS），所以手机端的流量是可预期的。 */
+const SNIPPET_DOCS = 8;
+const DOC_CACHE_MAX = 60;
+
+/** 记录正文到内存缓存（打开文档时写入；搜索出片段时也写入）。 */
+function rememberDoc(id, content) {
+  if (typeof content !== "string") return;
+  const key = String(id);
+  state.docCache.delete(key);
+  state.docCache.set(key, content);
+  while (state.docCache.size > DOC_CACHE_MAX) {
+    state.docCache.delete(state.docCache.keys().next().value);
+  }
+}
+
+/** 取正文里第一处命中的上下文，命中词用 <mark> 标出；markdown 标记先抹平。 */
+function buildSnippet(content, q) {
+  const flat = String(content || "").replace(/\r\n?/g, "\n");
+  const at = flat.toLowerCase().indexOf(q.toLowerCase());
+  if (at < 0) return "";
+  const WIN_BEFORE = 34, WIN_AFTER = 62;
+  const clean = (s) => s.replace(/[#>*`_[\]]/g, " ").replace(/\s+/g, " ");
+  const head = flat.slice(Math.max(0, at - WIN_BEFORE), at);
+  const hit = flat.slice(at, at + q.length);
+  const tail = flat.slice(at + q.length, at + q.length + WIN_AFTER);
+  return (at > WIN_BEFORE ? "…" : "")
+    + escapeHtml(clean(head)) + "<mark>" + escapeHtml(hit) + "</mark>" + escapeHtml(clean(tail))
+    + (at + q.length + WIN_AFTER < flat.length ? "…" : "");
+}
+
+/** 相关度：标题命中 > 路径命中 > 仅正文命中。 */
+function scoreDoc(d, lc, hasSnippet) {
+  let s = 0;
+  if (String(d.title || "").toLowerCase().includes(lc)) s += 100;
+  if (String(d.rel_path || "").toLowerCase().includes(lc)) s += 40;
+  if (hasSnippet) s += 20;
+  return s;
+}
+
 let searchTimer = null;
 el.q.addEventListener("input", () => {
   const v = el.q.value.trim();
@@ -608,19 +973,28 @@ el.q.addEventListener("input", () => {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(() => runSearch(v), 280);
 });
-el.clearQ.addEventListener("click", () => {
-  el.q.value = ""; el.clearQ.hidden = true;
-  el.searchResults.hidden = true; el.tree.hidden = false;
-  el.searchResults.innerHTML = "";
-});
+el.clearQ.addEventListener("click", applyView);
 
 async function runSearch(q) {
-  if (!q) { el.searchResults.hidden = true; el.tree.hidden = false; return; }
+  if (!q) { applyView(); return; }
   const token = ++state.searchToken;
   const lc = q.toLowerCase();
-  const local = state.docs.filter((d) =>
-    String(d.title || "").toLowerCase().includes(lc) || String(d.rel_path).toLowerCase().includes(lc));
+  const snippets = new Map();   // id -> 片段 HTML
 
+  // 1) 本地：标题 / 路径
+  const local = state.docs.filter((d) =>
+    String(d.title || "").toLowerCase().includes(lc)
+    || String(d.rel_path || "").toLowerCase().includes(lc));
+
+  // 2) 本地正文缓存（打开过 / 上次搜过）
+  for (const d of state.docs) {
+    const cached = state.docCache.get(String(d.id));
+    if (cached && cached.toLowerCase().includes(lc)) {
+      snippets.set(String(d.id), buildSnippet(cached, q));
+    }
+  }
+
+  // 3) 云端正文检索：只选元数据列，正文不随响应回来
   let remote = [];
   if (q.length >= 2) {
     try {
@@ -629,7 +1003,8 @@ async function runSearch(q) {
         .select("id, workspace, rel_path, title, bytes, updated_at")
         .is("deleted_at", null)
         .ilike("content", `%${q.replace(/[%_\\]/g, (m) => "\\" + m)}%`)
-        .limit(80);
+        .order("updated_at", { ascending: false })
+        .limit(60);
       if (!error && Array.isArray(data)) remote = data;
     } catch (_) { /* 正文检索失败时仍展示本地命中 */ }
   }
@@ -638,17 +1013,49 @@ async function runSearch(q) {
   const seen = new Set();
   const merged = [];
   for (const d of [...local, ...remote]) {
-    if (seen.has(d.id)) continue;
-    seen.add(d.id); merged.push(d);
+    const id = String(d.id);
+    if (seen.has(id)) continue;
+    seen.add(id); merged.push(d);
   }
+
+  // 4) 给排名靠前、还没有片段的结果补拉正文（一次批量请求 + 条数上限）
+  const need = merged.filter((d) => !snippets.has(String(d.id))).slice(0, SNIPPET_DOCS);
+  if (need.length) {
+    try {
+      const { data } = await cloud.database
+        .from("documents").select("id, content")
+        .in("id", need.map((d) => d.id));
+      if (token !== state.searchToken) return;
+      const got = new Map((Array.isArray(data) ? data : []).map((r) => [String(r.id), r.content]));
+      for (const d of need) {
+        const id = String(d.id);
+        const content = got.get(id);
+        if (typeof content !== "string") continue;
+        rememberDoc(id, content);
+        if (content.toLowerCase().includes(lc)) snippets.set(id, buildSnippet(content, q));
+      }
+    } catch (_) { /* 补拉失败就只显示标题，不阻断搜索 */ }
+  }
+  if (token !== state.searchToken) return;
+
+  merged.sort((a, b) => {
+    const diff = scoreDoc(b, lc, snippets.has(String(b.id))) - scoreDoc(a, lc, snippets.has(String(a.id)));
+    return diff !== 0 ? diff : String(b.updated_at || "").localeCompare(String(a.updated_at || ""));
+  });
+
   el.tree.hidden = true;
+  el.cards.hidden = true;
   el.searchResults.hidden = false;
   if (!merged.length) {
-    el.searchResults.innerHTML = `<p class="empty-inline muted">没有匹配「${escapeHtml(q)}」的内容</p>`;
+    el.searchResults.innerHTML = `<p class="empty-inline muted">没有匹配「${escapeHtml(q)}」的内容。<br>试试更短的关键词，或确认这篇是否已上传到云端。</p>`;
     return;
   }
-  el.searchResults.innerHTML = `<p class="result-head muted">${merged.length} 条结果</p>`
-    + `<ul class="doc-list">${merged.map(docLeaf).join("")}</ul>`;
+  const bodyHits = [...snippets.keys()].filter((id) => merged.some((d) => String(d.id) === id)).length;
+  el.searchResults.innerHTML =
+    `<p class="sr-head"><strong>${merged.length}</strong> 篇命中`
+    + (bodyHits ? ` · <strong>${bodyHits}</strong> 篇含正文匹配` : "")
+    + `</p>`
+    + merged.map((d) => docCard(d, { q, snippet: snippets.get(String(d.id)) })).join("");
 }
 
 /* ══ 阅读 ═══════════════════════════════════════════════════ */
@@ -808,10 +1215,13 @@ async function openDoc(id) {
   el.docTitle.textContent = data.title || data.rel_path;
   el.docPath.textContent = `${data.workspace} / ${data.rel_path} · ${fmtTime(data.updated_at)}`;
   state.docSource = data.content || "";
+  rememberDoc(id, state.docSource);
   try {
     const html = await renderMarkdownInWorker(data.content || "");
     el.docBody.innerHTML = html;
     await decorateContent(el.docBody);
+    // 图片单独一步：正文先出来，再把本机相对引用的截图换成云存储的签名地址。
+    await resolveDocAssets(el.docBody, data);
   } catch (err) {
     el.docBody.innerHTML = `<pre class="fallback-pre">${escapeHtml(data.content || "")}</pre>`;
     toast("渲染降级为纯文本：" + String(err && err.message || err), "error");
@@ -819,7 +1229,7 @@ async function openDoc(id) {
 }
 
 document.addEventListener("click", (e) => {
-  const link = e.target.closest(".doc-link");
+  const link = e.target.closest(".doc-link, .doc-card");
   if (link) { openDoc(link.getAttribute("data-id")); return; }
   const a = e.target.closest("a[href]");
   if (a && !a.getAttribute("href").startsWith("#")) {
@@ -853,7 +1263,7 @@ el.docDeleteBtn.addEventListener("click", async () => {
   state.currentId = null;
   state.docSource = "";
   toast("已从云端删除");
-  renderTree(); renderStats(); show("list");
+  renderList(); show("list");
 });
 
 el.refreshBtn.addEventListener("click", async () => {
@@ -949,27 +1359,33 @@ async function runLocalImport() {
     const have = new Map((existing || []).map((r) => [r.rel_path, r.content_sha]));
 
     const candidates = [];
+    const scanned = [];        // 全部本机文档（含未变的）：图片引用必须逐篇扫
     let unchanged = 0;
     for (let i = 0; i < files.length; i += 1) {
       const f = files[i];
       const rel = relFromRef(f.path, ws.id);
       if (!rel) continue;
-      if (have.get(rel) && have.get(rel) === f.content_sha256) { unchanged += 1; continue; }
       const enc = rel.split("/").map(encodeURIComponent).join("/");
       const res = await localGet(LOCAL_ORIGIN, "/api/files/" + enc);
       const entry = res && res.data ? res.data : res;
       const text = typeof entry.content === "string" ? entry.content : "";
+      scanned.push({ rel, text });
+      if (have.get(rel) && have.get(rel) === f.content_sha256) { unchanged += 1; continue; }
       candidates.push({ relPath: rel, text, mtime: entry.modified || null });
-      setNote(`读取本机内容…（${i + 1}/${files.length}，已取 ${candidates.length} 篇）`);
+      setNote(`读取本机内容…（${i + 1}/${files.length}，待上传 ${candidates.length} 篇）`);
     }
 
-    if (!candidates.length) {
-      setNote(`已是最新：${files.length} 篇内容均与云端一致，无需上传。`);
+    // 图片要按「引用」读，而不是按文档是否变化 —— 见 collectLocalAssets 的说明
+    setNote(`本机 ${files.length} 篇；正在核对引用的图片 / 视频…`);
+    const assets = await collectLocalAssets(scanned, cloudWs, setNote);
+
+    if (!candidates.length && !assets.length) {
+      setNote(`已是最新：${files.length} 篇内容均与云端一致，引用的图片也已同步。`);
       return;
     }
-    setNote(`待上传 ${candidates.length} 篇（内容未变 ${unchanged} 篇已跳过），开始同步…`);
+    setNote(`待同步 ${candidates.length} 篇（内容未变 ${unchanged} 篇已跳过）、图片 / 视频 ${assets.length} 个，开始…`);
     closeSheet(win);
-    await runUpload(candidates);
+    await runUpload(candidates, assets, 0);
   } catch (err) {
     const msg = String((err && err.message) || err);
     setNote("读取本机失败：" + msg +
@@ -1073,12 +1489,17 @@ async function readZip(file) {
     const entries = [];
     for (const [rawName, bytes] of Object.entries(out)) {
       if (rawName.endsWith("/")) continue;
-      if (!TEXT_EXT.test(rawName)) continue;
-      if (/(^|\/)(__MACOSX|\.git|node_modules)(\/|$)/.test(rawName)) continue;
+      if (SKIP_DIR.test(rawName)) continue;
+      // 文本与图片/视频都要：压缩包是「把整个知识库连带 source/ 一起搬到手机」最省事的路径
+      const isText = TEXT_EXT.test(rawName);
+      if (!isText && !ASSET_EXT.test(rawName)) continue;
       let rel = normPath(rawName);
       const seg = rel.split("/");
       if (seg.length > 1) rel = seg.slice(1).join("/");
-      entries.push({ relPath: rel, text: new TextDecoder().decode(bytes) });
+      // 文本直接解码；二进制保留字节，上传时包成 Blob
+      entries.push(isText
+        ? { relPath: rel, text: new TextDecoder().decode(bytes) }
+        : { relPath: rel, bytes, size: bytes.byteLength });
     }
     return entries;
   } catch (err) {
@@ -1087,24 +1508,37 @@ async function readZip(file) {
   }
 }
 
+/** 把杂七杂八的条目分成「文本文档」与「图片/视频资源」两堆，顺带报出被忽略的数量。 */
+function splitEntries(entries) {
+  const docs = [];
+  const assets = [];
+  let ignored = 0;
+  for (const e of entries || []) {
+    const p = e && e.relPath ? e.relPath : "";
+    if (!p || SKIP_DIR.test(p)) continue;
+    if (TEXT_EXT.test(p)) docs.push(e);
+    else if (ASSET_EXT.test(p)) assets.push(e);
+    else ignored += 1;
+  }
+  return { docs, assets, ignored };
+}
+
 async function handleEntries(entries) {
-  const candidates = (entries || []).filter((e) => {
-    const p = e.relPath || "";
-    if (!TEXT_EXT.test(p)) return false;
-    if (/(^|\/)(__MACOSX|\.git|node_modules|\.obsidian|\.trash)(\/|$)/i.test(p)) return false;
-    return true;
-  });
-  if (!candidates.length) {
-    el.uploadResult.textContent = "没有找到可同步的 Markdown / 文本文件（.md / .markdown / .txt）";
+  const { docs, assets, ignored } = splitEntries(entries);
+  if (!docs.length && !assets.length) {
+    el.uploadResult.textContent = ignored
+      ? `选中的 ${ignored} 个文件都不是可同步的类型（支持 .md / .markdown / .txt 与常见图片、视频）`
+      : "没有找到可同步的文件";
     el.uploadResult.hidden = false;
     return;
   }
   if (!el.wsName.value.trim()) {
-    const first = candidates[0].relPath.split("/")[0];
-    el.wsName.value = first && candidates.some((c) => c.relPath.includes("/")) ? first : "我的知识库";
+    const first = (docs[0] || assets[0]).relPath.split("/")[0];
+    const multi = docs.concat(assets).some((c) => c.relPath.includes("/"));
+    el.wsName.value = first && multi ? first : "我的知识库";
     toast("已自动填写分区名：" + el.wsName.value);
   }
-  await runUpload(candidates);
+  await runUpload(docs, assets, ignored);
 }
 
 el.cancelUploadBtn.addEventListener("click", () => {
@@ -1112,22 +1546,194 @@ el.cancelUploadBtn.addEventListener("click", () => {
   el.progressLabel.textContent = "正在取消…";
 });
 
-async function runUpload(candidates) {
+/**
+ * 把图片 / 视频送进云存储。
+ *
+ * 增量判据用本地清单的「分区/相对路径 → 体积」：体积没变就跳过。
+ * 文档有 content_sha 可以精确比对，存储端没有同样便宜的指纹接口，体积是成本最低的可用信号；
+ * 代价是「同体积但内容变了」会漏传，对截图来说极少见，且用户重选一次文件夹即会重传。
+ */
+async function uploadAssets(job, ws, assets, setProgress) {
+  const uid = state.session && state.session.user && state.session.user.id;
+  if (!uid) { job.assetFailed += assets.length; return; }
+
+  const todo = [];
+  for (const a of assets) {
+    if (job.cancelled) break;
+    const rel = normPath(a.relPath);
+    const size = Number(a.size != null ? a.size : (a.file ? a.file.size : 0));
+    const obj = rel ? assetObjectPath(uid, ws, rel) : "";
+    if (!obj) { job.assetFailed += 1; continue; }
+    if (size > ASSET_MAX_BYTES) { job.assetTooBig += 1; continue; }
+    if (state.assetManifest.get(assetManifestKey(ws, rel)) === size) { job.assetSkipped += 1; continue; }
+    todo.push({ entry: a, rel, size, obj });
+  }
+  if (!todo.length) return;
+
+  let sent = 0;
+  let batch = [];
+  let batchBytes = 0;
+  const flush = async () => {
+    if (!batch.length) return;
+    const slice = batch.slice();
+    batch = []; batchBytes = 0;
+    // 每次 4 个并发：串行在手机上太慢，全量并发又容易被限流
+    const results = await Promise.all(slice.map(async (t) => {
+      try {
+        const body = t.entry.file || new Blob([t.entry.bytes], { type: mimeOf(t.rel) });
+        const { error } = await cloud.storage.upload(t.obj, body, {
+          contentType: mimeOf(t.rel),
+          upsert: true,
+          cacheControl: "31536000",
+        });
+        return { t, ok: !error };
+      } catch (_) { return { t, ok: false }; }
+    }));
+    for (const r of results) {
+      sent += 1;
+      if (r.ok) {
+        job.assetSent += 1;
+        state.assetManifest.set(assetManifestKey(ws, r.t.rel), r.t.size);
+      } else {
+        job.assetFailed += 1;
+      }
+    }
+    setProgress(`同步图片 / 视频…（${sent}/${todo.length}）`, (sent / todo.length) * 35);
+  };
+  for (const t of todo) {
+    if (job.cancelled) break;
+    batch.push(t);
+    batchBytes += Number(t.size) || 0;
+    if (batch.length >= ASSET_CONCURRENCY || batchBytes >= ASSET_BATCH_BYTES) await flush();
+  }
+  if (!job.cancelled) await flush();
+  if (job.assetSent) saveAssetManifest();
+}
+
+/**
+ * 批量签发资源访问 URL。
+ * 存储桶不对外暴露公开地址，读也必须带短期签名；签不出来的就是「云端没有这张对象」。
+ * 结果按对象路径缓存到会话内存里，同一篇文档反复打开不会重复签。
+ */
+async function signAssets(paths) {
+  const out = new Map();
+  const now = Date.now();
+  const need = [];
+  for (const p of paths) {
+    const hit = state.signedAssets.get(p);
+    if (hit && hit.exp > now + 60_000) out.set(p, hit.url);
+    else need.push(p);
+  }
+  if (!need.length) return out;
+
+  const keep = (entries, fallback) => {
+    (entries || []).forEach((e, i) => {
+      const url = e && (e.signedUrl || e.signedURL);
+      const p = (e && e.path) || fallback[i];
+      if (url && p && !(e && e.error)) {
+        out.set(p, url);
+        state.signedAssets.set(p, { url, exp: now + SIGN_TTL * 1000 });
+      }
+    });
+  };
+
+  try {
+    const { data, error } = await cloud.storage.createSignedUrls(need, SIGN_TTL);
+    if (!error && Array.isArray(data)) { keep(data, need); return out; }
+  } catch (_) { /* 落到逐个兜底 */ }
+
+  for (const p of need.slice(0, SIGN_FALLBACK_MAX)) {
+    try {
+      const { data, error } = await cloud.storage.createSignedUrl(p, SIGN_TTL);
+      if (!error) keep([data], [p]);
+    } catch (_) { /* 该对象不存在 */ }
+  }
+  return out;
+}
+
+/** 图片确实不在云端时给一条可读的占位，而不是让用户对着一张裂图猜原因。 */
+function markAssetMissing(node) {
+  const holder = document.createElement("span");
+  holder.className = "asset-missing";
+  const label = node.getAttribute("alt") || String(node.getAttribute("src") || "").split("/").pop() || "媒体";
+  const tag = document.createElement("span");
+  tag.className = "asset-missing-tag";
+  tag.textContent = "未同步";
+  const name = document.createElement("span");
+  name.className = "asset-missing-name";
+  name.textContent = label;
+  const path = document.createElement("span");
+  path.className = "asset-missing-path";
+  path.textContent = node.getAttribute("src") || "";
+  holder.append(tag, name, path);
+  node.replaceWith(holder);
+}
+
+/**
+ * 文档渲染后，把 `source/x.webp` 这类本机相对引用换成云存储的签名地址。
+ * 外链（http/data/blob）不属于本地资源，原样留给浏览器。
+ */
+async function resolveDocAssets(root, doc) {
+  const nodes = [...root.querySelectorAll("img[src], video[src]")];
+  if (!nodes.length) return;
+  const uid = state.session && state.session.user && state.session.user.id;
+  if (!uid) return;
+
+  const ws = doc.workspace;
+  const docRel = doc.rel_path || "";
+  const items = [];
+  const allPaths = new Set();
+  for (const node of nodes) {
+    const cands = assetRelCandidates(node.getAttribute("src") || "", docRel);
+    if (!cands.length) continue;
+    const paths = cands
+      .map((rel) => ({ rel, obj: assetObjectPath(uid, ws, rel) }))
+      .filter((x) => x.obj);
+    if (!paths.length) continue;
+    paths.forEach((x) => allPaths.add(x.obj));
+    items.push({ node, paths });
+  }
+  if (!items.length) return;
+
+  const signed = await signAssets([...allPaths]);
+  for (const it of items) {
+    const hit = it.paths.find((x) => signed.has(x.obj));
+    if (!hit) { markAssetMissing(it.node); continue; }
+    const url = signed.get(hit.obj);
+    if (it.node.getAttribute("src") !== url) it.node.setAttribute("src", url);
+    it.node.setAttribute("data-cloud-asset", hit.rel);
+    // 签名地址是短期的，不要让浏览器把它写进磁盘缓存
+    it.node.setAttribute("referrerpolicy", "no-referrer");
+  }
+}
+
+async function runUpload(candidates, assets, ignoredCount) {
   const ws = el.wsName.value.trim() || "我的知识库";
+  assets = assets || [];
   el.uploadResult.hidden = true;
   el.uploadProgress.hidden = false;
   el.progressFill.style.width = "0%";
 
-  const job = { cancelled: false, done: 0, total: candidates.length, added: 0, updated: 0, skipped: 0, failed: 0 };
+  const job = {
+    cancelled: false, done: 0, total: candidates.length, added: 0, updated: 0, skipped: 0, failed: 0,
+    assetTotal: assets.length, assetSent: 0, assetSkipped: 0, assetFailed: 0, assetTooBig: 0, ignored: ignoredCount || 0,
+  };
   state.upload = job;
   const setProgress = (label, pct) => {
     el.progressLabel.textContent = label;
     el.progressFill.style.width = Math.max(0, Math.min(100, pct)) + "%";
   };
-  setProgress(`读取文件…（0/${job.total}）`, 0);
+  setProgress(assets.length ? `准备文档与 ${assets.length} 个图片 / 视频…` : "读取文件…（0/0）", 0);
 
   try {
+    // 0) 文档与资源是两条独立的链：先把图片送进云存储，文档正文随后。
+    //    顺序不能反 —— 文档先入库的话，用户点开时图片还没到，会先看到一排「未同步」。
+    if (assets.length) await uploadAssets(job, ws, assets, setProgress);
+    if (job.cancelled) return finishUpload(job, "已取消（未写入任何内容）");
+
     // 1) 读取内容 + 内容指纹
+    //    进度基准：图片已经在 0~35% 走完，文档再占 35~100%；没图片时文档从 0 开始。
+    const base = assets.length ? 35 : 0;
     const prepared = [];
     for (let i = 0; i < candidates.length; i += 1) {
       if (job.cancelled) break;
@@ -1143,22 +1749,26 @@ async function runUpload(candidates) {
         doc_mtime: c.file ? (c.file.lastModified || null) : (c.mtime || null),
       });
       if (i % 10 === 0 || i === candidates.length - 1) {
-        setProgress(`读取文件…（${i + 1}/${job.total}）`, ((i + 1) / job.total) * 25);
+        if (!job.total) break;
+        setProgress(`读取文档…（${i + 1}/${job.total}）`, base + ((i + 1) / job.total) * 20);
       }
     }
     if (job.cancelled) return finishUpload(job, "已取消（未写入任何内容）");
 
-    // 2) 拉取云端已有指纹，算出真正需要传的
-    const { data: existing, error: exErr } = await cloud.database
-      .from("documents").select("rel_path, content_sha").eq("workspace", ws);
-    if (exErr) return finishUpload(job, "读取云端索引失败：" + (exErr.message || ""), true);
-    const have = new Map((existing || []).map((r) => [r.rel_path, r.content_sha]));
+    // 2) 拉取云端已有指纹，算出真正需要传的（只选图片时不查文档表）
+    let todo = [];
+    if (prepared.length) {
+      const { data: existing, error: exErr } = await cloud.database
+        .from("documents").select("rel_path, content_sha").eq("workspace", ws);
+      if (exErr) return finishUpload(job, "读取云端索引失败：" + (exErr.message || ""), true);
+      const have = new Map((existing || []).map((r) => [r.rel_path, r.content_sha]));
 
-    const todo = prepared.filter((p) => have.get(p.rel_path) !== p.content_sha);
-    job.updated = prepared.filter((p) => have.has(p.rel_path) && have.get(p.rel_path) !== p.content_sha).length;
-    job.added = prepared.length - job.updated;
-    job.skipped = job.total - todo.length;
-    if (!todo.length) return finishUpload(job, null);
+      todo = prepared.filter((p) => have.get(p.rel_path) !== p.content_sha);
+      job.updated = prepared.filter((p) => have.has(p.rel_path) && have.get(p.rel_path) !== p.content_sha).length;
+      job.added = prepared.length - job.updated;
+      job.skipped = prepared.length - todo.length;
+    }
+    if (!todo.length && !job.assetSent) return finishUpload(job, null);
 
     // 3) 分批 upsert
     const nowIso = new Date().toISOString();
@@ -1188,7 +1798,7 @@ async function runUpload(candidates) {
       }
       sent += batch.length;
       batch = []; batchBytes = 0;
-      setProgress(`上传中…（${sent}/${todo.length}）`, 25 + (sent / todo.length) * 70);
+      setProgress(`上传文档…（${sent}/${todo.length}）`, base + 20 + (sent / todo.length) * 40);
     };
     for (const p of todo) {
       if (job.cancelled) break;
@@ -1220,16 +1830,29 @@ async function runUpload(candidates) {
 function finishUpload(job, note, isError) {
   state.upload = null;
   const parts = [];
-  if (job.added) parts.push(`新增 ${job.added}`);
-  if (job.updated) parts.push(`更新 ${job.updated}`);
-  if (job.skipped) parts.push(`跳过未变 ${job.skipped}`);
-  if (job.failed) parts.push(`失败 ${job.failed}`);
+  if (job.added) parts.push(`新增 ${job.added} 篇`);
+  if (job.updated) parts.push(`更新 ${job.updated} 篇`);
+  if (job.skipped) parts.push(`跳过未变 ${job.skipped} 篇`);
+  if (job.assetSent) parts.push(`图片 / 视频 ${job.assetSent} 个`);
+  if (job.assetSkipped) parts.push(`图片未变 ${job.assetSkipped} 个`);
+  if (job.failed) parts.push(`失败 ${job.failed} 篇`);
+  if (job.assetFailed) parts.push(`图片失败 ${job.assetFailed} 个`);
+  if (job.assetTooBig) parts.push(`超大跳过 ${job.assetTooBig} 个`);
   const summary = parts.length ? parts.join("，") : "没有需要传输的内容";
+
+  // 被忽略的文件类型要单独说一句：静默丢弃会让人以为「传成功了」
+  const warns = [];
+  if (job.assetTooBig) warns.push(`有 ${job.assetTooBig} 个文件超过 ${Math.round(ASSET_MAX_BYTES / 1024 / 1024)}MB 未上传`);
+  if (job.assetFailed) warns.push(`有 ${job.assetFailed} 个图片 / 视频上传失败，可重试`);
+  if (job.failed) warns.push(`有 ${job.failed} 篇文档未成功，可稍后重试`);
+  if (job.ignored) warns.push(`忽略了 ${job.ignored} 个不支持的文件`);
+
   el.progressFill.style.width = "100%";
   el.progressLabel.textContent = note || summary;
-  if (note || job.failed) {
-    el.uploadResult.textContent = (note ? note + "。" : "") + (job.failed ? `有 ${job.failed} 篇未成功，可稍后重试。` : "");
-    el.uploadResult.hidden = !el.uploadResult.textContent;
+  const detail = note || warns.length ? [note ? note + "。" : "", warns.join("；"), warns.length ? "。" : ""].join("") : "";
+  if (detail) {
+    el.uploadResult.textContent = detail;
+    el.uploadResult.hidden = false;
   }
   toast(note || summary, isError ? "error" : undefined);
   if (!job.cancelled) setTimeout(() => { el.uploadProgress.hidden = true; }, 1500);
@@ -1268,6 +1891,9 @@ el.wsList.addEventListener("click", async (e) => {
   const { data, error } = await cloud.database.from("documents").delete().eq("workspace", ws).select("id");
   if (error || !Array.isArray(data) || data.length === 0) { toast("删除失败或没有权限", "error"); return; }
   state.docs = state.docs.filter((d) => d.workspace !== ws);
+  // 分区里的图片也被一并删掉了吗？没有 —— 这里删的只是文档行。
+  // 但用户的心智是「这个分区清空了」，所以把该分区的上传清单一起作废，下次重传一遍最稳妥。
+  forgetAssetManifest(ws);
   toast(`已删除 ${data.length} 篇云端副本`);
   renderWsList(); renderTree(); renderStats();
 });
@@ -1279,6 +1905,7 @@ el.clearAllBtn.addEventListener("click", async () => {
   const { data, error } = await cloud.database.from("documents").delete().not("id", "is", null).select("id");
   if (error || !Array.isArray(data)) { toast("清空失败：" + (error ? error.message : "未知错误"), "error"); return; }
   state.docs = [];
+  state.assetManifest = new Map(); saveAssetManifest();
   toast(`已清空 ${data.length} 篇云端副本`);
   closeSheet(el.manageSheet);
   renderWsList(); renderTree(); renderStats();
@@ -1414,6 +2041,7 @@ async function enterApp() {
 
 async function boot() {
   show("boot");
+  loadAssetManifest();
   try {
     initClient();
   } catch (err) {
@@ -1441,6 +2069,7 @@ async function boot() {
     cloud.auth.onAuthStateChange((evt, session) => {
       if (evt === "SIGNED_OUT") {
         state.session = null; state.docs = [];
+        state.signedAssets.clear(); state.assetManifest = new Map(); saveAssetManifest();
         show("login");
       } else if (session && !state.session) {
         enterApp();

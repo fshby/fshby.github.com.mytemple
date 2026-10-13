@@ -1,14 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   启动画面（launch theme 的 windowBackground）。
-  纯色底 + 居中图标，避免模板自带的位图启动图（已删除，随 minSdk 26 改为纯矢量）。
+  纯色底 + 居中的品牌方牌，避免模板自带的位图启动图（已删除，随 minSdk 26 改为纯矢量）。
   Android 12+ 由系统用自己的 splash 机制在同一底色上绘制应用图标。
+
+  注意用的是 ic_logo_tile（带品牌色底）而不是只带线条的 ic_launcher_foreground：
+  标记是米色 #f4ead6，浅色底 #f6f4ef 上直接放会几乎看不见（旧版就是这个毛病）。
+  套一层深色方牌后，浅色 / 深色两种启动底色下都清晰。
 -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:drawable="@color/splash_background" />
     <item
-        android:width="108dp"
-        android:height="108dp"
+        android:width="76dp"
+        android:height="76dp"
         android:gravity="center"
-        android:drawable="@drawable/ic_launcher_foreground" />
+        android:drawable="@drawable/ic_logo_tile" />
 </layer-list>

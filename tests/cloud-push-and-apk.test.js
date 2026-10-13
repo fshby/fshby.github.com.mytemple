@@ -87,20 +87,23 @@ test("来源不匹配时不加任何 CORS 头（桌面自身行为逐字节不�
   assert.match(body, /StatusCode::NO_CONTENT/);
 });
 
-test("只读中间件只挂在三个只读 GET 端点上，写端点一律不挂", () => {
+test("只读中间件只挂在四个只读 GET 端点上，写端点一律不挂", () => {
   const occurrences = [...handlersRs.matchAll(/layer\(axum::middleware::from_fn\(cloud_read_cors\)\)/g)];
-  assert.equal(occurrences.length, 3, `cloud_read_cors 应恰好挂 3 处，实测 ${occurrences.length}`);
+  assert.equal(occurrences.length, 4, `cloud_read_cors 应恰好挂 4 处，实测 ${occurrences.length}`);
 
-  // 三处都必须挂在 get(...) 上
+  // 四处都必须挂在 get(...) 上
   for (const m of occurrences) {
     const lineStart = handlersRs.lastIndexOf("\n", m.index);
     const line = handlersRs.slice(lineStart, m.index + m[0].length);
-    assert.match(line, /get\((get_workspaces|list_files|read_file)\)/, `挂载点必须是只读 handler：${line.trim()}`);
+    assert.match(line, /get\((get_workspaces|list_files|read_file|serve_source)\)/, `挂载点必须是只读 handler：${line.trim()}`);
   }
   for (const [path, handler] of [
     ["/api/workspaces", "get_workspaces"],
     ["/api/files", "list_files"],
     ["/api/files/*path", "read_file"],
+    // 图片字节也走这条只读边界：/api/files 只回文本索引，云端「一键推送」要靠它把
+    // 笔记里引用的本机截图读出来（serve_source 本身已有 `..` 穿越防护）。
+    ["/source/*path", "serve_source"],
   ]) {
     assert.match(
       handlersRs,
@@ -127,7 +130,7 @@ test("?local= 只接受本机回环地址 + 数字端口，其余一律拒绝", 
   assert.doesNotMatch(body, /LOCAL_ORIGIN_RE = \/\^http:\\\/\\\//, "不得放宽到任意 http 源");
 });
 
-test("本机交互全部是 GET 读取，不向本机发任何写请求", () => {
+test("本机交互全部是只读请求，不向本机发任何写请求", () => {
   const body = fnBody(cloudApp, "async function localGet");
   assert.doesNotMatch(body, /method:\s*"(POST|PUT|PATCH|DELETE)"/i, "只读接口不得带写方法");
   assert.match(body, /cache: "no-store"/, "本机读取必须绕开缓存");
@@ -141,6 +144,13 @@ test("本机交互全部是 GET 读取，不向本机发任何写请求", () => 
     );
   }
   assert.doesNotMatch(cloudApp, /fetch\(\s*LOCAL_ORIGIN[\s\S]{0,80}?method:/, "不得向本机发起带方法的请求");
+  // 图片字节读取：只允许 GET / HEAD（HEAD 用来先拿体积，体积没变就不下载整张图）
+  const assetFetches = [...cloudApp.matchAll(/fetch\(\s*localAssetUrl\([^)]*\)\s*,\s*\{([^}]*)\}/g)].map((m) => m[1]);
+  assert.ok(assetFetches.length >= 1, "图片读取必须走 localAssetUrl");
+  for (const opt of assetFetches) {
+    assert.match(opt, /cache: "no-store"/, "本机图片读取也要绕开缓存：换图后不能读到旧字节");
+    assert.doesNotMatch(opt, /method:\s*"(POST|PUT|PATCH|DELETE)"/i, `本机图片只读，不得带写方法：${opt.trim()}`);
+  }
 });
 
 test("从本机导入：索引解包正确、按工作区过滤、只取文本类文件", () => {
@@ -152,13 +162,20 @@ test("从本机导入：索引解包正确、按工作区过滤、只取文本�
   assert.match(body, /f\.workspace_id === def\.id/, "必须按工作区过滤，避免串到别的库");
 });
 
-test("从本机导入：指纹一致直接跳过，读取才用正文；只提交有变化的", () => {
+test("从本机导入：指纹一致就不重复上传；图片则必须逐篇扫引用（正文没变≠图片已上云）", () => {
   assert.match(cloudApp, /function relFromRef\(ref, wsId\)/, "FileEntry.path 形如 <wsId>/<相对路径>，要剥前缀");
   const body = fnBody(cloudApp, "async function runLocalImport");
-  assert.match(body, /have\.get\(rel\) === f\.content_sha256/, "本机已给指纹，一致就跳过（连正文都不读）");
+  assert.match(body, /have\.get\(rel\) === f\.content_sha256/, "本机已给指纹，一致就不上传");
   assert.match(body, /candidates\.push\(\{ relPath: rel, text, mtime: entry\.modified \|\| null \}\)/, "带 mtime 便于云端侧比对");
   assert.match(body, /\.select\("rel_path, content_sha"\)/, "先取云端指纹再决定传什么");
   assert.doesNotMatch(body, /\.delete\(\)|\.insert\(|\.update\(/, "本机导入流程不得直接操作云端表（交给 runUpload 统一 upsert）");
+  // 图片必须从**每一篇**的正文里找：文档没改，不代表它引用的截图已经在云端
+  //（图片同步上线前推送过的笔记，全部正文一致、图片全缺 —— 只按指纹判断就永远修不回来）
+  assert.match(body, /scanned\.push\(\{ rel, text \}\)/, "每篇正文都要留下，供引用扫描");
+  assert.match(body, /collectLocalAssets\(scanned, cloudWs, setNote\)/, "图片扫描要覆盖全部本机文档");
+  // 没有文档变化但图片缺失时不能提前返回
+  assert.match(body, /if \(!candidates\.length && !assets\.length\)/, "只有文档与图片都齐了才算「已是最新」");
+  assert.match(body, /await runUpload\(candidates, assets, 0\)/, "图片要随这一次导入一起上云");
 });
 
 test("从本机导入失败时给出可操作的提示（桌面端需运行 + 同一台电脑）", () => {
@@ -170,6 +187,42 @@ test("从本机导入失败时给出可操作的提示（桌面端需运行 + �
   assert.match(cloudHtml, /id="localImportBtn"/, "需要触发按钮");
   assert.match(cloudHtml, /id="localImportNote"/, "需要状态提示位");
   assert.match(cloudApp, /el\.localImport\.hidden = false/, "仅在带 ?local= 时显示");
+});
+
+test("本机图片：按引用解析候选路径、先 HEAD 比体积、读到的字节交给同一条存储链路", () => {
+  // 引用提取要覆盖 Markdown 与内联 HTML 两种写法
+  assert.match(cloudApp, /function extractAssetRefs\(md\)/, "必须有引用提取");
+  const ex = fnBody(cloudApp, "function extractAssetRefs");
+  assert.ok(ex.includes("!\\[[^\\]]*\\]\\("), "要认 ![alt](url)");
+  assert.ok(ex.includes("img|video|source"), "要认 <img|video|source src=…>");
+
+  // 本机 URL 与桌面端同语义：引用什么路径，就是同源下的那个路径
+  assert.match(cloudApp, /function localAssetUrl\(rel\)/, "必须有本机资源 URL 拼装");
+  assert.match(cloudApp, /return LOCAL_ORIGIN \+ "\/" \+ String\(rel\)\.split\("\/"\)\.map\(encodeURIComponent\)\.join\("\/"\);/,
+    "本机资源路径要逐段转义后拼在 LOCAL_ORIGIN 上");
+
+  const body = fnBody(cloudApp, "async function collectLocalAssets");
+  assert.ok(body.length > 500, "collectLocalAssets 实现缺失");
+  // 候选按优先级顺序试，第一个能读到的就是它（与渲染时同一套解析顺序）
+  assert.match(body, /assetRelCandidates\(ref, d\.rel\)/, "必须复用同一套引用解析");
+  assert.match(body, /ASSET_EXT\.test\(p\)/, "只取图片 / 视频类引用");
+  // 先 HEAD 拿体积，体积与清单一致就不下载整张图
+  assert.match(body, /method: "HEAD"/, "必须先发 HEAD 探体积");
+  assert.match(body, /content-length/, "体积取自 Content-Length");
+  assert.match(body, /state\.assetManifest\.get\(assetManifestKey\(ws, rel\)\) === size/, "体积没变就不下载");
+  assert.match(body, /skipFetch: true/, "跳过下载的条目不得带着假字节进上传队列");
+  // 单张读不到不能打断整批
+  assert.match(body, /catch \(_\) \{ \/\* 单张读不到就跳过/, "单张失败要吞掉，不能影响其它图片与文档");
+});
+
+test("本机图片与网页选择两条路共用同一套存储上传（对象路径、增量、计数都不另起一套）", () => {
+  const body = fnBody(cloudApp, "async function runLocalImport");
+  assert.match(body, /collectLocalAssets\(/, "本机导入必须走资源收集");
+  // 关键：收集完直接交给 runUpload → uploadAssets，绝不自己写一份 upload 逻辑
+  assert.match(body, /runUpload\(candidates, assets, 0\)/, "资源必须交给统一入口");
+  assert.doesNotMatch(body, /storage\.upload\(/, "本机导入不得自己调存储上传（否则增量与计数会分叉）");
+  const up = fnBody(cloudApp, "async function uploadAssets");
+  assert.match(up, /cloud\.storage\.upload\(/, "统一入口才真正上传");
 });
 
 /* ══ 三、桌面入口 ═══════════════════════════════════════════════ */

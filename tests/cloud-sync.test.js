@@ -82,14 +82,15 @@ test("前端从不上送 owner_id（归属由数据库 DEFAULT auth.uid() 决定
 });
 
 test("所有写操作都用 .select() 读回，用于区分「被 RLS 过滤」与「真的成功」", () => {
-  const calls = cloudApp.match(/\.(upsert|update|delete)\(/g) || [];
+  // 只统计**数据库链上**的写操作。本地集合（Map/Set）的 .delete() 不是网络写，
+  // 例如打开文档后往内存缓存里写的 docCache.delete(key)，不该被算进来。
+  const all = [...cloudApp.matchAll(/\.(upsert|update|delete)\(/g)];
+  const calls = all.filter((m) =>
+    /cloud\.database|\.from\(/.test(cloudApp.slice(Math.max(0, m.index - 200), m.index)));
   assert.ok(calls.length >= 3, `应有多处写操作，实测 ${calls.length}`);
   // 每个写操作链上都应出现 .select( —— 逐个切片检查
-  let from = 0;
-  for (let n = 0; n < calls.length; n += 1) {
-    const at = cloudApp.indexOf(calls[n], from);
-    from = at + 1;
-    const tail = cloudApp.slice(at, at + 420);
+  for (const m of calls) {
+    const tail = cloudApp.slice(m.index, m.index + 420);
     const end = tail.search(/;\s*\n/);
     const stmt = end > 0 ? tail.slice(0, end) : tail;
     assert.match(stmt, /\.select\(/, `写操作缺少 .select() 读回：${stmt.split("\n")[0].trim()}`);
@@ -226,7 +227,8 @@ test("有会话才进入工作台，退出登录后回到登录页且不残留�
 
 test("上传由用户显式选择触发，支持文件夹 / 多选 / 拖拽 / zip 四种入口", () => {
   assert.match(cloudHtml, /webkitdirectory/, "必须支持选择文件夹");
-  assert.match(cloudHtml, /accept="\.md,\.markdown,\.txt,\.zip"/, "必须支持选择 md/txt/zip");
+  assert.match(cloudHtml, /accept="\.md,\.markdown,\.mdown,\.mkd,\.txt,\.zip/,
+    "必须支持选择 md/txt/zip");
   assert.match(cloudApp, /webkitGetAsEntry/, "必须支持拖拽文件夹");
   assert.match(cloudApp, /fflate\.unzipSync|window\.fflate/, "必须支持 zip 包解析");
   assert.match(cloudApp, /addEventListener\("drop"/, "必须有拖放处理");
@@ -488,4 +490,195 @@ test("自托管脚本钉死精确版本，不得使用浮动 tag", () => {
   // katex 的样式与字体必须同版本，否则 CSS 里声明的字形会对不上字体文件
   const katexVers = [...new Set((src.match(/katex@[\d.]+/g) || []))];
   assert.equal(katexVers.length, 1, `katex 版本必须唯一，实测 ${katexVers.join(" / ")}`);
+});
+
+/* ══ 列表页：品牌标识 + 三种视图 + 检索（2026-10-12 重设计）══════════
+ * 背景：手机端（含 APK）首屏此前只有顶栏一个小圆点 + 一段分区树，
+ * 既缺产品识别，又把「最近更新」和分区树重复铺开。这一轮：
+ *   ① 登录页加品牌标识，与 APK 图标同母题；
+ *   ② 列表页用「一个分段控件 → 目录 / 最近 / 全部」承载三种看全整库的方式；
+ *   ③ 检索从「标题/路径筛选」升级为三层递进，并给出正文命中片段。
+ * 下面锁的是其中「改错了不报错、但会静默退化」的部分。 */
+
+test("登录页品牌标识与 cloud/icon.svg 同母题（拱弧 + 展开的书 + 核心圆点）", () => {
+  assert.match(cloudHtml, /class="login-brand"/, "登录卡必须有品牌标识块");
+  assert.match(cloudHtml, /class="brand-tile"/, "品牌方牌容器");
+  assert.match(cloudHtml, /class="brand-name-lg">知识库云端</, "必须有品牌名");
+  assert.match(cloudHtml, /class="brand-tagline"/, "必须有副标语");
+  const icon = read("cloud/icon.svg");
+  assert.equal((icon.match(/<path\b/g) || []).length, 2, "icon.svg 应为 2 条 path（拱弧 + 书）");
+  assert.equal((icon.match(/<circle\b/g) || []).length, 1, "icon.svg 应为 1 个圆点");
+  assert.ok(icon.includes("M11 25.5 Q32 9.5 53 25.5"), "icon.svg 缺少屋顶拱弧");
+  assert.ok(icon.includes("M17 44 L32 51.5 L47 44"), "icon.svg 缺少展开的书");
+  // 登录页内联的那份必须是同一套几何 —— 两端各画各的必然分叉
+  for (const d of ["M11 25.5 Q32 9.5 53 25.5", "M17 44 L32 51.5 L47 44"]) {
+    assert.ok(cloudHtml.includes(d), `登录页内联标记缺少路径：${d}`);
+  }
+  // 方牌底色走 CSS（浅/深主题下都要清晰），标记用米色
+  assert.match(cloudCss, /\.brand-tile\s*\{[^}]*linear-gradient/, "品牌方牌应有品牌色渐变底");
+  assert.match(cloudHtml, /<link rel="icon" href="\/icon\.svg"/, "云页面应带 svg favicon（否则每次访问都 404）");
+});
+
+test("APK 应用图标与启动图同母题，且启动图不再「浅色压浅色」", () => {
+  const fg = read("apk/android/app/src/main/res/drawable/ic_launcher_foreground.xml");
+  assert.equal((fg.match(/<path\b/g) || []).length, 3, "前景层 = 拱弧 + 书 + 圆点（3 条 path）");
+  assert.ok(fg.includes("M35.1,48.15 Q54,33.75 72.9,48.15"), "前景拱弧（64→108 视口按 v = 25.2 + 0.9d 映射）");
+  assert.ok(fg.includes("M40.5,64.8 L54,71.55 L67.5,64.8"), "前景书页");
+  // 启动图必须用带品牌底的方牌：标记是米色，直接放在浅色启动底上几乎看不见（旧版缺陷）
+  const splash = read("apk/android/app/src/main/res/drawable/splash.xml");
+  assert.match(splash, /@drawable\/ic_logo_tile/, "启动图必须用带品牌底的方牌");
+  assert.ok(existsSync(new URL("apk/android/app/src/main/res/drawable/ic_logo_tile.xml", ROOT)), "方牌矢量必须存在");
+  const tile = read("apk/android/app/src/main/res/drawable/ic_logo_tile.xml");
+  assert.match(tile, /#6b5f44/, "方牌底 = 品牌色");
+  assert.ok(tile.includes("#f4ead6"), "方牌标记 = 米色");
+  for (const d of ["M11,25.5 Q32,9.5 53,25.5", "M17,44 L32,51.5 L47,44"]) {
+    assert.ok(tile.includes(d), `方牌缺少路径：${d}`);
+  }
+});
+
+test("列表页用一个分段控件承载三种视图，且不再重复展示最近更新", () => {
+  // 旧版把「最近更新」伪分区和分区树同时铺开，信息重复、首屏很长
+  assert.doesNotMatch(cloudApp, /最近更新/, "树里不得再塞最近更新伪分区");
+  assert.match(
+    cloudHtml,
+    /id="viewSwitch"[\s\S]{0,700}data-view="tree"[\s\S]{0,400}data-view="recent"[\s\S]{0,400}data-view="all"/,
+    "分段控件必须提供 目录 / 最近 / 全部 三个视图"
+  );
+  assert.match(cloudHtml, /id="cards"/, "必须新增卡片容器");
+  assert.match(cloudHtml, /id="wsChips"/, "必须新增分区筛选容器");
+  for (const fn of ["applyView", "renderCards", "renderList", "visibleDocs", "renderWsChips", "docCard", "fmtRelative"]) {
+    assert.match(cloudApp, new RegExp(`function ${fn}\\(`), `缺少 ${fn}()`);
+  }
+  // 三种视图共用同一个卡片组件，视觉噪音不随视图数增长
+  assert.match(cloudApp, /el\.cards\.hidden = isTree/, "切换视图必须真的显隐容器");
+  assert.match(cloudApp, /renderTree\(\);\s*renderCards\(\);/, "切视图后两个容器都要重绘");
+  // 列表查询不得取正文：否则为了看一眼目录就得把整库拉下来
+  const load = cloudApp.slice(cloudApp.indexOf("async function loadDocs"), cloudApp.indexOf("function renderStats"));
+  assert.doesNotMatch(load, /\bcontent\b/, "列表查询的 select 不得包含 content（content_sha 不算）");
+});
+
+test("检索三层递进：本地标题/路径 + 云端正文（只取元数据）+ 按 id 批量补片段", () => {
+  const fn = cloudApp.slice(cloudApp.indexOf("async function runSearch"), cloudApp.indexOf("/* ══ 阅读"));
+  assert.ok(fn.length > 400, "runSearch 实现缺失");
+  // 云端正文检索：ilike 命中，但**不 select content**（把正文留到第 4 步按需补拉）
+  assert.match(
+    fn,
+    /\.select\("id, workspace, rel_path, title, bytes, updated_at"\)[\s\S]{0,220}\.ilike\("content"/,
+    "正文检索必须用「不 select content 的 ilike」"
+  );
+  // 片段补拉：一次批量请求 + 硬上限
+  assert.match(cloudApp, /const SNIPPET_DOCS = \d+/, "片段补拉条数必须有上限");
+  assert.match(fn, /\.in\("id", need\.map/, "片段补拉必须一次批量请求");
+  assert.match(fn, /slice\(0, SNIPPET_DOCS\)/, "补拉必须收在上限内");
+  // 片段与高亮
+  assert.match(cloudApp, /function buildSnippet\(/, "必须有正文片段提取");
+  assert.match(cloudApp, /function markHits\(/, "必须有命中高亮");
+  assert.match(cloudApp, /<mark>/, "高亮用 <mark>");
+  // 用户输入永远不当 HTML：关键词必须先转义再进正则
+  assert.match(cloudApp, /const needle = escapeHtml\(q\)/, "关键词必须先转义再进正则");
+  // 相关度：标题 > 路径 > 仅正文
+  assert.match(cloudApp, /function scoreDoc\(/, "必须有相关度打分");
+  // Esc 退出搜索态
+  assert.match(cloudApp, /document\.activeElement === el\.q\)\s*\{\s*el\.q\.blur\(\); applyView\(\);/, "Esc 必须能退出搜索");
+  // 搜索期间的并发保护（旧的 searchToken 机制不能丢）
+  assert.match(fn, /token !== state\.searchToken/, "必须保留搜索竞态保护");
+});
+
+test("打开文档的正文会进内存缓存，供列表页片段与秒开复用", () => {
+  assert.match(cloudApp, /function rememberDoc\(/, "必须有正文缓存写入函数");
+  assert.match(cloudApp, /rememberDoc\(id, state\.docSource\)/, "openDoc 成功后必须写缓存");
+  assert.match(cloudApp, /const DOC_CACHE_MAX = \d+/, "缓存必须有上限，避免长会话内存无限增长");
+  assert.match(cloudApp, /state\.docCache\.clear\(\)/, "退出登录必须清缓存（换账号不能残留他人正文）");
+  // 点击代理要同时认树的条目与新卡片
+  assert.match(cloudApp, /closest\("\.doc-link, \.doc-card"\)/, "点击代理必须同时覆盖 doc-link 与 doc-card");
+});
+
+/* ══ 文档里的图片 / 视频（2026-10-12 补链）══════════════════════════
+ * 背景：文档正文里的截图写作 `![](source/x.webp)`，桌面端由 Rust 的 /source/*
+ * 直接读磁盘所以一直正常；云端没有这个路由，相对路径按云域解析必然 404 ——
+ * 这就是「手机端截图不显示」的根因，而且图片此前**根本没被上传**（上传链路只收文本）。
+ *
+ * 补链的两条铁律：
+ *   ① 图片不进 documents.content —— 一篇 20 图的笔记会把正文撑到几十兆，
+ *      列表查询和正文检索都会被拖死（列表查询本来就不 select content）；
+ *   ② 存储键必须与文档 rel_path 同构（assets/<分区>/<工作区相对路径>），
+ *      这样文档里写 `source/x.webp` 就能直接对上，不存在需要维护的映射表。
+ * 下面锁住这两条以及围绕它们的增量、失败与占位行为。 */
+
+test("上传放行图片与视频，且不再静默丢弃", () => {
+  assert.match(cloudApp, /const ASSET_EXT = \/\\\.\(png\|jpe\?g/, "必须有资源扩展名白名单");
+  assert.match(cloudHtml, /accept="[^"]*\.webp/, "文件选择器必须放行 webp");
+  assert.match(cloudHtml, /accept="[^"]*\.mp4/, "文件选择器必须放行视频");
+  assert.match(cloudApp, /function splitEntries\(/, "必须把条目分成文档与资源两堆");
+  assert.match(cloudApp, /const \{ docs, assets, ignored \} = splitEntries\(/, "handleEntries 必须走分类");
+  // zip 里也要收二进制，否则「打包整个知识库搬上手机」这条路依然会丢图
+  const zip = cloudApp.slice(cloudApp.indexOf("async function readZip"), cloudApp.indexOf("function splitEntries"));
+  assert.match(zip, /ASSET_EXT\.test\(rawName\)/, "zip 必须同时收文本与图片");
+  assert.match(zip, /bytes, size: bytes\.byteLength/, "zip 里的二进制要保留原始字节");
+  // 被忽略的文件要报数，不能静默丢（旧版就是静默丢，用户以为传成功了）
+  assert.match(cloudApp, /ignored \+= 1/, "必须统计被忽略的文件数");
+  assert.match(cloudApp, /job\.ignored/, "结论文案必须带上被忽略数量");
+});
+
+test("图片走云存储，绝不写进 documents.content", () => {
+  assert.match(cloudApp, /const ASSET_ROOT = "assets"/, "存储前缀必须是常量");
+  assert.match(cloudApp, /function assetObjectPath\(/, "必须有存储路径拼装函数");
+  assert.match(cloudApp, /cloud\.storage\.userPath\(uid, `\$\{ASSET_ROOT\}\/\$\{assetWsSegment\(ws\)\}\/\$\{rel\}`\)/,
+    "存储键 = users/<uid>/assets/<分区>/<相对路径>，与文档 rel_path 同构");
+  assert.match(cloudApp, /function assetWsSegment\(/, "分区名必须先过路径校验再进对象路径");
+  assert.match(cloudApp, /cloud\.storage\.upload\(/, "必须真的调用存储上传");
+  assert.match(cloudApp, /upsert: true/, "同名资源应覆盖（图片改动不产生新键）");
+  assert.match(cloudApp, /contentType: mimeOf\(t\.rel\)/, "必须显式给 contentType，否则浏览器按 octet-stream 处理");
+  assert.match(cloudApp, /cacheControl: "31536000"/, "资源按路径不可变，可长缓存");
+
+  // 关键：资源上传这段里不许出现写 documents 的动作
+  const fn = cloudApp.slice(cloudApp.indexOf("async function uploadAssets"), cloudApp.indexOf("async function signAssets"));
+  assert.ok(fn.length > 600, "uploadAssets 实现缺失");
+  assert.doesNotMatch(fn, /from\("documents"\)/, "资源上传不得碰 documents 表");
+  assert.doesNotMatch(fn, /\.upsert\(/, "资源不走数据库 upsert");
+
+  // 顺序：图片先落地，文档后入库；反了的话用户点开就先看到一排「未同步」
+  assert.match(cloudApp, /if \(assets\.length\) await uploadAssets\(job, ws, assets, setProgress\);/,
+    "资源必须先于文档上传");
+});
+
+test("资源是增量的：本地清单按体积跳过，且换账号 / 删分区会作废", () => {
+  assert.match(cloudApp, /const ASSET_MANIFEST_KEY = "mtCloudAssets\.v1"/, "清单要有稳定的存储键");
+  assert.match(cloudApp, /function loadAssetManifest\(/, "启动时必须读清单");
+  assert.match(cloudApp, /function saveAssetManifest\(/, "上传成功后必须回写清单");
+  assert.match(cloudApp, /state\.assetManifest\.get\(assetManifestKey\(ws, rel\)\) === size/,
+    "同一分区同一路径且体积没变就跳过重传");
+  assert.match(cloudApp, /function forgetAssetManifest\(/, "删除分区后要作废该分区清单");
+  assert.match(cloudApp, /forgetAssetManifest\(ws\)/, "删除分区必须调用它");
+  // 换账号必须清：清单是「这个分区传过哪些图」的账本，留着会让新账号的图被误判为已传
+  assert.match(cloudApp, /state\.assetManifest = new Map\(\);\s*saveAssetManifest\(\);/,
+    "登出必须清清单（换账号不能残留上一个账号的上传记录）");
+  // 单文件上限：超限跳过并计数，不把存储配额一次打满
+  assert.match(cloudApp, /const ASSET_MAX_BYTES = \d+ \* 1024 \* 1024/, "必须有单文件上限");
+  assert.match(cloudApp, /job\.assetTooBig \+= 1/, "超限要计数");
+  assert.match(cloudApp, /job\.assetFailed \+= 1/, "失败要计数");
+});
+
+test("渲染时把本机相对引用换成云存储的签名地址；签不出来给占位而不是裂图", () => {
+  assert.match(cloudApp, /async function resolveDocAssets\(root, doc\)/, "必须有渲染后解析");
+  assert.match(cloudApp, /await resolveDocAssets\(el\.docBody, data\)/, "openDoc 渲染完必须调用");
+  assert.match(cloudApp, /function assetRelCandidates\(/, "必须有引用解析");
+  // 存储桶不对外暴露公开地址，读也必须带签名
+  assert.match(cloudApp, /cloud\.storage\.createSignedUrls\(need, SIGN_TTL\)/, "必须批量签发");
+  assert.match(cloudApp, /cloud\.storage\.createSignedUrl\(p, SIGN_TTL\)/, "批量失败要逐个兜底");
+  assert.match(cloudApp, /const SIGN_TTL = 3600/, "签名有效期取 SDK 上限（≤3600s）");
+  // 外链不是本地资源，原样交给浏览器（搞钱.md 的 COS 签名图就靠这条）
+  assert.ok(cloudApp.includes("blob:|mailto:|javascript:") && cloudApp.includes(".test(raw)) return [];"),
+    "外链不得被当成存储对象（http/data/blob 原样交给浏览器）");
+  // 候选顺序：先工作区根相对（与桌面端 serve_source 语义一致），再文档同目录
+  assert.match(cloudApp, /const wsAsset = p\.match\(\/\^ws-asset\\\/\[\^\/\]\+\\\/\(\.\+\)\$\/\)/, "要认旧版 ws-asset/ 写法");
+  // 签不出来 = 云端没这张图 → 占位，别让用户对着裂图猜
+  assert.match(cloudApp, /function markAssetMissing\(/, "必须有缺图占位");
+  assert.match(cloudApp, /if \(!hit\) \{ markAssetMissing\(it\.node\); continue; \}/, "缺图必须走占位");
+  assert.match(cloudCss, /\.asset-missing\s*\{/, "占位要有样式");
+  assert.match(cloudCss, /\.asset-missing-tag\s*\{/, "占位要有「未同步」标签");
+  // 签名 URL 属短期凭证：登出即清，不要长期留在内存
+  assert.match(cloudApp, /state\.signedAssets\.clear\(\)/, "登出必须清签名缓存");
+  // 缓存命中就不重复签（同一篇反复打开不该反复请求）
+  assert.match(cloudApp, /if \(hit && hit\.exp > now \+ 60_000\) out\.set\(p, hit\.url\)/, "未过期的签名要复用");
 });

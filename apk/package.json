@@ -1,6 +1,6 @@
 {
   "name": "mytemple-cloud-apk",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "private": true,
   "description": "MyTemple 知识库云端 · Android 客户端（WebView 加载云端工作台，Origin 与会话与浏览器端一致）",
   "scripts": {

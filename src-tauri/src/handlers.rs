@@ -247,7 +247,13 @@ pub fn build_native_router(state: Arc<ServerState>) -> Router {
         .route("/api/asset", post(upload_asset).layer(DefaultBodyLimit::max(50 * 1024 * 1024)))
         .route("/api/asset/delete", post(delete_asset))
         // 资源文件服务
-        .route("/source/*path", get(serve_source))
+        // `/source/*path` 额外挂 cloud_read_cors：云端工作台「一键推送」要把笔记里引用的
+        // 本机截图一并传上云，而它只能通过跨源读本机服务拿字节（/api/files 只回文本索引）。
+        // 与另外两个只读端点同一条安全边界：仅 GET、仅本站域名、本机服务仍只绑 127.0.0.1。
+        .route(
+            "/source/*path",
+            get(serve_source).layer(axum::middleware::from_fn(cloud_read_cors)),
+        )
         .route("/ws-asset/:ws_id/*relative", get(serve_ws_asset))
         // Import/Export
         .route("/api/import", post(import_document).layer(DefaultBodyLimit::max(50 * 1024 * 1024)))

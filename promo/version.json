@@ -1,7 +1,7 @@
 {
-    "version":  "2.1.39",
+    "version":  "2.1.40",
     "downloadUrl":  "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
-    "latestReleaseNotes":  "首轮实机反馈修复：修「可同步内容恒为暂无 Markdown」（后端字段为驼峰命名而前端按旧拼写读取，连带修复拉取冲突检测因此失效的隐患）；云端同步面板显示推送目标、支持选择同步工作区（含各工作区篇数），提示语改为说明具体原因；云端/Android 登录界面重排——验证码为主路径，密码框默认收起，按钮触控目标加大。",
-    "releaseNotes":  "v2.1.39 release. See changelog for details.",
-    "releaseDate":  "2026-10-12"
+    "latestReleaseNotes":  "桌面端「一键推送」会把笔记里引用的本机截图 / 视频一并同步到云端（此前只推文本，手机端图片全是裂图）；文档正文没变时也会补齐缺失的图片。",
+    "releaseNotes":  "v2.1.40 release. See changelog for details.",
+    "releaseDate":  "2026-10-13"
 }

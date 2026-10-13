@@ -181,6 +181,24 @@ body[data-view="doc"] .view { padding-bottom: calc(48px + env(safe-area-inset-bo
   border-radius: var(--radius-lg); padding: 26px 22px;
   box-shadow: var(--shadow-sm);
 }
+/* ── 登录卡品牌标识 ─────────────────────────────────────
+   方牌一律用品牌色（不随主题变），因为要跟手机桌面上的应用图标对得上；
+   标记线条是米色，靠深色牌底保证对比度。 */
+.login-brand { display: flex; align-items: center; gap: 12px; margin: 0 0 20px; }
+.brand-tile {
+  flex: none; width: 44px; height: 44px; border-radius: 12px;
+  background: linear-gradient(180deg, #7a6c4d, #5b5138);
+  display: inline-flex; align-items: center; justify-content: center;
+  box-shadow: var(--shadow-sm);
+}
+.brand-tile svg { display: block; width: 31px; height: 31px; }
+.brand-lockup { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.brand-name-lg {
+  font-size: 17px; font-weight: 650; letter-spacing: .01em;
+  color: var(--text-strong); line-height: 1.2;
+}
+.brand-tagline { font-size: 12.5px; color: var(--muted); }
+
 .card-title { margin: 0 0 6px; font-size: 22px; letter-spacing: .01em; color: var(--text-strong); }
 .card-sub { margin: 0 0 20px; font-size: 13.5px; }
 .card-foot { margin: 14px 0 0; font-size: 12px; text-align: center; }
@@ -241,12 +259,43 @@ body[data-view="doc"] .view { padding-bottom: calc(48px + env(safe-area-inset-bo
 .search-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .search-wrap .icon-btn-sm { position: absolute; right: 5px; }
 
-.statusline {
-  display: flex; align-items: center; gap: 10px;
-  padding: 10px 0 6px; font-size: 13px;
-}
+/* ── 概览 + 视图切换 ───────────────────────────────────── */
+.overview { padding: 10px 0 6px; }
+.overview-row { display: flex; align-items: center; gap: 10px; font-size: 13px; }
 .stats { flex: 1 1 auto; }
-.statusline-actions { display: flex; gap: 14px; }
+.overview-actions { display: flex; gap: 14px; }
+
+/* 分段控件：一个控件承载三种「看全整库」的方式 */
+.viewswitch {
+  display: flex; gap: 3px; padding: 3px; margin: 10px 0 0;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 11px;
+}
+.vs-btn {
+  flex: 1 1 0; border: none; background: transparent; border-radius: 8px;
+  padding: 7px 8px; font-size: 13.5px; color: var(--muted);
+  transition: background .15s, color .15s;
+}
+.vs-btn.is-active {
+  background: var(--surface); color: var(--text-strong);
+  font-weight: 600; box-shadow: var(--shadow-sm);
+}
+
+/* 分区筛选：仅当分区数 > 1 才渲染 */
+.chips {
+  display: flex; gap: 7px; padding: 10px 0 2px;
+  overflow-x: auto; scrollbar-width: none;
+}
+.chips::-webkit-scrollbar { display: none; }
+.chip {
+  flex: none; border: 1px solid var(--line-strong); background: var(--bg-elevated);
+  color: var(--text); border-radius: 999px; padding: 5px 12px; font-size: 12.5px;
+  white-space: nowrap; transition: background .15s, color .15s;
+}
+.chip.is-active {
+  background: var(--accent-solid); color: var(--on-accent);
+  border-color: transparent; font-weight: 650;
+}
+.chip-count { margin-left: 5px; font-size: 11px; opacity: .68; }
 
 /* ── 目录树 ───────────────────────────────────────────── */
 .list-wrap { padding-bottom: 24px; }
@@ -281,9 +330,56 @@ details.ws > .doc-list > .doc-item > .doc-link { padding-left: 34px; }
 .empty-title { font-size: 17px; font-weight: 600; margin: 0 0 8px; color: var(--text-strong); }
 .empty-inline { padding: 28px 4px; font-size: 14px; }
 .result-head { font-size: 12.5px; padding: 6px 2px 10px; }
-#searchResults { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
-#searchResults .doc-link { padding-left: 14px; }
-#searchResults .doc-item:first-child { border-top: none; }
+
+/* ── 文档卡片（「最近」与「全部」两种视图共用一种卡片）─────
+   一条卡片 = 标题 + （分区 · 目录 · 体积 · 时间）。
+   手机上单列、≥640px 双列；不显示正文，避免为了列表把整库正文拉下来。 */
+.doc-cards { display: grid; gap: 9px; grid-template-columns: 1fr; }
+@media (min-width: 640px) { .doc-cards { grid-template-columns: 1fr 1fr; } }
+
+.doc-card {
+  display: flex; flex-direction: column; gap: 4px; width: 100%; text-align: left;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 12px 14px;
+  transition: border-color .15s, box-shadow .15s, transform .15s;
+}
+.doc-card:hover { border-color: var(--line-strong); box-shadow: var(--shadow-sm); }
+.doc-card:active { transform: scale(.99); background: var(--accent-soft); }
+.dc-title {
+  font-size: 15px; font-weight: 600; line-height: 1.42; color: var(--text-strong);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.dc-sub {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  font-size: 12px; color: var(--muted);
+}
+.dc-badge {
+  flex: none; font-size: 11px; font-weight: 650; letter-spacing: .02em;
+  color: var(--accent-strong); background: var(--accent-soft);
+  border-radius: 5px; padding: 1px 6px;
+}
+.dc-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.dc-sep { opacity: .5; }
+
+/* ── 搜索结果 ─────────────────────────────────────────── */
+.search-results { display: flex; flex-direction: column; gap: 9px; }
+.sr-head {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12.5px; color: var(--muted); padding: 2px 2px 0;
+}
+.sr-head strong { color: var(--text-strong); font-weight: 650; }
+.sr-snippet {
+  margin-top: 1px; font-size: 12.5px; line-height: 1.62; color: var(--muted);
+  background: var(--bg); border: 1px solid var(--line);
+  border-radius: 8px; padding: 7px 9px;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+
+/* 命中高亮：三处列表（卡片 / 片段 / 树的文件名）共用一套 */
+.doc-card mark, .sr-snippet mark, .doc-name mark {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+  color: var(--text-strong); border-radius: 3px; padding: 0 2px; font-weight: 650;
+}
 
 /* ── 文档 ─────────────────────────────────────────────── */
 .doc-meta { padding: 18px 0 6px; }
@@ -317,6 +413,35 @@ details.ws > .doc-list > .doc-item > .doc-link { padding-left: 34px; }
 .fallback-pre {
   white-space: pre-wrap; word-break: break-word; font-family: var(--mono);
   font-size: 13px; background: var(--paper); padding: 14px; border-radius: var(--radius);
+  border: 1px solid var(--line);
+}
+
+/* ── 未同步的图片占位 ─────────────────────────────────────────
+ * 文档引用了本机截图、但这张图没跟着上传时出现。
+ * 不做成刺眼的红框：绝大多数情况下用户只是没选 source/ 目录，
+ * 只需要一眼看懂「缺哪张、怎么补」。 */
+.asset-missing {
+  display: inline-flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  margin: 6px 0; padding: 10px 12px; max-width: 100%;
+  border: 1px dashed var(--line-strong); border-radius: var(--radius);
+  background: var(--paper); font-size: 13px; line-height: 1.5;
+}
+.asset-missing-tag {
+  flex: 0 0 auto; padding: 1px 7px; border-radius: 999px;
+  background: var(--accent-soft); color: var(--accent-strong);
+  font-size: 11.5px; letter-spacing: .02em;
+}
+.asset-missing-name { color: var(--text); font-weight: 500; }
+.asset-missing-path {
+  color: var(--muted); font-family: var(--mono); font-size: 11.5px;
+  word-break: break-all;
+}
+.upload-hint {
+  margin: 4px 0 0; font-size: 12.5px; line-height: 1.6;
+}
+.upload-hint code {
+  font-family: var(--mono); font-size: 11.5px;
+  padding: 1px 5px; border-radius: 4px; background: var(--paper);
   border: 1px solid var(--line);
 }
 

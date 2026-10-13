@@ -7,7 +7,8 @@
 <meta name="theme-color" content="#12100e" media="(prefers-color-scheme: dark)" />
 <title>知识库云端 · MyTemple</title>
 <link rel="manifest" href="/manifest.webmanifest" />
-<link rel="stylesheet" href="/styles.css?v=cloud-6" />
+<link rel="icon" href="/icon.svg" type="image/svg+xml" />
+<link rel="stylesheet" href="/styles.css?v=cloud-9" />
 </head>
 <body>
 <div class="app" id="app">
@@ -33,6 +34,30 @@
   <!-- ── 登录 ───────────────────────────────────────────── -->
   <section id="viewLogin" class="view view-login" hidden>
     <div class="card card-login">
+      <!-- 品牌标识：与 cloud/icon.svg、APK 自适应图标同一母题（屋顶拱弧 + 知识核心 + 展开的书） -->
+      <div class="login-brand">
+        <span class="brand-tile" aria-hidden="true">
+          <svg viewBox="0 0 64 64" width="40" height="40" focusable="false">
+            <defs>
+              <linearGradient id="mtLoginTile" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#7a6c4d" />
+                <stop offset="1" stop-color="#5b5138" />
+              </linearGradient>
+            </defs>
+            <rect width="64" height="64" rx="15" fill="url(#mtLoginTile)" />
+            <g fill="none" stroke="#f4ead6" stroke-width="3.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M11 25.5 Q32 9.5 53 25.5" />
+              <path d="M17 44 L32 51.5 L47 44" />
+            </g>
+            <circle cx="32" cy="35.5" r="4.3" fill="#f4ead6" />
+          </svg>
+        </span>
+        <span class="brand-lockup">
+          <strong class="brand-name-lg">知识库云端</strong>
+          <span class="brand-tagline">MyTemple · 私人知识库</span>
+        </span>
+      </div>
+
       <h1 class="card-title">登录</h1>
       <p class="muted card-sub">登录后，只有你自己能看到上传到云端的内容。</p>
 
@@ -124,12 +149,23 @@
       <button id="uploadBtn" class="primary-btn primary-btn-sm" type="button">上传</button>
     </div>
 
-    <div class="statusline">
-      <span id="stats" class="stats muted">—</span>
-      <div class="statusline-actions">
-        <button id="refreshBtn" class="link-btn" type="button">刷新</button>
-        <button id="manageBtn" class="link-btn" type="button">管理</button>
+    <!-- 概览 + 视图切换：一个分段控件换三种「看全整库」的方式，
+         取代旧版「最近更新 + 分区树同时铺开」的重复信息 -->
+    <div class="overview">
+      <div class="overview-row">
+        <span id="stats" class="stats muted">—</span>
+        <div class="overview-actions">
+          <button id="refreshBtn" class="link-btn" type="button">刷新</button>
+          <button id="manageBtn" class="link-btn" type="button">管理</button>
+        </div>
       </div>
+      <div id="viewSwitch" class="viewswitch" role="tablist" aria-label="浏览方式">
+        <button class="vs-btn is-active" type="button" role="tab" aria-selected="true" data-view="tree">目录</button>
+        <button class="vs-btn" type="button" role="tab" aria-selected="false" data-view="recent">最近</button>
+        <button class="vs-btn" type="button" role="tab" aria-selected="false" data-view="all">全部</button>
+      </div>
+      <!-- 分区筛选：只有多于一个分区时才出现（单分区下纯属噪音） -->
+      <div id="wsChips" class="chips" hidden></div>
     </div>
 
     <div id="listWrap" class="list-wrap">
@@ -138,7 +174,8 @@
         <p class="muted">点右上角「上传」，选择你电脑上的知识库文件夹即可。</p>
       </div>
       <div id="tree" class="tree"></div>
-      <div id="searchResults" class="tree" hidden></div>
+      <div id="cards" class="doc-cards" hidden></div>
+      <div id="searchResults" class="search-results" hidden></div>
     </div>
   </section>
 
@@ -176,7 +213,8 @@
         </p>
 
         <!-- 一键推送：仅当桌面端「云端」面板带着 ?local=http://127.0.0.1:<port> 打开时出现。
-             本机 axum 只对本站域名开放三个只读端点，因此这里只能读、不能写本机。 -->
+             本机 axum 只对本站域名开放四个只读端点（/api/workspaces、/api/files、
+             /api/files/*、/source/*），因此这里只能读、不能写本机。 -->
         <div id="localImport" class="local-import" hidden>
           <div class="local-import-head">
             <span class="local-import-tag">一键推送</span>
@@ -184,20 +222,22 @@
           </div>
           <button id="localImportBtn" class="primary-btn primary-btn-sm" type="button">从本机读取并同步</button>
           <p class="muted local-import-note" id="localImportNote">
-            直接读取本机知识库，按内容指纹只上传有变化的文档；本机原文件不会被修改或删除。
+            直接读取本机知识库，按内容指纹只上传有变化的文档，笔记里引用的截图 / 视频会一并同步；本机原文件不会被修改或删除。
           </p>
         </div>
 
         <div id="dropZone" class="dropzone">
           <div class="dropzone-icon" aria-hidden="true">⬆</div>
-          <p class="dropzone-title">把文件夹或 .md 文件拖到这里</p>
-          <p class="muted dropzone-sub">也可以选择下面的方式</p>
+          <p class="dropzone-title">把知识库文件夹拖到这里</p>
+          <p class="muted dropzone-sub">文档与文档里引用的截图 / 视频会一起同步</p>
           <div class="dropzone-actions">
             <button id="pickFolderBtn" class="ghost-btn ghost-btn-strong" type="button">选择文件夹</button>
             <button id="pickFilesBtn" class="ghost-btn" type="button">选择文件</button>
           </div>
           <input id="folderInput" type="file" webkitdirectory directory multiple hidden />
-          <input id="filesInput" type="file" accept=".md,.markdown,.txt,.zip" multiple hidden />
+          <input id="filesInput" type="file"
+            accept=".md,.markdown,.mdown,.mkd,.txt,.zip,.png,.jpg,.jpeg,.jfif,.gif,.webp,.avif,.bmp,.ico,.svg,.mp4,.m4v,.webm,.mov,.ogv"
+            multiple hidden />
         </div>
 
         <label class="field">
@@ -205,6 +245,11 @@
           <input id="wsName" class="input" type="text" placeholder="例如：temple" />
           <span class="field-hint">同一分区内按相对路径去重，不同分区互不影响。</span>
         </label>
+
+        <p class="upload-hint muted">
+          想让文档里的截图在手机上显示，请<strong>连同 <code>source/</code> 目录一起选</strong>：
+          图片按「分区 + 相对路径」存进你的云存储，只有你能读；文档更新而图片没变时不会重传。
+        </p>
 
         <div id="uploadProgress" class="progress" hidden>
           <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
@@ -256,14 +301,14 @@
   <div id="offlineBar" class="offline-bar" role="status" hidden>当前离线：已打开的笔记仍可正常阅读，上传与同步会在联网后恢复</div>
 </div>
 
-<script src="/cloud-config.js?v=cloud-6"></script>
+<script src="/cloud-config.js?v=cloud-9"></script>
 <!--
   第三方库一律同源自托管（cloud/vendor/，见 scripts/vendor-cloud.mjs）。
   这些库原先取自 cdn.jsdelivr.net，而该主机名在部分网络下 TLS 会被重置；
   登录 SDK 恰好挂在那里，加载失败会导致验证码 / 微信 / 密码登录全部不可用。
 -->
-<script src="/vendor/sdk/workbuddy-cloud-sdk.global.js?v=cloud-6"></script>
-<script src="/vendor/fflate/fflate.min.js?v=cloud-6"></script>
-<script src="/app.js?v=cloud-6" type="module"></script>
+<script src="/vendor/sdk/workbuddy-cloud-sdk.global.js?v=cloud-9"></script>
+<script src="/vendor/fflate/fflate.min.js?v=cloud-9"></script>
+<script src="/app.js?v=cloud-9" type="module"></script>
 </body>
 </html>

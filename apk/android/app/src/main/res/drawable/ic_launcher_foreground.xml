@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   应用图标前景层（自适应图标，108x108 视口，中心 72x72 为安全区）。
-  图形与 cloud/icon.svg 同一母题：一条折线构成的书页/山形 + 一个圆点，
-  由 64 视口 1.25 倍缩放并平移居中（x' = 14 + 1.25x，y' = 9.6 + 1.25y）。
+  图形与 cloud/icon.svg 同一母题：屋顶上拱弧 + 知识核心圆点 + 展开的书（下垂 V）。
+  由 64 视口按 v = 25.2 + 0.9d 缩放居中（图形占 108 视口的 22~86，全部落在
+  半径 36 的安全圆内）。**改这里必须同步 cloud/icon.svg**，两端不能分叉。
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
@@ -10,15 +11,26 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
+    <!-- 屋顶（飞檐）：一条上拱弧，两端略低于顶心 -->
     <path
-        android:pathData="M39,62.1 L39,37.1 L54,47.1 L69,37.1 L69,62.1"
+        android:pathData="M35.1,48.15 Q54,33.75 72.9,48.15"
         android:fillColor="#00000000"
         android:strokeColor="#f4ead6"
-        android:strokeWidth="4.25"
+        android:strokeWidth="3.42"
         android:strokeLineCap="round"
         android:strokeLineJoin="round" />
 
+    <!-- 展开的书：下垂的 V，与上方拱弧形成上下对位 -->
     <path
-        android:pathData="M54,67.1 m-3.75,0 a3.75,3.75 0 1,0 7.5,0 a3.75,3.75 0 1,0 -7.5,0"
+        android:pathData="M40.5,64.8 L54,71.55 L67.5,64.8"
+        android:fillColor="#00000000"
+        android:strokeColor="#f4ead6"
+        android:strokeWidth="3.42"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- 知识核心：居中的圆点 -->
+    <path
+        android:pathData="M54,57.15 m-3.87,0 a3.87,3.87 0 1,0 7.74,0 a3.87,3.87 0 1,0 -7.74,0"
         android:fillColor="#f4ead6" />
 </vector>
