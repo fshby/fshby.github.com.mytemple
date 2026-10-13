@@ -1,4 +1,4 @@
-import { createMarkdownEditor } from "/editor-core.js?v=20261013-html-1";
+import { createMarkdownEditor } from "/editor-core.js?v=20261013-html-2";
 import { getPaperBackgroundUrl } from "./modules/paper-texture.js";
 import { escapeHtml, displayName, displayRelativePath, splitPathRef, joinPathRef, parentPathRef, compactName, splitWorkspaceRef, plainText, headingId } from "./modules/path-utils.js";
 import { extractOutline, addCnEnSpaces } from "./modules/editor-utils.js";
@@ -42,7 +42,7 @@ const LARGE_PREVIEW_DELAY = 700;
 const CHUNKED_RENDER_BYTES = 500 * 1024;
 const CHUNK_RENDER_SLICE_BYTES = 150 * 1024;
 const GRAPH_WORKER_URL = "/graph-worker.js?v=20260810-graph-1";
-const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20261013-html-1";
+const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20261013-html-2";
 // Markdown 渲染缓存版本戳：解析器或 CSS 规则升级时递增，确保旧缓存不被复用。
 // 2026-08-29 v1.8.102：安装包 resources 包含 public/ 前端静态文件、端口回滚；修正其他电脑安装后 404 白屏。
 const MARKDOWN_RENDER_VERSION = "20260829-v18102-install-static-bundle-port-scan";
@@ -3982,6 +3982,30 @@ const HTML_DOC_EXT_RE = /\.(html?|xhtml)$/i;
 // 读 localStorage 里的登录态，也能直接同源请求 /api/*。
 // 去掉后帧内落到独立 opaque origin，只保留脚本执行、表单与模态框。
 const HTML_DOC_SANDBOX = "allow-scripts allow-forms allow-modals";
+/* 注入到 srcdoc 最前面的高度上报脚本：沙箱帧与父页是 opaque origin，父页量不到内容高度，
+ * 由帧内自己把 scrollHeight postMessage 出来，父页据此把 iframe 撑到内容高度 ——
+ * 否则整页网页挤在固定小窗里，嵌套滚动很难用（真机反馈 v2.1.41）。 */
+const HTML_FRAME_RESIZE_SCRIPT = '<script>(function(){function p(){var d=document.documentElement,b=document.body;var h=Math.max(d?d.scrollHeight:0,b?b.scrollHeight:0);try{parent.postMessage({type:"mt-html-frame-height",h:Math.ceil(h)},"*")}catch(_){}}function s(){p();if(window.ResizeObserver){try{new ResizeObserver(p).observe(document.documentElement)}catch(_){}}else{setInterval(p,500)}}if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",s)}else{s()}})();</script>';
+
+/**
+ * 父页侧：接收沙箱帧上报的内容高度并调整对应 iframe。
+ * 必须校验 event.source === frame.contentWindow，只认自家帧；高度 clamp 防异常值。
+ */
+function installHtmlFrameAutoHeight() {
+  if (window.__mtHtmlFrameAutoHeightInstalled) return;
+  window.__mtHtmlFrameAutoHeightInstalled = true;
+  window.addEventListener("message", (event) => {
+    const d = event.data;
+    if (!d || d.type !== "mt-html-frame-height") return;
+    const h = Number(d.h);
+    if (!Number.isFinite(h) || h <= 0) return;
+    document.querySelectorAll("iframe.html-inline-frame").forEach((frame) => {
+      if (!frame.isConnected || frame.contentWindow !== event.source) return;
+      const clamped = Math.min(Math.max(Math.ceil(h) + 12, 240), 20000);
+      frame.style.height = `${clamped}px`;
+    });
+  });
+}
 
 function isHtmlDocPath(p) {
   return HTML_DOC_EXT_RE.test(String(p || ""));
@@ -4042,9 +4066,9 @@ function renderHtmlPreview(container, source, options = {}) {
   if (options.defer) {
     // 阅读态容器先不装 srcdoc：等切到阅读模式再激活。
     // 否则同一篇文档会同时存在两个 iframe，脚本被跑两遍（且第 2 个还在后台）。
-    container.__pendingHtml = { frame, content };
+    container.__pendingHtml = { frame, content: HTML_FRAME_RESIZE_SCRIPT + content };
   } else {
-    frame.srcdoc = content;
+    frame.srcdoc = HTML_FRAME_RESIZE_SCRIPT + content;
   }
 }
 
@@ -4733,13 +4757,13 @@ function renderMarkdown(source, options = {}) {
           // Chart.js / ECharts JSON：识别后转自包含 iframe，识别失败 fallback 为 JSON 代码块
           const chartHtml = detectAndBuildChartHtml(raw);
           if (chartHtml) {
-            html.push(`<div class="html-inline-block"><iframe class="html-inline-frame" sandbox="${HTML_DOC_SANDBOX}" srcdoc="${escapeHtml(chartHtml)}"></iframe></div>`);
+            html.push(`<div class="html-inline-block"><iframe class="html-inline-frame" sandbox="${HTML_DOC_SANDBOX}" srcdoc="${escapeHtml(HTML_FRAME_RESIZE_SCRIPT + chartHtml)}"></iframe></div>`);
           } else {
             html.push(`<div class="code-block" data-language="chart"><span class="code-language">chart JSON</span><button class="code-copy" type="button">\u590d\u5236</button><pre><code class="language-json">${escapeHtml(raw)}</code></pre></div>`);
           }
         } else if (normalizedLang === "html-inline" || normalizedLang === "raw-html" || (normalizedLang === "html" && /^\s*<!doctype\s+html|<html[\s>]|<!DOCTYPE\s+HTML/i.test(raw))) {
           // html fence 若包含完整 HTML 文档结构（DOCTYPE / <html>），当作 iframe 内嵌渲染；普通 html 片段仍走高亮
-          html.push(`<div class="html-inline-block"><iframe class="html-inline-frame" sandbox="${HTML_DOC_SANDBOX}" srcdoc="${escapeHtml(raw)}"></iframe></div>`);
+          html.push(`<div class="html-inline-block"><iframe class="html-inline-frame" sandbox="${HTML_DOC_SANDBOX}" srcdoc="${escapeHtml(HTML_FRAME_RESIZE_SCRIPT + raw)}"></iframe></div>`);
         } else if (normalizedLang === "html-web") {
           const url = String(raw || "").trim().split("\n")[0].trim();
           const safeUrl = /^https?:\/\//i.test(url) ? url : "";
@@ -8483,6 +8507,7 @@ async function renderChartsInPreview(container) {
  * （.html-doc-block）共用同一套按钮与全屏浮层，避免两处各写一份。 */
 function decorateHtmlInlineBlocks(container) {
   if (!container || typeof container.querySelectorAll !== "function") return;
+  installHtmlFrameAutoHeight();
   container.querySelectorAll(".html-inline-block, .html-doc-block").forEach((block) => {
     if (block.querySelector(".html-inline-fullscreen-btn")) return;
     const iframe = block.querySelector("iframe.html-inline-frame");

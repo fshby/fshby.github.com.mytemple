@@ -24,7 +24,7 @@
         <a href="index.html#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.1.41</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.1.42</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -40,6 +40,7 @@
         <div class="changelog-toc reveal">
           <h3>版本索引</h3>
           <ul>
+            <li><a href="#v2.1.42">v2.1.42</a> — 内嵌网页体验修复：修「点放大没反应」（浮层样式选择器带错前缀，永远匹配不上）；内嵌网页改为按内容高度自适应，整页网页不再挤在固定小窗里（桌面 / 网页 / 手机三端同步）</li>
             <li><a href="#v2.1.41">v2.1.41</a> — HTML 文件渲染：打开 .html 就像打开网页（编辑态左源码、阅读态整页渲染，可放大全屏）；重新收紧沙箱——网页里的脚本已无法读取你的登录态与知识库；搜索索引不再命中标签噪音</li>
             <li><a href="#v2.1.40">v2.1.40</a> — 图片同步补齐：桌面端「一键推送」把笔记里引用的本机截图 / 视频一并同步到云端（此前只传文本，手机端与网页端图片全是裂图）；正文没变时也会补齐缺失的图片，按体积做增量、图片没变 / 上传失败 / 超过 12MB 分别报数；Android 客户端 1.1.1 图标与启动图重制</li>
             <li><a href="#v2.1.39">v2.1.39</a> — 首轮实机反馈修复：桌面端修「可同步内容恒为暂无 Markdown」（驼峰字段错配，连带修复拉取冲突检测），面板显示推送目标、支持选择同步工作区；云端 / Android 登录界面重排（验证码为主路径，密码框默认收起）</li>
@@ -100,6 +101,25 @@
             <li><a href="#v1.8.93">v1.8.93</a> — 界面与体验升级 + 性能优化</li>
           </ul>
         </div>
+
+                <article class="doc-section reveal" id="v2.1.42">
+          <h3>v2.1.42 · 内嵌网页体验修复</h3>
+          <p>v2.1.41 上线内嵌网页渲染后收到两条实机反馈：点「放大」没反应；网页只显示顶上一条、要在一个小窗里套着滚动。逐条修掉，三端（桌面 / 网页 / 手机）同步生效。</p>
+
+          <h4>修复「放大」没反应</h4>
+          <ul>
+            <li><b>根因是样式选择器带错前缀</b>：全屏浮层是挂在页面最外层的，而样式规则却写成了「必须是正文容器内的后代」才生效 —— 浮层永远匹配不上，点击后其实创建了浮层，但它没有任何尺寸与位置，看起来就是「没反应」。去掉前缀后浮层正常铺满窗口，点背景或 × 关闭，Esc 也可关。</li>
+            <li><b>真浏览器实测</b>：浮层计算样式 position:fixed、z-index 9999、尺寸与视口完全一致。</li>
+          </ul>
+
+          <h4>内嵌网页按内容高度自适应</h4>
+          <ul>
+            <li><b>不再挤在小窗里</b>：此前内嵌网页固定高度（正文里约一屏的三分之一），整页网页只能在小窗里嵌套滚动，手机上尤其难受。现在帧内把实际内容高度上报给外层，外层把网页撑到内容高度 —— 网页多高就显示多高，像看普通长文一样顺着滚。</li>
+            <li><b>动态页面也跟着长</b>：内容高度变化（图片加载、展开折叠）会持续上报，高度实时跟随；内容变矮时高度也会回落。</li>
+            <li><b>异常值有边界</b>：高度限制在 240px ~ 20000px 之间，且只认自家内嵌帧上报的消息 —— 页面里其他来源的同名消息不会生效。</li>
+            <li><b>三端同一份实现</b>：桌面端与云端共用同一渲染器，网页端与手机端（安卓应用加载云端页面）同步获得此修复，无需重新安装应用。</li>
+          </ul>
+        </article>
 
                 <article class="doc-section reveal" id="v2.1.41">
           <h3>v2.1.41 · HTML 文件渲染</h3>

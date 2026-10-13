@@ -168,7 +168,7 @@ test("内嵌网页沙箱必须不含 allow-same-origin", () => {
 test("HTML 预览用 DOM 属性装载 srcdoc，不把内容拼进 HTML 字符串", () => {
   const body = fnBodyAt(appSrc, "function renderHtmlPreview(container, source, options = {}) {");
   assert.match(body, /frame\.setAttribute\("sandbox", HTML_DOC_SANDBOX\)/, "沙箱必须来自统一常量");
-  assert.match(body, /frame\.srcdoc = content/, "srcdoc 必须用属性赋值（自动转义）");
+  assert.match(body, /frame\.srcdoc = HTML_FRAME_RESIZE_SCRIPT \+ content/, "srcdoc 必须用属性赋值（自动转义），并前置高度上报脚本");
   assert.doesNotMatch(body, /srcdoc="\$\{/, "禁止把用户 HTML 拼进标记字符串");
   assert.match(body, /container\.replaceChildren\(block\)/);
   assert.match(body, /decorateHtmlInlineBlocks\(container\)/, "复用「放大」按钮机制");
@@ -176,7 +176,7 @@ test("HTML 预览用 DOM 属性装载 srcdoc，不把内容拼进 HTML 字符串
 
 test("阅读态 iframe 延时装载：同一篇文档不同时跑两份脚本", () => {
   const body = fnBodyAt(appSrc, "function renderHtmlPreview(container, source, options = {}) {");
-  assert.match(body, /container\.__pendingHtml = \{ frame, content \}/, "defer 时先挂起内容");
+  assert.match(body, /container\.__pendingHtml = \{ frame, content: HTML_FRAME_RESIZE_SCRIPT \+ content \}/, "defer 时先挂起内容（含高度上报脚本）");
   const activate = fnBody(appSrc, "function activateDeferredHtml(container)");
   assert.match(activate, /pending\.frame\.srcdoc = pending\.content/);
   assert.match(activate, /pending\.frame\.isConnected/, "已移除的帧不得再装载");
@@ -283,4 +283,45 @@ test("样式表提供 html-doc 预览块（含阅读态更高的视口）", () =
   assert.match(cssSrc, /\.html-doc-bar \{/, "缺说明栏样式");
   assert.match(cssSrc, /\.html-doc-frame \{/, "缺 iframe 样式");
   assert.match(cssSrc, /#markdownView > \.html-doc-block > \.html-doc-frame/, "阅读态要高一些");
+});
+
+test("全屏浮层样式不得带 .markdown-body 前缀（浮层挂在 body 下，带前缀永不匹配）", () => {
+  // v2.1.41 真机回归：「放大」点了没反应 —— overlay 建了但选择器匹配不上，零尺寸不可见。
+  for (const cls of [
+    "html-inline-fullscreen-overlay",
+    "html-inline-fullscreen-close",
+  ]) {
+    assert.doesNotMatch(
+      cssSrc,
+      new RegExp(`\\.markdown-body [^\\n{]*\\.${cls}`),
+      `.${cls} 不能依赖 .markdown-body 祖先`,
+    );
+    assert.match(cssSrc, new RegExp(`\\.${cls} \\{`), `.${cls} 必须有顶层规则`);
+  }
+});
+
+test("沙箱 iframe 高度自适应：帧内上报 + 父页监听（三端同一消息）", () => {
+  // 帧内注入：worker 围栏（chart / html-inline）与 app.js 主线程围栏、html 文档预览
+  for (const [name, src] of [
+    ["public/markdown-worker.js", workerSrc],
+    ["cloud/markdown-worker.js", cloudWorkerSrc],
+    ["public/app.js", appSrc],
+  ]) {
+    assert.match(src, /mt-html-frame-height/, `${name} 应含高度上报消息类型`);
+    assert.match(
+      src,
+      /HTML_FRAME_RESIZE_SCRIPT \+ (chartHtml|raw|content)/,
+      `${name} 的 srcdoc 必须前置高度上报脚本`,
+    );
+  }
+  // 父页监听：必须校验 event.source，防止外来消息乱调高度
+  for (const [name, src] of [
+    ["public/app.js", appSrc],
+    ["cloud/app.js", cloudApp],
+  ]) {
+    assert.match(src, /installHtmlFrameAutoHeight/, `${name} 应安装高度监听`);
+    const body = fnBody(src, "function installHtmlFrameAutoHeight");
+    assert.match(body, /contentWindow !== event\.source/, `${name} 必须校验消息来源帧`);
+    assert.match(body, /Math\.min\(Math\.max/, `${name} 高度必须 clamp`);
+  }
 });

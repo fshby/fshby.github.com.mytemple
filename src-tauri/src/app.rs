@@ -922,6 +922,16 @@ impl AppState {
         Ok(())
     }
 
+    /// 工作区是否勾选了「仅显示 md」（找不到时视为 false，不拦正常操作）。
+    async fn workspace_md_only(&self, id: &str) -> bool {
+        let workspaces = self.workspaces.read().await;
+        workspaces
+            .iter()
+            .find(|w| w.id == id)
+            .map(|w| w.md_only)
+            .unwrap_or(false)
+    }
+
     pub async fn show_workspace(&self, id: &str, visible: bool) -> anyhow::Result<()> {
 
         {
@@ -2037,8 +2047,14 @@ impl AppState {
         }
 
         let is_dir = src_abs.is_dir();
-        if !is_dir && !src.relative.ends_with(".md") {
-            anyhow::bail!("Only .md files can be moved");
+        if !is_dir {
+            // 与 rename 同一语义：只有勾选「仅显示 md」的工作区限制为 Markdown；
+            // 其它工作区的非二进制文件（html/txt/代码等）本来就进索引，允许移动。
+            let md_only_ws = self.workspace_md_only(&src.workspace_id).await;
+            let ext = ext_of(&src.relative);
+            if md_only_ws && !matches!(ext.as_str(), "md" | "markdown") {
+                anyhow::bail!("该工作区勾选了「仅显示 md」，只能移动 Markdown 文件；请在 设置 → 工作区 取消勾选「仅显示 md」后再试");
+            }
         }
 
         // Prevent moving folder into itself
@@ -2122,13 +2138,23 @@ impl AppState {
         }
 
         let is_dir = src_abs.is_dir();
-        let mut safe_name = new_name.to_string();
-        if !is_dir && !safe_name.ends_with(".md") {
-            safe_name = format!("{}.md", safe_name);
-        }
-        safe_name = sanitize_name(&safe_name);
+        // 实机反馈（2026-10-13）：把 hello.md 改名成 hello.html 会被强行落成
+        // hello.html.md。现在：有显式扩展名就尊重用户；无扩展名才补 .md
+        //（保留旧行为：输入 "hello" 仍得 hello.md）。
+        let safe_name = resolve_rename_name(new_name, is_dir);
         if safe_name.is_empty() || safe_name == "." || safe_name == ".." {
             anyhow::bail!("Invalid name");
+        }
+        if !is_dir {
+            // 「仅显示 md」是视图过滤：在这种工作区里改成其它后缀会导致文件从
+            // 列表消失（仍在磁盘上），宁可明确拒绝并指路，也不静默改写用户输入。
+            let md_only_ws = self.workspace_md_only(&src.workspace_id).await;
+            let ext = ext_of(&safe_name);
+            if md_only_ws && !matches!(ext.as_str(), "md" | "markdown") {
+                anyhow::bail!(
+                    "该工作区勾选了「仅显示 md」，改名成 .{ext} 后文件将不在列表中显示；如确要修改，请先在 设置 → 工作区 取消勾选「仅显示 md」"
+                );
+            }
         }
 
 
@@ -3118,6 +3144,32 @@ fn sanitize_name(name: &str) -> String {
 
 
 
+/// 取小写扩展名（无扩展名返回空串）。
+fn ext_of(name: &str) -> String {
+    std::path::Path::new(name)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase()
+}
+
+/// 重命名目标名的解析：先净化非法字符，再去掉结尾的点；
+/// 文件在**没有显式扩展名**时才补 `.md`（输入 "hello" → "hello.md"，保留旧习惯），
+/// 有显式扩展名则原样尊重（输入 "hello.html" → "hello.html"，实机反馈修复）。
+/// 目录不补后缀。
+fn resolve_rename_name(raw: &str, is_dir: bool) -> String {
+    let mut name = sanitize_name(raw);
+    while name.ends_with('.') {
+        name.pop();
+    }
+    if !is_dir && !name.is_empty() && ext_of(&name).is_empty() {
+        name = format!("{}.md", name);
+    }
+    name
+}
+
+
+
 fn document_template(title: &str) -> String {
 
     format!(
@@ -3201,5 +3253,49 @@ mod plain_text_tests {
             extract_title("<html><body>无标题</body></html>", "a/b/fallback.html"),
             "fallback"
         );
+    }
+}
+
+#[cfg(test)]
+mod rename_name_tests {
+    use super::{ext_of, resolve_rename_name};
+
+    #[test]
+    fn explicit_extension_is_respected() {
+        // 实机反馈（2026-10-13）：hello.html 曾被强行落成 hello.html.md
+        assert_eq!(resolve_rename_name("hello.html", false), "hello.html");
+        assert_eq!(resolve_rename_name("笔记.TXT", false), "笔记.TXT");
+        assert_eq!(resolve_rename_name("page.xhtml", false), "page.xhtml");
+        assert_eq!(resolve_rename_name("still.md", false), "still.md");
+    }
+
+    #[test]
+    fn missing_extension_still_appends_md() {
+        // 旧行为保留：输入裸名字仍得 Markdown 文件
+        assert_eq!(resolve_rename_name("hello", false), "hello.md");
+        assert_eq!(resolve_rename_name("  笔记  ", false), "笔记.md");
+    }
+
+    #[test]
+    fn directories_never_get_extension() {
+        assert_eq!(resolve_rename_name("我的文件夹", true), "我的文件夹");
+        assert_eq!(resolve_rename_name("notes", true), "notes");
+    }
+
+    #[test]
+    fn illegal_chars_are_sanitized_and_trailing_dots_trimmed() {
+        assert_eq!(resolve_rename_name("a<b>c.html", false), "abc.html");
+        // "hello." 结尾的点先剥掉，再因无扩展名补 .md，绝不产生 "hello..md"
+        assert_eq!(resolve_rename_name("hello.", false), "hello.md");
+        // 纯点输入剥完为空：交由调用方的空名检查拒绝
+        assert_eq!(resolve_rename_name(".", false), "");
+        assert_eq!(resolve_rename_name("..", false), "");
+    }
+
+    #[test]
+    fn ext_of_is_case_insensitive_and_empty_safe() {
+        assert_eq!(ext_of("a/b/photo.JPG"), "jpg");
+        assert_eq!(ext_of("no-ext"), "");
+        assert_eq!(ext_of("a/b/"), "");
     }
 }

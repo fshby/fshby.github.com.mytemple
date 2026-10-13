@@ -60,6 +60,10 @@ function echartsLibUrl() {
  * 属 no-cors 请求，不受影响。
  */
 const HTML_DOC_SANDBOX = "allow-scripts allow-forms allow-modals";
+/* 注入到 srcdoc 最前面的高度上报脚本：沙箱帧是 opaque origin，父页量不到内容高度，
+ * 由帧内 postMessage 上报 scrollHeight，父页（桌面 app.js / 云端 app.js 都监听同一消息）
+ * 把 iframe 撑到内容高度 —— 否则整页网页挤在固定小窗里。与 app.js 的 HTML_FRAME_RESIZE_SCRIPT 保持一致。 */
+const HTML_FRAME_RESIZE_SCRIPT = '<script>(function(){function p(){var d=document.documentElement,b=document.body;var h=Math.max(d?d.scrollHeight:0,b?b.scrollHeight:0);try{parent.postMessage({type:"mt-html-frame-height",h:Math.ceil(h)},"*")}catch(_){}}function s(){p();if(window.ResizeObserver){try{new ResizeObserver(p).observe(document.documentElement)}catch(_){}}else{setInterval(p,500)}}if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",s)}else{s()}})();</script>';
 
 /**
  * 检测 Chart.js / ECharts JSON 配置，返回可直接在 srcdoc iframe 中渲染的完整 HTML。
@@ -612,14 +616,14 @@ function renderMarkdown(source, options = {}) {
           // 识别失败则 fallback 为普通代码块展示 JSON
           const chartHtml = detectAndBuildChartHtml(raw);
           if (chartHtml) {
-            html.push(`<div class="html-inline-block"><iframe class="html-inline-frame" sandbox="${HTML_DOC_SANDBOX}" srcdoc="${escapeHtml(chartHtml)}"></iframe></div>`);
+            html.push(`<div class="html-inline-block"><iframe class="html-inline-frame" sandbox="${HTML_DOC_SANDBOX}" srcdoc="${escapeHtml(HTML_FRAME_RESIZE_SCRIPT + chartHtml)}"></iframe></div>`);
           } else {
             html.push(`<div class="code-block" data-language="chart"><span class="code-language">chart JSON</span><button class="code-copy" type="button">复制</button><pre><code class="language-json">${escapeHtml(raw)}</code></pre></div>`);
           }
         } else if (normalizedLang === "html-inline" || normalizedLang === "raw-html" || (normalizedLang === "html" && /^\s*<!doctype\s+html|<html[\s>]|<!DOCTYPE\s+HTML/i.test(raw))) {
           // 内嵌 HTML 网页：srcdoc 模式（HTML 内容直接内嵌）
           // 沙箱隔离：脚本可运行，但帧内是独立 opaque origin，访问不到父 DOM 与同源存储
-          html.push(`<div class="html-inline-block"><iframe class="html-inline-frame" sandbox="${HTML_DOC_SANDBOX}" srcdoc="${escapeHtml(raw)}"></iframe></div>`);
+          html.push(`<div class="html-inline-block"><iframe class="html-inline-frame" sandbox="${HTML_DOC_SANDBOX}" srcdoc="${escapeHtml(HTML_FRAME_RESIZE_SCRIPT + raw)}"></iframe></div>`);
         } else if (normalizedLang === "html-web") {
           // iframe URL 模式：加载外部网页
           const url = String(raw || "").trim().split("\n")[0].trim();

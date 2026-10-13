@@ -35,7 +35,7 @@ const UPSERT_BATCH_MAX_DOCS = 20;
 const UPSERT_BATCH_MAX_BYTES = 1_200_000;
 
 /* 静态资源版本戳：改动 cloud/ 下被页面引用的任何文件时，与 index.html 的三件套一起递增。 */
-const ASSET_V = "cloud-12";
+const ASSET_V = "cloud-13";
 
 /* 第三方库一律同源自托管，见 scripts/vendor-cloud.mjs。
  * 绝不改回第三方 CDN —— 见该脚本头部注释：cdn.jsdelivr.net 在部分网络下 TLS 会被重置，
@@ -1176,6 +1176,25 @@ function renderMarkdownInWorker(source) {
     w.postMessage({ seq, source, searchTerm: "", includeHtml: true, includeOutline: false });
   });
 }
+
+/* 沙箱帧高度自适应：worker 渲染的 html / chart 围栏 iframe 会在 srcdoc 最前置一段上报脚本，
+ * 帧内把 scrollHeight postMessage 出来，这里把对应 iframe 撑到内容高度。
+ * 必须校验 event.source === frame.contentWindow，只认自家帧；高度 clamp 防异常值。 */
+(function installHtmlFrameAutoHeight() {
+  if (window.__mtHtmlFrameAutoHeightInstalled) return;
+  window.__mtHtmlFrameAutoHeightInstalled = true;
+  window.addEventListener("message", (event) => {
+    const d = event.data;
+    if (!d || d.type !== "mt-html-frame-height") return;
+    const h = Number(d.h);
+    if (!Number.isFinite(h) || h <= 0) return;
+    document.querySelectorAll("iframe.html-inline-frame").forEach((frame) => {
+      if (!frame.isConnected || frame.contentWindow !== event.source) return;
+      const clamped = Math.min(Math.max(Math.ceil(h) + 12, 240), 20000);
+      frame.style.height = clamped + "px";
+    });
+  });
+})();
 
 let katexPromise = null;
 function loadKatex() {

@@ -11131,6 +11131,10 @@ html body .print-body.print-body .callout.callout.callout-example.callout-exampl
 .markdown-body .html-inline-block:hover .html-inline-fullscreen-btn {
   opacity: 1;
 }
+/* HTML 文档块（.html-doc-block）同样悬停显示「放大」 */
+.html-doc-block:hover .html-inline-fullscreen-btn {
+  opacity: 1;
+}
 .markdown-body .html-inline-fullscreen-btn {
   position: absolute;
   top: 6px;
@@ -11207,7 +11211,9 @@ html body .print-body.print-body .callout.callout.callout-example.callout-exampl
 #markdownView > .html-doc-block > .html-doc-frame {
   height: clamp(420px, 76vh, 1100px);
 }
-.markdown-body .html-inline-fullscreen-overlay {
+/* 全屏浮层挂在 document.body 下（不在 .markdown-body 里），选择器绝不能带容器前缀，
+ * 否则规则匹配不上 —— v2.1.41 曾因此「点放大没反应」（overlay 建了但零尺寸不可见）。 */
+.html-inline-fullscreen-overlay {
   position: fixed;
   inset: 0;
   z-index: 9999;
@@ -11217,14 +11223,14 @@ html body .print-body.print-body .callout.callout.callout-example.callout-exampl
   justify-content: center;
   padding: 20px;
 }
-.markdown-body .html-inline-fullscreen-overlay iframe {
+.html-inline-fullscreen-overlay iframe {
   width: 95vw;
   height: 95vh;
   border: none;
   background: #fff;
   border-radius: 8px;
 }
-.markdown-body .html-inline-fullscreen-close {
+.html-inline-fullscreen-close {
   position: fixed;
   top: 16px;
   right: 24px;

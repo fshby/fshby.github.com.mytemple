@@ -1,7 +1,7 @@
 {
-    "version":  "2.1.41",
+    "version":  "2.1.42",
     "downloadUrl":  "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
-    "latestReleaseNotes":  "HTML 文件渲染：打开 .html 像打开网页（编辑态左源码可改可存、侧边实时预览，阅读态整页渲染并可放大全屏）；同时收紧渲染安全边界——网页内脚本已无法访问宿主页面、登录态与知识库；搜索索引按文件类型分派纯文本，不再命中 HTML 标签噪音。",
-    "releaseNotes":  "v2.1.41 release. See changelog for details.",
+    "latestReleaseNotes":  "内嵌网页体验修复：修「点放大没反应」（全屏浮层样式选择器带错前缀，永远匹配不上）；内嵌网页改为按内容高度自适应，整页网页不再挤在固定小窗里嵌套滚动，桌面 / 网页 / 手机三端同步。",
+    "releaseNotes":  "v2.1.42 release. See changelog for details.",
     "releaseDate":  "2026-10-13"
 }
