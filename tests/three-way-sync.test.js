@@ -14,6 +14,8 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 
 const WS_ID = "ws_test1";
 const WS_NAME = "测试知识库";
+/** 与下面 window.__MT_CLOUD__.endpoint 必须一致（资产直连自己拼 URL，不走 SDK）。 */
+const CLOUD_EP = "https://cloud.example.test";
 const ROOT = new URL("../", import.meta.url);
 
 const sha = (text) => createHash("sha256").update(text, "utf8").digest("hex");
@@ -152,8 +154,11 @@ function makeLocal(files, opts = {}) {
   // 本机 source/ 目录里的资源字节：相对路径（如 "source/x.webp"）→ Uint8Array。
   // 真实后端是 Rust 的 /source/*path（axum get 同时吃 HEAD），命中则带 content-length。
   const sources = new Map(Object.entries(opts.sources || {}).map(([k, v]) => [k, Buffer.from(v)]));
-  const stats = { listCalls: 0, contentReads: 0, saves: 0, sourceHeads: 0, sourceGets: 0 };
+  const stats = { listCalls: 0, contentReads: 0, saves: 0, sourceHeads: 0, sourceGets: 0, storageHeads: 0, storagePosts: 0 };
   let beforeSave = null;
+  /** 让资产上传返回指定状态码（模拟 CORS 被拦 / 鉴权失败 / 5xx），用于验「失败可见 + 可重试」。 */
+  let storageFailStatus = opts.storageFailStatus || 0;
+  const setStorageFail = (code) => { storageFailStatus = code || 0; };
   const fetchStub = async (url, options = {}) => {
     const u = String(url);
     const method = options.method || "GET";
@@ -164,12 +169,51 @@ function makeLocal(files, opts = {}) {
       const cands = [rel, rel.replace(/^source\//, "")];
       const hit = cands.map((c) => sources.get(c)).find(Boolean);
       if (!hit) return { ok: false, status: 404, headers: { get: () => null }, text: async () => "Not Found" };
+      // 真实 /source/* 由 Rust serve_file 按扩展名给 content-type；Blob 的 type 就是它，
+      // 上传时作为 multipart 分片的 Content-Type 落到云存储（渲染能否内联看这个）。
+      const ext = rel.split(".").pop().toLowerCase();
+      const ctype = { webp: "image/webp", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", svg: "image/svg+xml", mp4: "video/mp4" }[ext] || "application/octet-stream";
       if (method === "HEAD") {
         stats.sourceHeads += 1;
         return { ok: true, status: 200, headers: { get: (n) => (n.toLowerCase() === "content-length" ? String(hit.byteLength) : null) }, blob: async () => new Blob([hit]) };
       }
       stats.sourceGets += 1;
-      return new Response(hit, { status: 200, headers: { "content-length": String(hit.byteLength) } });
+      return new Response(hit, { status: 200, headers: { "content-length": String(hit.byteLength), "content-type": ctype } });
+    }
+    if (u.startsWith(`${CLOUD_EP}/.cloud/storage/object/runtime/`)) {
+      // 资产直连的假实现（照抄平台 REST 契约）：HEAD 探针 + multipart POST。
+      // 并且**强制校验请求头只在平台 CORS 白名单内** —— 白名单外的头会让真浏览器
+      // 在预检阶段直接失败（net::ERR_FAILED），这里是防复发的硬门槛。
+      const hdrs = {};
+      for (const [k, v] of Object.entries(options.headers || {})) hdrs[k.toLowerCase()] = String(v);
+      const ALLOWED = new Set(["authorization", "x-wb-webapp-access-key", "content-type"]);
+      for (const k of Object.keys(hdrs)) {
+        if (!ALLOWED.has(k)) throw new Error(`资产请求头「${k}」不在平台 CORS 白名单内，真浏览器会直接拦掉`);
+      }
+      if (!hdrs["x-wb-webapp-access-key"]) throw new Error("资产请求必须带 x-wb-webapp-access-key");
+      const key = u.slice(`${CLOUD_EP}/.cloud/storage/object/runtime/`.length)
+        .split("/").map((s) => decodeURIComponent(s)).join("/");
+      if (method === "HEAD") {
+        stats.storageHeads += 1;
+        const has = activeCloud.objects.has(key);
+        return { ok: has, status: has ? 200 : 404, headers: { get: () => null }, text: async () => (has ? "" : "Not Found") };
+      }
+      if (method === "POST") {
+        stats.storagePosts += 1;
+        const fd = options.body;
+        if (!(fd instanceof FormData)) throw new Error("资产上传必须是 multipart/form-data");
+        if (fd.get("cacheControl") !== "31536000") throw new Error("必须带 cacheControl 分片（与 SDK 同契约）");
+        const blob = fd.get("");
+        if (!(blob instanceof Blob)) throw new Error("文件必须放在**无名**分片里（与 SDK 同契约）");
+        if (storageFailStatus) {
+          return { ok: false, status: storageFailStatus, headers: { get: () => null }, text: async () => '{"message":"upload rejected"}' };
+        }
+        const buf = Buffer.from(await blob.arrayBuffer());
+        if (activeCloud.objects.has(key)) return { ok: false, status: 409, headers: { get: () => null }, text: async () => '{"error":"already exists"}' };
+        activeCloud.objects.set(key, { bytes: buf, contentType: blob.type || "" });
+        activeCloud.uploads.push({ path: key, size: buf.byteLength, contentType: blob.type || "" });
+        return { ok: true, status: 200, headers: { get: () => null }, text: async () => JSON.stringify({ Key: `runtime/${key}` }) };
+      }
     }
     if (u === "/api/workspaces") {
       return jsonResponse({ workspaces, defaultWorkspaceId: defaultId });
@@ -218,7 +262,7 @@ function makeLocal(files, opts = {}) {
     if (u === "/api/open-url") return jsonResponse({ ok: true });
     throw new Error(`未预期的请求：${method} ${u}`);
   };
-  return { fetchStub, stats, armBeforeSave: (fn) => { beforeSave = fn; } };
+  return { fetchStub, stats, setStorageFail, armBeforeSave: (fn) => { beforeSave = fn; } };
 }
 
 /* ══ 装载被测模块 ═════════════════════════════════════════════ */
@@ -228,7 +272,7 @@ const storeBackup = new Map();
 globalThis.window = {
   __MT_CLOUD__: {
     resourceId: "wbcs_test",
-    endpoint: "https://cloud.example.test",
+    endpoint: CLOUD_EP,
     oauthRelayBaseUrl: "https://www.workbuddy.cn/v2/as/genie-baas/oauth",
     publishableKey: "wbpk_test",
   },
@@ -237,10 +281,20 @@ globalThis.window = {
     // ⚠️ SDK 的 storage 面照抄真实契约（见 cloud/vendor 里的 SDK 类型声明）：
     //    userPath(uid, path) → 对象全路径；exists(path) → HEAD 探针 {data:bool}；
     //    upload(path, blob, {contentType, upsert, cacheControl}) → {data, error}。
-    // 写成别的形状（比如让 exists 抛异常）会让「探针失败按缺失处理」的分支假绿。
+    //    写成别的形状（比如让 exists 抛异常）会让「探针失败按缺失处理」的分支假绿。
+    //
+    // ⚠️⚠️ 2026-10-13 起**资产一律不得走 SDK 的 storage**：官方 SDK 每次存储请求都固定带
+    //    X-Client-Info（上传还带 X-Upsert），而平台 CORS 白名单不含这两个头 ——
+    //    桌面端这种跨源调用会在预检阶段被浏览器拦掉（真机表现为 "Failed to fetch"，
+    //    且错误被吞掉，界面上什么都看不到）。所以下面这两个方法**故意抛错**：
+    //    只要有人把资产上传改回 SDK 路径，测试立刻红，而不是等实机再发现。
     createWorkBuddyCloud: () => ({
       database: { from: (t) => activeCloud.query(t) },
-      auth: { getSession: async () => ({ data: activeSession, error: null }) },
+      auth: {
+        getSession: async () => ({ data: activeSession, error: null }),
+        // 资产直连要自己取令牌；无会话时返回 null（与真实 SDK 一致）
+        getAccessToken: async () => (activeSession ? "test-token" : null),
+      },
       storage: {
         // 真实 SDK：userPath(uid, path) → `users/<uid>/<path>`（**无**前导斜杠），
         // 且会校验路径必须以 users/<uid>/ 开头（见 cloud/vendor/sdk 的 scopedPath）。
@@ -252,13 +306,8 @@ globalThis.window = {
           }
           return `users/${uid}/${p}`;
         },
-        exists: async (p) => ({ data: activeCloud.objects.has(p), error: null }),
-        upload: async (p, blob, opts = {}) => {
-          const buf = Buffer.from(await blob.arrayBuffer());
-          activeCloud.objects.set(p, { bytes: buf, contentType: opts.contentType || "" });
-          activeCloud.uploads.push({ path: p, size: buf.byteLength, contentType: opts.contentType || "" });
-          return { data: { path: p }, error: null };
-        },
+        exists: async () => { throw new Error("资产不得走 SDK storage.exists（X-Client-Info 会被 CORS 拦）"); },
+        upload: async () => { throw new Error("资产不得走 SDK storage.upload（X-Upsert / X-Client-Info 会被 CORS 拦）"); },
       },
     }),
   },
@@ -635,6 +684,7 @@ test("推送：云端已有该对象时只探针、不重传（老库重复同�
   assert.equal(s.assetPush, 0, "已有对象不该重传");
   assert.equal(s.assetExists, 1, `应记为「云端已有 1 张」，实测 ${s.assetExists}`);
   assert.equal(cloud.uploads.length, 0, "不得产生任何上传");
+  assert.ok(local.stats.storageHeads >= 1, "云端存在性用 HEAD 探针（只带白名单头，跨源才可用）");
   assert.ok(local.stats.sourceHeads >= 1, "仍要看本机是否存在（引用失效与已同步要能区分）");
 });
 
@@ -678,8 +728,66 @@ test("引用在本机找不到（图片被删 / 路径写错）→ 记为缺失�
   assert.equal(cloud.uploads.length, 0);
 });
 
-test("拉取模式不碰图片上传（本机没有新东西要推）", async () => {
+test("图片上传失败：原因可见、不写核对戳、下次同步自愈", async () => {
+  // 2026-10-13 实机教训：资产上传被浏览器 CORS 拦下时，错误被 per-file catch 吞掉，
+  // 界面上什么都看不到；更糟的是**核对戳照写**，于是这个内容版本以后永远不会再核对，
+  // 图片就再也修不回来了（云存储里 0 个对象的直接原因）。
   const cloud = makeCloud();
+  const { local } = setup({
+    files: { [`${WS_ID}/note.md`]: { content: DOC_WITH_IMG, modified: 1000 } },
+    cloud,
+    localOpts: { sources: { "source/shot.webp": PNG }, storageFailStatus: 403 },
+  });
+
+  const s = await mod.syncCloud({ mode: "push" });
+
+  assert.equal(s.assetPush, 0);
+  assert.equal(s.assetFailed, 1, `上传失败必须计数，实测 ${s.assetFailed}`);
+  assert.ok(
+    s.assetFailures[0] && s.assetFailures[0].includes("source/shot.webp") && s.assetFailures[0].includes("upload rejected"),
+    `必须带原始原因，实测 ${JSON.stringify(s.assetFailures)}`,
+  );
+  assert.ok(s.notes.some((n) => n.includes("图片未上传")), "notes 里也要留痕");
+  assert.match(mod.summarize(s), /图片失败 1 张/, "汇总文案要能直接看到失败与原因");
+
+  const st = JSON.parse(globalThis.localStorage.getItem("mtCloudSync.v1"));
+  assert.ok(!(st.assets || {})["note.md"], "失败时不得写图片核对戳，否则永远不再重试");
+
+  // 放开故障后重试：同一份状态必须能自愈（这正是老库补图的路径）
+  local.setStorageFail(0);
+  const s2 = await mod.syncCloud({ mode: "push" });
+  assert.equal(s2.assetPush, 1, `重试应成功补传，实测 ${s2.assetPush}`);
+  assert.equal(s2.assetFailed, 0);
+  assert.ok(cloud.objects.has(IMG_OBJ));
+  const st2 = JSON.parse(globalThis.localStorage.getItem("mtCloudSync.v1"));
+  assert.ok((st2.assets || {})["note.md"], "成功后应该写上核对戳");
+});
+
+test("升级迁移：旧世代（v1）的图片核对戳必须一次性作废，否则老库永远补不上图", async () => {
+  // v1 的戳是在「上传失败也照写戳」的代码下产生的，内容不可信。
+  // 不递增世代的话，升级到修复版后点推送会直接跳过图片环节 → 看起来像没修好。
+  const cloud = makeCloud();
+  const { } = setup({
+    files: { [`${WS_ID}/note.md`]: { content: DOC_WITH_IMG, modified: 1000 } },
+    cloud,
+    localOpts: { sources: { "source/shot.webp": PNG } },
+  });
+  // 伪造一份 v1 状态：文档内容 sha 与当前完全一致，且已写图片核对戳（无 assetsEpoch）
+  globalThis.localStorage.setItem("mtCloudSync.v1", JSON.stringify({
+    workspace: WS_NAME,
+    lastSyncAt: new Date().toISOString(),
+    files: { "note.md": sha(DOC_WITH_IMG) },
+    assets: { "note.md": sha(DOC_WITH_IMG) },
+  }));
+
+  const s = await mod.syncCloud({ mode: "push" });
+  assert.equal(s.assetPush, 1, `旧世代戳必须作废并重新补图，实测 ${s.assetPush}`);
+  assert.ok(cloud.objects.has(IMG_OBJ));
+  const st = JSON.parse(globalThis.localStorage.getItem("mtCloudSync.v1"));
+  assert.equal(st.assetsEpoch, 2, "升级后要写下当前世代");
+});
+
+test("拉取模式不碰图片上传（本机没有新东西要推）", async () => {  const cloud = makeCloud();
   const { } = setup({
     files: { [`${WS_ID}/note.md`]: { content: DOC_WITH_IMG, modified: 1000 } },
     cloud,

@@ -1,7 +1,7 @@
 {
-    "version":  "2.2.2",
+    "version":  "2.2.3",
     "downloadUrl":  "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
-    "latestReleaseNotes":  "独立的 .html 文件也能同步到云端：桌面端一直把 .html 当一等公民（网页预览、去标签检索），只有同步白名单没放行 —— 本机能看、云端永远没有。现已放行 .html/.htm/.xhtml 参与三路同步；云端工作台与分享页按扩展名分派渲染（沙箱网页原样呈现，图片随分享一起带走），单篇设 1.2MB 上限、超限明确报数；文档里的图片走上一版打通的图片同步链路一起上云。.json / .csv 仍不同步（工作区里的配置文件常含密钥，自动上云等于泄漏）。",
-    "releaseNotes":  "v2.2.2 release. See changelog for details.",
+    "latestReleaseNotes":  "桌面端「一键推送」的截图 / 视频此前永远传不上去：官方 SDK 的存储请求会带两个平台跨源白名单里没有的请求头（X-Client-Info / X-Upsert），浏览器直接拦下预检、请求根本不发出 —— 而登录与文档的头都在白名单内，所以「文档能同步、图片永远缺失」，云端存储对象数为 0。资产上传改为只带白名单头的直连请求（请求体沿用同一份 multipart 契约，云端对象格式不变）；同时修掉两个让故障静默的放大器：上传失败也照写「已核对」戳（一次失败就永久不再重试）、异常被静默吞掉（现在失败原因会写进同步结果）。旧核对戳一次性作废，升级后对工作区点一次「一键推送」即可补齐历史缺失的图片。",
+    "releaseNotes":  "v2.2.3 release. See changelog for details.",
     "releaseDate":  "2026-10-13"
 }

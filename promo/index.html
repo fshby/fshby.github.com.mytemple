@@ -25,7 +25,7 @@
         <a href="#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.2.2</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.2.3</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -33,7 +33,7 @@
     <main id="top">
       <section class="hero section-wrap" aria-labelledby="hero-title">
         <div class="hero-copy reveal">
-          <p class="eyebrow"><span class="status-dot"></span> 本地 Markdown 工作区 <em>v2.2.2 桌面版</em></p>
+          <p class="eyebrow"><span class="status-dot"></span> 本地 Markdown 工作区 <em>v2.2.3 桌面版</em></p>
           <h1 id="hero-title">本地 Markdown 知识库与编辑器</h1>
           <p class="hero-lede">围绕本地 Markdown 文件提供阅读、编辑、目录、图谱、检索、主题与多工作区管理。</p>
           <div class="hero-actions">
@@ -252,7 +252,7 @@
         </div>
         <div class="download-block reveal">
           <div class="download-primary">
-            <span class="download-badge">当前稳定版 v2.2.2</span>
+            <span class="download-badge">当前稳定版 v2.2.3</span>
             <p>独立窗口截图标注、录屏、OCR 文字识别、知识图谱、主题、增量索引、绘图编辑器、代码语法高亮、JSON 格式化预览、版本自更新与可选 AI 辅助功能。</p>
             <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载安装包</a>
             <a class="button button-soft" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Cloud_1.1.2.apk" download>下载 Android 版 (APK v1.1.2)</a>
@@ -260,6 +260,7 @@
           <div class="download-secondary">
             <h3>最近更新</h3>
             <ul class="update-list">
+              <li><span class="ver">v2.2.3</span> 图片同步修复 — 桌面端「一键推送」的截图 / 视频此前<b>永远传不上去</b>（真浏览器实测复现：官方 SDK 的存储请求会带两个平台 CORS 白名单里没有的头，预检直接被拦、请求根本不发出；登录与文档的头都在白名单内，所以「文档能同步、图片永远缺失」）。资产上传改为只带白名单头的直连请求，body 契约不变。同时修掉两个放大器：上传失败也照写「已核对」戳（一次失败就永久不再重试）、异常被静默吞掉（现在失败原因会写进同步结果）。旧版本留下的核对戳一律作废，升级后对工作区点一次「一键推送」即可补齐历史缺失的图片。</li>
               <li><span class="ver">v2.2.2</span> 独立的 .html 文件也能同步到云端 — 桌面端一直把 .html 当一等公民（网页预览、去标签检索），只有同步白名单没放行，本机能看、云端永远没有；云端工作台与分享页按扩展名分派渲染（沙箱网页 + 随分享带走的图片），单个文档设 1.2MB 上限，超限会明确报数。.json / .csv 仍不同步（工作区里的配置文件常含密钥，自动上云等于泄漏）。</li>
               <li><span class="ver">v2.2.1</span> 手机端截图不再「未同步」 — 桌面端「一键推送」补齐图片 / 视频（此前只搬正文，推上去的库文档在、图片全缺，手机与网页只能显示「未同步」占位）；正文没变也会按引用补齐历史缺失图片，云端已有则只探针不重传。分享出去的网页补上内嵌卡片样式与高度自适应，不再被压在 300×150 小窗里。安卓启动第一帧改为品牌方牌与品牌底色（此前是系统占位图标），启动屏受控收起。Android 客户端 1.1.2。</li>
               <li><span class="ver">v2.2.0</span> 重命名后缀修复 — 重命名时显式写的扩展名（如 hello.html）不再被强行改成 hello.html.md；不写扩展名仍自动补 .md；「仅显示 md」工作区下的边界行为改为明确提示。同批随 2.1.42 的内嵌网页体验修复。</li>

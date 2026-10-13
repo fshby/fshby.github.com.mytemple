@@ -73,6 +73,15 @@ const CLIENT_VER = "exe";
 const STATE_KEY = "mtCloudSync.v1";
 const DEVICE_KEY = "mtCloudDevice.v1";
 
+/** 图片核对戳的「世代」。只要改了**怎么核对图片**，就必须递增一次：
+ *  旧世代的戳一律作废，升级后的第一次同步会把全部引用重新核对一遍。
+ *
+ *  v2（2026-10-13）：v1 的戳是在「上传失败也照写戳」的代码下产生的 —— 内容不可信
+ *  （实机表现：云存储里 0 个对象，本机状态里却全是已核对）。不递增的话，
+ *  升级到修复版之后点「一键推送」会直接跳过图片环节，报「内容已一致」，
+ *  看起来像没修好。 */
+const ASSET_EPOCH = 2;
+
 /* ── 图片 / 视频资产 ─────────────────────────────────────────
  * 文档正文里的截图写成 `![](source/x.webp)`，字节存在云存储：
  *   users/<uid>/assets/<分区>/<工作区相对路径>
@@ -116,6 +125,66 @@ function assetObjectPath(uid, ws, rel) {
   } catch (_) {
     return "";
   }
+}
+
+/* ── 云存储直连（资产专用，不走 SDK）──────────────────────────
+ * 2026-10-13 实测的硬约束：平台的 CORS 预检只放行这些请求头 ——
+ *   Authorization, X-Wb-Webapp-Access-Key, Content-Type, Accept, Prefer, Range,
+ *   Content-Range, If-Match, If-None-Match, X-Request-Id, X-Device-Id, X-Wb-Webapp-Language
+ * 而官方 SDK 的**每一次**存储请求都固定带 `X-Client-Info: storage-js/…`，
+ * 上传还额外带 `X-Upsert: true` —— 这两者都不在白名单里。跨源（桌面端就是）
+ * 时浏览器在预检阶段直接判定失败，请求根本不会发出，表现为
+ *   storage.upload / storage.exists 一律抛 "Failed to fetch"（TypeError）。
+ * 而登录与数据库用的头都在白名单内，所以「文档能同步、图片永远传不上去」，
+ * 且因为错误被 per-file catch 吞掉，界面上什么都看不到（2026-10-13 用户反馈）。
+ *
+ * 结论：资产这一路的请求头必须自己控制 —— 只发白名单内的头，body 沿用同一份
+ * multipart 契约（cacheControl 字段 + 无名 Blob）。同源场景（云端页 / APK）本来就没有
+ * 预检，也不受影响。真 Chrome 跨源对照实测见 .verify/cors-cross-origin-check.cjs。
+ *
+ * 副作用：没有 X-Upsert 就不能覆盖同名对象，所以这里只做「云端没有才写」；
+ * 云端已有对象一律按成功处理（保持既有「按路径存在即跳过」的语义）。
+ */
+const STORAGE_BUCKET = "runtime";
+
+/** 资产对象 URL（路径分段逐一编码，中文工作区名也能正确落到同一对象）。 */
+function assetObjectUrl(uid, ws, rel) {
+  const key = assetObjectPath(uid, ws, rel);
+  if (!key) return "";
+  const enc = key.split("/").map((s) => encodeURIComponent(s)).join("/");
+  return `${CFG.endpoint}/.cloud/storage/object/${STORAGE_BUCKET}/${enc}`;
+}
+
+/** 资产请求头：只有白名单内的三个。token 取不到时返回 null（调用方按失败处理）。 */
+async function assetAuthHeaders() {
+  try {
+    const token = await cloudClient().auth.getAccessToken();
+    if (!token) return null;
+    return { authorization: `Bearer ${token}`, "x-wb-webapp-access-key": CFG.publishableKey };
+  } catch (_) {
+    return null;
+  }
+}
+
+/** 云端是否已有该对象：true / false / 抛错（网络、鉴权、CORS 都抛，交给调用方报出来）。 */
+async function storageHasAsset(url, headers) {
+  const res = await fetch(url, { method: "HEAD", headers, cache: "no-store" });
+  if (res.ok) return true;
+  if (res.status === 404) return false;
+  throw new Error(`HTTP ${res.status}`);
+}
+
+/** 写入一个资产对象。返回 { ok, status?, message? }，绝不吞异常信息。 */
+async function storagePutAsset(url, headers, blob) {
+  const fd = new FormData();
+  fd.append("cacheControl", "31536000");
+  fd.append("", blob);
+  const res = await fetch(url, { method: "POST", headers, body: fd });
+  if (res.ok) return { ok: true };
+  if (res.status === 409) return { ok: true, existed: true };   // 已存在（无 upsert 不覆盖）
+  let message = "";
+  try { message = (await res.text()).slice(0, 200); } catch (_) { /* 读不出 body 不影响判失败 */ }
+  return { ok: false, status: res.status, message };
 }
 
 /** 本机资源 URL：笔记里写 `source/x.webp`，本机就是 `/source/x.webp`（本机只读路由）。 */
@@ -174,7 +243,13 @@ async function localAssetSize(rel) {
  */
 async function pushLocalAssets({ docs, ws, uid, onProgress }) {
   const report = (t) => { try { onProgress && onProgress(t); } catch (_) { /* UI 回调出错不影响同步 */ } };
-  const out = { sent: 0, exists: 0, missing: 0, tooBig: 0, failed: 0 };
+  const out = { sent: 0, exists: 0, missing: 0, tooBig: 0, failed: 0, failures: [] };
+  /** 记一条可见的失败原因（同因只留一条，避免 300 张图刷屏）。 */
+  const fail = (rel, msg) => {
+    out.failed += 1;
+    const line = `${rel}：${msg}`;
+    if (out.failures.length < 5 && !out.failures.some((x) => x.split("：")[1] === msg)) out.failures.push(line);
+  };
 
   // 1) 收集「每个引用一组候选路径」（去重，避免同一张图被多篇文档重复处理）
   const jobs = [];
@@ -196,13 +271,18 @@ async function pushLocalAssets({ docs, ws, uid, onProgress }) {
   if (!jobs.length) return out;
 
   report(`核对笔记引用的图片（0/${jobs.length}）…`);
-  const client = cloudClient();
+  const headers = await assetAuthHeaders();
+  if (!headers) {
+    fail("（全部图片）", "登录态不可用，取不到访问令牌");
+    return out;
+  }
   const queue = [];
   const handled = new Set();   // 已解析成功的本机路径（多个引用可能指向同一张图）
 
   // 2) 逐个确认「本机有 + 云端没有」
   //    候选要**依次试**：笔记写 `![](x.webp)` 时既可能是工作区根下的 source/，
   //    也可能是文档同目录下的 —— 只看第一个候选会把后者误报成「本机找不到」。
+  let probeFailed = null;   // 探针本身报错（鉴权 / 网络 / CORS）时的原始原因
   for (let i = 0; i < jobs.length; i += 1) {
     if (i % 5 === 0 || i === jobs.length - 1) report(`核对笔记引用的图片（${i + 1}/${jobs.length}）…`);
     let target = null;
@@ -221,15 +301,16 @@ async function pushLocalAssets({ docs, ws, uid, onProgress }) {
     if (!target) { out.missing += 1; continue; }         // 候选全都不在本机（引用失效）
     handled.add(target.rel);
 
-    const obj = assetObjectPath(uid, ws.name, target.rel);
-    if (!obj) { out.failed += 1; continue; }
-    let present = false;
+    const url = assetObjectUrl(uid, ws.name, target.rel);
+    if (!url) { fail(target.rel, "对象路径非法"); continue; }
     try {
-      const r = await client.storage.exists(obj);
-      present = !!(r && r.data);
-    } catch (_) { present = false; }
-    if (present) { out.exists += 1; continue; }
-    queue.push({ rel: target.rel, obj, size: target.size });
+      if (await storageHasAsset(url, headers)) { out.exists += 1; continue; }
+    } catch (err) {
+      // 探针出错不直接判死：照样排队上传（上传成功就说明只是探针的问题），
+      // 但把原因记下来 —— 历史上正是这一步的报错被吞掉才导致「查不出原因」。
+      probeFailed = String((err && err.message) || err);
+    }
+    queue.push({ rel: target.rel, url, size: target.size });
   }
   if (!queue.length) return out;
 
@@ -242,22 +323,25 @@ async function pushLocalAssets({ docs, ws, uid, onProgress }) {
         const res = await fetch(assetLocalUrl(t.rel), { cache: "no-store" });
         if (!res.ok) return { t, ok: false, why: "local" };
         const blob = await res.blob();
-        const { error } = await client.storage.upload(t.obj, blob, {
-          contentType: mimeOf(t.rel), upsert: true, cacheControl: "31536000",
-        });
-        return { t, ok: !error };
-      } catch (_) {
-        return { t, ok: false };
+        // 分片的 Content-Type 决定云端存下来的 mimetype，也决定浏览器能否内联渲染。
+        // 本机服务正常会给（serve_file 按扩展名），但拿不到时按扩展名兜底，
+        // 不能让它落成 application/octet-stream（那样手机/网页会变成「下载」而不是显示）。
+        const body = blob.type ? blob : new Blob([blob], { type: mimeOf(t.rel) });
+        const r = await storagePutAsset(t.url, headers, body);
+        return r.ok ? { t, ok: true } : { t, ok: false, msg: r.message || `HTTP ${r.status}` };
+      } catch (err) {
+        return { t, ok: false, msg: String((err && err.message) || err) };
       }
     }));
     for (const r of results) {
       done += 1;
       if (r.ok) out.sent += 1;
       else if (r.why === "local") out.missing += 1;
-      else out.failed += 1;
+      else fail(r.t.rel, r.msg);
     }
     report(`上传图片 / 视频（${done}/${queue.length}）…`);
   }
+  if (probeFailed && !out.sent) fail("（云端探针）", probeFailed);
   return out;
 }
 
@@ -647,7 +731,7 @@ function deviceTag() {
 function loadState() {
   try {
     const raw = localStorage.getItem(STATE_KEY);
-    if (!raw) return { workspace: null, lastSyncAt: null, files: {}, assets: {} };
+    if (!raw) return { workspace: null, lastSyncAt: null, files: {}, assets: {}, assetsEpoch: ASSET_EPOCH };
     const parsed = JSON.parse(raw);
     return {
       workspace: parsed && parsed.workspace ? parsed.workspace : null,
@@ -657,9 +741,11 @@ function loadState() {
       // 已确认都在云端」。有它才不会每次同步都把整个库的正文与云端探针重跑一遍。
       // 内容一变（推 / 拉 / 本机编辑）sha 就对不上，自动重新核对。
       assets: parsed && parsed.assets && typeof parsed.assets === "object" ? parsed.assets : {},
+      // 未标世代的是 v1（不可信的旧戳），按 1 处理 → 会被下面的世代判断整批作废
+      assetsEpoch: parsed && Number(parsed.assetsEpoch) ? Number(parsed.assetsEpoch) : 1,
     };
   } catch (_) {
-    return { workspace: null, lastSyncAt: null, files: {}, assets: {} };
+    return { workspace: null, lastSyncAt: null, files: {}, assets: {}, assetsEpoch: ASSET_EPOCH };
   }
 }
 
@@ -708,7 +794,10 @@ export async function syncCloud({ mode = "both", workspaceId, onProgress } = {})
 
   const st = loadState();
   const base = st.workspace === workspace ? (st.files || {}) : {};
-  const baseAssets = st.workspace === workspace ? (st.assets || {}) : {};
+  // 世代不符 → 旧戳整批作废（只影响图片核对，文档的三路判据 base 不受影响）
+  const baseAssets = st.workspace === workspace && Number(st.assetsEpoch || 1) >= ASSET_EPOCH
+    ? (st.assets || {})
+    : {};
   const next = { ...base };
   // 本次真正核对过的图片戳（rel → 内容 sha）；只有成功跑完一轮才写回
   const assetStamps = {};
@@ -721,6 +810,8 @@ export async function syncCloud({ mode = "both", workspaceId, onProgress } = {})
     // 图片 / 视频：即使这一轮没扫（核对戳命中）也是 0，而不是 undefined ——
     // 面板与 summarize 直接读这几个字段做判断，缺字段会变成「undefined 张」。
     assetPush: 0, assetExists: 0, assetMissing: 0, assetTooBig: 0, assetFailed: 0,
+    // 失败原因（去重后的前几条）：面板上要能直接看到「为什么没传上去」
+    assetFailures: [],
   };
   summary.localCount = localMap.size;
   summary.cloudCount = [...cloudMap.values()].filter((r) => r && !r.deleted_at).length;
@@ -889,7 +980,11 @@ export async function syncCloud({ mode = "both", workspaceId, onProgress } = {})
           summary.assetMissing = ar.missing;
           summary.assetTooBig = ar.tooBig;
           summary.assetFailed = ar.failed;
-          for (const d of docs) assetStamps[d.__rel] = fSha(d);
+          summary.assetFailures = ar.failures || [];
+          for (const m of summary.assetFailures) summary.notes.push(`图片未上传：${m}`);
+          // 只有**一张都没失败**才写核对戳。历史上这里无条件写戳：一次失败之后
+          // 这个内容版本永远不会再被核对，图片就再也修不回来了（2026-10-13 实机现象）。
+          if (!ar.failed) for (const d of docs) assetStamps[d.__rel] = fSha(d);
         }
       }
     } catch (_) { /* 图片环节出错不改变文档同步的结论，也不写戳（下次重试） */ }
@@ -995,7 +1090,7 @@ export async function syncCloud({ mode = "both", workspaceId, onProgress } = {})
     if (v) nextAssets[rel] = v;
   }
 
-  saveState({ workspace, lastSyncAt: new Date().toISOString(), files: next, assets: nextAssets });
+  saveState({ workspace, lastSyncAt: new Date().toISOString(), files: next, assets: nextAssets, assetsEpoch: ASSET_EPOCH });
   if (pushedCount) await writeMeta(localMap.size);
 
   return summary;
@@ -1032,7 +1127,10 @@ export function summarize(summary) {
   if (summary.assetPush) parts.push(`补传图片 ${summary.assetPush} 张`);
   if (summary.assetMissing) parts.push(`${summary.assetMissing} 张引用在本机找不到`);
   if (summary.assetTooBig) parts.push(`${summary.assetTooBig} 张超过 12MB 未上传`);
-  if (summary.assetFailed) parts.push(`图片失败 ${summary.assetFailed} 张`);
+  if (summary.assetFailed) {
+    const why = (summary.assetFailures && summary.assetFailures[0]) || "";
+    parts.push(`图片失败 ${summary.assetFailed} 张${why ? `（${why}）` : ""}`);
+  }
   if (summary.docTooBig) parts.push(`${summary.docTooBig} 个 HTML 文档过大未上传`);
   if (summary.failed) parts.push(`失败 ${summary.failed}`);
   if (parts.length) {

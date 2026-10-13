@@ -24,7 +24,7 @@
         <a href="index.html#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.2.2</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.2.3</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -40,6 +40,7 @@
         <div class="changelog-toc reveal">
           <h3>版本索引</h3>
           <ul>
+            <li><a href="#v2.2.3">v2.2.3</a> — 图片同步修复：桌面端「一键推送」的截图 / 视频此前永远传不上去（官方 SDK 的存储请求带了两个平台 CORS 白名单里没有的头，预检被拦、请求根本不发出；登录与文档的头都在白名单内，所以文档能同步、图片永远缺失）。改为只带白名单头的直连上传，并让失败原因可见、失败不再写「已核对」戳；旧核对戳一律作废，升级后点一次「一键推送」即可补齐历史图片</li>
             <li><a href="#v2.2.2">v2.2.2</a> — 独立的 .html 文件也能同步到云端：桌面端一直把 .html 当一等公民（网页预览、去标签检索），只有同步白名单没放行 —— 本机能看、云端永远没有；云端工作台与分享页按扩展名分派渲染（沙箱网页 + 随分享带走的图片）。.json / .csv 仍不同步</li>
             <li><a href="#v2.2.1">v2.2.1</a> — 手机端截图不再「未同步」：桌面端「一键推送」补齐图片 / 视频（此前只传正文）；分享出去的网页不再被压在小窗里；安卓启动第一帧改用品牌方牌（此前是系统占位图标）</li>
             <li><a href="#v2.2.0">v2.2.0</a> — 重命名后缀修复：显式扩展名（如 hello.html）不再被强行改成 hello.html.md；不写扩展名仍自动补 .md；非 Markdown 文件允许移动；「仅显示 md」工作区下的边界行为改为明确提示</li>
@@ -104,6 +105,46 @@
             <li><a href="#v1.8.93">v1.8.93</a> — 界面与体验升级 + 性能优化</li>
           </ul>
         </div>
+
+                <article class="doc-section reveal" id="v2.2.3">
+          <h3>v2.2.3 · 图片同步修复（真的传上去了）</h3>
+          <p>实机反馈：桌面端点了「一键推送」，文档都在，手机和网页上引用的截图却全是「未同步」。上一版给同步链路补上了图片上传代码，可一查云存储 —— <b>对象总数是 0</b>。一张都没传上去过。</p>
+
+          <h4>根因：平台 CORS 白名单挡住了官方 SDK 的存储请求</h4>
+          <ul>
+            <li><b>不是权限、不是路径、不是账号</b>：RLS 策略齐全且与代码一致，路径拼接正确，用桌面端的真实登录凭据直连上传可以成功 —— 平台侧完全正常。</li>
+            <li><b>差别在浏览器才校验的 CORS 预检</b>：官方 SDK 每次存储请求都会带 <code>X-Client-Info</code>（上传另加 <code>X-Upsert</code>），而平台的跨源放行头里<b>没有这两个</b>。浏览器因此判定预检失败，请求<b>根本不发出</b>（控制台报 blocked by CORS policy / net::ERR_FAILED）。</li>
+            <li><b>为什么文档没事、只有图片出事</b>：登录与数据库用到的头都在白名单内，所以同步文档一路正常；只有图片这一路会踩到那两个头。云端网页端与手机端因为和接口同源、不触发预检，也一直是好的 —— 问题只在桌面端（跨源）。</li>
+            <li>真浏览器对照实测：用 SDK 走 <code>upload</code> / <code>exists</code> 被 CORS 拦下；换成只带白名单头的等价请求，POST / HEAD 都能抵达服务器。</li>
+          </ul>
+
+          <h4>两个让故障静默的放大器</h4>
+          <ul>
+            <li><b>失败也照写「已核对」戳</b>：上传抛错被逐文件捕获后，核对戳照写不误 —— 意思是「这篇引用的图片都确认在云端了」。于是第一次失败就永久跳过，之后每次同步都报「内容已一致」，看起来像没事发生。</li>
+            <li><b>异常被静默吞掉</b>：错误连一条日志都没留下，面板上只显示「同步完成」。</li>
+          </ul>
+
+          <h4>修复</h4>
+          <ul>
+            <li><b>资产上传不再走 SDK</b>：改为只携带平台白名单内请求头的直连请求，请求体沿用同一份 multipart 契约（<code>cacheControl</code> 分片 + 无名 Blob 分片），云端行为不变。已有对象照样先探针、不重传。</li>
+            <li><b>失败可见</b>：逐文件收集去重后的失败原因，写进同步结果与提示（「图片失败 N 张（原因）」），控制台也有明细。</li>
+            <li><b>只有零失败才写核对戳</b>：出错的下次同步会自动重试，不需要手动清状态。</li>
+            <li><b>旧核对戳一次性作废</b>：旧版本留下的戳是「失败也写」的代码产生的，不可信。升级后第一次同步会整批重新核对 —— 老库点一次「一键推送」就能把历史缺失的图片补齐，而不是直接跳过。</li>
+            <li><b>类型兜底</b>：本机服务没给出 content-type 时按扩展名补上，避免图片在云端落成通用二进制、手机端变成「下载」而不是直接显示。</li>
+          </ul>
+
+          <h4>实测</h4>
+          <ul>
+            <li>清掉云端对象后用修复后的内核重跑：<code>assetPush: 3 / assetFailed: 0</code>；再跑一次 <code>assetExists: 3 / assetPush: 0</code>（不重传）。</li>
+            <li>数据库实查：云存储出现 3 个对象，MIME 为 <code>image/webp</code>，字节数与本地文件逐一对上；取回地址返回 200，手机与网页现在就能正常显示这些截图。</li>
+            <li>自动化测试 235 → 237 全绿，新增「失败要可见且不得写核对戳」「旧世代核对戳必须作废」两条回归。</li>
+          </ul>
+
+          <h4>升级提示</h4>
+          <ul>
+            <li>装好 2.2.3 后，请对每个工作区点一次<b>「一键推送」</b>：历史缺失的图片会在这一次补齐，之后就不会再重跑了。（云端网页端与手机端无需更新，它们本来就正常显示。）</li>
+          </ul>
+        </article>
 
                 <article class="doc-section reveal" id="v2.2.2">
           <h3>v2.2.2 · 独立的 .html 文件同步到云端</h3>
