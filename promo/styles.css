@@ -254,6 +254,11 @@ textarea {
   margin-top: 30px;
 }
 
+/* Android 下载入口：只在移动端出现（桌面主 CTA 保持 Windows 不变） */
+.hero-apk {
+  display: none;
+}
+
 .hero-note {
   margin: 16px 0 0;
   color: rgba(84, 95, 71, 0.86);
@@ -1489,6 +1494,11 @@ textarea {
 }
 
 @media (max-width: 760px) {
+  .hero-apk {
+    display: inline-flex;
+    order: -1;
+  }
+
   .download-block {
     grid-template-columns: 1fr;
     gap: 18px;
