@@ -15,7 +15,7 @@
   "use strict";
 
   var CFG = window.__MT_CLOUD__ || {};
-  var ASSET_V = "cloud-17";
+  var ASSET_V = "cloud-18";
   var ENDPOINT = String(CFG.endpoint || "").replace(/\/+$/, "");
   var REST = ENDPOINT + "/.cloud/database/rest/v1";
   var HDR = { apikey: CFG.publishableKey || "", "X-Wb-Webapp-Access-Key": CFG.publishableKey || "" };
@@ -106,6 +106,9 @@
   var HTML_DOC_SANDBOX = "allow-scripts allow-forms allow-modals";
   var HTML_FRAME_RESIZE_SCRIPT = '<script>(function(){function p(){var d=document.documentElement,b=document.body;var h=Math.max(d?d.scrollHeight:0,b?b.scrollHeight:0);try{parent.postMessage({type:"mt-html-frame-height",h:Math.ceil(h)},"*")}catch(_){}}function s(){p();if(window.ResizeObserver){try{new ResizeObserver(p).observe(document.documentElement)}catch(_){}}else{setInterval(p,500)}}if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",s)}else{s()}})();</script>';
   var HTML_ASSET_SRC_RE = /(<\s*(?:img|video|source)\b[^>]*?\bsrc\s*=\s*)(["'])([^"']+)\2/gi;
+  /* 帧高上限（与工作台 cloud/app.js 的 HTML_FRAME_MAX_HEIGHT 同值同义）。
+   * 原先写死 20000px：长网页被截断，访客在外层滚一遍、帧内再滚一遍。 */
+  var HTML_FRAME_MAX_HEIGHT = 200000;
 
   /** 引用 → 绝对地址；返回空串表示放弃改写（保持原样）。与工作台 rewriteHtmlAssetSrc 同源。 */
   function rewriteHtmlAssetSrc(html, lookup) {
@@ -165,6 +168,71 @@
     block.appendChild(bar);
     block.appendChild(frame);
     container.replaceChildren(block);
+    decorateHtmlBlocks(container);
+  }
+
+  /* ── 内嵌网页卡片：全屏视图 ─────────────────────────────
+   * 访客在微信里读到一篇 .html 笔记时，iframe 只有正文区那么宽（实测 356/390 ＝ 91.3%），
+   * 且卡片外面还有说明栏与边框。全屏视图把这些外壳全部让出去，iframe 直接铺满视口。
+   * 与工作台 cloud/app.js 的 openHtmlFrameFullscreen / decorateHtmlBlocks 同源：
+   *   1) 全屏帧沿用同一 sandbox（借「放大」绕过限制是不允许的）；
+   *   2) 全屏帧**不挂** html-inline-frame / html-doc-frame 类名 —— 那两类是高度上报的
+   *      命中目标，带上就会被撑到内容高度，全屏就白开了；
+   *   3) 按钮**常显**：这里主要服务手机与微信，触屏没有 hover。 */
+  function openHtmlFrameFullscreen(iframe) {
+    if (!iframe) return;
+    var overlay = document.createElement("div");
+    overlay.className = "html-frame-fullscreen-overlay";
+    var closeBtn = document.createElement("button");
+    closeBtn.className = "html-frame-fullscreen-close";
+    closeBtn.type = "button";
+    closeBtn.setAttribute("aria-label", "退出全屏");
+    closeBtn.textContent = "×";
+    var full = document.createElement("iframe");
+    full.srcdoc = iframe.srcdoc || iframe.getAttribute("srcdoc") || "";
+    var inherited = iframe.getAttribute("sandbox");
+    full.setAttribute("sandbox", inherited === null ? HTML_DOC_SANDBOX : inherited);
+    full.setAttribute("referrerpolicy", "no-referrer");
+    full.setAttribute("title", "HTML 全屏预览");
+    overlay.appendChild(full);
+    overlay.appendChild(closeBtn);
+
+    var prevOverflow = document.body.style.overflow;
+    function cleanup() {
+      overlay.remove();
+      document.body.style.overflow = prevOverflow;
+      document.removeEventListener("keydown", onKey);
+    }
+    function onKey(ev) { if (ev.key === "Escape") cleanup(); }
+    closeBtn.addEventListener("click", cleanup);
+    overlay.addEventListener("click", function (ev) { if (ev.target === overlay) cleanup(); });
+    document.addEventListener("keydown", onKey);
+
+    document.body.appendChild(overlay);
+    document.body.style.overflow = "hidden";
+  }
+
+  function decorateHtmlBlocks(container) {
+    if (!container || typeof container.querySelectorAll !== "function") return;
+    var blocks = container.querySelectorAll(".html-doc-block, .html-inline-block");
+    Array.prototype.forEach.call(blocks, function (block) {
+      if (block.querySelector(".html-frame-fullscreen-btn")) return;
+      var iframe = block.querySelector("iframe.html-doc-frame, iframe.html-inline-frame");
+      if (!iframe) return;
+      var btn = document.createElement("button");
+      btn.className = "html-frame-fullscreen-btn";
+      btn.type = "button";
+      btn.textContent = "放大";
+      btn.title = "全屏查看这个网页";
+      btn.addEventListener("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        openHtmlFrameFullscreen(iframe);
+      });
+      var bar = block.querySelector(":scope > .html-doc-bar");
+      if (bar) bar.appendChild(btn);
+      else block.appendChild(btn);
+    });
   }
 
   /* ── Markdown：与工作台同一份 worker ───────────────────── */
@@ -219,7 +287,7 @@
       var frames = document.querySelectorAll("iframe.html-inline-frame, iframe.html-doc-frame");
       Array.prototype.forEach.call(frames, function (frame) {
         if (!frame.isConnected || frame.contentWindow !== event.source) return;
-        var clamped = Math.min(Math.max(Math.ceil(h) + 12, 240), 20000);
+        var clamped = Math.min(Math.max(Math.ceil(h) + 12, 240), HTML_FRAME_MAX_HEIGHT);
         frame.style.height = clamped + "px";
       });
     });
@@ -320,6 +388,9 @@
         }
       }
     }
+
+    // 内嵌网页（```html / chart 围栏）也挂「放大」
+    decorateHtmlBlocks(root);
   }
 
   /* ── 图片：滚动到可见才逐张拉取 ─────────────────────────── */

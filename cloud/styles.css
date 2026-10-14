@@ -489,6 +489,7 @@ details.ws > .doc-list > .doc-item > .doc-link { padding-left: 34px; }
  * 高度靠帧内 postMessage 上报撑开（cloud/app.js 的 installHtmlFrameAutoHeight），
  * 这里的 height 只是脚本尚未上报时的兜底视口。 */
 .html-doc-block {
+  position: relative;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   overflow: hidden;
@@ -513,6 +514,58 @@ details.ws > .doc-list > .doc-item > .doc-link { padding-left: 34px; }
   min-height: 320px;
   border: none;
   background: #fff;
+}
+
+/* ── 内嵌网页「放大」按钮与全屏视图（.html-frame-*）────────────
+ * 阅读区的可用宽度只有屏幕的 91.3%（正文区左右 padding + 卡片边框，2026-10-13 实测
+ * 356/390px）；遇到按固定宽度排版的网页更是只剩三分之一，必须左右拖。全屏视图把
+ * 这层外壳全部让出去：iframe 铺满视口，可用宽度回到 100%，帧内 100vh 也恢复成真实
+ * 视口高度。适用于独立 HTML 文档（.html-doc-block）与 Markdown 的内嵌网页块。
+ *
+ * 按钮**常显**，不学桌面端的 hover 才显 —— 这里主要服务手机（APK / 微信），
+ * 触屏没有 hover，hover 才显等于永远点不到。
+ * 全屏浮层挂在 document.body 下（不在任何容器里），选择器绝不能带容器前缀。 */
+.html-frame-fullscreen-btn {
+  flex: none;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  min-height: 28px;
+}
+.html-frame-fullscreen-btn:hover { background: var(--accent-soft); }
+/* 没有说明栏的块（Markdown 里的 html 围栏）→ 绝对定位到块右上角 */
+.html-inline-block > .html-frame-fullscreen-btn {
+  position: absolute; top: 6px; right: 8px; z-index: 10;
+}
+.html-frame-fullscreen-overlay {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(0, 0, 0, 0.92);
+  display: flex; align-items: center; justify-content: center;
+}
+.html-frame-fullscreen-overlay iframe {
+  display: block; width: 100%; height: 100%;
+  border: none; background: #fff;
+}
+.html-frame-fullscreen-close {
+  position: fixed;
+  top: calc(10px + env(safe-area-inset-top));
+  right: calc(12px + env(safe-area-inset-right));
+  z-index: 201;
+  width: 40px; height: 40px; border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff; font-size: 22px; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(6px);
+}
+/* 桌面宽度下留一圈边，别把网页顶到屏幕边缘 */
+@media (min-width: 900px) {
+  .html-frame-fullscreen-overlay { padding: 24px; }
+  .html-frame-fullscreen-overlay iframe { width: 96vw; height: 94vh; border-radius: 10px; }
 }
 
 /* ── Markdown 正文排版 ────────────────────────────────── */

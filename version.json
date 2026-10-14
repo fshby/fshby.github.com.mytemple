@@ -1,7 +1,7 @@
 {
-    "version":  "2.2.3",
+    "version":  "2.2.4",
     "downloadUrl":  "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
-    "latestReleaseNotes":  "桌面端「一键推送」的截图 / 视频此前永远传不上去：官方 SDK 的存储请求会带两个平台跨源白名单里没有的请求头（X-Client-Info / X-Upsert），浏览器直接拦下预检、请求根本不发出 —— 而登录与文档的头都在白名单内，所以「文档能同步、图片永远缺失」，云端存储对象数为 0。资产上传改为只带白名单头的直连请求（请求体沿用同一份 multipart 契约，云端对象格式不变）；同时修掉两个让故障静默的放大器：上传失败也照写「已核对」戳（一次失败就永久不再重试）、异常被静默吞掉（现在失败原因会写进同步结果）。旧核对戳一次性作废，升级后对工作区点一次「一键推送」即可补齐历史缺失的图片。",
-    "releaseNotes":  "v2.2.3 release. See changelog for details.",
-    "releaseDate":  "2026-10-13"
+    "latestReleaseNotes":  "HTML 文档阅读体验修复：手机端预览变窄（响应式网页只剩 91% 宽、固定宽度网页只剩 32%）、长网页被 20000px 高度上限截断成双层滚动、同一文档反复打开完全不收敛（srcdoc 没有 URL，HTTP 缓存用不上）。现在高度上限提到 200000px、云端与分享页补上「放大」全屏入口（全屏铺满、100vh 恢复真实视口）、补上正文与成品预览的会话内缓存（重开 0 次网络请求 84ms，首次 190ms）；顺手修桌面端放大后关闭不恢复页面滚动。预览仍在沙箱内运行，安全边界不变。",
+    "releaseNotes":  "v2.2.4 release. See changelog for details.",
+    "releaseDate":  "2026-10-14"
 }

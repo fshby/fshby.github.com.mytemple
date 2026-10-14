@@ -30,6 +30,13 @@ const HTML_DOC_SANDBOX = "allow-scripts allow-forms allow-modals";
 /** 注入到 srcdoc 最前面的高度上报脚本（与桌面端 app.js 逐字同源）：沙箱帧是 opaque
  *  origin，父页量不到内容高度，只能由帧内自己把 scrollHeight postMessage 出来。 */
 const HTML_FRAME_RESIZE_SCRIPT = '<script>(function(){function p(){var d=document.documentElement,b=document.body;var h=Math.max(d?d.scrollHeight:0,b?b.scrollHeight:0);try{parent.postMessage({type:"mt-html-frame-height",h:Math.ceil(h)},"*")}catch(_){}}function s(){p();if(window.ResizeObserver){try{new ResizeObserver(p).observe(document.documentElement)}catch(_){}}else{setInterval(p,500)}}if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",s)}else{s()}})();</script>';
+/** 帧高上限：原先写死 20000px，长网页会被**截断**（2026-10-13 实测：一篇 542KB 的
+ *  文档内容高 443608px → iframe 只给到 20000px，剩 4.5%，用户还得在帧内再滚一次，
+ *  「外层滚 + 帧内滚」两层滚动正是「大 HTML 不流畅」的来源之一）。
+ *  放宽到 200000px：常见长文一屏到底、与外层滚动条合成一条；真正超限的极端文档
+ *  由每块右上角的「放大」全屏视图兜底（见 decorateHtmlBlocks）。
+ *  注意这同时是**安全阀**：帧内可上报任意 h，不 clamp 会被构造出天文数字高度。 */
+const HTML_FRAME_MAX_HEIGHT = 200000;
 const ASSET_EXT = /\.(png|jpe?g|jfif|gif|webp|avif|bmp|ico|svg|mp4|m4v|webm|mov|ogv)$/i;
 const VIDEO_EXT = /\.(mp4|m4v|webm|mov|ogv)$/i;
 const SKIP_DIR = /(^|\/)(__MACOSX|\.git|node_modules|\.obsidian|\.trash)(\/|$)/i;
@@ -51,7 +58,7 @@ const UPSERT_BATCH_MAX_DOCS = 20;
 const UPSERT_BATCH_MAX_BYTES = 1_200_000;
 
 /* 静态资源版本戳：改动 cloud/ 下被页面引用的任何文件时，与 index.html 的三件套一起递增。 */
-const ASSET_V = "cloud-17";
+const ASSET_V = "cloud-18";
 
 /* 第三方库一律同源自托管，见 scripts/vendor-cloud.mjs。
  * 绝不改回第三方 CDN —— 见该脚本头部注释：cdn.jsdelivr.net 在部分网络下 TLS 会被重置，
@@ -136,6 +143,11 @@ const state = {
   searchToken: 0,
   docSource: "",      // 当前打开的文档原文（原生端分享/导出要用）
   docCache: new Map(),// id -> 正文（打开过或搜过的文档，用于秒开与出命中片段）
+  /* id -> { digest, srcdoc, exp }：独立 HTML 文档「改写 + 签名」后的成品 srcdoc。
+   * srcdoc 没有 URL，浏览器 HTTP 缓存完全用不上；而准备阶段对几百 KB 的文档同样是
+   * 可观开销（正则扫全篇找引用 → 批量签名往返 → 字符串级改写）。重开同一篇直接复用
+   * 成品，只做一次 iframe 装载。签名 URL 有 SIGN_TTL 有效期，所以缓存跟着过期。 */
+  htmlFrameCache: new Map(),
   view: "tree",       // 列表视图："tree"（目录）| "recent"（最近）| "all"（全部）
   wsFilter: null,     // 分区筛选，null = 不筛
   signedAssets: new Map(), // 存储对象路径 -> { url, exp } 已签名的图片地址（随会话失效）
@@ -818,6 +830,8 @@ el.logoutBtn.addEventListener("click", async () => {
   state.session = null; state.docs = []; state.loaded = false;
   state.pendingOtp = null; state.pendingEmailOtp = null;
   state.docCache.clear(); state.wsFilter = null; state.view = "tree";
+  // 成品 srcdoc 里内嵌着上一个账号的签名 URL，绝不能跨账号复用
+  state.htmlFrameCache.clear();
   // 换账号必须清掉资源缓存与上传清单：签名 URL 属于上一个账号，
   // 清单更是「这个分区已经传过哪些图」的账本，留着会让新账号的图被误判为已传。
   state.signedAssets.clear();
@@ -853,6 +867,11 @@ async function loadDocs() {
   }
   state.docs = all;
   state.loaded = true;
+  /* 列表已经是最新状态 —— 之前缓存的正文与成品 srcdoc（内含签名 URL）都可能过期：
+   * 一键推送 / 上传会改写云端正文。这一处清掉，覆盖「刷新按钮 / 上传与推送完成 /
+   * 启动」三条路径，避免用户打开一篇看到旧内容。 */
+  state.docCache.clear();
+  state.htmlFrameCache.clear();
   renderList();
 }
 
@@ -1333,11 +1352,80 @@ function renderMarkdownInWorker(source) {
     if (!Number.isFinite(h) || h <= 0) return;
     document.querySelectorAll("iframe.html-inline-frame, iframe.html-doc-frame").forEach((frame) => {
       if (!frame.isConnected || frame.contentWindow !== event.source) return;
-      const clamped = Math.min(Math.max(Math.ceil(h) + 12, 240), 20000);
+      const clamped = Math.min(Math.max(Math.ceil(h) + 12, 240), HTML_FRAME_MAX_HEIGHT);
       frame.style.height = clamped + "px";
     });
   });
 })();
+
+/** 阅读区宽度没被利用完，是「APK 里打开 HTML 变窄」的第一层成因（实测 iframe 356px /
+ *  屏幕 390px ＝ 91.3%，少的 34px 是正文区左右 padding 与卡片边框）。
+ *  全屏视图把这层外壳全部让出去：iframe 直接铺满视口 → 可用宽度回到 100%，
+ *  帧内 100vh 也从「被撑开的内容高度」变回真实视口高度。 */
+function openHtmlFrameFullscreen(iframe) {
+  if (!iframe) return;
+  const overlay = document.createElement("div");
+  overlay.className = "html-frame-fullscreen-overlay";
+  const closeBtn = document.createElement("button");
+  closeBtn.className = "html-frame-fullscreen-close";
+  closeBtn.type = "button";
+  closeBtn.setAttribute("aria-label", "退出全屏");
+  closeBtn.textContent = "×";
+  const full = document.createElement("iframe");
+  // 沿用同一份 srcdoc 与 sandbox：借「放大」绕过限制是不允许的。
+  // 注意 sandbox="" 必须原样保留（那是最严格档），不能因「空值」回退到放宽策略。
+  full.srcdoc = iframe.srcdoc || iframe.getAttribute("srcdoc") || "";
+  const inherited = iframe.getAttribute("sandbox");
+  full.setAttribute("sandbox", inherited === null ? HTML_DOC_SANDBOX : inherited);
+  full.setAttribute("referrerpolicy", "no-referrer");
+  full.setAttribute("title", "HTML 全屏预览");
+  overlay.append(full, closeBtn);
+
+  const prevOverflow = document.body.style.overflow;
+  const cleanup = () => {
+    overlay.remove();
+    document.body.style.overflow = prevOverflow;
+    document.removeEventListener("keydown", onKey);
+  };
+  const onKey = (ev) => { if (ev.key === "Escape") cleanup(); };
+  closeBtn.addEventListener("click", cleanup);
+  overlay.addEventListener("click", (ev) => { if (ev.target === overlay) cleanup(); });
+  document.addEventListener("keydown", onKey);
+
+  document.body.appendChild(overlay);
+  document.body.style.overflow = "hidden";
+}
+
+/** 给内嵌网页 iframe 挂「放大」按钮（Markdown 里的 html 围栏块 .html-inline-block 与
+ *  独立 HTML 文档 .html-doc-block 共用，桌面端 app.js 的同名实现为参照）。
+ *
+ *  与桌面端的一处**有意差异**：按钮**常显**而不是 hover 才显 —— 这里主要服务手机
+ *  （APK / 微信），触屏没有 hover，hover 才显等于永远点不到。
+ *
+ *  全屏帧**不挂** html-inline-frame / html-doc-frame 类名：那两个类是高度上报的
+ *  命中目标，带上就会被撑到内容高度，全屏就白开了。 */
+function decorateHtmlBlocks(container) {
+  if (!container || typeof container.querySelectorAll !== "function") return;
+  container.querySelectorAll(".html-doc-block, .html-inline-block").forEach((block) => {
+    if (block.querySelector(".html-frame-fullscreen-btn")) return;
+    const iframe = block.querySelector("iframe.html-doc-frame, iframe.html-inline-frame");
+    if (!iframe) return;
+    const btn = document.createElement("button");
+    btn.className = "html-frame-fullscreen-btn";
+    btn.type = "button";
+    btn.textContent = "放大";
+    btn.title = "全屏查看这个网页";
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openHtmlFrameFullscreen(iframe);
+    });
+    // 说明栏存在就并进栏里（不遮挡提示文字），否则绝对定位到块右上角
+    const bar = block.querySelector(":scope > .html-doc-bar");
+    if (bar) bar.appendChild(btn);
+    else block.appendChild(btn);
+  });
+}
 
 let katexPromise = null;
 function loadKatex() {
@@ -1438,6 +1526,9 @@ async function decorateContent(root) {
       catch (_) { toast("复制失败", "error"); }
     });
   });
+
+  // 4) 内嵌网页（Markdown 的 html / chart 围栏）挂「放大」
+  decorateHtmlBlocks(root);
 }
 
 async function openDoc(id) {
@@ -1445,17 +1536,33 @@ async function openDoc(id) {
   const meta = state.docs.find((d) => String(d.id) === String(id));
   el.docTitle.textContent = meta ? (meta.title || meta.rel_path) : "加载中…";
   el.docPath.textContent = meta ? `${meta.workspace} / ${meta.rel_path}` : "";
-  el.docBody.innerHTML = `<div class="doc-loading"><div class="spinner"></div></div>`;
   show("doc");
   window.scrollTo(0, 0);
 
-  const { data, error } = await cloud.database
-    .from("documents").select("id, title, rel_path, workspace, content, bytes, updated_at")
-    .eq("id", id).is("deleted_at", null).maybeSingle();
-  if (error || !data) {
-    state.docSource = "";
-    el.docBody.innerHTML = `<p class="muted">读取失败：${escapeHtml(error ? (error.message || "未知错误") : "文档不存在")}</p>`;
-    return;
+  /* 打开过的文档走内存缓存秒开，不再打一次网络 —— 列表页与「按 id 补拉片段」都会把
+   * 正文写进 docCache，手机上省掉一次 30–300ms 的往返。只有缓存未命中、或列表元信息
+   * 缺失时才回云端取正文。
+   * 失效点（正文可能已经不是这一份了）：刷新列表 loadDocs、一键推送 runLocalImport、
+   * 上传、删除、退出登录 —— 各自都会清 docCache，见对应实现。 */
+  const cachedText = state.docCache.get(String(id));
+  let data = null;
+  if (cachedText != null && meta) {
+    data = {
+      id,
+      title: meta.title, rel_path: meta.rel_path, workspace: meta.workspace,
+      content: cachedText, bytes: meta.bytes, updated_at: meta.updated_at,
+    };
+  } else {
+    el.docBody.innerHTML = `<div class="doc-loading"><div class="spinner"></div></div>`;
+    const { data: row, error } = await cloud.database
+      .from("documents").select("id, title, rel_path, workspace, content, bytes, updated_at")
+      .eq("id", id).is("deleted_at", null).maybeSingle();
+    if (error || !row) {
+      state.docSource = "";
+      el.docBody.innerHTML = `<p class="muted">读取失败：${escapeHtml(error ? (error.message || "未知错误") : "文档不存在")}</p>`;
+      return;
+    }
+    data = row;
   }
   el.docTitle.textContent = data.title || data.rel_path;
   el.docPath.textContent = `${data.workspace} / ${data.rel_path} · ${fmtTime(data.updated_at)}`;
@@ -1485,18 +1592,38 @@ async function openDoc(id) {
   }
 }
 
+/** 内容指纹（与桌面端 app.js 的 htmlDocDigest 逐字同源）：内容没变就不重建 iframe。 */
+function htmlDocDigest(text) {
+  const s = String(text || "");
+  let h = 5381;
+  for (let i = 0; i < s.length; i += 1) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return `${s.length}:${(h >>> 0).toString(36)}`;
+}
+
 /**
  * 渲染独立 HTML 文档：沙箱 iframe + 说明栏。
  *
- * 两条不可省的约束：
+ * 三条不可省的约束：
  *   1) srcdoc 前置高度上报脚本，父页把帧撑到内容高度（否则整页网页挤在固定小窗里）；
  *   2) 资源引用必须先做**字符串级**改写再塞进去 —— 沙箱帧是 opaque origin，父页
- *      摸不到帧内 DOM，做不到「渲染后再替换 src」（markdown 那条路可以，这条不行）。
+ *      摸不到帧内 DOM，做不到「渲染后再替换 src」（markdown 那条路可以，这条不行）；
+ *   3) 「找引用 → 批量签名 → 改写」这套准备动作的成品按内容指纹缓存（htmlFrameCache）：
+ *      对几百 KB 的文档，重扫全篇 + 一次签名往返本身就是可观开销，而 srcdoc 没有 URL，
+ *      浏览器 HTTP 缓存一点忙都帮不上。
  */
 async function renderHtmlDocRow(row) {
   const uid = state.session && state.session.user && state.session.user.id;
   const docRel = row.rel_path || "";
   const source = row.content || "";
+  const docKey = String(row.id || "");
+  const digest = htmlDocDigest(source);
+
+  // 成品缓存命中：跳过准备阶段，直接装载（签名 URL 有 SIGN_TTL，缓存跟着过期）
+  const hit = state.htmlFrameCache.get(docKey);
+  if (hit && hit.digest === digest && hit.exp > Date.now()) {
+    mountHtmlDocBlock(hit.srcdoc, hit.hasAsset);
+    return;
+  }
 
   // 先把引用逐个解析成云存储对象路径，再一次性批量签名（逐个签名会打爆请求数）。
   const plan = new Map();
@@ -1518,10 +1645,20 @@ async function renderHtmlDocRow(row) {
   const content = rewriteHtmlAssetSrc(source, (ref) => {
     const paths = plan.get(ref);
     if (!paths) return "";
-    const hit = paths.find((x) => signed.has(x.obj));
-    return hit ? signed.get(hit.obj) : "";
+    const hitPath = paths.find((x) => signed.has(x.obj));
+    return hitPath ? signed.get(hitPath.obj) : "";
   });
 
+  const hasAsset = plan.size > 0;
+  const srcdoc = HTML_FRAME_RESIZE_SCRIPT + content;
+  state.htmlFrameCache.set(docKey, {
+    digest, srcdoc, hasAsset, exp: Date.now() + SIGN_TTL * 1000,
+  });
+  mountHtmlDocBlock(srcdoc, hasAsset);
+}
+
+/** 把成品 srcdoc 装成一个 HTML 文档块（说明栏 + 沙箱 iframe + 「放大」入口）。 */
+function mountHtmlDocBlock(srcdoc, hasAsset) {
   const block = document.createElement("div");
   block.className = "html-doc-block";
   const bar = document.createElement("div");
@@ -1531,7 +1668,7 @@ async function renderHtmlDocRow(row) {
   label.textContent = "网页预览";
   const hint = document.createElement("span");
   hint.className = "html-doc-hint";
-  hint.textContent = plan.size
+  hint.textContent = hasAsset
     ? "按网页原样加载（脚本在沙箱内运行）；已随云同步的图片可正常显示"
     : "按网页原样加载（脚本在沙箱内运行）；相对路径资源不可用";
   bar.append(label, hint);
@@ -1541,10 +1678,12 @@ async function renderHtmlDocRow(row) {
   frame.setAttribute("sandbox", HTML_DOC_SANDBOX);
   frame.setAttribute("referrerpolicy", "no-referrer");
   frame.setAttribute("title", "HTML 文档预览");
-  frame.srcdoc = HTML_FRAME_RESIZE_SCRIPT + content;
+  frame.srcdoc = srcdoc;
 
   block.append(bar, frame);
   el.docBody.replaceChildren(block);
+  // 手机端「放大」入口：全屏后 iframe 铺满视口，宽度利用率回到 100%
+  decorateHtmlBlocks(el.docBody);
 }
 
 document.addEventListener("click", (e) => {

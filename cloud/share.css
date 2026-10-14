@@ -203,6 +203,7 @@ body {
 /* 独立 HTML 文档块（.html-doc-*）：与工作台 cloud/styles.css 同名规则同值 ——
    同步上来的 .html 文档在分享页也按网页原样装进沙箱 iframe。 */
 .html-doc-block {
+  position: relative;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   overflow: hidden;
@@ -227,6 +228,49 @@ body {
   min-height: 320px;
   border: none;
   background: #fff;
+}
+
+/* ── 内嵌网页「放大」按钮与全屏视图（.html-frame-*）────────────
+   与工作台 cloud/styles.css 同名规则同义：正文区可用宽度只有屏幕的 91.3%，
+   固定宽度排版的网页更是只剩三分之一；全屏视图把外壳让出去，iframe 铺满视口。
+   按钮**常显**（访客多在微信/手机里看，触屏没有 hover）。
+   浮层挂在 body 下，选择器绝不能带容器前缀。 */
+.html-frame-fullscreen-btn {
+  flex: none;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  min-height: 28px;
+}
+.html-frame-fullscreen-btn:hover { background: var(--brand-soft); }
+.html-inline-block > .html-frame-fullscreen-btn {
+  position: absolute; top: 6px; right: 8px; z-index: 10;
+}
+.html-inline-block { position: relative; }
+.html-frame-fullscreen-overlay {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(0, 0, 0, 0.92);
+  display: flex; align-items: center; justify-content: center;
+}
+.html-frame-fullscreen-overlay iframe {
+  display: block; width: 100%; height: 100%;
+  border: none; background: #fff;
+}
+.html-frame-fullscreen-close {
+  position: fixed;
+  top: calc(10px + env(safe-area-inset-top));
+  right: calc(12px + env(safe-area-inset-right));
+  z-index: 201;
+  width: 40px; height: 40px; border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff; font-size: 22px; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(6px);
 }
 
 /* 图片占位：拉取中 / 未随分享一起带走 */

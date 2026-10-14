@@ -1,4 +1,4 @@
-import { createMarkdownEditor } from "/editor-core.js?v=20261013-html-5";
+import { createMarkdownEditor } from "/editor-core.js?v=20261013-html-6";
 import { getPaperBackgroundUrl } from "./modules/paper-texture.js";
 import { escapeHtml, displayName, displayRelativePath, splitPathRef, joinPathRef, parentPathRef, compactName, splitWorkspaceRef, plainText, headingId } from "./modules/path-utils.js";
 import { extractOutline, addCnEnSpaces } from "./modules/editor-utils.js";
@@ -42,7 +42,7 @@ const LARGE_PREVIEW_DELAY = 700;
 const CHUNKED_RENDER_BYTES = 500 * 1024;
 const CHUNK_RENDER_SLICE_BYTES = 150 * 1024;
 const GRAPH_WORKER_URL = "/graph-worker.js?v=20260810-graph-1";
-const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20261013-html-5";
+const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20261013-html-6";
 // Markdown 渲染缓存版本戳：解析器或 CSS 规则升级时递增，确保旧缓存不被复用。
 // 2026-08-29 v1.8.102：安装包 resources 包含 public/ 前端静态文件、端口回滚；修正其他电脑安装后 404 白屏。
 const MARKDOWN_RENDER_VERSION = "20260829-v18102-install-static-bundle-port-scan";
@@ -3971,8 +3971,11 @@ function canPreviewAsJson() {
  *   也调不动 /api/save、/api/files 与 IPC 桥。同时不给 allow-popups /
  *   allow-top-navigation，避免帧内脚本弹窗或把整个应用导航走。
  *
- * 已知限制：srcdoc 的解析基准是 about:srcdoc，`./style.css`、`./img/a.png` 这类
- * 相对路径必然 404（只有 Markdown 的 `![](source/x.webp)` 有专门通道）。
+ * 已知限制：桌面端是本机自定义协议（tauri://），srcdoc 的 base URL 继承父文档，
+ * 所以 `./style.css`、`./img/a.png` 这类相对路径解析到本机协议下、必然拿不到东西
+ * （只有 Markdown 的 `![](source/x.webp)` 有专门通道）。
+ * 注意云端是 http 站点，同一份 HTML 在云端 base 会落在站点根上 —— 相对路径不一定
+ * 404（命中站点自带文件时甚至会串味），两端表现不同，别照搬这里的结论。
  * 页面上给出明确提示，避免被误判成「渲染坏了」。
  */
 const HTML_DOC_EXT_RE = /\.(html?|xhtml)$/i;
@@ -3982,6 +3985,11 @@ const HTML_DOC_EXT_RE = /\.(html?|xhtml)$/i;
 // 读 localStorage 里的登录态，也能直接同源请求 /api/*。
 // 去掉后帧内落到独立 opaque origin，只保留脚本执行、表单与模态框。
 const HTML_DOC_SANDBOX = "allow-scripts allow-forms allow-modals";
+/* 帧高上限：原先写死 20000px，长网页会被截断，变成「外层滚 + 帧内滚」两层滚动
+ * （2026-10-13 实测：542KB 的文档内容高 443608px，只给到 20000px）。放宽后常见长文
+ * 一屏到底；真正超限的极端文档由「放大」全屏视图兜底。这同时是安全阀 —— 帧内可上报
+ * 任意 h，不 clamp 会被构造出天文数字高度。 */
+const HTML_FRAME_MAX_HEIGHT = 200000;
 /* 注入到 srcdoc 最前面的高度上报脚本：沙箱帧与父页是 opaque origin，父页量不到内容高度，
  * 由帧内自己把 scrollHeight postMessage 出来，父页据此把 iframe 撑到内容高度 ——
  * 否则整页网页挤在固定小窗里，嵌套滚动很难用（真机反馈 v2.1.41）。 */
@@ -4001,7 +4009,7 @@ function installHtmlFrameAutoHeight() {
     if (!Number.isFinite(h) || h <= 0) return;
     document.querySelectorAll("iframe.html-inline-frame").forEach((frame) => {
       if (!frame.isConnected || frame.contentWindow !== event.source) return;
-      const clamped = Math.min(Math.max(Math.ceil(h) + 12, 240), 20000);
+      const clamped = Math.min(Math.max(Math.ceil(h) + 12, 240), HTML_FRAME_MAX_HEIGHT);
       frame.style.height = `${clamped}px`;
     });
   });
@@ -8524,9 +8532,17 @@ function decorateHtmlInlineBlocks(container) {
       const closeBtn = document.createElement("button");
       closeBtn.className = "html-inline-fullscreen-close";
       closeBtn.textContent = "×";
-      closeBtn.addEventListener("click", () => overlay.remove());
+      const prevOverflow = document.body.style.overflow;
+      // 统一收尾：点 ×、点遮罩、按 ESC 三条路径都必须恢复 body 滚动，
+      // 否则「放大」一次之后整页就再也滚不动了（曾只在 ESC 分支里恢复）。
+      const cleanup = () => {
+        overlay.remove();
+        document.body.style.overflow = prevOverflow;
+        document.removeEventListener("keydown", escHandler);
+      };
+      closeBtn.addEventListener("click", cleanup);
       overlay.addEventListener("click", (ev) => {
-        if (ev.target === overlay) overlay.remove();
+        if (ev.target === overlay) cleanup();
       });
       const fullIframe = document.createElement("iframe");
       fullIframe.srcdoc = iframe.srcdoc || iframe.getAttribute("srcdoc") || "";
@@ -8542,11 +8558,7 @@ function decorateHtmlInlineBlocks(container) {
       document.body.appendChild(overlay);
       document.body.style.overflow = "hidden";
       const escHandler = (ev) => {
-        if (ev.key === "Escape") {
-          overlay.remove();
-          document.body.style.overflow = "";
-          document.removeEventListener("keydown", escHandler);
-        }
+        if (ev.key === "Escape") cleanup();
       };
       document.addEventListener("keydown", escHandler);
     });

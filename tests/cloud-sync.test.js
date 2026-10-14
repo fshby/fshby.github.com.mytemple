@@ -880,3 +880,122 @@ test("云端页「一键推送」必须按 camelCase 读本机 FileEntry（写�
   }
 });
 
+/* ── HTML 文档阅读体验修复契约（2026-10-13）────────────────────────
+ * 用户报「APK 打开 HTML 变窄 / 大 HTML 不流畅 / 没有缓存」。真浏览器实测定位到三条：
+ *   1) 帧高被写死 20000px → 长网页被截断，外层滚一遍、帧内再滚一遍（双层滚动）；
+ *   2) 没有任何全屏入口，可用宽度只有屏幕的 91.3%（正文 padding + 卡片边框），
+ *      固定宽度排版的网页更是只剩三分之一；
+ *   3) srcdoc 无 URL，HTTP 缓存完全不参与，每次打开都全量重建 iframe（实测 542KB
+ *      文档单次 0.2–0.3s 且不随次数收敛）—— 云端连桌面端那层内容指纹都没有。
+ * 下面锁死这三条的修复，防止日后回退。 */
+
+test("沙箱帧高度上限必须是三端同值的可放长常量，不得再写死 20000", () => {
+  const files = {
+    "cloud/app.js": cloudApp,
+    "cloud/share.js": read("cloud/share.js"),
+    "public/app.js": appSrc,
+  };
+  const caps = [];
+  for (const [name, src] of Object.entries(files)) {
+    const m = src.match(/HTML_FRAME_MAX_HEIGHT = (\d+)/);
+    assert.ok(m, `${name} 必须使用 HTML_FRAME_MAX_HEIGHT 常量`);
+    assert.ok(Number(m[1]) > 20000, `${name} 的上限必须大于原先写死的 20000（实际 ${m ? m[1] : "缺失"}）`);
+    // 真正的回归锁：clamp 表达式里不得再出现写死的 20000
+    assert.doesNotMatch(src, /Math\.max\(Math\.ceil\(h\) \+ 12, 240\), 20000\)/,
+      `${name} 的高度 clamp 里不得残留写死的 20000`);
+    caps.push(m[1]);
+  }
+  assert.equal(new Set(caps).size, 1,
+    `三端上限必须同值，否则同一篇文档在桌面端与云端表现不一致（实际 ${caps.join(" / ")}）`);
+});
+
+test("云端与分享页都要给内嵌网页「放大」入口，且按钮常显、全屏帧沿用原沙箱", () => {
+  const targets = [["cloud/app.js", cloudApp], ["cloud/share.js", read("cloud/share.js")]];
+  for (const [name, src] of targets) {
+    assert.match(src, /function decorateHtmlBlocks\(container\)/, `${name} 必须有 decorateHtmlBlocks`);
+    const fn = src.match(/function decorateHtmlBlocks\(container\)[\s\S]*?\n(?:  )?\}\n/);
+    assert.ok(fn, `${name} 的 decorateHtmlBlocks 必须能提取出来检查`);
+    const body = fn[0];
+    assert.match(body, /\.html-doc-block/, `${name} 的按钮要覆盖独立 HTML 文档块`);
+    assert.match(body, /\.html-inline-block/, `${name} 的按钮要覆盖 Markdown 内嵌网页块`);
+    // 借「放大」绕过沙箱是不允许的：全屏帧必须沿用原帧的 sandbox 令牌
+    assert.match(src, /inherited === null \? HTML_DOC_SANDBOX : inherited/,
+      `${name} 全屏帧必须沿用原 sandbox`);
+    // 全屏帧绝不能挂 html-doc-frame / html-inline-frame —— 那两类是高度上报的命中目标，
+    // 挂上就会被撑到内容高度，全屏白开
+    const fullChunk = src.match(/(?:var|const) full = document\.createElement\("iframe"\)[\s\S]{0,700}?overlay\.(?:appendChild\(full\)|append\(full)/);
+    assert.ok(fullChunk, `${name} 必须能定位全屏帧创建代码`);
+    assert.doesNotMatch(fullChunk[0], /className/,
+      `${name} 的全屏帧不得设置 class（带上 html-*-frame 会被高度上报撑开）`);
+    // 挂载点：独立文档块渲染完就要挂按钮
+    const caller = name === "cloud/app.js" ? /decorateHtmlBlocks\(el\.docBody\)/ : /decorateHtmlBlocks\(container\)/;
+    assert.match(src, caller, `${name} 渲染完 HTML 文档块后必须调用 decorateHtmlBlocks`);
+  }
+  // 分享页的 Markdown 内嵌网页块也要挂（否则只有独立 .html 文档有放大）
+  assert.match(read("cloud/share.js"), /decorateHtmlBlocks\(root\)/,
+    "分享页 decorate() 末尾也要给 Markdown 内嵌网页挂放大");
+});
+
+test("全屏浮层样式两端都在，压过抽屉层级，且按钮不得默认透明（触屏没有 hover）", () => {
+  const sheets = [["cloud/styles.css", cloudCss], ["cloud/share.css", read("cloud/share.css")]];
+  for (const [name, css] of sheets) {
+    assert.match(css, /\.html-frame-fullscreen-overlay\s*\{/, `${name} 缺全屏浮层样式`);
+    const btn = css.match(/\.html-frame-fullscreen-btn\s*\{[^}]*\}/);
+    assert.ok(btn, `${name} 缺放大按钮样式`);
+    // 手机（APK / 微信）触屏没有 hover，默认透明等于永远点不到
+    assert.doesNotMatch(btn[0], /opacity:\s*0\b/, `${name} 的放大按钮不得默认 opacity:0`);
+    const z = css.match(/\.html-frame-fullscreen-overlay\s*\{[^}]*z-index:\s*(\d+)/);
+    assert.ok(z, `${name} 浮层必须显式给 z-index`);
+    assert.ok(Number(z[1]) > 60, `${name} 浮层必须压过底部抽屉（z-index 60），实际 ${z ? z[1] : "无"}`);
+    // 浮层挂在 document.body 下，规则绝不能带容器前缀（带上就匹配不上、点放大没反应）
+    assert.doesNotMatch(css, /\.markdown-body\s+\.html-frame-fullscreen-overlay/,
+      `${name} 浮层选择器不得带容器前缀`);
+    assert.doesNotMatch(css, /\.html-doc-block\s+\.html-frame-fullscreen-overlay/,
+      `${name} 浮层选择器不得带容器前缀`);
+  }
+});
+
+test("云端 HTML 文档重开走缓存：正文秒开 + 成品 srcdoc 复用（srcdoc 无 URL，HTTP 缓存帮不上）", () => {
+  const digestSrc = cloudApp.match(/function htmlDocDigest\(text\) \{[\s\S]*?\n\}/);
+  assert.ok(digestSrc, "云端必须有与桌面端同源的 htmlDocDigest");
+  const digest = new Function(`${digestSrc[0]}\nreturn htmlDocDigest;`)();
+  // 行为：内容没变指纹必须相同（否则缓存永不命中），内容变了必须不同（否则拿到旧帧）
+  assert.equal(digest("abc"), digest("abc"));
+  assert.notEqual(digest("abc"), digest("abcd"));
+  assert.notEqual(digest("abc"), digest("abd"));
+  assert.equal(digest(""), digest(null ?? ""));
+
+  // ① 成品 srcdoc 缓存：按 文档 id + 内容指纹 + 有效期 三重命中
+  assert.match(cloudApp, /htmlFrameCache: new Map\(\)/, "必须有待渲染成品缓存");
+  assert.match(cloudApp, /state\.htmlFrameCache\.set\(docKey, \{[\s\S]{0,200}exp: Date\.now\(\) \+ SIGN_TTL \* 1000/,
+    "写缓存时必须带上与签名同期的有效期（签名 URL 过期后不能继续用）");
+  const renderFn = cloudApp.match(/async function renderHtmlDocRow\(row\) \{[\s\S]*?\n\}/);
+  assert.ok(renderFn, "renderHtmlDocRow 必须可提取");
+  const body = renderFn[0];
+  const hitIdx = body.indexOf("if (hit && hit.digest === digest && hit.exp > Date.now())");
+  const prepIdx = body.indexOf("extractAssetRefs(source)");
+  assert.ok(hitIdx > 0, "必须有缓存命中判断（id + 指纹 + 未过期）");
+  assert.ok(prepIdx > hitIdx, "缓存命中判断必须早于「找引用 → 签名 → 改写」的准备阶段");
+  assert.match(body.slice(hitIdx, prepIdx), /mountHtmlDocBlock\(hit\.srcdoc, hit\.hasAsset\);\s*\n\s*return;/,
+    "命中后直接装载成品，不得再走准备阶段");
+
+  // ② 打开文档：正文缓存命中就不再打网络
+  const openFn = cloudApp.match(/async function openDoc\(id\) \{[\s\S]*?\n\}/);
+  assert.ok(openFn, "openDoc 必须可提取");
+  const openBody = openFn[0];
+  const cacheIdx = openBody.indexOf("state.docCache.get(String(id))");
+  const netIdx = openBody.indexOf('.from("documents")');
+  assert.ok(cacheIdx > 0 && netIdx > cacheIdx, "必须先查正文缓存，只有未命中才回云端取");
+  assert.match(openBody.slice(cacheIdx), /if \(cachedText != null && meta\) \{[\s\S]*?\} else \{/,
+    "缓存命中分支与回源分支必须互斥");
+
+  // ③ 失效点：列表刷新 / 上传与推送完成 / 启动 都会清两份缓存
+  assert.match(cloudApp, /state\.docCache\.clear\(\);\s*\n\s*state\.htmlFrameCache\.clear\(\);/,
+    "loadDocs 成功后必须同时作废正文缓存与成品 srcdoc 缓存（推送/上传会改写云端正文）");
+  // 换账号绝不能复用：成品 srcdoc 里内嵌上一个账号的签名 URL
+  const logout = cloudApp.match(/el\.logoutBtn\.addEventListener[\s\S]*?\n\}\);/);
+  assert.ok(logout, "退出登录处理必须可提取");
+  assert.match(logout[0], /state\.htmlFrameCache\.clear\(\)/, "退出登录必须清成品 srcdoc 缓存");
+});
+
+
