@@ -1,7 +1,7 @@
 {
-    "version":  "2.2.4",
+    "version":  "2.2.5",
     "downloadUrl":  "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
-    "latestReleaseNotes":  "HTML 文档阅读体验修复：手机端预览变窄（响应式网页只剩 91% 宽、固定宽度网页只剩 32%）、长网页被 20000px 高度上限截断成双层滚动、同一文档反复打开完全不收敛（srcdoc 没有 URL，HTTP 缓存用不上）。现在高度上限提到 200000px、云端与分享页补上「放大」全屏入口（全屏铺满、100vh 恢复真实视口）、补上正文与成品预览的会话内缓存（重开 0 次网络请求 84ms，首次 190ms）；顺手修桌面端放大后关闭不恢复页面滚动。预览仍在沙箱内运行，安全边界不变。",
-    "releaseNotes":  "v2.2.4 release. See changelog for details.",
+    "latestReleaseNotes":  "云同步可靠性修复：个别含脚本的 .html 文档此前永远传不上云端——正文命中平台内容安全策略被服务端拒写（拒绝响应不携带跨源响应头，浏览器与官方 SDK 一律误报为「缺少 Access-Control-Allow-Origin 头」，看着像跨源问题）。现在推送前把 HTML 的脚本剥离成「云端安全形态」再上传（本机文件一个字节都不动），失败改为逐篇定位并将原因写进同步面板，只有被拒的 HTML 走降级重试、同批其他文档不受牵连，失败文档不再被误记为已同步（下次自动重试），从云端拉回时也不会用剥离版覆盖本机完整正文；云端工作台与分享页识别该标记并明确提示「云端版已移除脚本」。自动化测试 245→251 全绿，真浏览器端到端验证 13/13。",
+    "releaseNotes":  "v2.2.5 release. See changelog for details.",
     "releaseDate":  "2026-10-14"
 }

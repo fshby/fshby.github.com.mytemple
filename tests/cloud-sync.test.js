@@ -999,3 +999,30 @@ test("云端 HTML 文档重开走缓存：正文秒开 + 成品 srcdoc 复用（
 });
 
 
+
+/* ── 云端安全形态（平台内容检测）：三端必须认同一个标记 ──────────
+ * 平台按正文特征拒写含 <script> / onXxx= 的文档（2026-10-14 实测）。工作台因此
+ * 剥离后写入，并在正文头部留一个标记；分享页与桌面端都靠这个标记识别剥离版。
+ * 标记串一旦分叉，就会出现「工作台剥了、分享页认不出」的静默失效。 */
+test("「云端安全形态」标记三端同串，且引用它的渲染分支都在", () => {
+  const MARK = "<!-- mt-cloud-no-script -->";
+  const cloudClient = read("public/modules/cloud-client.js");
+  const shareJs = read("cloud/share.js");
+  for (const [name, src] of [["cloud/app.js", cloudApp], ["cloud/share.js", shareJs], ["cloud-client.js", cloudClient]]) {
+    assert.ok(src.includes(MARK), `${name} 必须用同一个标记串，否则认不出剥离版`);
+  }
+  // 工作台：HTML 文档块的说明栏要据此提示（而不是把缺内容的页面当成渲染坏了）
+  assert.ok(cloudApp.includes("isCloudStrippedHtml(srcdoc)"), "工作台应显式用 isCloudStrippedHtml() 判断");
+  // 分享页：同样要认，且说明栏文案要提到「已移除」（访客看不懂白页）
+  assert.ok(shareJs.includes("HTML_CLOUD_STRIP_MARK") && /安全策略移除/.test(shareJs),
+    "分享页必须认标记并提示访客");
+});
+
+test("写入失败必须逐篇定位并把原因带进面板（不许只剩下「失败 N 篇」）", () => {
+  const cloudClient = read("public/modules/cloud-client.js");
+  // 原因必须是可读文本，且不能把误导性的 CORS 文案原样丢给用户
+  assert.ok(cloudClient.includes("describeCloudWriteError"), "桌面端要有失败原因翻译");
+  assert.ok(cloudApp.includes("describeCloudWriteError"), "云端工作台同样要有");
+  assert.ok(/pushFailures/.test(cloudClient) && /failures/.test(cloudApp),
+    "失败原因要进 summary / job 供面板展示");
+});

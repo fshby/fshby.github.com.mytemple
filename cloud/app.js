@@ -57,8 +57,71 @@ const ASSET_MANIFEST_KEY = "mtCloudAssets.v1";
 const UPSERT_BATCH_MAX_DOCS = 20;
 const UPSERT_BATCH_MAX_BYTES = 1_200_000;
 
+/* ── 云端安全形态（平台内容检测规避）───────────────────────────
+ * 平台侧对写入请求体做内容检测：实测 2026-10-14，正文含 `<script>…</script>`
+ * 或内联事件属性（`onclick="…"`）时服务端返回 403「WAF拦截页面」。那个错误页
+ * **不带 CORS 头**，浏览器与 SDK 一律报
+ *   "No 'Access-Control-Allow-Origin' header is present on the requested resource"
+ * 看起来像跨源配置问题，其实请求已抵达并被业务层拒绝。
+ *
+ * 处理方式：写入云端时把执行类片段剥掉，并在头部留一个注释标记（本页与分享页
+ * 渲染时据此提示）。这是**功能降级**而不是绕过检测 —— 云端版本因此更保守。
+ * 只对独立 HTML 文档启用（Markdown 里的 `<script>` 常出现在代码块中，剥离会改坏内容）。
+ *
+ * 与桌面端 public/modules/cloud-client.js 的同名函数必须同实现
+ * （tests/cloud-sync.test.js 有契约锁）。 */
+const HTML_CLOUD_STRIP_MARK = "<!-- mt-cloud-no-script -->";
+const HTML_CLOUD_STRIP_NOTE = "<!-- [云端版] 为通过平台内容安全策略，此处的脚本已移除；本机阅读不受影响 -->";
+const HTML_CLOUD_UNSAFE_HINT = /<script\b|\son[a-z]+\s*=|javascript:/i;
+const HTML_CLOUD_SCRIPT_PAIR = /<script\b[\s\S]*?<\/script\s*>/gi;
+const HTML_CLOUD_SCRIPT_SELF = /<script\b[^>]*\/\s*>/gi;
+const HTML_CLOUD_SCRIPT_OPEN = /<script\b[^>]*>/gi;
+const HTML_CLOUD_EVENT_ATTR = /\s+on[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi;
+const HTML_CLOUD_JS_URL = /(\b(?:href|src|xlink:href)\s*=\s*)(?:"javascript:[^"]*"|'javascript:[^']*')/gi;
+
+/**
+ * 生成写入云端用的「安全形态」HTML 正文。
+ * @returns {{text:string, changed:boolean, removed:number}} removed = 移除的片段数
+ */
+function stripCloudUnsafeHtml(text) {
+  const src = String(text == null ? "" : text);
+  if (!src || !HTML_CLOUD_UNSAFE_HINT.test(src)) return { text: src, changed: false, removed: 0 };
+  let removed = 0;
+  let out = src
+    .replace(HTML_CLOUD_SCRIPT_PAIR, () => { removed += 1; return HTML_CLOUD_STRIP_NOTE; })
+    .replace(HTML_CLOUD_SCRIPT_SELF, () => { removed += 1; return HTML_CLOUD_STRIP_NOTE; })
+    .replace(HTML_CLOUD_SCRIPT_OPEN, () => { removed += 1; return HTML_CLOUD_STRIP_NOTE; })
+    .replace(HTML_CLOUD_EVENT_ATTR, () => { removed += 1; return ""; })
+    .replace(HTML_CLOUD_JS_URL, (_m, head) => { removed += 1; return `${head}"#"`; });
+  if (!removed) return { text: src, changed: false, removed: 0 };
+  // 标记插在 DOCTYPE 之后：注释出现在 DOCTYPE 之前会让部分浏览器退回怪异模式。
+  const dt = /<!doctype[^>]*>/i.exec(out);
+  const at = dt ? dt.index + dt[0].length : 0;
+  out = dt
+    ? `${out.slice(0, at)}\n${HTML_CLOUD_STRIP_MARK}${out.slice(at)}`
+    : `${HTML_CLOUD_STRIP_MARK}\n${out}`;
+  return { text: out, changed: true, removed };
+}
+
+/** 正文是否是「安全形态」（渲染时据此提示，而不是把白页当成坏了）。 */
+function isCloudStrippedHtml(text) {
+  return String(text == null ? "" : text).includes(HTML_CLOUD_STRIP_MARK);
+}
+
+/**
+ * 把写入失败翻译成人话。平台内容检测的 403 错误页不带 CORS 头，SDK 只会报
+ * `No 'Access-Control-Allow-Origin'…`（看着像跨源配置问题），照抄会把人带偏。
+ */
+function describeCloudWriteError(err) {
+  const raw = String((err && (err.message || err.hint || err.code)) || err || "未知错误");
+  if (/Access-Control-Allow-Origin|Failed to fetch|NetworkError|Load failed/i.test(raw)) {
+    return "被服务端拒绝（响应缺少跨源响应头，常见于平台内容安全策略拦下正文特征）";
+  }
+  return raw.slice(0, 200);
+}
+
 /* 静态资源版本戳：改动 cloud/ 下被页面引用的任何文件时，与 index.html 的三件套一起递增。 */
-const ASSET_V = "cloud-18";
+const ASSET_V = "cloud-19";
 
 /* 第三方库一律同源自托管，见 scripts/vendor-cloud.mjs。
  * 绝不改回第三方 CDN —— 见该脚本头部注释：cdn.jsdelivr.net 在部分网络下 TLS 会被重置，
@@ -1668,9 +1731,13 @@ function mountHtmlDocBlock(srcdoc, hasAsset) {
   label.textContent = "网页预览";
   const hint = document.createElement("span");
   hint.className = "html-doc-hint";
-  hint.textContent = hasAsset
-    ? "按网页原样加载（脚本在沙箱内运行）；已随云同步的图片可正常显示"
-    : "按网页原样加载（脚本在沙箱内运行）；相对路径资源不可用";
+  /* 云端那份若是「安全形态」（推送时剥离过脚本），说明栏必须点明 —— 否则帧内
+   * 动态内容不显示会被当成「渲染坏了」。（本机阅读不受影响，见 stripCloudUnsafeHtml） */
+  hint.textContent = isCloudStrippedHtml(srcdoc)
+    ? "此文档含脚本，云端版已按平台安全策略移除；本机阅读不受影响"
+    : (hasAsset
+      ? "按网页原样加载（脚本在沙箱内运行）；已随云同步的图片可正常显示"
+      : "按网页原样加载（脚本在沙箱内运行）；相对路径资源不可用");
   bar.append(label, hint);
 
   const frame = document.createElement("iframe");
@@ -1763,7 +1830,17 @@ function localOrigin() {
 const LOCAL_ORIGIN = localOrigin();
 
 async function localGet(origin, path) {
-  const res = await fetch(origin + path, { cache: "no-store" });
+  let res;
+  try {
+    res = await fetch(origin + path, { cache: "no-store" });
+  } catch (_) {
+    /* 浏览器的新权限模型（Local Network Access）会拦「网页 → 本机地址」：
+     * 控制台原文是 "Permission was denied for this request to access the 'loopback'
+     * address space"，页面侧只看到 TypeError: Failed to fetch —— 只报这句会让人以为
+     * 是桌面端没开。本机服务已发 Access-Control-Allow-Private-Network 也不够。
+     * 端口没监听时也走这里，所以两种可能都列出来。 */
+    throw new Error("无法连接本机服务（浏览器可能禁止本页访问本机地址，或桌面端未在运行）");
+  }
   if (!res.ok) throw new Error("本机接口 " + path + " 返回 HTTP " + res.status);
   return res.json();
 }
@@ -2210,6 +2287,9 @@ async function runUpload(candidates, assets, ignoredCount) {
   const job = {
     cancelled: false, done: 0, total: candidates.length, added: 0, updated: 0, skipped: 0, failed: 0,
     assetTotal: assets.length, assetSent: 0, assetSkipped: 0, assetFailed: 0, assetTooBig: 0, ignored: ignoredCount || 0,
+    // 失败原因（rel → 人话）与「剥离脚本后才写进云端」的篇数：面板必须能看到，
+    // 否则只剩一句「失败 N 篇」，用户无从下手（2026-10-14 实测的可用性缺口）。
+    failures: [], stripped: 0,
   };
   state.upload = job;
   const setProgress = (label, pct) => {
@@ -2263,34 +2343,54 @@ async function runUpload(candidates, assets, ignoredCount) {
     }
     if (!todo.length && !job.assetSent) return finishUpload(job, null);
 
-    // 3) 分批 upsert
+    // 3) 分批 upsert。批量被拒时逐篇重试：既拿到「是哪一篇、为什么」，也避免
+    //    「一篇被拦、整批算失败」——被拦的文档随后剥离脚本再试一次。
     const nowIso = new Date().toISOString();
     let sent = 0;
     let batch = [];
     let batchBytes = 0;
-    const flush = async () => {
-      if (!batch.length) return;
-      const payload = batch.map((p) => ({
-        workspace: ws,
-        rel_path: p.rel_path,
-        title: p.title,
-        content: p.content,
-        content_sha: p.content_sha,
-        bytes: p.bytes,
-        doc_mtime: p.doc_mtime,
-        deleted_at: null,
-        updated_at: nowIso,
-      }));
+    const rowsOf = (list) => list.map((p) => ({
+      workspace: ws,
+      rel_path: p.rel_path,
+      title: p.title,
+      content: p.content,
+      content_sha: p.content_sha,
+      bytes: p.bytes,
+      doc_mtime: p.doc_mtime,
+      deleted_at: null,
+      updated_at: nowIso,
+    }));
+    const writeRows = async (payload) => {
       const { error } = await cloud.database
         .from("documents")
         .upsert(payload, { onConflict: "owner_id,workspace,rel_path" })
         .select("id");
-      if (error) {
-        job.failed += batch.length;
-        console.warn("upload batch failed", error.code || "", error.message || "");
-      }
-      sent += batch.length;
+      return error || null;
+    };
+    const flush = async () => {
+      if (!batch.length) return;
+      const batchRef = batch;
       batch = []; batchBytes = 0;
+      const err = await writeRows(rowsOf(batchRef));
+      if (err) {
+        for (const p of batchRef) {
+          const one = await writeRows(rowsOf([p]));
+          if (!one) continue;
+          // 含脚本特征的独立 HTML：剥离执行类片段后重试（本机文件不动，只有云端那份精简）。
+          // content_sha 仍写**本机原文**指纹 → 下一轮比对判定一致，不会每次来撞一次失败请求。
+          if (HTML_DOC_EXT.test(p.rel_path)) {
+            const safe = stripCloudUnsafeHtml(p.content);
+            if (safe.changed) {
+              const alt = rowsOf([{ ...p, content: safe.text, bytes: new TextEncoder().encode(safe.text).length }]);
+              const err2 = await writeRows(alt);
+              if (!err2) { job.stripped += 1; continue; }
+            }
+          }
+          job.failed += 1;
+          job.failures.push({ rel: p.rel_path, reason: describeCloudWriteError(one) });
+        }
+      }
+      sent += batchRef.length;
       setProgress(`上传文档…（${sent}/${todo.length}）`, base + 20 + (sent / todo.length) * 40);
     };
     for (const p of todo) {
@@ -2328,6 +2428,7 @@ function finishUpload(job, note, isError) {
   if (job.skipped) parts.push(`跳过未变 ${job.skipped} 篇`);
   if (job.assetSent) parts.push(`图片 / 视频 ${job.assetSent} 个`);
   if (job.assetSkipped) parts.push(`图片未变 ${job.assetSkipped} 个`);
+  if (job.stripped) parts.push(`${job.stripped} 篇含脚本的 HTML 已移除脚本后上传`);
   if (job.failed) parts.push(`失败 ${job.failed} 篇`);
   if (job.assetFailed) parts.push(`图片失败 ${job.assetFailed} 个`);
   if (job.assetTooBig) parts.push(`超大跳过 ${job.assetTooBig} 个`);
@@ -2337,7 +2438,12 @@ function finishUpload(job, note, isError) {
   const warns = [];
   if (job.assetTooBig) warns.push(`有 ${job.assetTooBig} 个文件超过 ${Math.round(ASSET_MAX_BYTES / 1024 / 1024)}MB 未上传`);
   if (job.assetFailed) warns.push(`有 ${job.assetFailed} 个图片 / 视频上传失败，可重试`);
-  if (job.failed) warns.push(`有 ${job.failed} 篇文档未成功，可稍后重试`);
+  if (job.stripped) warns.push(`${job.stripped} 篇含脚本的 HTML 在云端已移除脚本（本机文件未改动；云端预览可能少动态内容）`);
+  if (job.failed) {
+    // 只报条数等于什么都没说 —— 必须带上原因（历史上正是这里被 console.warn 吞掉）
+    const why = (job.failures && job.failures[0] && job.failures[0].reason) || "";
+    warns.push(`有 ${job.failed} 篇文档未成功${why ? `（${why}）` : ""}，可稍后重试`);
+  }
   if (job.ignored) warns.push(`忽略了 ${job.ignored} 个不支持的文件`);
 
   el.progressFill.style.width = "100%";

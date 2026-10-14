@@ -65,6 +65,13 @@ class FakeQuery {
     const store = this.store;
     if (this.op === "upsert") {
       const list = Array.isArray(this.payload) ? this.payload : [this.payload];
+      /* 平台侧内容检测（2026-10-14 实测）：正文含 <script> / onXxx= 时服务端返回 403，
+       * 且那个错误页**不带 CORS 头** → SDK 只看到 "No 'Access-Control-Allow-Origin'…"。
+       * 这里让用例按同一规则拒写，用来验「逐篇定位 + 剥离脚本降级 + 原因可见」。 */
+      if (this.cloud.rejectUpsert) {
+        const err = this.cloud.rejectUpsert(list, this.table);
+        if (err) return { data: null, error: typeof err === "string" ? { message: err } : err };
+      }
       const out = [];
       for (const item of list) {
         // documents 的冲突键是 (workspace, rel_path)；kb_meta 按 owner 单行
@@ -103,6 +110,8 @@ function makeCloud() {
     uploads: [],
     nextId: 1,
     writes: 0,
+    /** 平台内容检测的替身：返回错误对象/字符串即表示这次 upsert 被拒（见 run 里的用法）。 */
+    rejectUpsert: null,
     query(table) {
       if (!(table in this.tables)) throw new Error(`未预期的表：${table}`);
       return new FakeQuery(this, table);
@@ -954,5 +963,134 @@ test("对象路径规则两端逐字一致（assetWsSegment / extractAssetRefs /
   for (const fn of ["assetWsSegment", "extractAssetRefs", "assetRelCandidates", "normPath"]) {
     assert.equal(normFn(extractFn(desk, fn)), normFn(extractFn(web, fn)),
       `${fn} 在桌面内核与云端工作台之间已经分叉 —— 两端会算出不同的对象路径`);
+  }
+});
+
+/* ══ 平台内容策略拦下正文特征（2026-10-14 实测根因）══════════════
+ * 现象：一篇含 `<script>` 的 HTML 永远推不上云端，桌面端口只能看到
+ * `push:0 / failed:1` 与一句误导性的 CORS 文案。实测（Node 直连拿到的真身）：
+ * 服务端对含 `<script>…</script>` / `onclick="…"` 的请求体返回 403「WAF拦截页面」，
+ * 而那个错误页不带 CORS 头。下面用「按正文特征拒写」的假数据面复现整条链路。 */
+
+const WAF_MSG = "No 'Access-Control-Allow-Origin' header is present on the requested resource";
+
+/** 照抄实测的拦截规则：正文含脚本标签或内联事件属性即拒。 */
+function armPlatformContentFilter(cloud) {
+  cloud.rejectUpsert = (rows, table) => {
+    if (table !== "documents") return null;
+    const hit = rows.some((r) => /<script\b|\son[a-z]+\s*=/i.test(String(r.content || "")));
+    return hit ? { message: WAF_MSG } : null;
+  };
+}
+
+const SCRIPT_HTML = '<!DOCTYPE html><html><head><title>倒计时</title></head>\n'
+  + '<body onload="tick()"><script>var n=11;setInterval(tick,1000);</script>\n<p>冲刺</p></body></html>';
+
+test("平台按正文特征拒写：剥离脚本后重试成功，本机文件保持完整版", async () => {
+  const cloud = makeCloud();
+  armPlatformContentFilter(cloud);
+  const { localFiles, local } = setup({
+    files: {
+      [`${WS_ID}/count.html`]: { content: SCRIPT_HTML, modified: 1000 },
+      [`${WS_ID}/note.md`]: { content: "# 笔记\n静态内容\n", modified: 1000 },
+    },
+    cloud,
+  });
+
+  const s = await mod.syncCloud({ mode: "push" });
+
+  const row = cloud.row("count.html");
+  assert.ok(row, "剥离后必须真的写进云端");
+  assert.ok(!/<script\b/i.test(row.content), "云端正文不得再含脚本标签");
+  assert.ok(!/\son[a-z]+\s*=/i.test(row.content), "内联事件属性也要移除");
+  assert.ok(row.content.includes("<!-- mt-cloud-no-script -->"), "要留可识别的标记（云端渲染据此提示）");
+  assert.ok(row.content.includes("冲刺"), "静态内容必须原样保留");
+  assert.ok(row.content.indexOf("<!DOCTYPE") < row.content.indexOf("<!-- mt-cloud-no-script -->"),
+    "标记必须在 DOCTYPE 之后，否则浏览器可能退回怪异模式");
+  assert.equal(row.content_sha, sha(SCRIPT_HTML),
+    "content_sha 仍写本机原文指纹 —— 下一轮才会判「两端一致」，不会每次都来撞一次失败请求");
+  assert.equal(s.push, 2, `同批里正常的文档也不能被连带算失败，实测 ${s.push}`);
+  assert.equal(s.stripped, 1);
+  assert.equal(s.failed, 0);
+  assert.ok(s.notes.some((n) => n.includes("count.html") && n.includes("已移除脚本")), "降级要在 notes 里说清楚");
+  assert.equal(localFiles.get(`${WS_ID}/count.html`).content, SCRIPT_HTML, "本机文件必须是完整版");
+  assert.equal(local.stats.saves, 0, "推送不写本机");
+
+  // 下一轮：内容没变 → 既不重传，也不会再撞一次注定失败的请求
+  const s2 = await mod.syncCloud({ mode: "push" });
+  assert.equal(s2.push, 0, `已同步的文档不得重复上传，实测 ${s2.push}`);
+  assert.equal(s2.failed, 0);
+  assert.equal(cloud.tables.documents.length, 2);
+});
+
+test("Markdown 里出现脚本特征被拒：不擅自改写内容，只报原因且不写基线", async () => {
+  const cloud = makeCloud();
+  armPlatformContentFilter(cloud);
+  const MD = "# 代码笔记\n\n```html\n<script>alert(1)</script>\n```\n";
+  const { localFiles } = setup({ files: { [`${WS_ID}/code.md`]: { content: MD, modified: 1000 } }, cloud });
+
+  const s = await mod.syncCloud({ mode: "push" });
+
+  assert.equal(cloud.row("code.md"), undefined, "被拒就不能算写进去了");
+  assert.equal(s.push, 0);
+  assert.equal(s.failed, 1);
+  assert.ok(s.pushFailures[0] && s.pushFailures[0].rel === "code.md",
+    `失败原因要指到具体文档，实测 ${JSON.stringify(s.pushFailures)}`);
+  assert.match(s.pushFailures[0].reason, /服务端拒绝|平台内容安全策略/,
+    `原因要人话，实测 ${s.pushFailures[0] && s.pushFailures[0].reason}`);
+  assert.ok(!/Access-Control-Allow-Origin/.test(s.pushFailures[0].reason),
+    "误导性的 CORS 文案不能原样甩给用户");
+  assert.match(mod.summarize(s), /失败 1/, "汇总文案要能直接看到失败");
+  assert.ok(s.notes.some((n) => n.startsWith("未上传：code.md")), "notes 也要留痕");
+  assert.equal(localFiles.get(`${WS_ID}/code.md`).content, MD, "Markdown 内容不得被改写（代码块里的标签是真内容）");
+
+  const st = JSON.parse(globalThis.localStorage.getItem("mtCloudSync.v1"));
+  assert.ok(!(st.files || {})["code.md"], "失败的文档不得写同步基线，否则下一轮直接跳过、永远不重试");
+});
+
+test("云端存的是「剥离形态」时不覆盖本机完整版（本机不能丢脚本）", async () => {
+  const cloud = makeCloud();
+  const stripped = mod.stripCloudUnsafeHtml(SCRIPT_HTML).text;
+  assert.ok(stripped.includes("<!-- mt-cloud-no-script -->"), "夹具前提：剥离产物必须带标记");
+  // 云端这份是「后来的」版本（updated_at 明显更新），才会被判成「云端改过 → 要拉」
+  cloud.seed("count.html", stripped, { updatedAt: new Date(Date.now() + 3_600_000).toISOString() });
+  const { localFiles, local } = setup({
+    files: { [`${WS_ID}/count.html`]: { content: SCRIPT_HTML, modified: 1000 } },
+    cloud,
+  });
+
+  const s = await mod.syncCloud({});
+
+  assert.equal(localFiles.get(`${WS_ID}/count.html`).content, SCRIPT_HTML, "本机必须保持完整版");
+  assert.equal(local.stats.saves, 0, "不得写回本机");
+  assert.equal(s.pull, 0);
+  assert.ok(s.notes.some((n) => n.includes("跳过覆盖")), `要在 notes 里说明为什么没拉，实测 ${JSON.stringify(s.notes)}`);
+});
+
+test("剥离脚本的实现两端同源（本机与云端工作台必须剥出同一份正文）", () => {
+  const desk = readFileSync(new URL("../public/modules/cloud-client.js", import.meta.url), "utf8");
+  const web = readFileSync(new URL("../cloud/app.js", import.meta.url), "utf8");
+  assert.equal(normFn(extractFn(desk, "stripCloudUnsafeHtml")), normFn(extractFn(web, "stripCloudUnsafeHtml")),
+    "stripCloudUnsafeHtml 已分叉 —— 同一篇文档在两端的云端形态会不一致");
+  // 只看函数体还不够：常量（标记串、正则）也得同值，所以再跑一遍同一批输入比结果
+  const apiOf = (src) => {
+    const from = src.indexOf("const HTML_CLOUD_STRIP_MARK");
+    const to = src.indexOf("function isCloudStripped");
+    assert.ok(from > 0 && to > from, "必须能找到剥离函数段");
+    const code = src.slice(from, to).replace(/\bexport\s+/g, "");
+    return new Function(`${code}\nreturn stripCloudUnsafeHtml;`)();
+  };
+  const a = apiOf(desk);
+  const b = apiOf(web);
+  const inputs = [
+    SCRIPT_HTML,
+    '<html><body><a href="javascript:alert(1)">x</a></body></html>',
+    "<html><body><p>纯静态</p></body></html>",
+    "<div onclick='x()'>t</div>",
+    "no doctype<script>a</script>",
+    "",
+  ];
+  for (const inp of inputs) {
+    assert.deepEqual(a(inp), b(inp), `两端剥出的结果不同：${inp.slice(0, 40)}`);
   }
 });

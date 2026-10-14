@@ -15,7 +15,7 @@
   "use strict";
 
   var CFG = window.__MT_CLOUD__ || {};
-  var ASSET_V = "cloud-18";
+  var ASSET_V = "cloud-19";
   var ENDPOINT = String(CFG.endpoint || "").replace(/\/+$/, "");
   var REST = ENDPOINT + "/.cloud/database/rest/v1";
   var HDR = { apikey: CFG.publishableKey || "", "X-Wb-Webapp-Access-Key": CFG.publishableKey || "" };
@@ -104,6 +104,10 @@
    * 所以这里先把该分享的全部资源行取回来建 rel_path → data URL 映射，再改写。 */
   var HTML_DOC_EXT = /\.(html?|xhtml)$/i;
   var HTML_DOC_SANDBOX = "allow-scripts allow-forms allow-modals";
+  /* 「云端安全形态」标记（与 cloud/app.js 的 HTML_CLOUD_STRIP_MARK 同串）：推送时
+   * 平台内容策略会拦下含 <script> / onclick= 的正文，工作台因此剥离后再写云端。
+   * 分享页据此在说明栏提示访客「云端版不含脚本」。 */
+  var HTML_CLOUD_STRIP_MARK = "<!-- mt-cloud-no-script -->";
   var HTML_FRAME_RESIZE_SCRIPT = '<script>(function(){function p(){var d=document.documentElement,b=document.body;var h=Math.max(d?d.scrollHeight:0,b?b.scrollHeight:0);try{parent.postMessage({type:"mt-html-frame-height",h:Math.ceil(h)},"*")}catch(_){}}function s(){p();if(window.ResizeObserver){try{new ResizeObserver(p).observe(document.documentElement)}catch(_){}}else{setInterval(p,500)}}if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",s)}else{s()}})();</script>';
   var HTML_ASSET_SRC_RE = /(<\s*(?:img|video|source)\b[^>]*?\bsrc\s*=\s*)(["'])([^"']+)\2/gi;
   /* 帧高上限（与工作台 cloud/app.js 的 HTML_FRAME_MAX_HEIGHT 同值同义）。
@@ -146,9 +150,12 @@
     hint.className = "html-doc-hint";
     var hasAsset = false;
     for (var k in assetMap) { if (Object.prototype.hasOwnProperty.call(assetMap, k)) { hasAsset = true; break; } }
-    hint.textContent = hasAsset
-      ? "按网页原样加载；随分享带走的图片可正常显示"
-      : "按网页原样加载；相对路径资源不可用";
+    /* 正文若带「云端安全形态」标记（推送时按平台内容策略剥离过脚本），要说明白：
+     * 否则动态内容不显示会被当成渲染坏了。标记由工作台 stripCloudUnsafeHtml 写入。 */
+    var stripped = String(source || "").indexOf(HTML_CLOUD_STRIP_MARK) !== -1;
+    hint.textContent = stripped
+      ? "此文档含脚本，云端版已按平台安全策略移除"
+      : (hasAsset ? "按网页原样加载；随分享带走的图片可正常显示" : "按网页原样加载；相对路径资源不可用");
     bar.appendChild(label);
     bar.appendChild(hint);
 

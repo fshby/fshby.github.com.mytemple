@@ -70,6 +70,64 @@ const CONFLICT_WINDOW_MS = 60_000;
 /** 与云端页同款客户端标识，写入 kb_meta.client_ver。 */
 const CLIENT_VER = "exe";
 
+/* ── 云端安全形态（平台内容检测规避）───────────────────────────
+ * 平台侧对写入请求体做内容检测：实测 2026-10-14，正文含 `<script>…</script>`
+ * 或内联事件属性（`onclick="…"`）时服务端返回 403「WAF拦截页面」。那个错误页
+ * **不带 CORS 头**，浏览器与官方 SDK 一律报
+ *   "No 'Access-Control-Allow-Origin' header is present on the requested resource"
+ * 看起来像跨源配置问题，其实请求已抵达并被业务层拒绝（Node 直连能拿到 403 原文）。
+ *
+ * 处理方式：本机正文一律不动，**只在写入云端时**把执行类片段剥掉，并在头部留一个
+ * 注释标记（云端渲染据此提示「云端版不含脚本」）。这是**功能降级**而不是绕过检测
+ * —— 云端版本因此更保守（分享页给别人看时，脚本本来也是风险面）。
+ *
+ * 只对独立 HTML 文档启用：Markdown 里的 `<script>` 常出现在代码块中，剥离会改坏
+ * 用户内容，所以 md / txt 一律原样上传，失败时只报原因。
+ *
+ * 与 cloud/app.js 的同名函数必须同实现（tests/cloud-sync.test.js 有契约锁）。
+ */
+const HTML_CLOUD_STRIP_MARK = "<!-- mt-cloud-no-script -->";
+const HTML_CLOUD_STRIP_NOTE = "<!-- [云端版] 为通过平台内容安全策略，此处的脚本已移除；本机阅读不受影响 -->";
+/** 有这些特征才值得走一次重写（否则所有文档都要跑一遍正则）。 */
+const HTML_CLOUD_UNSAFE_HINT = /<script\b|\son[a-z]+\s*=|javascript:/i;
+const HTML_CLOUD_SCRIPT_PAIR = /<script\b[\s\S]*?<\/script\s*>/gi;
+const HTML_CLOUD_SCRIPT_SELF = /<script\b[^>]*\/\s*>/gi;
+const HTML_CLOUD_SCRIPT_OPEN = /<script\b[^>]*>/gi;
+const HTML_CLOUD_EVENT_ATTR = /\s+on[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi;
+const HTML_CLOUD_JS_URL = /(\b(?:href|src|xlink:href)\s*=\s*)(?:"javascript:[^"]*"|'javascript:[^']*')/gi;
+
+/**
+ * 生成写入云端用的「安全形态」HTML 正文。
+ * @param {string} text 本机原文
+ * @returns {{text:string, changed:boolean, removed:number}} removed = 移除的片段数
+ */
+export function stripCloudUnsafeHtml(text) {
+  const src = String(text == null ? "" : text);
+  if (!src || !HTML_CLOUD_UNSAFE_HINT.test(src)) return { text: src, changed: false, removed: 0 };
+  let removed = 0;
+  let out = src
+    .replace(HTML_CLOUD_SCRIPT_PAIR, () => { removed += 1; return HTML_CLOUD_STRIP_NOTE; })
+    .replace(HTML_CLOUD_SCRIPT_SELF, () => { removed += 1; return HTML_CLOUD_STRIP_NOTE; })
+    .replace(HTML_CLOUD_SCRIPT_OPEN, () => { removed += 1; return HTML_CLOUD_STRIP_NOTE; })
+    .replace(HTML_CLOUD_EVENT_ATTR, () => { removed += 1; return ""; })
+    .replace(HTML_CLOUD_JS_URL, (_m, head) => { removed += 1; return `${head}"#"`; });
+  if (!removed) return { text: src, changed: false, removed: 0 };
+  // 标记插在 DOCTYPE 之后：注释出现在 DOCTYPE 之前会让部分浏览器退回怪异模式。
+  const dt = /<!doctype[^>]*>/i.exec(out);
+  const at = dt ? dt.index + dt[0].length : 0;
+  out = dt
+    ? `${out.slice(0, at)}\n${HTML_CLOUD_STRIP_MARK}${out.slice(at)}`
+    : `${HTML_CLOUD_STRIP_MARK}\n${out}`;
+  return { text: out, changed: true, removed };
+}
+
+/** 云端正文是否就是本机这份正文的「安全形态」（拉取时据此避免覆盖本机完整版）。 */
+export function isCloudStrippedFormOf(cloudText, localText) {
+  const c = String(cloudText == null ? "" : cloudText);
+  if (!c.includes(HTML_CLOUD_STRIP_MARK)) return false;
+  return stripCloudUnsafeHtml(localText).text === c;
+}
+
 const STATE_KEY = "mtCloudSync.v1";
 const DEVICE_KEY = "mtCloudDevice.v1";
 
@@ -594,34 +652,67 @@ export async function fetchCloudIndex(workspace) {
   return all;
 }
 
-/** 分批 upsert 正文。 */
+/**
+ * 把云端写入失败翻译成人话。
+ *
+ * 最坑的是平台内容检测返回的 403：那个错误页不带 CORS 头，浏览器与官方 SDK 一律报
+ * `No 'Access-Control-Allow-Origin' header is present…`，看起来像跨源配置问题，
+ * 实际是服务端拒绝了正文（2026-10-14 实测：正文含 `<script>` / `onclick=` 即被拦）。
+ * 面板照抄这句话只会把人带偏，所以这里换成能对症的说法。
+ */
+function describeCloudWriteError(err) {
+  const raw = String((err && (err.message || err.error_description || err.hint || err.code)) || err || "未知错误");
+  if (/Access-Control-Allow-Origin|Failed to fetch|NetworkError|Load failed/i.test(raw)) {
+    return '被服务端拒绝（响应缺少跨源响应头，常见于平台内容安全策略拦下正文特征）';
+  }
+  return raw.slice(0, 200);
+}
+
+/** 分批 upsert 正文。批量被拒时逐篇重试：既拿到真实失败原因，也避免「一篇坏、整批算失败」。 */
 async function upsertDocs(workspace, prepared, onSent) {
   const nowIso = new Date().toISOString();
   let sent = 0;
   let batch = [];
   let batchBytes = 0;
   let failed = 0;
-  const flush = async () => {
-    if (!batch.length) return;
-    const payload = batch.map((p) => ({
-      workspace,
-      rel_path: p.rel_path,
-      title: p.title,
-      content: p.content,
-      content_sha: p.content_sha,
-      bytes: p.bytes,
-      doc_mtime: p.doc_mtime,
-      deleted_at: null,
-      updated_at: nowIso,
-    }));
+  /** @type {{rel:string, reason:string}[]} */
+  const failures = [];
+  const rowOf = (p) => ({
+    workspace,
+    rel_path: p.rel_path,
+    title: p.title,
+    content: p.content,
+    content_sha: p.content_sha,
+    bytes: p.bytes,
+    doc_mtime: p.doc_mtime,
+    deleted_at: null,
+    updated_at: nowIso,
+  });
+  const write = async (payload) => {
     const { error } = await cloudClient().database
       .from("documents")
       .upsert(payload, { onConflict: "owner_id,workspace,rel_path" })
       .select("id");
-    if (error) failed += batch.length;
-    sent += batch.length;
+    return error || null;
+  };
+  const flush = async () => {
+    if (!batch.length) return;
+    const batchRef = batch;
     batch = [];
     batchBytes = 0;
+    const error = await write(batchRef.map(rowOf));
+    if (error) {
+      // 批量失败无法定位是哪一篇（错误里没有 rel_path）——逐篇重试，
+      // 让同批里没问题的文档照常上传，并把真正的失败原因报到面板。
+      for (const p of batchRef) {
+        const one = await write([rowOf(p)]);
+        if (one) {
+          failed += 1;
+          failures.push({ rel: p.rel_path, reason: describeCloudWriteError(one) });
+        }
+      }
+    }
+    sent += batchRef.length;
     if (onSent) onSent(sent);
   };
   for (const p of prepared) {
@@ -630,7 +721,50 @@ async function upsertDocs(workspace, prepared, onSent) {
     if (batch.length >= UPSERT_BATCH_MAX_DOCS || batchBytes >= UPSERT_BATCH_MAX_BYTES) await flush();
   }
   await flush();
-  return { sent, failed };
+  return { sent, failed, failures };
+}
+
+/**
+ * 上传一批正文，并对「含脚本特征而被服务端拒绝的独立 HTML」做一次降级重试。
+ *
+ * 平台内容检测拦的是正文特征（实测 `<script>…</script>` 与 `onclick="…"`），
+ * 把这类片段换掉就能过：本机文件不动，只有云端那份是精简版。重试成功时
+ * content_sha 仍写**本机原文**的指纹，于是下一轮同步直接判「两端一致」跳过，
+ * 不会每次同步都来撞一次注定失败的请求。
+ *
+ * @returns {{ok:number, failures:{rel:string,reason:string}[], stripped:string[]}}
+ */
+async function upsertDocsWithHtmlFallback(workspace, prepared, onSent) {
+  const res = await upsertDocs(workspace, prepared, onSent);
+  const failureByRel = new Map(res.failures.map((f) => [f.rel, f.reason]));
+  const retry = [];
+  for (const p of prepared) {
+    if (!failureByRel.has(p.rel_path)) continue;
+    if (!HTML_DOC_EXT.test(p.rel_path)) continue;
+    const safe = stripCloudUnsafeHtml(p.content);
+    if (!safe.changed) continue;
+    retry.push({ ...p, content: safe.text, bytes: new TextEncoder().encode(safe.text).length });
+  }
+  let ok = res.sent - res.failed;
+  const stripped = [];
+  if (retry.length) {
+    const r2 = await upsertDocs(workspace, retry, onSent);
+    const stillBad = new Map(r2.failures.map((f) => [f.rel, f.reason]));
+    for (const p of retry) {
+      if (stillBad.has(p.rel_path)) {
+        failureByRel.set(p.rel_path, stillBad.get(p.rel_path));
+        continue;
+      }
+      failureByRel.delete(p.rel_path);
+      ok += 1;
+      stripped.push(p.rel_path);
+    }
+  }
+  return {
+    ok,
+    stripped,
+    failures: [...failureByRel.entries()].map(([rel, reason]) => ({ rel, reason })),
+  };
 }
 
 /** 给云端打墓碑（软删除，可恢复）。 */
@@ -812,6 +946,10 @@ export async function syncCloud({ mode = "both", workspaceId, onProgress } = {})
     assetPush: 0, assetExists: 0, assetMissing: 0, assetTooBig: 0, assetFailed: 0,
     // 失败原因（去重后的前几条）：面板上要能直接看到「为什么没传上去」
     assetFailures: [],
+    // 文档写入失败的原因（rel → 人话原因）；见 describeCloudWriteError
+    pushFailures: [],
+    // 含脚本特征的 HTML：剥离脚本后才写进云端的篇数（本机文件不动）
+    stripped: 0,
   };
   summary.localCount = localMap.size;
   summary.cloudCount = [...cloudMap.values()].filter((r) => r && !r.deleted_at).length;
@@ -937,11 +1075,19 @@ export async function syncCloud({ mode = "both", workspaceId, onProgress } = {})
     }
     if (prepared.length) {
       report(`上传中（0/${prepared.length}）…`);
-      const { sent, failed } = await upsertDocs(workspace, prepared, (n) => report(`上传中（${n}/${prepared.length}）…`));
-      summary.push = sent - failed;
-      summary.failed += failed;
+      const r = await upsertDocsWithHtmlFallback(workspace, prepared, (n) => report(`上传中（${n}/${prepared.length}）…`));
+      // 基线只记真正写成功的：失败的也记进去会让下一轮直接跳过它（等于永远不重试）
+      const badSet = new Set(r.failures.map((f) => f.rel));
+      for (const p of prepared) if (!badSet.has(p.rel_path)) next[p.rel_path] = p.content_sha;
+      summary.push = r.ok;
+      summary.stripped += r.stripped.length;
+      for (const rel of r.stripped) {
+        summary.notes.push(`已移除脚本后上传云端（本机文件未改动；云端预览可能少动态内容）：${rel}`);
+      }
+      summary.pushFailures = r.failures;
+      for (const f of r.failures) summary.notes.push(`未上传：${f.rel}（${f.reason}）`);
+      summary.failed += r.failures.length;
       pushedCount = summary.push;
-      for (const p of prepared) next[p.rel_path] = p.content_sha;
     }
   } else if (!wantPush && toPush.length) {
     modeNote(toPush.length, "待上传");
@@ -1006,6 +1152,20 @@ export async function syncCloud({ mode = "both", workspaceId, onProgress } = {})
       }
       const ref = `${ws.id}/${item.rel}`;
       const local = localMap.get(item.rel);
+      /* 云端那份若只是本机完整版的「云端安全形态」（我们推送时剥离过脚本的那一份），
+       * 就绝不能写回本机 —— 否则本机文件也会丢掉脚本段。判定等价后只记基线、不动文件。 */
+      if (HTML_DOC_EXT.test(item.rel)) {
+        let localText = local && typeof local.content === "string" ? local.content : null;
+        if (localText === null) {
+          try { localText = (await readLocalContent(ref)).content; } catch (_) { localText = null; }
+        }
+        if (localText !== null && isCloudStrippedFormOf(row.content, localText)) {
+          summary.skipped += 1;
+          next[item.rel] = row.content_sha;
+          summary.notes.push(`云端版本即本机版本（云端不含脚本），已跳过覆盖：${item.rel}`);
+          continue;
+        }
+      }
       try {
         // baseHash 用本机当前 sha —— camelCase 适配漏掉这里，冲突检测会整体失效
         await writeLocalDoc(ref, row.content, local ? fSha(local) : undefined);
@@ -1067,10 +1227,13 @@ export async function syncCloud({ mode = "both", workspaceId, onProgress } = {})
       });
     }
     if (prepared.length) {
-      const { sent, failed } = await upsertDocs(workspace, prepared);
-      summary.push += sent - failed;
-      summary.failed += failed;
-      pushedCount += sent - failed;
+      const r = await upsertDocsWithHtmlFallback(workspace, prepared);
+      summary.push += r.ok;
+      summary.stripped += r.stripped.length;
+      summary.failed += r.failures.length;
+      summary.pushFailures.push(...r.failures);
+      for (const f of r.failures) summary.notes.push(`未上传：${f.rel}（${f.reason}）`);
+      pushedCount += r.ok;
     }
   }
 
@@ -1132,7 +1295,13 @@ export function summarize(summary) {
     parts.push(`图片失败 ${summary.assetFailed} 张${why ? `（${why}）` : ""}`);
   }
   if (summary.docTooBig) parts.push(`${summary.docTooBig} 个 HTML 文档过大未上传`);
-  if (summary.failed) parts.push(`失败 ${summary.failed}`);
+  if (summary.stripped) parts.push(`${summary.stripped} 篇含脚本的 HTML 已移除脚本后上传`);
+  if (summary.failed) {
+    // 失败条数之外必须带上原因：只报「失败 1 篇」等于什么都不说（历史上正是如此）
+    const why = (summary.pushFailures && summary.pushFailures[0] && summary.pushFailures[0].reason)
+      || (summary.assetFailures && summary.assetFailures[0]) || "";
+    parts.push(`失败 ${summary.failed}${why ? `（${why}）` : ""}`);
+  }
   if (parts.length) {
     if (summary.skipped) parts.push(`未变 ${summary.skipped}`);
     return parts.join("，");

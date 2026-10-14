@@ -609,10 +609,11 @@ export async function openCloudPanel() {
         });
         setProgress("");
         const line = summarize(summary);
-        // 图片失败的原因要在面板上看得见（历史上正是这一步的报错被吞掉，
-        // 结果「图片传不上去」这件事在界面上完全无感）。单行文本，用「；」分隔。
-        const assetWhy = (summary.notes || []).filter((n) => n.startsWith("图片未上传")).join("；");
-        setResult(assetWhy ? `${line}　${assetWhy}` : line);
+        // 失败原因与降级说明都要在面板上看得见（历史上正是这些报错被吞掉，
+        // 结果「传不上去」这件事在界面上完全无感）。单行文本，用「；」分隔。
+        const extraNotes = (summary.notes || []).filter((n) => n.startsWith("图片未上传")
+          || n.startsWith("未上传：") || n.startsWith("已移除脚本后上传云端"));
+        setResult(extraNotes.length ? `${line}　${extraNotes.join("；")}` : line);
         notify(line, (summary.failed || summary.assetFailed) ? "error" : undefined);
         if (summary.notes.length) console.info("[cloud-sync]", summary.notes.join("\n"));
         if (summary.push || summary.pull || summary.conflict || summary.tombstone) {
