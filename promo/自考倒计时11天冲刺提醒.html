@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>自考倒计时11天 · 冲刺提醒</title>
+<style>
+:root{
+  --paper:#fffbf4;
+  --paper-2:#ffffff;
+  --ink:#3d332b;
+  --ink-soft:#6b5d50;
+  --warm:#ef8354;
+  --warm-2:#f3a26d;
+  --pink:#f6c9b9;
+  --green:#6fae7d;
+  --green-soft:#e6f3e7;
+  --blue:#6c91c4;
+  --blue-soft:#e9f0fa;
+  --yellow:#f7d98e;
+  --yellow-soft:#fdf3d7;
+  --line:#f0dfc9;
+  --shadow:0 12px 30px rgba(110,80,55,.12);
+}
+*{box-sizing:border-box}
+body{
+  margin:0;
+  font-family:"PingFang SC","Microsoft YaHei","WenQuanYi Micro Hei",system-ui,sans-serif;
+  color:var(--ink);
+  background:
+    radial-gradient(circle at 12% 10%,#ffe7cf 0,transparent 42%),
+    radial-gradient(circle at 88% 8%,#ffe0e6 0,transparent 38%),
+    linear-gradient(135deg,#fff8f0,#fdf4ec);
+  line-height:1.75;
+}
+.wrap{max-width:1120px;margin:auto;padding:28px 20px 60px}
+a{color:var(--warm)}
+
+/* Header */
+header{
+  text-align:center;
+  padding:44px 24px 36px;
+  border-radius:28px;
+  background:linear-gradient(135deg,#ffd7ba,#ffe9cf 45%,#ffe0e6);
+  box-shadow:var(--shadow);
+  position:relative;
+  overflow:hidden;
+}
+header:before,header:after{
+  content:"";
+  position:absolute;
+  border-radius:50%;
+  opacity:.5;
+}
+header:before{width:150px;height:150px;right:-50px;top:-55px;background:#fff6e8}
+header:after{width:90px;height:90px;left:-35px;bottom:-30px;background:#ffe3d7}
+.badge{
+  display:inline-block;
+  padding:6px 15px;
+  border-radius:999px;
+  background:#fff;
+  color:var(--warm);
+  font-size:14px;
+  font-weight:700;
+  letter-spacing:1px;
+  box-shadow:0 4px 12px rgba(239,131,84,.18);
+}
+h1{margin:14px 0 6px;font-size:clamp(28px,5vw,42px);letter-spacing:1px}
+.lead{margin:0 auto;max-width:650px;color:var(--ink-soft);font-size:17px}
+#countdown{
+  margin-top:18px;
+  font-size:clamp(24px,4vw,34px);
+  font-weight:800;
+  color:#d8582c;
+}
+#countdown small{display:block;font-size:14px;color:var(--ink-soft);font-weight:500;margin-top:6px}
+
+/* Layout */
+section{margin-top:26px}
+h2{
+  font-size:24px;
+  margin:0 0 16px;
+  padding-left:14px;
+  border-left:7px solid var(--warm);
+}
+h3{font-size:18px;margin:0 0 10px;color:var(--warm)}
+.card{
+  background:var(--paper-2);
+  border:1px solid var(--line);
+  border-radius:20px;
+  padding:22px;
+  box-shadow:0 8px 20px rgba(110,80,55,.06);
+}
+.grid{display:grid;gap:18px}
+.g2{grid-template-columns:repeat(2,1fr)}
+.g3{grid-template-columns:repeat(3,1fr)}
+.g4{grid-template-columns:repeat(4,1fr)}
+@media(max-width:820px){.g2,.g3,.g4{grid-template-columns:1fr}}
+
+/* Rules */
+.rule{
+  padding:16px;
+  border-radius:16px;
+  background:var(--yellow-soft);
+  border-left:6px solid var(--yellow);
+}
+.rule.red{background:#fff0ed;border-left-color:#ed8c70}
+.rule.blue{background:var(--blue-soft);border-left-color:var(--blue)}
+.rule b{display:block;margin-bottom:4px;font-size:17px}
+
+/* Steps */
+.steps{counter-reset:step;display:grid;gap:14px}
+.step{
+  display:flex;
+  gap:14px;
+  padding:16px 18px;
+  border-radius:16px;
+  background:#fffdf8;
+  border:1px solid var(--line);
+}
+.step:before{
+  counter-increment:step;
+  content:counter(step);
+  flex:0 0 36px;
+  width:36px;height:36px;
+  border-radius:50%;
+  background:linear-gradient(135deg,var(--warm),var(--warm-2));
+  color:#fff;
+  font-weight:800;
+  display:flex;align-items:center;justify-content:center;
+}
+
+/* Timetable */
+table{width:100%;border-collapse:collapse;font-size:15px}
+th,td{padding:12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{background:#fff3e5;color:#9c4b26}
+tr:nth-child(even) td{background:#fffcf7}
+
+/* Flashcards */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px}
+.flip{
+  height:150px;
+  perspective:1000px;
+  cursor:pointer;
+}
+.flip .inner{
+  position:relative;
+  width:100%;height:100%;
+  transform-style:preserve-3d;
+  transition:transform .55s ease;
+}
+.flip.flipped .inner{transform:rotateY(180deg)}
+.face{
+  position:absolute;inset:0;
+  padding:18px;
+  border-radius:18px;
+  backface-visibility:hidden;
+  display:flex;flex-direction:column;justify-content:center;
+  box-shadow:0 8px 18px rgba(110,80,55,.08);
+}
+.face.front{background:linear-gradient(135deg,#ffe7cf,#ffe9e2);font-weight:800;font-size:18px}
+.face.back{background:#fff;transform:rotateY(180deg);font-weight:600;font-size:16px;border:2px solid #ffe2cb}
+.hint{font-size:12px;color:var(--ink-soft);font-weight:400;margin-top:8px}
+
+/* Checklist */
+.checklist{list-style:none;padding:0;margin:0}
+.checklist li{padding:9px 0;border-bottom:1px dashed var(--line)}
+.checklist input{width:20px;height:20px;margin-right:10px;accent-color:var(--green);cursor:pointer;transform:translateY(2px)}
+.checklist label{cursor:pointer}
+.done label{text-decoration:line-through;color:#9a8d7f}
+
+/* Notice */
+.notice{
+  background:#fff8e9;
+  border:1px dashed #f0c987;
+  border-radius:16px;
+  padding:18px 20px;
+  font-size:15px;
+  color:#725a35;
+}
+
+/* Buttons */
+.btns{display:flex;gap:12px;flex-wrap:wrap;margin-top:12px}
+button{
+  font:inherit;font-weight:700;
+  padding:10px 18px;
+  border-radius:999px;
+  border:0;
+  cursor:pointer;
+  background:linear-gradient(135deg,var(--warm),var(--warm-2));
+  color:#fff;
+  box-shadow:0 6px 14px rgba(239,131,84,.25);
+}
+button.ghost{background:#fff;color:var(--warm);box-shadow:0 0 0 2px var(--warm) inset}
+#praise{
+  margin-top:14px;
+  min-height:28px;
+  text-align:center;
+  font-weight:700;
+  color:#d8582c;
+}
+footer{text-align:center;color:var(--ink-soft);font-size:14px;margin-top:36px}
+
+/* Timer */
+.timer{font-size:30px;font-weight:800;text-align:center;color:#4f86c2;letter-spacing:2px}
+.quotes{padding-left:0;list-style:none;display:grid;gap:10px}
+.quotes li{
+  padding:12px 16px;
+  border-radius:14px;
+  background:linear-gradient(135deg,#fff4ea,#fff9f3);
+  border:1px solid var(--line);
+  font-weight:600;
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <span class="badge">自 考 · 最 后 冲 刺</span>
+  <h1>稳住，还剩最后一段路</h1>
+  <p class="lead">不要试图一夜之间掌握所有内容。真正有效的是：真题找规律、错题补漏洞、模板保主观题、稳定睡眠保状态。</p>
+  <div id="countdown">正在计算倒计时…<small>默认考试日期：<input id="examDate" type="date" value="2026-10-24" style="font:inherit"></small></div>
+  <div class="btns" style="justify-content:center">
+    <button onclick="setPraise()">今天，鼓励一下自己</button>
+    <button class="ghost" onclick="window.print()">打印或保存为PDF</button>
+  </div>
+  <div id="praise"></div>
+</header>
+
+<section>
+  <h2>核心原则：不贪多，只抓分</h2>
+  <div class="grid g4">
+    <div class="rule"><b>真题优先</b>用近年真题熟悉题型、分值和命题重点，不做无意义的题海。</div>
+    <div class="rule blue"><b>高频优先</b>先复习常考名词、简答、公式和反复出错的内容。</div>
+    <div class="rule"><b>默写优先</b>看懂不等于会写。答案必须能落在纸上、写完、写清楚。</div>
+    <div class="rule red"><b>状态优先</b>考前三天减少熬夜，别让最后一天的学习抵消考场状态。</div>
+  </div>
+</section>
+
+<section>
+  <h2>11天冲刺路线</h2>
+  <div class="card">
+    <div class="steps">
+      <div class="step"><div><b>第1～3天｜摸清试卷结构</b><br>按正式时间完成真题，逐题分类统计失分：没见过、表达不清、记混、计算错、时间不足。只重点解决“能补回来”的漏洞。</div></div>
+      <div class="step"><div><b>第4～6天｜专项补漏</b><br>按目录→高频考点→名词简答→易混点→错题二刷的顺序推进，再完成一套限时卷。</div></div>
+      <div class="step"><div><b>第7～9天｜完整模拟</b><br>上午9:00—11:30、下午14:30—17:00进行全真训练。主观题必须手写、计时、对关键词、重写改进版。</div></div>
+      <div class="step"><div><b>第10天｜减法复习</b><br>只保留真题高频内容、公式、时间线、错题和作文模板；每科压缩成一页纸。</div></div>
+      <div class="step"><div><b>第11天｜准备而非硬拼</b><br>检查证件路线，浏览一页纸笔记，正常吃饭和睡觉，不再刷新偏题怪题。</div></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>按科目制定你的冲刺计划</h2>
+  <div class="card">
+    <p>保存页面后可直接在框内编辑。时间分配遵循：<b>弱科多投入、强科保熟练、每天固定背诵。</b></p>
+    <table contenteditable="true">
+      <thead>
+        <tr><th>科目</th><th>当前薄弱点</th><th>每日时间</th><th>未来3天任务</th><th>一页纸清单</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>科目一</td><td>名词和简答表达不全</td><td>1.5小时</td><td>2套真题＋高频简答默写</td><td>10个名词/8道简答/5道错题</td></tr>
+        <tr><td>科目二</td><td>计算步骤丢分</td><td>1小时</td><td>公式卡片＋典型例题重做</td><td>8个公式/6道例题/3组易混点</td></tr>
+        <tr><td>科目三</td><td>论述缺少框架</td><td>1小时</td><td>论述模板＋材料分析训练</td><td>3个模板/4个案例/关键词表</td></tr>
+        <tr><td>科目四</td><td>选择题审题错误</td><td>0.5小时</td><td>错题二刷＋限定词训练</td><td>20道错题/10组易错词</td></tr>
+      </tbody>
+    </table>
+    <p class="notice" style="margin-top:16px">提示：如果每天只有2小时，建议拆成“1小时做题＋40分钟批改整理＋20分钟背诵”，不要连续低效学习3小时。</p>
+  </div>
+</section>
+
+<section>
+  <h2>记忆卡片：点击翻面</h2>
+  <div class="cards">
+    <div class="flip" onclick="this.classList.toggle('flipped')">
+      <div class="inner">
+        <div class="face front">名词解释怎么答？<div class="hint">点击翻面</div></div>
+        <div class="face back">定义＋主要特征＋作用或意义。不能只写一个孤立的词。</div>
+      </div>
+    </div>
+    <div class="flip" onclick="this.classList.toggle('flipped')">
+      <div class="inner">
+        <div class="face front">简答题怎么答？<div class="hint">点击翻面</div></div>
+        <div class="face back">总述＋分点＋简要解释。关键词在前，不写成没有层次的整段。</div>
+      </div>
+    </div>
+    <div class="flip" onclick="this.classList.toggle('flipped')">
+      <div class="inner">
+        <div class="face front">论述题怎么答？<div class="hint">点击翻面</div></div>
+        <div class="face back">亮明观点→理论依据→结合材料或案例→总结提升。</div>
+      </div>
+    </div>
+    <div class="flip" onclick="this.classList.toggle('flipped')">
+      <div class="inner">
+        <div class="face front">计算题怎么保分？<div class="hint">点击翻面</div></div>
+        <div class="face back">写出公式、代入、计算过程、单位与结论；即使结果错误，过程仍可能得分。</div>
+      </div>
+    </div>
+    <div class="flip" onclick="this.classList.toggle('flipped')">
+      <div class="inner">
+        <div class="face front">背不下来怎么办？<div class="hint">点击翻面</div></div>
+        <div class="face back">先记核心词，再解释，最后默写。合上书能回忆，才算真正记住。</div>
+      </div>
+    </div>
+    <div class="flip" onclick="this.classList.toggle('flipped')">
+      <div class="inner">
+        <div class="face front">最后一天别做什么？<div class="hint">点击翻面</div></div>
+        <div class="face back">别熬夜、别换方法、别大量刷陌生押题，也别临时攻完全不会的大题。</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>考前检查：完成一项，勾一项</h2>
+  <div class="grid g2">
+    <div class="card">
+      <h3>必带物品</h3>
+      <ul class="checklist" id="list1">
+        <li><input type="checkbox"><label>纸质准考证</label></li>
+        <li><input type="checkbox"><label>有效居民身份证原件</label></li>
+        <li><input type="checkbox"><label>2B铅笔、削笔工具</label></li>
+        <li><input type="checkbox"><label>黑色签字笔2～3支</label></li>
+        <li><input type="checkbox"><label>橡皮、直尺等必要文具</label></li>
+        <li><input type="checkbox"><label>准考证明确允许使用的计算器</label></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>考场前确认</h3>
+      <ul class="checklist" id="list2">
+        <li><input type="checkbox"><label>核对考点名称、具体地址和考场楼层</label></li>
+        <li><input type="checkbox"><label>确认上午、下午考试课程与时间</label></li>
+        <li><input type="checkbox"><label>预留安检、验证和找考场的时间</label></li>
+        <li><input type="checkbox"><label>手机等禁带物品按规定存放</label></li>
+        <li><input type="checkbox"><label>主观题看清题号与答题区域</label></li>
+        <li><input type="checkbox"><label>遵守开考与结束信号</label></li>
+      </ul>
+    </div>
+  </div>
+  <div class="notice">重要提醒：手机、智能手表、手环、蓝牙耳机、电子词典等具有通信或信息接收功能的设备，是否允许带入及具体存放规则，务必以准考证和当地考试机构公告为准。不要携带、传播试题、答题纸或草稿纸。</div>
+</section>
+
+<section>
+  <h2>考场当天节奏</h2>
+  <div class="card">
+    <table>
+      <thead><tr><th>时间节点</th><th>该做什么</th><th>提醒</th></tr></thead>
+      <tbody>
+        <tr><td>出门前</td><td>核对身份证、准考证、笔、铅笔、橡皮和必要文具</td><td>放进固定袋子，避免临时翻找</td></tr>
+        <tr><td>到达考点</td><td>核对考场位置，提前解决个人需要</td><td>高校不同校区可能距离很远</td></tr>
+        <tr><td>发卷后</td><td>检查科目、页码，按要求填写信息</td><td>先检查，不要等交卷前补</td></tr>
+        <tr><td>开考前</td><td>快速浏览全卷，确定答题顺序</td><td>注意选做题、题号和作答区域</td></tr>
+        <tr><td>答题中</td><td>先写确定会做的题，选择题注意限定词</td><td>不会的题先标记，控制单题时间</td></tr>
+        <tr><td>结束前</td><td>检查漏题、填涂、个人信息和答题区域</td><td>遵循统一指令，不抢答、不延时</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2>给自己的提神栏</h2>
+  <div class="grid g2">
+    <div class="card">
+      <h3>专注计时</h3>
+      <div class="timer" id="timer">25:00</div>
+      <div class="btns" style="justify-content:center">
+        <button onclick="startTimer()">开始专注</button>
+        <button class="ghost" onclick="resetTimer()">重置</button>
+      </div>
+      <p class="notice" style="margin-top:12px">可用25分钟专注＋5分钟休息。计时状态只保存在当前页面。</p>
+    </div>
+    <div class="card">
+      <h3>冲刺心态</h3>
+      <ul class="quotes">
+        <li>不求全部掌握，但求会做的题不丢分。</li>
+        <li>不求难题满分，但求基础题稳定得分。</li>
+        <li>做透一套卷子，胜过草草做完五套。</li>
+        <li>能落在纸上的答案，才是真正属于自己的分数。</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<footer>
+  本页仅为学习方法与考前提醒，不构成押题或考试通过承诺。证件、考点、考试时间与携带物品规则，请以准考证及湖北省教育考试院最新公告为准。
+</footer>
+
+</div>
+
+<script>
+// Countdown
+const examDate=document.getElementById('examDate');
+function updateCountdown(){
+  const target=new Date(examDate.value+'T09:00:00');
+  const now=new Date();
+  const diff=target-now;
+  const box=document.getElementById('countdown');
+  if(diff<=0){box.innerHTML='今天是考试日，稳住心态，认真发挥！<small>请以上述日期为准，可按实际考试日期修改。</small>';return;}
+  const d=Math.floor(diff/86400000);
+  const h=Math.floor(diff%86400000/3600000);
+  box.innerHTML=d+' 天 '+h+' 小时<small>默认考试日期：'+examDate.value+'；可按你的实际考试日期修改。</small>';
+}
+examDate.addEventListener('change',updateCountdown);
+updateCountdown();
+setInterval(updateCountdown,60000);
+
+// Checklist
+document.querySelectorAll('.checklist input').forEach(cb=>{
+  cb.addEventListener('change',()=>{
+    cb.closest('li').classList.toggle('done',cb.checked);
+  });
+});
+
+// Praise
+const praises=[
+  '坚持到现在，已经非常了不起！',
+  '今天的笔记会替明天的你说话。',
+  '别怕慢，真正背下来的内容不会辜负你。',
+  '会做的题不丢分，你就已经赢了一大半。',
+  '稳住状态，按步骤来，结果不会差。',
+  '你不是从零开始，而是从每一次复习开始。'
+];
+function setPraise(){
+  document.getElementById('praise').textContent=praises[Math.floor(Math.random()*praises.length)];
+}
+
+// Timer
+let timerId=null;
+let seconds=25*60;
+function render(){
+  const m=String(Math.floor(seconds/60)).padStart(2,'0');
+  const s=String(seconds%60).padStart(2,'0');
+  document.getElementById('timer').textContent=m+':'+s;
+}
+function startTimer(){
+  if(timerId)return;
+  timerId=setInterval(()=>{
+    if(seconds<=0){clearInterval(timerId);timerId=null;alert('专注时间到，起来活动一下吧！');return;}
+    seconds--;
+    render();
+  },1000);
+}
+function resetTimer(){
+  clearInterval(timerId);timerId=null;seconds=25*60;render();
+}
+render();
+</script>
+</body>
+</html>
