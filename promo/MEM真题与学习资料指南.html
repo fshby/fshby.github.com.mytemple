@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MEM 真题与学习资料获取指南（199 管综 + 英语二）</title>
+<style>
+  :root{
+    --bg:#f6f7f9;--card:#fff;--ink:#1a1d24;--ink-2:#4a5060;--ink-3:#8a92a3;
+    --line:#e6e9ef;--accent:#2f6bff;--accent-soft:#eef3ff;
+    --red:#d64545;--red-soft:#fdeded;--green:#1f9d6b;--green-soft:#e9f7f0;
+    --amber:#c9820a;--amber-soft:#fdf3e2;--purple:#7a4fd8;--purple-soft:#f2edfd;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    line-height:1.7;font-size:14.5px;}
+  .wrap{max-width:1010px;margin:0 auto;padding:36px 22px 70px;}
+  header.top{background:linear-gradient(135deg,#1f4fd8,#4a7cff);color:#fff;
+    border-radius:16px;padding:30px;margin-bottom:22px;}
+  header.top h1{margin:0 0 8px;font-size:23px;}
+  header.top .sub{opacity:.93;font-size:13.5px;}
+  header.top .kv{margin-top:14px;display:flex;flex-wrap:wrap;gap:8px;}
+  header.top .kv span{background:rgba(255,255,255,.16);border-radius:6px;
+    padding:3px 10px;font-size:12.5px;}
+  section{background:var(--card);border:1px solid var(--line);border-radius:14px;
+    padding:24px 26px;margin-bottom:18px;box-shadow:0 1px 3px rgba(20,30,60,.04);}
+  h2{font-size:18px;margin:0 0 16px;padding-left:11px;border-left:4px solid var(--accent);}
+  h3{font-size:15px;margin:18px 0 8px;}
+  h3:first-of-type{margin-top:4px;}
+  p{margin:8px 0;color:var(--ink-2);}
+  ul,ol{margin:8px 0;padding-left:21px;color:var(--ink-2);}
+  li{margin:4px 0;}
+  strong{color:var(--ink);}
+  a{color:var(--accent);word-break:break-all;}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.3px;}
+  th,td{padding:9px 11px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top;}
+  th{background:#f2f4f8;font-weight:600;color:var(--ink);font-size:13px;}
+  td{color:var(--ink-2);}
+  tr:last-child td{border-bottom:none;}
+  .tag{display:inline-block;padding:1px 8px;border-radius:5px;font-size:12px;font-weight:600;}
+  .t-red{background:var(--red-soft);color:var(--red);}
+  .t-green{background:var(--green-soft);color:var(--green);}
+  .t-amber{background:var(--amber-soft);color:var(--amber);}
+  .t-blue{background:var(--accent-soft);color:var(--accent);}
+  .t-purple{background:var(--purple-soft);color:var(--purple);}
+  .callout{border-radius:9px;padding:12px 16px;margin:14px 0;font-size:13.5px;border-left:4px solid;}
+  .c-warn{background:var(--red-soft);border-color:var(--red);color:#7a2b2b;}
+  .c-tip{background:var(--green-soft);border-color:var(--green);color:#175c40;}
+  .c-info{background:var(--accent-soft);border-color:var(--accent);color:#22458f;}
+  .c-note{background:var(--amber-soft);border-color:var(--amber);color:#7a5208;}
+  /* 资源卡 */
+  .res{border:1px solid var(--line);border-radius:11px;padding:13px 16px;margin:10px 0;background:#fafbfd;}
+  .res .h{font-size:13.6px;font-weight:700;color:var(--ink);margin-bottom:5px;
+    display:flex;flex-wrap:wrap;gap:7px;align-items:center;}
+  .res .u{font-size:12.5px;color:var(--accent);word-break:break-all;margin:3px 0;}
+  .res .d{font-size:12.6px;color:var(--ink-2);margin:3px 0;}
+  /* 书单网格 */
+  .books{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:14px 0;}
+  @media(max-width:780px){.books{grid-template-columns:1fr;}}
+  .bk{border:1px solid var(--line);border-radius:11px;overflow:hidden;background:#fafbfd;}
+  .bk-hd{padding:9px 14px;color:#fff;font-size:13.2px;font-weight:700;}
+  .bk-bd{padding:11px 14px;}
+  .bk-bd ul{padding-left:16px;margin:0;font-size:12.7px;}
+  .bk-bd li{margin:5px 0;}
+  .bk-bd li b{color:var(--ink);}
+  .bk-bd .st{font-size:11.5px;color:var(--ink-3);display:block;}
+  .anchor{border:2px solid var(--accent);border-radius:12px;padding:16px 20px;
+    background:var(--accent-soft);margin:14px 0;}
+  .anchor .t{font-size:13px;font-weight:700;color:var(--accent);margin-bottom:8px;letter-spacing:.5px;}
+  .anchor .m{font-size:14.6px;font-weight:700;color:var(--ink);line-height:2;}
+  .anchor .m em{font-style:normal;background:#fff;border-radius:5px;padding:1px 7px;
+    border:1px solid var(--accent);color:var(--accent);}
+  /* 方法步骤 */
+  .method{counter-reset:m;list-style:none;padding:0;margin:14px 0;}
+  .method li{counter-increment:m;position:relative;padding:11px 15px 11px 50px;
+    border:1px solid var(--line);border-radius:10px;margin-bottom:8px;background:#fafbfd;
+    font-size:13.2px;color:var(--ink-2);}
+  .method li::before{content:counter(m);position:absolute;left:13px;top:11px;
+    width:25px;height:25px;border-radius:50%;background:var(--accent);color:#fff;
+    font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;}
+  footer{text-align:center;color:var(--ink-3);font-size:12px;margin-top:22px;line-height:1.9;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <h1>MEM 真题与学习资料获取指南</h1>
+  <div class="sub">199 管理类综合能力 + 204 英语二 ｜ 资源清单 · 正版书单 · 整理归纳方法</div>
+  <div class="kv">
+    <span>目标：2027 级（2026.12 考试）</span>
+    <span>重点：2025、2026 两套真题</span>
+    <span>原则：真题用正版，资料求少不求多</span>
+  </div>
+</header>
+
+<!-- ★ 先读这一条 -->
+<section>
+  <h2>零、开始之前，必须先知道的一件事</h2>
+  <div class="callout c-warn">
+    <strong>网上免费流传的「回忆版」管综真题，题干经常是错的——尤其是数学。</strong><br><br>
+    真题考完后，教育部<strong>不公开发布试卷原文</strong>。你在网上看到的所有「真题」，都是考生回忆 + 机构老师复原的产物。分两种质量：<br><br>
+    <strong>① 英语二真题：文本可靠。</strong>因为阅读原文是英文文章，考后原题会被完整还原，网上的版本基本准确，可以直接用。<br>
+    <strong>② 管综真题：题干有误差风险。</strong>数学题的数据、逻辑题的措辞，靠回忆复原时极易走样。一道题的数据错一位，答案就全变，你会被<strong>错误的题干带偏</strong>，越练越乱。<br><br>
+    <strong>所以本指南的核心建议是：</strong><br>
+    <span class="tag t-green">英语二</span>网络公开资源 + 正版真题书都可用；<br>
+    <span class="tag t-red">管综</span><strong>务必以正版真题书为准</strong>，网络解析只当「看思路」的辅助，不要用来对答案、算正确率。
+  </div>
+</section>
+
+<!-- 一 真题获取 -->
+<section>
+  <h2>一、真题获取：三条路，按可靠性排序</h2>
+
+  <h3>① 正版真题书 —— 最可靠，优先选这个</h3>
+  <p>真题题目由出版社专业编辑校对过，答案与解析有作者署名，是可验证的。买书渠道：京东、当当、淘宝，或孔夫子/多抓鱼买二手（真题内容完全一样，二手能省一半）。</p>
+  <table>
+    <tr><th style="width:24%">科目</th><th>推荐书</th><th style="width:22%">说明</th></tr>
+    <tr>
+      <td><strong>199 管综真题</strong></td>
+      <td><strong>陈剑《管理类联考综合能力 历年真题》（讲真题）</strong><br>或 <strong>赵鑫全《管理类联考综合历年真题精点》</strong><br>或 <strong>周建武《逻辑历年真题分类精解》</strong>（按题型分类，适合专项突破）</td>
+      <td>含真题原文 + 详解，是管综真题的<strong>唯一可靠来源</strong></td>
+    </tr>
+    <tr>
+      <td><strong>204 英语二真题</strong></td>
+      <td><strong>张剑《考研英语二历年真题解析（黄皮书）》</strong><br>或 <strong>《考研真相（英语二）》</strong>（=考研圣经，逐句翻译，基础弱首选）</td>
+      <td>黄皮书解析深、适合基础较好；考研真相逐句译、适合基础弱</td>
+    </tr>
+    <tr>
+      <td><strong>官方考试大纲</strong><br><span class="tag t-red">必买</span></td>
+      <td><strong>《管理类专业学位联考综合能力考试大纲》</strong><br><strong>《英语（二）考试大纲》</strong><br>（教育部教育考试院，每年 9 月发布）</td>
+      <td>命题的唯一依据。十几块钱一本，<strong>别省这个钱</strong>。每年考点有微调</td>
+    </tr>
+  </table>
+
+  <h3>② 网络公开资源 —— 免费，作为辅助</h3>
+  <p>下面是<strong>公开可访问</strong>的机构真题解析页（多为机构自己发布的公益内容）。<strong>英语二可放心用；管综只看思路、别对答案。</strong></p>
+
+  <div class="res">
+    <div class="h"><span class="tag t-blue">2026 英语二</span>真题答案与逐题精解</div>
+    <div class="d">整卷逐题精解，含完形、阅读、翻译、写作，答案表完整</div>
+    <div class="u">https://www.yingyuzhenti.com/blog/2026-english-two-answers-analysis</div>
+  </div>
+
+  <div class="res">
+    <div class="h"><span class="tag t-blue">2026 英语二</span>参考答案（含全文翻译）</div>
+    <div class="d">逐题解析，附全文翻译，适合精读复盘</div>
+    <div class="u">https://www.yeyulingfeng.com/wendang/523587.html</div>
+  </div>
+
+  <div class="res">
+    <div class="h"><span class="tag t-blue">2026 管综 199</span>真题详细解析</div>
+    <div class="d">海文考研发布，含逻辑题逐题解析思路（<strong>注意题干可能有回忆误差</strong>）</div>
+    <div class="u">https://www.scwanxue.com/beikao/zhenti/2272503.html</div>
+  </div>
+
+  <div class="res">
+    <div class="h"><span class="tag t-amber">2025 英语二</span>真题及答案解析（完整版）</div>
+    <div class="d">新东方在线整理，含答案速查表</div>
+    <div class="u">https://kaoyan.koolearn.com/20241221/1790462.html</div>
+  </div>
+
+  <div class="res">
+    <div class="h"><span class="tag t-amber">2025 英语二</span>真题 + 答案详解（PDF）</div>
+    <div class="d">可直接下载的 PDF，含完形填空逐题解析</div>
+    <div class="u">https://m.juyingonline.com/upload/202412/23/202412231032136943.pdf</div>
+    <div class="u">http://wzyjs.com/Upfiles/file/202508/20250804172208_26027.pdf</div>
+  </div>
+
+  <div class="callout c-note">
+    <strong>怎么用这些链接最有效：</strong>打开后<strong>把答案表抄成一张速查表</strong>（题号 + 答案 + 一句话考点），后面的解析只看你错的题。<strong>不要收藏一堆网页等以后看——那等于没找。</strong>今天就把有用的部分整理进自己的笔记里。
+  </div>
+
+  <h3>③ 官方渠道</h3>
+  <table>
+    <tr><th style="width:26%">渠道</th><th>能拿到什么</th></tr>
+    <tr><td><strong>研招网</strong><br>yz.chsi.com.cn</td><td>考试大纲发布、报考信息、历年分数线。<strong>注意：研招网不提供历年真题原文</strong></td></tr>
+    <tr><td><strong>教育部教育考试院</strong></td><td>考试大纲（命题依据），无真题原文</td></tr>
+    <tr><td><strong>武工大研究生院</strong><br>yjs.wit.edu.cn</td><td>招生简章、复试办法、拟录取名单、<strong>自命题科目大纲</strong>（MEM 是统考，无需自命题大纲）</td></tr>
+  </table>
+</section>
+
+<!-- 二 书单 -->
+<section>
+  <h2>二、学习资料书单（按阶段选，别贪多）</h2>
+  <div class="callout c-warn">
+    <strong>先记住一个原则：</strong>教育部<strong>从未指定任何联考教材</strong>。市面所有"教材"都是机构老师编的。所以：<strong>每科跟定一个老师，买 1 本主书 + 1 本真题，就够。</strong><br>
+    <span class="tag t-red">千万别买</span>「押题卷」「预测卷」「XX 天搞定 XX」——真题风格稳定，做透近 10 年真题远胜 10 套模拟题。
+  </div>
+
+  <div class="books">
+    <div class="bk">
+      <div class="bk-hd" style="background:#2f6bff;">199 数学</div>
+      <div class="bk-bd">
+        <ul>
+          <li><b>陈剑《数学分册》</b><span class="st">基础期 · 知识点全、例题简单，零基础首选</span></li>
+          <li><b>陈剑《数学高分指南》</b><span class="st">强化期 · 题型分类细，含「条件充分性判断」专项</span></li>
+          <li><b>陈剑《讲真题》</b><span class="st">冲刺期 · 真题按题型归纳</span></li>
+        </ul>
+      </div>
+    </div>
+    <div class="bk">
+      <div class="bk-hd" style="background:#7a4fd8;">199 逻辑</div>
+      <div class="bk-bd">
+        <ul>
+          <li><b>赵鑫全《逻辑精点》</b><span class="st">入门首选 · 形式逻辑讲得细，有解题口诀</span></li>
+          <li><b>老吕《逻辑母题 800 练》</b><span class="st">刷题 · 归纳成母题，吃透应对绝大多数题</span></li>
+          <li><b>周建武《逻辑历年真题分类精解》</b><span class="st">补短板 · 按题型分类，统计哪种题型错最多</span></li>
+        </ul>
+      </div>
+    </div>
+    <div class="bk">
+      <div class="bk-hd" style="background:#c9820a;">199 写作</div>
+      <div class="bk-bd">
+        <ul>
+          <li><b>王诚《写作分册》/《写作攻略》</b><span class="st">主书 · 论证有效性分析「找漏洞口诀」+ 论说文结构模板</span></li>
+          <li><b>《人民日报评论》公众号</b><span class="st">免费素材 · 每天 10 分钟，积累论说文论据</span></li>
+        </ul>
+      </div>
+    </div>
+    <div class="bk">
+      <div class="bk-hd" style="background:#1f9d6b;">204 英语二</div>
+      <div class="bk-bd">
+        <ul>
+          <li><b>张剑《英语二历年真题（黄皮书）》</b> 或 <b>《考研真相（英语二）》</b><span class="st">真题主书 · 前者解析深，后者逐句译（基础弱选它）</span></li>
+          <li><b>《考研词汇闪过》或《红宝书》</b>（二选一）<span class="st">词汇 · 别从 A 背到 Z，先背高频词</span></li>
+          <li><b>田静/唐迟 长难句与阅读</b><span class="st">补语法与阅读技巧</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 三 免费工具 -->
+<section>
+  <h2>三、免费工具与碎片时间用法</h2>
+  <table>
+    <tr><th style="width:24%">工具</th><th>用途</th><th style="width:26%">最佳使用时段</th></tr>
+    <tr><td><strong>墨墨背单词 / 不背单词</strong></td><td>英语词汇，按艾宾浩斯曲线复习，选「真题高频词」词库</td><td>通勤 30 分钟，每天 50 个</td></tr>
+    <tr><td><strong>MBA 大师 App</strong></td><td>管综刷题，可按「基础题」筛，每题限时 1 分钟</td><td>午休 30 分钟，10 道逻辑题</td></tr>
+    <tr><td><strong>喜马拉雅</strong></td><td>搜「赵鑫全逻辑口诀」等音频课，磨耳朵</td><td>通勤、走路</td></tr>
+    <tr><td><strong>B 站</strong></td><td>各科免费系统课（找播放量高、口碑好的系列）</td><td>周末整块时间</td></tr>
+    <tr><td><strong>知网/公众号</strong></td><td>《人民日报评论》积累写作素材</td><td>每天 10 分钟</td></tr>
+  </table>
+</section>
+
+<!-- 四 整理归纳方法 -->
+<section>
+  <h2>四、怎么整理归纳最有效（真题的正确用法）</h2>
+
+  <h3>4.1 先给真题分配任务（这一步最容易做错）</h3>
+  <table>
+    <tr><th style="width:26%">真题年份</th><th style="width:26%">用途</th><th>怎么用</th></tr>
+    <tr>
+      <td><strong>最近 3 年</strong><br>（2025、2026、2027）</td>
+      <td><span class="tag t-red">严格封存</span>留作模考</td>
+      <td><strong>现在千万不要做掉。</strong>到冲刺期（12 月），用它们做 3 次全真模考，掐表 180 分钟，检验真实水平。<strong>提前做掉 = 浪费掉唯一的高质量模拟</strong></td>
+    </tr>
+    <tr>
+      <td><strong>较早年份</strong><br>（近 10 年内）</td>
+      <td><span class="tag t-green">按题型拆解</span></td>
+      <td>拆开做：今天专做「条件充分性判断」，明天专做「削弱题」。<strong>比整套做效率高得多</strong>，因为你是在练题型，不是在考试</td>
+    </tr>
+  </table>
+  <div class="callout c-note">
+    <strong>所以你问的 2025、2026 两套真题，正确用法是——先下载、存档，但别急着做。</strong>等你把知识点过完一轮（大约 11 月中旬），再用它们模考。现在做，等于把最好的模考卷提前用掉了。
+  </div>
+
+  <h3>4.2 真题三遍法</h3>
+  <ol class="method">
+    <li><b>第一遍：掐表做，只对答案不看解析。</b>记录：哪些错了、哪些是蒙对的、哪些根本来不及做。<strong>"来不及做"比"做错"更值得警惕。</strong></li>
+    <li><b>第二遍：不看答案重做错题，逐题写"错在哪一步"。</b>是知识点没记住？是读题漏了条件？是计算失误？<strong>只记错因，不抄题</strong>——抄题是效率最低的动作。</li>
+    <li><b>第三遍：一周后只做标记的题。</b>做对了就划掉，还错的用红笔圈起来，进入"高频错题"清单，之后每次复习先看这份清单。</li>
+  </ol>
+
+  <h3>4.3 三本随身笔记（用 A4 或手机备忘录都行）</h3>
+  <div class="res">
+    <div class="h"><span class="tag t-blue">笔记一</span>数学题型本</div>
+    <div class="d">按题型记，不按年份记。例：「行程问题—相遇追及」「概率—独立事件」「绝对值—不等式」……每个题型下只写：<strong>识别特征 + 解题套路 + 我的易错点</strong>。目标：一个月后看目录就能回忆出解法。</div>
+  </div>
+  <div class="res">
+    <div class="h"><span class="tag t-purple">笔记二</span>逻辑母题本</div>
+    <div class="d">逻辑题翻来覆去就那些套路。每遇到一道典型题，记下：<strong>题型（削弱/支持/假设/解释）+ 题干结构 + 解题口诀</strong>。积累到 40–50 个母题，你会发现"新题"都是老朋友。</div>
+  </div>
+  <div class="res">
+    <div class="h"><span class="tag t-green">笔记三</span>写作素材卡</div>
+    <div class="d">分为两栏：<strong>论证有效性分析的「漏洞类型清单」</strong>（概念混淆、以偏概全、不当类比、因果倒置、非黑即白……）+ <strong>论说文「素材库」</strong>（科技自立、企业创新、社会责任等主题，每个配 1–2 个案例）。素材卡越用越薄，最后只剩十几张。</div>
+  </div>
+
+  <h3>4.4 一页纸法则（对抗遗忘的关键）</h3>
+  <div class="callout c-tip">
+    <strong>每周日花 30 分钟，把这周学的内容压缩到一张 A4 纸上。</strong><br>
+    一页写不下的，说明你还没真正消化。到冲刺阶段，你全部的复习资料就是这十几张 A4 纸——<strong>这时候你才真正"归纳"了知识</strong>。
+  </div>
+
+  <h3>4.5 英语二真题的正确用法（和管综不同）</h3>
+  <ol>
+    <li><strong>先背单词再做题</strong>——单词量不够时做真题，只是"猜"，浪费卷子</li>
+    <li><strong>阅读理解要精读</strong>：做完题后，把文章逐句翻译一遍，查出生词，标出长难句结构。<strong>一篇精读 40 分钟，胜过泛读 5 篇</strong></li>
+    <li><strong>每篇文章整理 3 样东西</strong>：① 生词（进单词本）② 长难句（抄下来拆结构）③ 错题的选项陷阱类型（无中生有 / 偷换概念 / 过度推断）</li>
+    <li><strong>作文从 11 月开始</strong>：整理自己的模板（小作文 3 类 + 大作文 3 类），背到能默写</li>
+  </ol>
+</section>
+
+<!-- 五 今天做什么 -->
+<section>
+  <h2>五、今天就能做的 4 件事</h2>
+  <div class="callout c-tip">
+    <strong>① 下单两本正版书</strong>：陈剑《讲真题》（管综真题）+ 张剑黄皮书（英语二真题）。这是管综真题的唯一可靠来源。<br>
+    <strong>② 买今年的大纲</strong>：《管理类专业学位联考综合能力考试大纲》+《英语（二）考试大纲》，命题依据，十几块。<br>
+    <strong>③ 装两个 App</strong>：墨墨背单词（今天就开始背 50 个）+ MBA 大师（今天做 10 道逻辑题）。<br>
+    <strong>④ 把 2025、2026 两套真题存档，但别做。</strong>建一个「模考——勿动」文件夹，等 11 月中旬再打开。
+  </div>
+
+  <div class="anchor">
+    <div class="t">记忆锚点</div>
+    <div class="m">
+      真题 <em>英语二网上够用</em> · 管综 <em>必须正版书</em><br>
+      近三年 <em>封存不碰</em> · 留着 <em>12 月模考</em><br>
+      错题 <em>只记错因不抄题</em> · 每周 <em>压成一页纸</em><br>
+      资料 <em>一本主书 + 一本真题</em> · 别贪多
+    </div>
+  </div>
+</section>
+
+<footer>
+  资源来源：教育部教育考试院考试大纲（命题依据）；教育部《2027 年全国硕士研究生招生工作管理规定》；各机构公开真题解析页（新东方在线、海文考研、征辰考研、英语真题网等，链接为公开可访问页面，内容版权归原作者）；正版书籍信息来自公开渠道。<br>
+  <strong>提示：</strong>网络流传的「回忆版」真题存在题干误差风险，尤其管综数学部分，<strong>请以正版真题书为准</strong>；书籍版本与大纲每年可能更新，购买前请确认是最新版本。本指南不提供任何侵权资源的下载通道，所列链接均为公开网页。
+</footer>
+
+</div>
+</body>
+</html>
