@@ -3,33 +3,36 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>四科系统学习方案：路径 · 周期 · 技巧</title>
+<title>武工大 MEM 冲刺指南：联系 · 大纲 · 65 天计划</title>
 <style>
   :root{
     --bg:#f6f7f9;--card:#fff;--ink:#1a1d24;--ink-2:#4a5060;--ink-3:#8a92a3;
     --line:#e6e9ef;--accent:#2f6bff;--accent-soft:#eef3ff;
     --red:#d64545;--red-soft:#fdeded;--green:#1f9d6b;--green-soft:#e9f7f0;
-    --amber:#c9820a;--amber-soft:#fdf3e2;
+    --amber:#c9820a;--amber-soft:#fdf3e2;--purple:#7a4fd8;--purple-soft:#f2edfd;
   }
   *{box-sizing:border-box;}
   body{margin:0;background:var(--bg);color:var(--ink);
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
     line-height:1.7;font-size:14.5px;}
-  .wrap{max-width:1000px;margin:0 auto;padding:36px 22px 70px;}
-  header.top{background:linear-gradient(135deg,#1f4fd8,#4a7cff);color:#fff;
-    border-radius:16px;padding:30px 30px;margin-bottom:22px;}
+  .wrap{max-width:1010px;margin:0 auto;padding:36px 22px 70px;}
+  header.top{background:linear-gradient(135deg,#7a4fd8,#a67bef);color:#fff;
+    border-radius:16px;padding:30px;margin-bottom:22px;}
   header.top h1{margin:0 0 8px;font-size:23px;}
   header.top .sub{opacity:.93;font-size:13.5px;}
+  header.top .kv{margin-top:14px;display:flex;flex-wrap:wrap;gap:8px;}
+  header.top .kv span{background:rgba(255,255,255,.18);border-radius:6px;
+    padding:3px 10px;font-size:12.5px;}
   section{background:var(--card);border:1px solid var(--line);border-radius:14px;
     padding:24px 26px;margin-bottom:18px;box-shadow:0 1px 3px rgba(20,30,60,.04);}
-  h2{font-size:18px;margin:0 0 16px;padding-left:11px;border-left:4px solid var(--accent);}
+  h2{font-size:18px;margin:0 0 16px;padding-left:11px;border-left:4px solid var(--purple);}
   h3{font-size:15px;margin:18px 0 8px;}
   h3:first-of-type{margin-top:4px;}
   p{margin:8px 0;color:var(--ink-2);}
   ul,ol{margin:8px 0;padding-left:21px;color:var(--ink-2);}
   li{margin:4px 0;}
   strong{color:var(--ink);}
-  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px;}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.3px;}
   th,td{padding:9px 11px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top;}
   th{background:#f2f4f8;font-weight:600;color:var(--ink);font-size:13px;}
   td{color:var(--ink-2);}
@@ -39,44 +42,68 @@
   .t-green{background:var(--green-soft);color:var(--green);}
   .t-amber{background:var(--amber-soft);color:var(--amber);}
   .t-blue{background:var(--accent-soft);color:var(--accent);}
+  .t-purple{background:var(--purple-soft);color:var(--purple);}
   .callout{border-radius:9px;padding:12px 16px;margin:14px 0;font-size:13.5px;border-left:4px solid;}
   .c-warn{background:var(--red-soft);border-color:var(--red);color:#7a2b2b;}
   .c-tip{background:var(--green-soft);border-color:var(--green);color:#175c40;}
   .c-info{background:var(--accent-soft);border-color:var(--accent);color:#22458f;}
   .c-note{background:var(--amber-soft);border-color:var(--amber);color:#7a5208;}
-  /* 四科定位卡 */
-  .subj-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:14px 0;}
-  @media(max-width:800px){.subj-grid{grid-template-columns:repeat(2,1fr);}}
-  @media(max-width:520px){.subj-grid{grid-template-columns:1fr;}}
-  .subj{border-radius:11px;padding:14px 15px;border:1px solid var(--line);background:#fafbfd;}
-  .subj .nm{font-size:14px;font-weight:700;margin-bottom:5px;}
-  .subj .role{font-size:12px;font-weight:600;margin-bottom:8px;display:inline-block;padding:1px 7px;border-radius:5px;}
-  .subj .score{font-size:12px;color:var(--ink-3);margin-bottom:7px;}
-  .subj p{font-size:12.5px;margin:3px 0;}
-  /* 时间轴 */
-  .tl{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0;}
-  @media(max-width:800px){.tl{grid-template-columns:repeat(2,1fr);}}
-  @media(max-width:520px){.tl{grid-template-columns:1fr;}}
-  .tl-col{border:1px solid var(--line);border-radius:11px;overflow:hidden;background:#fafbfd;}
-  .tl-hd{padding:9px 12px;color:#fff;font-size:12.5px;font-weight:700;}
-  .tl-bd{padding:11px 12px;}
-  .tl-bd .ph{font-size:12px;color:var(--ink-3);margin-bottom:7px;}
-  .tl-bd ul{padding-left:17px;margin:0;font-size:12.5px;}
-  .tl-bd li{margin:3px 0;}
-  /* 记忆技巧卡 */
-  .tip-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin:14px 0;}
-  @media(max-width:700px){.tip-grid{grid-template-columns:1fr;}}
-  .tip{border:1px solid var(--line);border-left:4px solid var(--green);border-radius:9px;
-    padding:12px 15px;background:#fafbfd;}
-  .tip h4{margin:0 0 5px;font-size:13.8px;color:var(--ink);}
-  .tip p{font-size:12.8px;margin:3px 0;}
-  /* 时间表 */
+  /* 大警报条 */
+  .alarm{background:linear-gradient(135deg,#d64545,#e8663f);color:#fff;border-radius:14px;
+    padding:22px 26px;margin-bottom:18px;box-shadow:0 4px 16px rgba(214,69,69,.25);}
+  .alarm h2{margin:0 0 10px;font-size:20px;padding:0;border:none;color:#fff;}
+  .alarm p{margin:6px 0;color:rgba(255,255,255,.95);font-size:14px;}
+  .alarm .big{font-size:26px;font-weight:800;letter-spacing:.5px;}
+  /* 倒计时 */
+  .cd{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:14px 0;}
+  @media(max-width:700px){.cd{grid-template-columns:1fr;}}
+  .cd-c{background:#fafbfd;border:1px solid var(--line);border-radius:11px;padding:14px;
+    text-align:center;}
+  .cd-c .n{font-size:21px;font-weight:800;color:var(--purple);line-height:1.4;
+    white-space:nowrap;letter-spacing:.2px;}
+  .cd-c .l{font-size:12.5px;color:var(--ink-3);margin-top:4px;}
+  /* 联系卡 */
+  .contact{border:1px solid var(--line);border-radius:12px;padding:0;overflow:hidden;margin:12px 0;}
+  .contact-hd{background:#f2f4f8;padding:10px 15px;font-size:13.5px;font-weight:700;color:var(--ink);}
+  .contact-bd{padding:4px 15px 12px;}
+  .crow{display:flex;border-bottom:1px dashed var(--line);padding:7px 0;font-size:13px;}
+  .crow:last-child{border-bottom:none;}
+  .crow .k{flex:0 0 92px;color:var(--ink-3);font-weight:600;}
+  .crow .v{flex:1;color:var(--ink-2);}
+  .crow .v.ph{font-weight:700;color:var(--ink);font-size:14px;}
+  /* 阶段 */
+  .stages{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:14px 0;}
+  @media(max-width:860px){.stages{grid-template-columns:1fr;}}
+  .stage{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fafbfd;}
+  .stage-hd{padding:10px 13px;color:#fff;font-size:13px;font-weight:700;}
+  .stage-hd .d{display:block;font-size:11.5px;font-weight:500;opacity:.9;margin-top:2px;}
+  .stage-bd{padding:12px 13px;}
+  .stage-bd ul{padding-left:16px;margin:0;font-size:12.5px;}
+  .stage-bd li{margin:3px 0;}
+  .stage-bd .goal{background:var(--amber-soft);border-radius:7px;padding:8px 10px;
+    font-size:12.3px;color:#7a5208;margin-top:10px;}
   .sched{border:1px solid var(--line);border-radius:10px;overflow:hidden;margin:12px 0;}
   .sched-row{display:flex;border-bottom:1px solid var(--line);}
   .sched-row:last-child{border-bottom:none;}
-  .sched-row .t{flex:0 0 118px;background:#f4f6fa;padding:8px 11px;font-size:12.8px;font-weight:600;color:var(--ink);}
+  .sched-row .t{flex:0 0 124px;background:#f4f6fa;padding:8px 11px;font-size:12.8px;font-weight:600;color:var(--ink);}
   .sched-row .c{flex:1;padding:8px 11px;font-size:12.8px;color:var(--ink-2);}
-  .sched-row.wk .t{background:#eef3ff;color:var(--accent);}
+  .sched-row.wk .t{background:#f2edfd;color:var(--purple);}
+  /* 记忆锚点 */
+  .anchor{border:2px solid var(--purple);border-radius:12px;padding:16px 20px;
+    background:var(--purple-soft);margin:14px 0;}
+  .anchor .t{font-size:13px;font-weight:700;color:var(--purple);margin-bottom:8px;
+    letter-spacing:.5px;}
+  .anchor .m{font-size:15.5px;font-weight:700;color:var(--ink);line-height:1.9;}
+  .anchor .m em{font-style:normal;background:#fff;border-radius:5px;padding:1px 7px;
+    border:1px solid var(--purple);color:var(--purple);}
+  /* 提分优先级 */
+  .pri{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin:12px 0;}
+  @media(max-width:700px){.pri{grid-template-columns:1fr;}}
+  .pri-c{border:1px solid var(--line);border-radius:10px;padding:12px 15px;background:#fafbfd;}
+  .pri-c h4{margin:0 0 6px;font-size:13.8px;display:flex;align-items:center;gap:7px;}
+  .pri-c p{font-size:12.7px;margin:3px 0;}
+  .bar{height:8px;border-radius:5px;background:#eceff5;overflow:hidden;margin:7px 0 3px;}
+  .bar i{display:block;height:100%;border-radius:5px;}
   footer{text-align:center;color:var(--ink-3);font-size:12px;margin-top:22px;line-height:1.9;}
 </style>
 </head>
@@ -84,282 +111,348 @@
 <div class="wrap">
 
 <header class="top">
-  <h1>四科系统学习方案：路径 · 周期 · 记忆技巧</h1>
-  <div class="sub">101 政治 · 204 英语二 · 302 数学二 · 836 数据结构与算法 ｜ 在职备考 · 每天 1.5–2 小时 · 目标 2028 级</div>
+  <h1>武汉工程大学 MEM 冲刺指南</h1>
+  <div class="sub">联系方式 · 考试大纲 · 65 天学习计划 —— 一页看完，照着做</div>
+  <div class="kv">
+    <span>专业：125601 工程管理硕士（非全）</span>
+    <span>学院：管理学院 · 专硕教育中心</span>
+    <span>考试：199 管综 + 204 英语二</span>
+    <span>学费：6 万 / 3 年</span>
+  </div>
 </header>
 
-<!-- 一句话战略 -->
+<!-- ★ 时间警报 -->
+<div class="alarm">
+  <h2>⏰ 今天就是报名第一天</h2>
+  <p><strong>2027 年研考网上报名：2026 年 10 月 15 日 — 10 月 24 日（每天 9:00–22:00）</strong></p>
+  <p>预报名已于 10 月 12 日结束。退无可退——<strong>报名截止 10 月 24 日 22:00，逾期不可补报</strong>，且报考点、报考单位一旦提交生成报名号就<strong>不能再改</strong>。</p>
+  <p style="margin-top:12px;">距初试（12 月 19–20 日）：<span class="big">约 65 天</span></p>
+</div>
+
+<!-- 一 倒计时与关键节点 -->
 <section>
-  <h2>一、先记住这句话</h2>
-  <div class="callout c-info" style="font-size:15px;">
-    <strong>数学（二）决定你上不上岸，836 决定你能不能上岸。</strong><br>
-    <span style="font-size:13.5px;">数学二是四科中唯一"投入大、周期长、可能失败"的科目，也是所有在职考生失败的主因；836 只考一门、自命题、竞争小，是你最大的机会。<strong>所以：把 50% 的时间给数学，30% 给 836，20% 给英语和政治。</strong></span>
+  <h2>一、四个不能再拖的节点</h2>
+  <div class="cd">
+    <div class="cd-c"><div class="n">10.15 – 10.24</div><div class="l">网上报名（研招网 yz.chsi.com.cn）<br><span class="tag t-red">今天开始</span></div></div>
+    <div class="cd-c"><div class="n">10.26 – 10.31</div><div class="l">网上确认（上传材料，审核不通过则报名无效）</div></div>
+    <div class="cd-c"><div class="n">12.19 – 12.20</div><div class="l">初试（12/19 上午管综、下午英语二，一天考完）</div></div>
   </div>
 
-  <h3>四科定位（不要平均用力）</h3>
-  <div class="subj-grid">
-    <div class="subj">
-      <div class="nm">302 数学（二）</div>
-      <div class="role" style="background:var(--red-soft);color:var(--red);">命门 · 主攻</div>
-      <div class="score">150 分 · 最早启动</div>
-      <p>高数 + 线代（不含概率）</p>
-      <p><strong>需要 6–8 个月</strong>，现在就开始</p>
-      <p>失败风险最高的一科</p>
-    </div>
-    <div class="subj">
-      <div class="nm">836 数据结构与算法</div>
-      <div class="role" style="background:var(--green-soft);color:var(--green);">机会 · 第二主攻</div>
-      <div class="score">150 分 · 自命题</div>
-      <p>只考 1 门 + 严蔚敏教材</p>
-      <p><strong>真题价值极高</strong>，务必拿到</p>
-      <p>投入产出比最高的一科</p>
-    </div>
-    <div class="subj">
-      <div class="nm">204 英语（二）</div>
-      <div class="role" style="background:var(--accent-soft);color:var(--accent);">细水长流</div>
-      <div class="score">100 分 · 每天必碰</div>
-      <p>单词是地基，阅读是大头</p>
-      <p><strong>不间断即可</strong>，不占大块时间</p>
-      <p>靠积累，不靠冲刺</p>
-    </div>
-    <div class="subj">
-      <div class="nm">101 政治</div>
-      <div class="role" style="background:var(--amber-soft);color:var(--amber);">可晚启动</div>
-      <div class="score">100 分 · 8 月启动</div>
-      <p>选择题靠刷，大题靠背</p>
-      <p><strong>9 月启动完全来得及</strong></p>
-      <p>性价比高，不必早碰</p>
-    </div>
+  <table>
+    <tr><th style="width:20%">节点</th><th style="width:26%">时间</th><th>你要做的事</th></tr>
+    <tr><td><strong>① 网上报名</strong></td><td><strong>10.15 – 10.24 22:00</strong></td><td>登录研招网 → 填报考信息 → <strong>缴费</strong> → 上传核验材料。<strong>填完不缴费 = 报名无效。</strong></td></tr>
+    <tr><td><strong>② 网上确认</strong></td><td>10.26 9:00 起<br>10.31 17:00 止</td><td>上传：报名照片、身份证、学历材料、户口本或社保凭证。<strong>务必盯紧审核结果，不通过要立刻补材料。</strong></td></tr>
+    <tr><td>③ 打印准考证</td><td>12 月中旬</td><td>研招网下载，A4 打印，多打几份</td></tr>
+    <tr><td>④ 初试</td><td><strong>12.19–12.20</strong></td><td>12/19 上午 8:30–11:30 管理类综合能力<br>12/19 下午 14:00–17:00 英语二<br><strong>一天考完，第二天休整</strong></td></tr>
+  </table>
+
+  <div class="callout c-warn">
+    <strong>⚠️ 最容易踩的坑：报考点会选错。</strong><br>
+    <strong>必须选「武汉工程大学（4228）」</strong>——武工大自己就是湖北省的报考点，其公告明确接收「户口或工作地在武汉的往届生报考武汉工程大学的考生」。<br>
+    东湖新技术开发区招考办（4248）只接收「报考<strong>未在武汉设报考点</strong>的招生单位」的管理类考生，<strong>你不属于这一类</strong>；武昌区（4225）、洪山区（4226）也不接收。<strong>选错会导致网上确认审核不通过、报名作废，且提交后不可改。</strong><br>
+    <strong>保险做法：报名前打武工大报考点电话 027-87940025 确认。</strong>
   </div>
 </section>
 
-<!-- 时间账 -->
+<!-- 二 联系方式 -->
 <section>
-  <h2>二、你的时间账（先算清楚，别高估自己）</h2>
+  <h2>二、武工大 MEM 官方联系方式（已核实）</h2>
+  <p>来源：武汉工程大学 2027 年硕士研究生招生简章原文（研究生院官网 yjs.wit.edu.cn）。</p>
+
+  <div class="contact">
+    <div class="contact-hd"><span class="tag t-red">首选</span> 管理学院 · 专硕教育中心（MBA / MEM / MPA）</div>
+    <div class="contact-bd">
+      <div class="crow"><span class="k">联系人</span><span class="v">黄老师</span></div>
+      <div class="crow"><span class="k">电话</span><span class="v ph">027-87992195</span></div>
+      <div class="crow"><span class="k">邮箱</span><span class="v ph">27196553@qq.com</span></div>
+      <div class="crow"><span class="k">办公地址</span><span class="v">流芳校区 文科楼 514 室（湖北省武汉市东湖新技术开发区光谷一路 206 号）</span></div>
+      <div class="crow"><span class="k">学院网址</span><span class="v">https://cm.wit.edu.cn</span></div>
+    </div>
+  </div>
+
+  <div class="contact">
+    <div class="contact-hd"><span class="tag t-red">报名必打</span> 武汉工程大学报考点（代码 4228）</div>
+    <div class="contact-bd">
+      <div class="crow"><span class="k">电话</span><span class="v ph">027-87940025</span></div>
+      <div class="crow"><span class="k">咨询范围</span><span class="v">报考点选择、接收范围、审核材料</span></div>
+      <div class="crow"><span class="k">公告</span><span class="v">yjs.wit.edu.cn/info/1020/13784.htm（报考点报名须知）</span></div>
+    </div>
+  </div>
+
+  <div class="contact">
+    <div class="contact-hd">管理学院 · 学硕方向（非 MEM，备查）</div>
+    <div class="contact-bd">
+      <div class="crow"><span class="k">联系人</span><span class="v">于老师 · 027-87992116 · witglxy@126.com（文科楼 424 室）</span></div>
+    </div>
+  </div>
+
+  <div class="contact">
+    <div class="contact-hd">武汉工程大学研究生院（学校层面）</div>
+    <div class="contact-bd">
+      <div class="crow"><span class="k">官网</span><span class="v">https://yjs.wit.edu.cn（招生简章、复试办法、拟录取名单都在这里）</span></div>
+      <div class="crow"><span class="k">简章页</span><span class="v">https://yjs.wit.edu.cn/info/1018/13744.htm（2027 年招生简章）</span></div>
+    </div>
+  </div>
+
+  <div class="callout c-tip">
+    <strong>打电话时一次问清这 4 件事（30 秒问完）：</strong><br>
+    ① 2027 年 MEM 非全<strong>是否招生、招多少人</strong>？<br>
+    ② 我<strong>自考本科、只有毕业证没有学位证</strong>，报考和复试是否受影响？<br>
+    ③ <strong>武汉地区报 MEM 应该选哪个报考点？</strong>（4248 东湖高新区，对吗）<br>
+    ④ 复试<strong>政治</strong>怎么考（笔试还是面试）、大概什么时候？
+  </div>
+</section>
+
+<!-- 三 考试大纲 -->
+<section>
+  <h2>三、考试大纲：好消息是「全国统一」，不用找学校</h2>
+  <div class="callout c-tip">
+    <strong>199 管综和 204 英语二都是全国统考科目</strong>，用教育部教育考试院发布的<strong>统一考试大纲</strong>，武工大不另行自命题。<br>
+    意味着：<strong>市面资料完全通用、真题充足、考纲稳定</strong>——这是 MEM 相比湖工大 836（自命题、资料稀缺）最大的优势。
+  </div>
+
+  <h3>科目一：199 管理类综合能力（满分 200，180 分钟）</h3>
   <table>
-    <tr><th>时间来源</th><th>每天/每周</th><th>用途</th></tr>
-    <tr><td>工作日晚上整块</td><td>1–1.5 小时/天</td><td><strong>数学 / 836</strong>（深度思考必须整块）</td></tr>
-    <tr><td>通勤 + 午休 + 睡前</td><td>0.5 小时/天</td><td>背单词、政治视频、刷选择题</td></tr>
-    <tr><td>周末</td><td>4–6 小时/周</td><td>数学大块 + 836 刷题</td></tr>
-    <tr><td colspan="2"><strong>月度合计</strong></td><td><strong>约 55–65 小时</strong></td></tr>
-    <tr><td colspan="2"><strong>14 个月合计（2026.10–2027.12）</strong></td><td><strong>约 750–900 小时</strong>（够用，但不富余）</td></tr>
+    <tr><th style="width:24%">模块</th><th style="width:16%">分值</th><th>内容与题型</th></tr>
+    <tr><td><strong>数学基础</strong></td><td><strong>75 分</strong></td><td>25 题 × 3 分 = 问题求解 15 题（45 分）+ 条件充分性判断 10 题（30 分）<br>范围：<strong>初等数学</strong>（算术、代数、几何、数据分析）——<strong>不考高等数学</strong></td></tr>
+    <tr><td><strong>逻辑推理</strong></td><td><strong>60 分</strong></td><td>30 题 × 2 分，全部单选<br>形式逻辑 + 论证逻辑 + 综合推理；材料长、阅读量大</td></tr>
+    <tr><td><strong>写作</strong></td><td><strong>65 分</strong></td><td>论证有效性分析 30 分（约 600 字，找逻辑漏洞）+ 论说文 35 分（约 700 字）<br>两篇合计约 <strong>1300 字，全部手写</strong></td></tr>
+  </table>
+
+  <h3>科目二：204 英语二（满分 100，180 分钟）</h3>
+  <table>
+    <tr><th style="width:30%">题型</th><th style="width:14%">分值</th><th>要点</th></tr>
+    <tr><td>完形填空</td><td>10 分</td><td>20 题 × 0.5 分，性价比低，<strong>不必重点投入</strong></td></tr>
+    <tr><td><strong>阅读理解</strong></td><td><strong>40 分</strong></td><td>4 篇 × 5 题，<strong>分值之最，重中之重</strong></td></tr>
+    <tr><td>新题型</td><td>10 分</td><td>匹配 / 小标题，技巧性强，提分快</td></tr>
+    <tr><td>翻译</td><td>15 分</td><td>英译汉 150 词左右</td></tr>
+    <tr><td>写作</td><td>25 分</td><td>小作文 10 分（书信/通知）+ 大作文 15 分（图表）</td></tr>
+  </table>
+
+  <div class="callout c-info">
+    <strong>难度定位：</strong>英语二难度<strong>介于四级与六级之间，不考听力</strong>；199 数学是初高中知识但<strong>陷阱多、时间紧</strong>。真正的难点不在知识深度，而在<strong>「180 分钟内做完」</strong>。
+  </div>
+</section>
+
+<!-- 四 目标分 -->
+<section>
+  <h2>四、目标定多少？先看「过线」这条线</h2>
+  <table>
+    <tr><th style="width:26%">项目</th><th>数值</th></tr>
+    <tr><td>总分</td><td>300 分（管综 200 + 英语二 100）</td></tr>
+    <tr><td>MEM 国家线（A 区）</td><td><strong>近年约 165–180 分</strong>（2024 年 165、2023 年 178、2022 年 189，逐年波动）<br><span class="tag t-amber">以当年官方公布为准</span></td></tr>
+    <tr><td>建议目标分</td><td><strong>180 分</strong>（比国家线高 15 分左右，心里有底）</td></tr>
+  </table>
+
+  <p><strong>180 分怎么拆？（这是你的作战地图）</strong></p>
+  <table>
+    <tr><th style="width:30%">科目</th><th style="width:20%">目标分</th><th>怎么拿到</th></tr>
+    <tr><td>199 数学基础</td><td><strong>50 / 75</strong></td><td>25 题里做对 17 题。<strong>只抓基础题，难题直接跳</strong></td></tr>
+    <tr><td>199 逻辑推理</td><td><strong>36 / 60</strong></td><td>30 题里做对 18 题。入门后正确率能到 60%+，是最容易提分的板块</td></tr>
+    <tr><td>199 写作</td><td><strong>38 / 65</strong></td><td>两篇都写完、结构规范、字迹工整，及格分不难拿</td></tr>
+    <tr><td>204 英语二</td><td><strong>56 / 100</strong></td><td>阅读拿 24 + 新题型 6 + 翻译 9 + 作文 14 + 完形 3</td></tr>
   </table>
   <div class="callout c-note">
-    <strong>结论：时间是够的，但容不得浪费。</strong>最怕的不是"时间少"，而是<strong>学了就忘、反复重头开始</strong>——那等于白干。这也是下一节"记忆技巧"为什么比时间表更重要的原因。
+    <strong>记住这个心理锚点：</strong>你不是在考「高分」，是在考<strong>「过线」</strong>。非全 MEM 竞争远小于全日制，<strong>过线就有很大机会</strong>。所以策略是「<strong>把会做的做对，把不会的果断扔掉</strong>」，而不是死磕难题。
   </div>
 </section>
 
-<!-- 12个月时间轴 -->
+<!-- 五 65天计划 -->
 <section>
-  <h2>三、14 个月时间轴（四个阶段，别跳级）</h2>
-  <div class="tl">
-    <div class="tl-col">
-      <div class="tl-hd" style="background:#2f6bff;">阶段一 · 筑基</div>
-      <div class="tl-bd">
-        <div class="ph">2026.10 – 2027.02（5 个月）</div>
+  <h2>五、65 天冲刺计划（三阶段）</h2>
+  <p>在职、每天 1.5–2 小时、周末加量。核心原则：<strong>先拿下「性价比最高」的板块，再补硬骨头。</strong></p>
+
+  <div class="stages">
+    <div class="stage">
+      <div class="stage-hd" style="background:#d64545;">
+        阶段一 · 摸底与入门
+        <span class="d">10.15 – 11.05（约 3 周）</span>
+      </div>
+      <div class="stage-bd">
         <ul>
-          <li><strong>数学：</strong>高数基础过完<br>（教材 + 基础课视频 + 1800 基础篇）</li>
-          <li><strong>英语：</strong>单词第一轮 + 长难句</li>
-          <li><strong>836：</strong>先不碰（数学优先）</li>
-          <li><strong>政治：</strong>不启动</li>
-          <li>🎯 里程碑：高数基础题能独立做 60%</li>
+          <li><strong>本周先做 1 套 2025 或 2026 年 199 真题 + 1 套英语二真题</strong>（严格限时，不计分骂自己）——这是全流程最重要的一次「体检」</li>
+          <li><strong>逻辑</strong>：跟一位老师的入门课，把形式逻辑（假言、直言、选言）吃透 —— 这是逻辑的地基</li>
+          <li><strong>数学</strong>：过一遍初等数学知识点，重点补「排列组合 + 概率 + 数据描述」</li>
+          <li><strong>英语</strong>：每天 50 词 + 1 篇真题阅读精读</li>
+          <li>写作：只了解题型，不动笔</li>
         </ul>
+        <div class="goal"><strong>阶段目标：</strong>知道自己现在大概能考多少分，决定后 9 周的投入强度。</div>
       </div>
     </div>
-    <div class="tl-col">
-      <div class="tl-hd" style="background:#4a7cff;">阶段二 · 强化</div>
-      <div class="tl-bd">
-        <div class="ph">2027.03 – 2027.08（6 个月）</div>
+
+    <div class="stage">
+      <div class="stage-hd" style="background:#c9820a;">
+        阶段二 · 强化与刷题
+        <span class="d">11.06 – 12.06（约 4.5 周）</span>
+      </div>
+      <div class="stage-bd">
         <ul>
-          <li><strong>数学：</strong>线代 + 高数强化<br>（660 + 880 题）</li>
-          <li><strong>836：</strong>教材过完 + 王道书 + 开始手写代码</li>
-          <li><strong>英语：</strong>真题阅读（2010–2020）</li>
-          <li><strong>政治：</strong>8 月启动（强化班 + 1000 题）</li>
-          <li>🎯 里程碑：数学强化题 70% · 836 代码能默写</li>
+          <li><strong>逻辑</strong>：分题型刷题，重点攻<strong>综合推理</strong>（最拉分也最耗时）</li>
+          <li><strong>数学</strong>：按题型刷，<strong>建立「条件充分性判断」的解题直觉</strong>（这是 MEM 特色题型，必须专项适应）</li>
+          <li><strong>写作</strong>：动笔！论证有效性分析练 5 篇、论说文练 5 篇，形成自己的模板</li>
+          <li><strong>英语</strong>：2015–2020 真题阅读精读 + 新题型专项</li>
         </ul>
+        <div class="goal"><strong>阶段目标：</strong>逻辑正确率 ≥60%，数学基础题正确率 ≥65%，写作能按时写完 1300 字。</div>
       </div>
     </div>
-    <div class="tl-col">
-      <div class="tl-hd" style="background:#7c9cff;">阶段三 · 真题</div>
-      <div class="tl-bd">
-        <div class="ph">2027.09 – 2027.11（3 个月）</div>
-        <ul>
-          <li><strong>数学：</strong>套卷真题（2000–2027）错题二刷</li>
-          <li><strong>836：</strong><strong>湖工大历年真题反复刷</strong>（最重要）</li>
-          <li><strong>英语：</strong>真题二刷 + 作文准备</li>
-          <li><strong>政治：</strong>肖八选择题 + 背诵</li>
-          <li>🎯 里程碑：数学真题稳定 100+</li>
-        </ul>
+
+    <div class="stage">
+      <div class="stage-hd" style="background:#1f9d6b;">
+        阶段三 · 套卷与冲刺
+        <span class="d">12.07 – 12.20（约 2 周）</span>
       </div>
-    </div>
-    <div class="tl-col">
-      <div class="tl-hd" style="background:#a8bcff;">阶段四 · 冲刺</div>
-      <div class="tl-bd">
-        <div class="ph">2027.12（1 个月）</div>
+      <div class="stage-bd">
         <ul>
-          <li><strong>数学：</strong>模拟卷（李林 6+4）</li>
-          <li><strong>836：</strong>错题 + 代码默写</li>
-          <li><strong>英语：</strong>作文模板固化</li>
-          <li><strong>政治：</strong><strong>肖四全背</strong></li>
-          <li>🎯 里程碑：进入考场，答完</li>
+          <li><strong>每 2 天一套 199 全真套卷</strong>，严格掐表 180 分钟（这是唯一能解决「做不完」的方法）</li>
+          <li>英语二：近 3 年真题整卷模考 + 作文模板定稿背诵</li>
+          <li>把错题只看「错在哪一步」，不重抄</li>
+          <li>最后 3 天：<strong>只复习自己的笔记和模板，不碰新题</strong>，调作息</li>
         </ul>
+        <div class="goal"><strong>阶段目标：</strong>套卷稳定在 180 分上下，时间分配形成肌肉记忆。</div>
       </div>
     </div>
   </div>
-  <div class="callout c-warn">
-    <strong>最容易犯的三个错：</strong>① 一开始就四科齐上（会崩，政治务必晚启动）；② 数学基础没打牢就冲强化（必然返工）；③ 把 836 的真题留到最后（<strong>自命题真题是最后阶段最该反复看的东西，不是考前一瞥</strong>）。
-  </div>
-</section>
 
-<!-- 分科方案 -->
-<section>
-  <h2>四、分科方案（含资源与周期）</h2>
-
-  <h3>1. 302 数学（二）—— 150 分，命门</h3>
-  <table>
-    <tr><th>阶段</th><th>资料</th><th>周期</th><th>完成标准</th></tr>
-    <tr><td>基础</td><td>同济《高等数学》+ 基础课视频（武忠祥/张宇）+《1800 题》基础篇</td><td>3 个月</td><td>基础篇正确率 60%+</td></tr>
-    <tr><td>强化</td><td>同济《线性代数》+ 强化课 +《660 题》+《880 题》</td><td>3 个月</td><td>强化题正确率 70%+</td></tr>
-    <tr><td>真题</td><td>历年真题套卷（近 15 年优先）</td><td>2 个月</td><td>严格计时，稳定 100+</td></tr>
-    <tr><td>冲刺</td><td>李林《6 套卷》+《4 套卷》</td><td>1 个月</td><td>模拟分不低于真题水平</td></tr>
-  </table>
-  <div class="callout c-tip">
-    <strong>数学二的关键提醒：</strong>① <strong>它是"算"出来的，不是"看"出来的</strong>——看懂≠会做，必须动笔算完整过程；② 错题本<strong>只记"错在哪一步"</strong>，不要抄题（抄题=浪费时间）；③ 计算错误也算错，不要归因于"粗心"——那是练得不够。
-  </div>
-
-  <h3>2. 836 数据结构与算法 —— 150 分，机会</h3>
-  <table>
-    <tr><th>阶段</th><th>资料</th><th>周期</th><th>完成标准</th></tr>
-    <tr><td>基础</td><td>严蔚敏《数据结构（C 语言版）》+ 王道《数据结构》考研辅导书</td><td>3 个月</td><td>各章课后题能独立做</td></tr>
-    <tr><td>代码</td><td>王道书代码 + 王道习题</td><td>2 个月</td><td><strong>核心算法能默写</strong>（链表、树、图、排序、查找）</td></tr>
-    <tr><td>真题</td><td><strong>湖工大历年真题（最重要）</strong></td><td>2 个月</td><td>近 5 年真题刷 2 遍以上</td></tr>
-    <tr><td>冲刺</td><td>错题 + 代码默写 + 算法复杂度分析</td><td>1 个月</td><td>常见算法 3 分钟内手写</td></tr>
-  </table>
-  <div class="callout c-tip">
-    <strong>836 的三个关键：</strong>① <strong>务必搞到历年真题</strong>——自命题院校的出题风格只有真题能告诉你（找学长、考研社群、真题论坛）；② <strong>代码必须手写</strong>，不能只看；③ 时间复杂度/空间复杂度分析是高频考点，别只背定义。
-  </div>
-
-  <h3>3. 204 英语（二）—— 100 分，细水长流</h3>
-  <table>
-    <tr><th>阶段</th><th>动作</th><th>周期</th><th>说明</th></tr>
-    <tr><td>全程</td><td>单词（APP：墨墨/不背单词/扇贝）</td><td>每天</td><td><strong>5500 词至少过 3 轮</strong>，利用碎片时间</td></tr>
-    <tr><td>基础</td><td>长难句（田静/唐迟）</td><td>2 个月</td><td>为阅读打底</td></tr>
-    <tr><td>强化</td><td>真题阅读 2010–2020（张剑黄皮书）</td><td>4 个月</td><td><strong>每篇精读</strong>：生词 + 长难句 + 错因</td></tr>
-    <tr><td>冲刺</td><td>作文（石雷鹏/潘赟）+ 真题二刷</td><td>2 个月</td><td>11 月起准备，形成自己的模板</td></tr>
-  </table>
-  <div class="callout c-tip">
-    <strong>英语二提醒：</strong>① <strong>单词一天都不能断</strong>——断了三天，前面全白干；② 阅读只做真题，别做模拟题；③ 新题型和翻译 10 月启动即可，不必早。
-  </div>
-
-  <h3>4. 101 政治 —— 100 分，可晚启动</h3>
-  <table>
-    <tr><th>阶段</th><th>资料</th><th>周期</th><th>说明</th></tr>
-    <tr><td>启动</td><td>徐涛强化班视频 + 肖秀荣《1000 题》</td><td>8–9 月（1 个月）</td><td>只做选择题，每天 30–40 分钟</td></tr>
-    <tr><td>刷题</td><td>《1000 题》二刷 + 肖八</td><td>10–11 月</td><td><strong>肖八只做选择</strong>，搞懂每个选项</td></tr>
-    <tr><td>背诵</td><td>肖秀荣《肖四》</td><td>12 月</td><td><strong>大题全背</strong>，这是性价比最高的一块</td></tr>
-  </table>
-  <div class="callout c-tip">
-    <strong>政治提醒：</strong>① <strong>别早启动</strong>——7 月前碰政治等于浪费生命；② 选择题靠"刷 + 理解"，大题靠肖四；③ 政治是四科中最不可能让你考不上的科目，不要为它焦虑。
-  </div>
-</section>
-
-<!-- 记忆技巧 -->
-<section>
-  <h2>五、记忆技巧（在职备考的核心竞争力）</h2>
-  <p style="margin-bottom:12px;">在职最大的敌人不是"没时间"，是<strong>"学了就忘"</strong>。下面 7 条按重要性排序，前三条就能解决你 80% 的问题。</p>
-  <div class="tip-grid">
-    <div class="tip">
-      <h4>① 主动回忆 &gt; 重读 <span class="tag t-red">最重要</span></h4>
-      <p>看完一节，<strong>合上书默写要点</strong>，再翻开核对。</p>
-      <p>重读三遍的记忆效果，远不如主动回想一遍。<strong>感觉"想不起来"的那个时刻，才是记忆真正在形成的时刻。</strong></p>
-    </div>
-    <div class="tip">
-      <h4>② 间隔复习节点</h4>
-      <p>学完后的第 <strong>当天晚 → 3 天 → 7 天 → 15 天</strong>，各复习一次。</p>
-      <p>每天前 10 分钟只做一件事：回顾昨天、3 天前、7 天前标记的<strong>模糊点</strong>。</p>
-    </div>
-    <div class="tip">
-      <h4>③ 三色标记法</h4>
-      <p>🟢 已掌握 ｜ 🟡 模糊 ｜ 🔴 不会</p>
-      <p><strong>优先消灭 🔴，其次 🟡，🟢 不看。</strong>复习时间永远花在"不会的"上，而不是"已经会的"上（后者只是心理安慰）。</p>
-    </div>
-    <div class="tip">
-      <h4>④ 一页纸法则</h4>
-      <p>每科每周做一张 A4「知识地图」：只写标题、关键词、公式。</p>
-      <p>后期只看这十几张纸，不翻厚书。<strong>能压缩成一页纸，才说明你真懂了。</strong></p>
-    </div>
-    <div class="tip">
-      <h4>⑤ 费曼输出</h4>
-      <p>把一个知识点<strong>用一句大白话讲出来</strong>。</p>
-      <p>讲不清的地方，就是没懂的地方。讲给自己听、讲给同事听都行。</p>
-    </div>
-    <div class="tip">
-      <h4>⑥ 错题只记"错在哪一步"</h4>
-      <p>数学/836 错题本<strong>不要抄题</strong>，只写：错在哪个环节、正确思路第一步是什么。</p>
-      <p>考前只看这个本子，比翻原书高效 10 倍。</p>
-    </div>
-    <div class="tip">
-      <h4>⑦ 利用两个记忆窗口</h4>
-      <p><strong>睡前 20 分钟</strong>回忆当天学的 3 个要点；<strong>晨起 10 分钟</strong>再回想一次。</p>
-      <p>这两个时段记忆效率最高，别用来刷手机。</p>
-    </div>
-  </div>
-</section>
-
-<!-- 每日时间表 -->
-<section>
-  <h2>六、每日/每周时间表模板（可直接照做）</h2>
+  <h3>每日时间表（在职版）</h3>
   <div class="sched">
-    <div class="sched-row"><div class="t">06:50–07:20</div><div class="c">通勤：单词 APP 50 个 <span class="tag t-blue">英语</span></div></div>
-    <div class="sched-row"><div class="t">12:30–13:00</div><div class="c">午休：政治视频 1 节 / 数学选择题 10 道 <span class="tag t-amber">政治/数学</span></div></div>
-    <div class="sched-row"><div class="t">20:00–21:30</div><div class="c"><strong>主时段</strong>：周一/二/四/六 数学 ｜ 周三/五/日 836 <span class="tag t-red">数学/836</span></div></div>
-    <div class="sched-row"><div class="t">21:30–21:45</div><div class="c">复盘：默写当日 3 个要点（用"一页纸法则"） <span class="tag t-green">记忆</span></div></div>
-    <div class="sched-row wk"><div class="t">周末上午</div><div class="c">4 小时：数学大块攻坚 / 真题套卷（严格计时）</div></div>
-    <div class="sched-row wk"><div class="t">周末下午</div><div class="c">2 小时：836 刷题 + 代码手写练习</div></div>
+    <div class="sched-row"><div class="t">06:50–07:20</div><div class="c">通勤：背英语单词 50 个</div></div>
+    <div class="sched-row"><div class="t">12:30–13:00</div><div class="c">午休：10 道逻辑题（掐表，练速度）</div></div>
+    <div class="sched-row wk"><div class="t">20:00–21:30 主时段</div><div class="c">
+      <strong>周一 / 三 / 五</strong>：数学基础（分题型刷）<br>
+      <strong>周二 / 四</strong>：逻辑（分题型刷）<br>
+      <strong>周六</strong>：英语二阅读 + 新题型<br>
+      <strong>周日</strong>：写作动笔 1 篇（阶段二起）
+    </div></div>
+    <div class="sched-row"><div class="t">21:30–21:45</div><div class="c">复盘：合书默写当日 3 个要点</div></div>
+    <div class="sched-row wk"><div class="t">周末上午 3h</div><div class="c">整套限时训练（阶段三起每 2 天一套）或数学/逻辑大块刷题</div></div>
+    <div class="sched-row wk"><div class="t">周末下午 1.5h</div><div class="c">写作 1 篇 + 英语真题精读</div></div>
   </div>
+
   <div class="callout c-info">
-    <strong>原则：</strong>主时段（晚上 90 分钟）必须整块、不被打断、不刷手机。<strong>碎片时间只做"轻任务"</strong>（单词、政治、选择题）。<br>
-    如果某天加班到很晚，<strong>只完成"最低线"：睡前 20 分钟回顾当日要点</strong>——保持连续性，比单日强度重要得多。
+    <strong>每日最低完成线：睡前 20 分钟回顾当日要点。</strong>哪怕这天再累，这 20 分钟也要守住——<strong>断了可以补，别归零</strong>。
   </div>
 </section>
 
-<!-- 防崩 -->
+<!-- 六 提分优先级 -->
 <section>
-  <h2>七、防崩指南与止损标准</h2>
-  <table>
-    <tr><th>常见坑</th><th>怎么办</th></tr>
-    <tr><td>一开始就每天学 3 小时</td><td><strong>必崩。</strong>从每天 1 小时开始，能稳定一个月再加</td></tr>
-    <tr><td>某天完不成就自责、放弃</td><td>设<strong>"最低完成线"</strong>：每天至少 30 分钟。断了可以补，别归零</td></tr>
-    <tr><td>数学看不懂就想跳过</td><td>数学<strong>不能跳</strong>。看不懂就降难度（换基础课），跳过=给后期埋雷</td></tr>
-    <tr><td>只学数学，忽略 836</td><td>836 是 150 分且竞争小，<strong>性价比比数学高</strong>，别让它拖到 9 月</td></tr>
-    <tr><td>买一堆资料看不完</td><td><strong>每科只留一套主资料 + 真题。</strong>资料越多越焦虑</td></tr>
-  </table>
+  <h2>六、65 天里，哪块最划算？（把时间押对地方）</h2>
+  <p>时间不够时，<strong>投入顺序决定成败</strong>。按「单位时间的提分效率」从高到低排：</p>
+
+  <div class="pri">
+    <div class="pri-c">
+      <h4><span class="tag t-green">第 1 优先</span>逻辑推理</h4>
+      <p>全新学科，但<strong>套路化极强</strong>。掌握题型方法后正确率能在 2–4 周内从 30% 提到 60%+。<strong>这就是 36 分。</strong></p>
+      <div class="bar"><i style="width:95%;background:#1f9d6b;"></i></div>
+      <p style="font-size:12.2px;color:var(--ink-3);">提分效率最高</p>
+    </div>
+    <div class="pri-c">
+      <h4><span class="tag t-green">第 2 优先</span>写作</h4>
+      <p>论证有效性分析<strong>有固定套路</strong>（找 4 个逻辑漏洞），论说文可套框架。<strong>不靠文采靠结构</strong>，练 10 篇就能稳定 35+。</p>
+      <div class="bar"><i style="width:82%;background:#1f9d6b;"></i></div>
+      <p style="font-size:12.2px;color:var(--ink-3);">确定性最高</p>
+    </div>
+    <div class="pri-c">
+      <h4><span class="tag t-blue">第 3 优先</span>英语二</h4>
+      <p>阅读 40 分是主战场。<strong>单词 + 真题精读</strong>是唯一路径，没有捷径，但每天 40 分钟、坚持 9 周就有效。<strong>而且这份投入双线共享。</strong></p>
+      <div class="bar"><i style="width:70%;background:#2f6bff;"></i></div>
+      <p style="font-size:12.2px;color:var(--ink-3);">需长期积累，但共享</p>
+    </div>
+    <div class="pri-c">
+      <h4><span class="tag t-amber">第 4 优先</span>数学基础</h4>
+      <p>知识点不难（初等数学），但<strong>陷阱多、易掉坑</strong>。<strong>只抓基础题</strong>：25 题做对 17 题就够。<strong>绝不要钻难题</strong>，那是时间的黑洞。</p>
+      <div class="bar"><i style="width:58%;background:#c9820a;"></i></div>
+      <p style="font-size:12.2px;color:var(--ink-3);">性价比中等，须有取舍</p>
+    </div>
+  </div>
+
   <div class="callout c-warn">
-    <strong>止损标准（提前定好，到点就执行）：</strong><br>
-    到 <strong>2027 年 6 月</strong>，如果数学二基础题正确率仍<strong>低于 50%</strong>，说明数学对你门槛过高。<br>
-    → <strong>届时果断转向管理类联考路线</strong>（如湖工大 MEM：199 管理类综合 + 英语二，<strong>不考数学二、不考专业课</strong>），上岸概率大幅提高。<br>
-    <span style="font-size:13px;">这不是失败，是<strong>用 8 个月时间换一个更理性的判断</strong>。提前知道止损点，才不会在错误的路上一路走到黑。</span>
+    <strong>两个必须提前知道的坑：</strong><br>
+    <strong>① 最容易失败的方式是「做不完」</strong>，不是「不会做」。180 分钟要完成 55 道选择题 + 手写 1300 字作文。所以从阶段二开始就要<strong>掐表做题</strong>，练「卡住就跳」的取舍能力——这个能力只能靠练，不能靠学。<br>
+    <strong>② 不要超范围深挖。</strong>管综数学<strong>不考高等数学</strong>。把时间花在竞赛级技巧上是纯浪费。
   </div>
 </section>
 
-<!-- 起手 -->
+<!-- 七 要不要冲 -->
 <section>
-  <h2>八、本周就开始的 4 件事</h2>
-  <ol>
-    <li><strong>下载单词 APP，今天就背 50 个</strong>（英语是唯一可以立刻开始的科目）。</li>
-    <li><strong>找到数学基础课视频，看 2 节</strong>（武忠祥或张宇，选一个，别比较，跟到底）。</li>
-    <li><strong>去计算机学院官网翻近 3 年拟录取名单</strong>，自己核实一遍数据。</li>
-    <li><strong>把上面的每日时间表抄一份贴在桌上</strong>——贴在眼前的东西，完成率高一倍。</li>
-  </ol>
+  <h2>七、核心决策：今年冲，还是等明年？</h2>
+
+  <div class="callout c-note">
+    <strong>先看清代价：报名费约 150–200 元 + 这 65 天的一部分精力。</strong>这就是全部成本。而一旦考上，你<strong>早一年拿到研究生学历</strong>（2031 年毕业，而不是 2032 年）。
+  </div>
+
+  <h3>两条路，说清楚</h3>
+  <table>
+    <tr><th style="width:22%">选择</th><th style="width:39%">好处</th><th>代价</th></tr>
+    <tr>
+      <td><strong>今年就报<br>（低成本试错）</strong></td>
+      <td>① 报名成本极低；② 拿到<strong>真实考场经验</strong>（这个经验明年直接复用）；③ 万一过线就早一年上岸；④ 英语投入双线共享、零浪费</td>
+      <td>① 65 天从零备考，<strong>上岸概率有限</strong>；② 这 65 天数学二进度会慢（但可补）</td>
+    </tr>
+    <tr>
+      <td><strong>不报，按原计划<br>（2028 级）</strong></td>
+      <td>① 备考时间充裕，上岸概率高得多；② 保留「湖工大计算机技术线」的完整选项；③ 不受打乱</td>
+      <td>① 晚一年拿到学历；② 少一次考场经验的积累</td>
+    </tr>
+  </table>
+
   <div class="callout c-tip">
-    <strong>最后一句：</strong>这份方案不复杂，<strong>难的是连续执行 14 个月</strong>。考研这件事上，坚持到底的人就已经赢过了大多数人——因为报名的人里，有相当一部分连考场都没进。
+    <strong>我的建议：报，但把它明确定位为「低成本试错」，不是「孤注一掷」。</strong><br><br>
+    <strong>① 今天就报。</strong>理由：报名成本几乎为零；即使考不上，考场经验本身就是资产；而且<strong>报名后你的心态会从「要不要」变成「怎么准备」，这是好事</strong>。<br>
+    <strong>② 报完先做一次真题摸底</strong>（199 一套 + 英语二一套，严格限时）。用真实数据决定投入强度：<br>
+    &nbsp;&nbsp;&nbsp;• 裸考 ≥140 分 → 全力冲，上岸希望大<br>
+    &nbsp;&nbsp;&nbsp;• 裸考 100–140 分 → 努力一把，有戏<br>
+    &nbsp;&nbsp;&nbsp;• 裸考 &lt;100 分 → 降低预期，当练手，精力仍以数学二为主<br>
+    <strong>③ 无论哪种情况，英语都照常投入</strong>——它是双线共享资产，怎么都不亏。<br>
+    <strong>④ 数学二不要完全断</strong>，每周保 3–5 小时。因为 12 月考完后，你还要回到 2028 年的双线决策上。
+  </div>
+
+  <div class="callout c-warn">
+    <strong>但有一个前提必须你自己回答：</strong>如果今年考上了 MEM，你愿意<strong>就此锁定「管理线」</strong>、放弃「湖工大计算机技术线」吗？<br>
+    MEM 上岸 → 2027 年 9 月入学武工大 → 三年后拿的是<strong>工程管理硕士学位</strong>，简历上是「管理硕士」，不是「计算机硕士」。<br>
+    <strong>如果你的职业目标已经偏向「测试管理 / 质量负责人」——冲。</strong><br>
+    <strong>如果你还想保留技术深耕的可能（测试开发 / 技术专家）——建议只报、低强度准备，把主要精力留给数学二。</strong><br>
+    这个问题没有标准答案，但<strong>必须在报名前想清楚</strong>，因为一旦上岸，这条线就定了。
+  </div>
+</section>
+
+<!-- 八 记忆锚点 -->
+<section>
+  <h2>八、记忆锚点（一句话记住全部）</h2>
+
+  <div class="anchor">
+    <div class="t">核心口诀 · 一句话</div>
+    <div class="m">
+      <em>今天报名</em>别犹豫 · <em>十月初五</em>到二四<br>
+      <em>管综两百</em>加英语 · <em>数学逻辑加写作</em><br>
+      <em>逻辑先攻</em>最好赚 · <em>写作套路</em>稳拿分<br>
+      <em>数学只抓基础题</em> · <em>英语阅读是主战场</em><br>
+      <em>过线就够</em>不追高 · <em>掐表做题</em>才活得下去
+    </div>
+  </div>
+
+  <div class="anchor">
+    <div class="t">数字锚点 · 记住这几个数</div>
+    <div class="m">
+      报名 <em>10.15–10.24</em> ｜ 确认 <em>10.26–10.31</em> ｜ 初试 <em>12.19–12.20</em><br>
+      管综 <em>200</em> 分（数学 75 / 逻辑 60 / 写作 65）｜ 英语二 <em>100</em> 分<br>
+      目标 <em>180</em> 分 ｜ 时间 <em>180</em> 分钟 ｜ 作文 <em>1300</em> 字<br>
+      报名电话 <em>027-87992195</em>（黄老师）｜ 报考点 <em>4228</em>（武汉工程大学）｜ 报名费 <em>160</em> 元
+    </div>
+  </div>
+
+  <div class="anchor">
+    <div class="t">每周三问 · 自查节奏</div>
+    <div class="m">
+      ① 这周背够 <em>350</em> 个单词了吗？<br>
+      ② 这周逻辑题正确率 <em>到 60%</em> 了吗？<br>
+      ③ 这周有没有<em>掐着表</em>做一次题？
+    </div>
   </div>
 </section>
 
 <footer>
-  本方案针对湖北工业大学非全日制"计算机技术（085404）"定制：101 政治 + 204 英语二 + 302 数学二 + 836 数据结构与算法。<br>
-  所用教材、习题册为考研通用主流资料，请结合湖工大官方公布的考试范围与参考书目使用；历年真题请通过学院官网、考研社群等正规渠道获取。<br>
-  备考周期按目标 2028 级（2027 年 10 月报名、2027 年 12 月初试）设计，请以当年研招网与学校官方时间安排为准。
+  数据来源：武汉工程大学 2027 年硕士研究生招生简章（研究生院官网，含管理学院 MEM 联系方式）；武汉工程大学管理学院 2026 年非全日制 MEM 招生简章；教育部《2027 年全国硕士研究生招生工作管理规定》；湖北省 2027 年硕士研究生招生考试各报考点报名须知（宜昌市、武汉市洪山区/武昌区/东湖新技术开发区招考办）。<br>
+  <strong>提示：</strong>199 管综与英语二为全国统考科目，大纲与题型以教育部教育考试院当年发布为准；MEM 国家线每年浮动，以官方公布为准；网上确认的具体时间与材料要求以你所选报考点公告为准。本指南为备考规划参考，不构成对录取结果的承诺。
 </footer>
 
 </div>
