@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>四科系统学习方案：路径 · 周期 · 技巧</title>
+<style>
+  :root{
+    --bg:#f6f7f9;--card:#fff;--ink:#1a1d24;--ink-2:#4a5060;--ink-3:#8a92a3;
+    --line:#e6e9ef;--accent:#2f6bff;--accent-soft:#eef3ff;
+    --red:#d64545;--red-soft:#fdeded;--green:#1f9d6b;--green-soft:#e9f7f0;
+    --amber:#c9820a;--amber-soft:#fdf3e2;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    line-height:1.7;font-size:14.5px;}
+  .wrap{max-width:1000px;margin:0 auto;padding:36px 22px 70px;}
+  header.top{background:linear-gradient(135deg,#1f4fd8,#4a7cff);color:#fff;
+    border-radius:16px;padding:30px 30px;margin-bottom:22px;}
+  header.top h1{margin:0 0 8px;font-size:23px;}
+  header.top .sub{opacity:.93;font-size:13.5px;}
+  section{background:var(--card);border:1px solid var(--line);border-radius:14px;
+    padding:24px 26px;margin-bottom:18px;box-shadow:0 1px 3px rgba(20,30,60,.04);}
+  h2{font-size:18px;margin:0 0 16px;padding-left:11px;border-left:4px solid var(--accent);}
+  h3{font-size:15px;margin:18px 0 8px;}
+  h3:first-of-type{margin-top:4px;}
+  p{margin:8px 0;color:var(--ink-2);}
+  ul,ol{margin:8px 0;padding-left:21px;color:var(--ink-2);}
+  li{margin:4px 0;}
+  strong{color:var(--ink);}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px;}
+  th,td{padding:9px 11px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top;}
+  th{background:#f2f4f8;font-weight:600;color:var(--ink);font-size:13px;}
+  td{color:var(--ink-2);}
+  tr:last-child td{border-bottom:none;}
+  .tag{display:inline-block;padding:1px 8px;border-radius:5px;font-size:12px;font-weight:600;}
+  .t-red{background:var(--red-soft);color:var(--red);}
+  .t-green{background:var(--green-soft);color:var(--green);}
+  .t-amber{background:var(--amber-soft);color:var(--amber);}
+  .t-blue{background:var(--accent-soft);color:var(--accent);}
+  .callout{border-radius:9px;padding:12px 16px;margin:14px 0;font-size:13.5px;border-left:4px solid;}
+  .c-warn{background:var(--red-soft);border-color:var(--red);color:#7a2b2b;}
+  .c-tip{background:var(--green-soft);border-color:var(--green);color:#175c40;}
+  .c-info{background:var(--accent-soft);border-color:var(--accent);color:#22458f;}
+  .c-note{background:var(--amber-soft);border-color:var(--amber);color:#7a5208;}
+  /* 四科定位卡 */
+  .subj-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:14px 0;}
+  @media(max-width:800px){.subj-grid{grid-template-columns:repeat(2,1fr);}}
+  @media(max-width:520px){.subj-grid{grid-template-columns:1fr;}}
+  .subj{border-radius:11px;padding:14px 15px;border:1px solid var(--line);background:#fafbfd;}
+  .subj .nm{font-size:14px;font-weight:700;margin-bottom:5px;}
+  .subj .role{font-size:12px;font-weight:600;margin-bottom:8px;display:inline-block;padding:1px 7px;border-radius:5px;}
+  .subj .score{font-size:12px;color:var(--ink-3);margin-bottom:7px;}
+  .subj p{font-size:12.5px;margin:3px 0;}
+  /* 时间轴 */
+  .tl{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0;}
+  @media(max-width:800px){.tl{grid-template-columns:repeat(2,1fr);}}
+  @media(max-width:520px){.tl{grid-template-columns:1fr;}}
+  .tl-col{border:1px solid var(--line);border-radius:11px;overflow:hidden;background:#fafbfd;}
+  .tl-hd{padding:9px 12px;color:#fff;font-size:12.5px;font-weight:700;}
+  .tl-bd{padding:11px 12px;}
+  .tl-bd .ph{font-size:12px;color:var(--ink-3);margin-bottom:7px;}
+  .tl-bd ul{padding-left:17px;margin:0;font-size:12.5px;}
+  .tl-bd li{margin:3px 0;}
+  /* 记忆技巧卡 */
+  .tip-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin:14px 0;}
+  @media(max-width:700px){.tip-grid{grid-template-columns:1fr;}}
+  .tip{border:1px solid var(--line);border-left:4px solid var(--green);border-radius:9px;
+    padding:12px 15px;background:#fafbfd;}
+  .tip h4{margin:0 0 5px;font-size:13.8px;color:var(--ink);}
+  .tip p{font-size:12.8px;margin:3px 0;}
+  /* 时间表 */
+  .sched{border:1px solid var(--line);border-radius:10px;overflow:hidden;margin:12px 0;}
+  .sched-row{display:flex;border-bottom:1px solid var(--line);}
+  .sched-row:last-child{border-bottom:none;}
+  .sched-row .t{flex:0 0 118px;background:#f4f6fa;padding:8px 11px;font-size:12.8px;font-weight:600;color:var(--ink);}
+  .sched-row .c{flex:1;padding:8px 11px;font-size:12.8px;color:var(--ink-2);}
+  .sched-row.wk .t{background:#eef3ff;color:var(--accent);}
+  footer{text-align:center;color:var(--ink-3);font-size:12px;margin-top:22px;line-height:1.9;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <h1>四科系统学习方案：路径 · 周期 · 记忆技巧</h1>
+  <div class="sub">101 政治 · 204 英语二 · 302 数学二 · 836 数据结构与算法 ｜ 在职备考 · 每天 1.5–2 小时 · 目标 2028 级</div>
+</header>
+
+<!-- 一句话战略 -->
+<section>
+  <h2>一、先记住这句话</h2>
+  <div class="callout c-info" style="font-size:15px;">
+    <strong>数学（二）决定你上不上岸，836 决定你能不能上岸。</strong><br>
+    <span style="font-size:13.5px;">数学二是四科中唯一"投入大、周期长、可能失败"的科目，也是所有在职考生失败的主因；836 只考一门、自命题、竞争小，是你最大的机会。<strong>所以：把 50% 的时间给数学，30% 给 836，20% 给英语和政治。</strong></span>
+  </div>
+
+  <h3>四科定位（不要平均用力）</h3>
+  <div class="subj-grid">
+    <div class="subj">
+      <div class="nm">302 数学（二）</div>
+      <div class="role" style="background:var(--red-soft);color:var(--red);">命门 · 主攻</div>
+      <div class="score">150 分 · 最早启动</div>
+      <p>高数 + 线代（不含概率）</p>
+      <p><strong>需要 6–8 个月</strong>，现在就开始</p>
+      <p>失败风险最高的一科</p>
+    </div>
+    <div class="subj">
+      <div class="nm">836 数据结构与算法</div>
+      <div class="role" style="background:var(--green-soft);color:var(--green);">机会 · 第二主攻</div>
+      <div class="score">150 分 · 自命题</div>
+      <p>只考 1 门 + 严蔚敏教材</p>
+      <p><strong>真题价值极高</strong>，务必拿到</p>
+      <p>投入产出比最高的一科</p>
+    </div>
+    <div class="subj">
+      <div class="nm">204 英语（二）</div>
+      <div class="role" style="background:var(--accent-soft);color:var(--accent);">细水长流</div>
+      <div class="score">100 分 · 每天必碰</div>
+      <p>单词是地基，阅读是大头</p>
+      <p><strong>不间断即可</strong>，不占大块时间</p>
+      <p>靠积累，不靠冲刺</p>
+    </div>
+    <div class="subj">
+      <div class="nm">101 政治</div>
+      <div class="role" style="background:var(--amber-soft);color:var(--amber);">可晚启动</div>
+      <div class="score">100 分 · 8 月启动</div>
+      <p>选择题靠刷，大题靠背</p>
+      <p><strong>9 月启动完全来得及</strong></p>
+      <p>性价比高，不必早碰</p>
+    </div>
+  </div>
+</section>
+
+<!-- 时间账 -->
+<section>
+  <h2>二、你的时间账（先算清楚，别高估自己）</h2>
+  <table>
+    <tr><th>时间来源</th><th>每天/每周</th><th>用途</th></tr>
+    <tr><td>工作日晚上整块</td><td>1–1.5 小时/天</td><td><strong>数学 / 836</strong>（深度思考必须整块）</td></tr>
+    <tr><td>通勤 + 午休 + 睡前</td><td>0.5 小时/天</td><td>背单词、政治视频、刷选择题</td></tr>
+    <tr><td>周末</td><td>4–6 小时/周</td><td>数学大块 + 836 刷题</td></tr>
+    <tr><td colspan="2"><strong>月度合计</strong></td><td><strong>约 55–65 小时</strong></td></tr>
+    <tr><td colspan="2"><strong>14 个月合计（2026.10–2027.12）</strong></td><td><strong>约 750–900 小时</strong>（够用，但不富余）</td></tr>
+  </table>
+  <div class="callout c-note">
+    <strong>结论：时间是够的，但容不得浪费。</strong>最怕的不是"时间少"，而是<strong>学了就忘、反复重头开始</strong>——那等于白干。这也是下一节"记忆技巧"为什么比时间表更重要的原因。
+  </div>
+</section>
+
+<!-- 12个月时间轴 -->
+<section>
+  <h2>三、14 个月时间轴（四个阶段，别跳级）</h2>
+  <div class="tl">
+    <div class="tl-col">
+      <div class="tl-hd" style="background:#2f6bff;">阶段一 · 筑基</div>
+      <div class="tl-bd">
+        <div class="ph">2026.10 – 2027.02（5 个月）</div>
+        <ul>
+          <li><strong>数学：</strong>高数基础过完<br>（教材 + 基础课视频 + 1800 基础篇）</li>
+          <li><strong>英语：</strong>单词第一轮 + 长难句</li>
+          <li><strong>836：</strong>先不碰（数学优先）</li>
+          <li><strong>政治：</strong>不启动</li>
+          <li>🎯 里程碑：高数基础题能独立做 60%</li>
+        </ul>
+      </div>
+    </div>
+    <div class="tl-col">
+      <div class="tl-hd" style="background:#4a7cff;">阶段二 · 强化</div>
+      <div class="tl-bd">
+        <div class="ph">2027.03 – 2027.08（6 个月）</div>
+        <ul>
+          <li><strong>数学：</strong>线代 + 高数强化<br>（660 + 880 题）</li>
+          <li><strong>836：</strong>教材过完 + 王道书 + 开始手写代码</li>
+          <li><strong>英语：</strong>真题阅读（2010–2020）</li>
+          <li><strong>政治：</strong>8 月启动（强化班 + 1000 题）</li>
+          <li>🎯 里程碑：数学强化题 70% · 836 代码能默写</li>
+        </ul>
+      </div>
+    </div>
+    <div class="tl-col">
+      <div class="tl-hd" style="background:#7c9cff;">阶段三 · 真题</div>
+      <div class="tl-bd">
+        <div class="ph">2027.09 – 2027.11（3 个月）</div>
+        <ul>
+          <li><strong>数学：</strong>套卷真题（2000–2027）错题二刷</li>
+          <li><strong>836：</strong><strong>湖工大历年真题反复刷</strong>（最重要）</li>
+          <li><strong>英语：</strong>真题二刷 + 作文准备</li>
+          <li><strong>政治：</strong>肖八选择题 + 背诵</li>
+          <li>🎯 里程碑：数学真题稳定 100+</li>
+        </ul>
+      </div>
+    </div>
+    <div class="tl-col">
+      <div class="tl-hd" style="background:#a8bcff;">阶段四 · 冲刺</div>
+      <div class="tl-bd">
+        <div class="ph">2027.12（1 个月）</div>
+        <ul>
+          <li><strong>数学：</strong>模拟卷（李林 6+4）</li>
+          <li><strong>836：</strong>错题 + 代码默写</li>
+          <li><strong>英语：</strong>作文模板固化</li>
+          <li><strong>政治：</strong><strong>肖四全背</strong></li>
+          <li>🎯 里程碑：进入考场，答完</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="callout c-warn">
+    <strong>最容易犯的三个错：</strong>① 一开始就四科齐上（会崩，政治务必晚启动）；② 数学基础没打牢就冲强化（必然返工）；③ 把 836 的真题留到最后（<strong>自命题真题是最后阶段最该反复看的东西，不是考前一瞥</strong>）。
+  </div>
+</section>
+
+<!-- 分科方案 -->
+<section>
+  <h2>四、分科方案（含资源与周期）</h2>
+
+  <h3>1. 302 数学（二）—— 150 分，命门</h3>
+  <table>
+    <tr><th>阶段</th><th>资料</th><th>周期</th><th>完成标准</th></tr>
+    <tr><td>基础</td><td>同济《高等数学》+ 基础课视频（武忠祥/张宇）+《1800 题》基础篇</td><td>3 个月</td><td>基础篇正确率 60%+</td></tr>
+    <tr><td>强化</td><td>同济《线性代数》+ 强化课 +《660 题》+《880 题》</td><td>3 个月</td><td>强化题正确率 70%+</td></tr>
+    <tr><td>真题</td><td>历年真题套卷（近 15 年优先）</td><td>2 个月</td><td>严格计时，稳定 100+</td></tr>
+    <tr><td>冲刺</td><td>李林《6 套卷》+《4 套卷》</td><td>1 个月</td><td>模拟分不低于真题水平</td></tr>
+  </table>
+  <div class="callout c-tip">
+    <strong>数学二的关键提醒：</strong>① <strong>它是"算"出来的，不是"看"出来的</strong>——看懂≠会做，必须动笔算完整过程；② 错题本<strong>只记"错在哪一步"</strong>，不要抄题（抄题=浪费时间）；③ 计算错误也算错，不要归因于"粗心"——那是练得不够。
+  </div>
+
+  <h3>2. 836 数据结构与算法 —— 150 分，机会</h3>
+  <table>
+    <tr><th>阶段</th><th>资料</th><th>周期</th><th>完成标准</th></tr>
+    <tr><td>基础</td><td>严蔚敏《数据结构（C 语言版）》+ 王道《数据结构》考研辅导书</td><td>3 个月</td><td>各章课后题能独立做</td></tr>
+    <tr><td>代码</td><td>王道书代码 + 王道习题</td><td>2 个月</td><td><strong>核心算法能默写</strong>（链表、树、图、排序、查找）</td></tr>
+    <tr><td>真题</td><td><strong>湖工大历年真题（最重要）</strong></td><td>2 个月</td><td>近 5 年真题刷 2 遍以上</td></tr>
+    <tr><td>冲刺</td><td>错题 + 代码默写 + 算法复杂度分析</td><td>1 个月</td><td>常见算法 3 分钟内手写</td></tr>
+  </table>
+  <div class="callout c-tip">
+    <strong>836 的三个关键：</strong>① <strong>务必搞到历年真题</strong>——自命题院校的出题风格只有真题能告诉你（找学长、考研社群、真题论坛）；② <strong>代码必须手写</strong>，不能只看；③ 时间复杂度/空间复杂度分析是高频考点，别只背定义。
+  </div>
+
+  <h3>3. 204 英语（二）—— 100 分，细水长流</h3>
+  <table>
+    <tr><th>阶段</th><th>动作</th><th>周期</th><th>说明</th></tr>
+    <tr><td>全程</td><td>单词（APP：墨墨/不背单词/扇贝）</td><td>每天</td><td><strong>5500 词至少过 3 轮</strong>，利用碎片时间</td></tr>
+    <tr><td>基础</td><td>长难句（田静/唐迟）</td><td>2 个月</td><td>为阅读打底</td></tr>
+    <tr><td>强化</td><td>真题阅读 2010–2020（张剑黄皮书）</td><td>4 个月</td><td><strong>每篇精读</strong>：生词 + 长难句 + 错因</td></tr>
+    <tr><td>冲刺</td><td>作文（石雷鹏/潘赟）+ 真题二刷</td><td>2 个月</td><td>11 月起准备，形成自己的模板</td></tr>
+  </table>
+  <div class="callout c-tip">
+    <strong>英语二提醒：</strong>① <strong>单词一天都不能断</strong>——断了三天，前面全白干；② 阅读只做真题，别做模拟题；③ 新题型和翻译 10 月启动即可，不必早。
+  </div>
+
+  <h3>4. 101 政治 —— 100 分，可晚启动</h3>
+  <table>
+    <tr><th>阶段</th><th>资料</th><th>周期</th><th>说明</th></tr>
+    <tr><td>启动</td><td>徐涛强化班视频 + 肖秀荣《1000 题》</td><td>8–9 月（1 个月）</td><td>只做选择题，每天 30–40 分钟</td></tr>
+    <tr><td>刷题</td><td>《1000 题》二刷 + 肖八</td><td>10–11 月</td><td><strong>肖八只做选择</strong>，搞懂每个选项</td></tr>
+    <tr><td>背诵</td><td>肖秀荣《肖四》</td><td>12 月</td><td><strong>大题全背</strong>，这是性价比最高的一块</td></tr>
+  </table>
+  <div class="callout c-tip">
+    <strong>政治提醒：</strong>① <strong>别早启动</strong>——7 月前碰政治等于浪费生命；② 选择题靠"刷 + 理解"，大题靠肖四；③ 政治是四科中最不可能让你考不上的科目，不要为它焦虑。
+  </div>
+</section>
+
+<!-- 记忆技巧 -->
+<section>
+  <h2>五、记忆技巧（在职备考的核心竞争力）</h2>
+  <p style="margin-bottom:12px;">在职最大的敌人不是"没时间"，是<strong>"学了就忘"</strong>。下面 7 条按重要性排序，前三条就能解决你 80% 的问题。</p>
+  <div class="tip-grid">
+    <div class="tip">
+      <h4>① 主动回忆 &gt; 重读 <span class="tag t-red">最重要</span></h4>
+      <p>看完一节，<strong>合上书默写要点</strong>，再翻开核对。</p>
+      <p>重读三遍的记忆效果，远不如主动回想一遍。<strong>感觉"想不起来"的那个时刻，才是记忆真正在形成的时刻。</strong></p>
+    </div>
+    <div class="tip">
+      <h4>② 间隔复习节点</h4>
+      <p>学完后的第 <strong>当天晚 → 3 天 → 7 天 → 15 天</strong>，各复习一次。</p>
+      <p>每天前 10 分钟只做一件事：回顾昨天、3 天前、7 天前标记的<strong>模糊点</strong>。</p>
+    </div>
+    <div class="tip">
+      <h4>③ 三色标记法</h4>
+      <p>🟢 已掌握 ｜ 🟡 模糊 ｜ 🔴 不会</p>
+      <p><strong>优先消灭 🔴，其次 🟡，🟢 不看。</strong>复习时间永远花在"不会的"上，而不是"已经会的"上（后者只是心理安慰）。</p>
+    </div>
+    <div class="tip">
+      <h4>④ 一页纸法则</h4>
+      <p>每科每周做一张 A4「知识地图」：只写标题、关键词、公式。</p>
+      <p>后期只看这十几张纸，不翻厚书。<strong>能压缩成一页纸，才说明你真懂了。</strong></p>
+    </div>
+    <div class="tip">
+      <h4>⑤ 费曼输出</h4>
+      <p>把一个知识点<strong>用一句大白话讲出来</strong>。</p>
+      <p>讲不清的地方，就是没懂的地方。讲给自己听、讲给同事听都行。</p>
+    </div>
+    <div class="tip">
+      <h4>⑥ 错题只记"错在哪一步"</h4>
+      <p>数学/836 错题本<strong>不要抄题</strong>，只写：错在哪个环节、正确思路第一步是什么。</p>
+      <p>考前只看这个本子，比翻原书高效 10 倍。</p>
+    </div>
+    <div class="tip">
+      <h4>⑦ 利用两个记忆窗口</h4>
+      <p><strong>睡前 20 分钟</strong>回忆当天学的 3 个要点；<strong>晨起 10 分钟</strong>再回想一次。</p>
+      <p>这两个时段记忆效率最高，别用来刷手机。</p>
+    </div>
+  </div>
+</section>
+
+<!-- 每日时间表 -->
+<section>
+  <h2>六、每日/每周时间表模板（可直接照做）</h2>
+  <div class="sched">
+    <div class="sched-row"><div class="t">06:50–07:20</div><div class="c">通勤：单词 APP 50 个 <span class="tag t-blue">英语</span></div></div>
+    <div class="sched-row"><div class="t">12:30–13:00</div><div class="c">午休：政治视频 1 节 / 数学选择题 10 道 <span class="tag t-amber">政治/数学</span></div></div>
+    <div class="sched-row"><div class="t">20:00–21:30</div><div class="c"><strong>主时段</strong>：周一/二/四/六 数学 ｜ 周三/五/日 836 <span class="tag t-red">数学/836</span></div></div>
+    <div class="sched-row"><div class="t">21:30–21:45</div><div class="c">复盘：默写当日 3 个要点（用"一页纸法则"） <span class="tag t-green">记忆</span></div></div>
+    <div class="sched-row wk"><div class="t">周末上午</div><div class="c">4 小时：数学大块攻坚 / 真题套卷（严格计时）</div></div>
+    <div class="sched-row wk"><div class="t">周末下午</div><div class="c">2 小时：836 刷题 + 代码手写练习</div></div>
+  </div>
+  <div class="callout c-info">
+    <strong>原则：</strong>主时段（晚上 90 分钟）必须整块、不被打断、不刷手机。<strong>碎片时间只做"轻任务"</strong>（单词、政治、选择题）。<br>
+    如果某天加班到很晚，<strong>只完成"最低线"：睡前 20 分钟回顾当日要点</strong>——保持连续性，比单日强度重要得多。
+  </div>
+</section>
+
+<!-- 防崩 -->
+<section>
+  <h2>七、防崩指南与止损标准</h2>
+  <table>
+    <tr><th>常见坑</th><th>怎么办</th></tr>
+    <tr><td>一开始就每天学 3 小时</td><td><strong>必崩。</strong>从每天 1 小时开始，能稳定一个月再加</td></tr>
+    <tr><td>某天完不成就自责、放弃</td><td>设<strong>"最低完成线"</strong>：每天至少 30 分钟。断了可以补，别归零</td></tr>
+    <tr><td>数学看不懂就想跳过</td><td>数学<strong>不能跳</strong>。看不懂就降难度（换基础课），跳过=给后期埋雷</td></tr>
+    <tr><td>只学数学，忽略 836</td><td>836 是 150 分且竞争小，<strong>性价比比数学高</strong>，别让它拖到 9 月</td></tr>
+    <tr><td>买一堆资料看不完</td><td><strong>每科只留一套主资料 + 真题。</strong>资料越多越焦虑</td></tr>
+  </table>
+  <div class="callout c-warn">
+    <strong>止损标准（提前定好，到点就执行）：</strong><br>
+    到 <strong>2027 年 6 月</strong>，如果数学二基础题正确率仍<strong>低于 50%</strong>，说明数学对你门槛过高。<br>
+    → <strong>届时果断转向管理类联考路线</strong>（如湖工大 MEM：199 管理类综合 + 英语二，<strong>不考数学二、不考专业课</strong>），上岸概率大幅提高。<br>
+    <span style="font-size:13px;">这不是失败，是<strong>用 8 个月时间换一个更理性的判断</strong>。提前知道止损点，才不会在错误的路上一路走到黑。</span>
+  </div>
+</section>
+
+<!-- 起手 -->
+<section>
+  <h2>八、本周就开始的 4 件事</h2>
+  <ol>
+    <li><strong>下载单词 APP，今天就背 50 个</strong>（英语是唯一可以立刻开始的科目）。</li>
+    <li><strong>找到数学基础课视频，看 2 节</strong>（武忠祥或张宇，选一个，别比较，跟到底）。</li>
+    <li><strong>去计算机学院官网翻近 3 年拟录取名单</strong>，自己核实一遍数据。</li>
+    <li><strong>把上面的每日时间表抄一份贴在桌上</strong>——贴在眼前的东西，完成率高一倍。</li>
+  </ol>
+  <div class="callout c-tip">
+    <strong>最后一句：</strong>这份方案不复杂，<strong>难的是连续执行 14 个月</strong>。考研这件事上，坚持到底的人就已经赢过了大多数人——因为报名的人里，有相当一部分连考场都没进。
+  </div>
+</section>
+
+<footer>
+  本方案针对湖北工业大学非全日制"计算机技术（085404）"定制：101 政治 + 204 英语二 + 302 数学二 + 836 数据结构与算法。<br>
+  所用教材、习题册为考研通用主流资料，请结合湖工大官方公布的考试范围与参考书目使用；历年真题请通过学院官网、考研社群等正规渠道获取。<br>
+  备考周期按目标 2028 级（2027 年 10 月报名、2027 年 12 月初试）设计，请以当年研招网与学校官方时间安排为准。
+</footer>
+
+</div>
+</body>
+</html>
