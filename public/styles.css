@@ -50,20 +50,22 @@
   --md-tag: #6b5f44;
   --md-search-bg: rgba(200, 149, 108, 0.16);
   --md-search-text: #2a2520;
-  /* syntax highlight tokens - warm neutral palette */
+  /* syntax highlight tokens - warm neutral palette
+     （2026-11 对比度修正：原 string/number/function/property/comment 系
+     在浅底上仅 2.8~4.4:1，按 WCAG AA 加深一档，色相不变） */
   --syn-keyword: #7a5c3e;
-  --syn-string: #6b7856;
-  --syn-comment: #9a8f82;
-  --syn-number: #b08850;
-  --syn-function: #a07850;
-  --syn-title: #a07850;
+  --syn-string: #5d6a4a;
+  --syn-comment: #857a6d;
+  --syn-number: #8a5f26;
+  --syn-function: #96613a;
+  --syn-title: #96613a;
   --syn-type: #7a6856;
-  --syn-builtin: #6b5a44;
+  --syn-builtin: #5f4f3a;
   --syn-variable: #3d3830;
   --syn-operator: #5a5048;
   --syn-tag: #7a5c3e;
-  --syn-attr: #8a7a68;
-  --syn-meta: #9a8f82;
+  --syn-attr: #6e6252;
+  --syn-meta: #857a6d;
   /* callout 主题色：默认暖色调中性主题 */
   --callout-note: #4f8cf7;
   --callout-info: #3b82f6;
@@ -262,19 +264,19 @@ body[data-theme="glow"] {
   --accent-wash: color-mix(in srgb, var(--accent) 6%, transparent);
   --shadow-sm: 0 1px 3px rgba(45, 55, 41, 0.06), 0 8px 20px rgba(45, 55, 41, 0.05);
   --shadow-md: 0 20px 50px rgba(45, 55, 41, 0.10);
-  --syn-keyword: #6e8d3b;
-  --syn-string: #6b7856;
-  --syn-comment: #8a9580;
-  --syn-number: #b08850;
-  --syn-function: #5c7a2c;
-  --syn-title: #5c7a2c;
+  --syn-keyword: #527126;
+  --syn-string: #586545;
+  --syn-comment: #75815f;
+  --syn-number: #845a22;
+  --syn-function: #557427;
+  --syn-title: #557427;
   --syn-type: #7a6856;
-  --syn-builtin: #6b5a44;
+  --syn-builtin: #5f4f3a;
   --syn-variable: #2d3729;
   --syn-operator: #4a5644;
-  --syn-tag: #6e8d3b;
-  --syn-attr: #8a9580;
-  --syn-meta: #8a9580;
+  --syn-tag: #527126;
+  --syn-attr: #617050;
+  --syn-meta: #75815f;
   /* callout 主题色：护眼米黄/米色背景下的自然配色 */
   --callout-note: #3b82f6;
   --callout-info: #2563eb;
@@ -435,6 +437,25 @@ body[data-theme="glow"] *::-webkit-scrollbar-thumb {
 
 body[data-theme="glow"] *::-webkit-scrollbar-track {
   background: transparent;
+}
+
+/* 图片主题：预览侧代码高亮（--syn-*）此前未定义 → 回落浅色值。
+   默认（浅背景图/深色文字）沿用 :root 深色系即可；这里补深背景图变体，
+   与 dark 主题同源，避免深底上变量/函数被背景吞掉。 */
+body[data-theme="image"][data-image-text="light"] {
+  --syn-keyword: #89a5c0;
+  --syn-string: #b8a48c;
+  --syn-comment: #7a8a78;
+  --syn-number: #a8b89a;
+  --syn-function: #c9b87a;
+  --syn-title: #c9b87a;
+  --syn-type: #7ab89a;
+  --syn-builtin: #89b0c0;
+  --syn-variable: #b0b8a8;
+  --syn-operator: #b5b0a5;
+  --syn-tag: #89a5c0;
+  --syn-attr: #a8b5a5;
+  --syn-meta: #7a8a78;
 }
 
 /* ================= Layer 2 · 兼容别名层 =================
@@ -8394,16 +8415,26 @@ select.heading-select {
   --cm-link: #6b5f44;
   --cm-url: #7a6b54;
   --cm-keyword: #7a5c3e;
-  --cm-string: #6b7856;
-  --cm-number: #b08850;
+  --cm-string: #5d6a4a;
+  --cm-number: #8a5f26;
   --cm-type: #7a6856;
-  --cm-property: #8a7a68;
+  --cm-property: #6e6252;
   --cm-operator: #5a5048;
-  --cm-comment: #9a8f82;
+  --cm-comment: #857a6d;
   --cm-variable: #3d3830;
-  --cm-function: #a07850;
+  --cm-function: #96613a;
   --cm-tag: #7a5c3e;
-  --cm-attr: #8a7a68;
+  --cm-attr: #6e6252;
+  /* 补全：此前缺失的 token 落到正文继承色，视觉上无区分 */
+  --cm-bool: #9a5f52;
+  --cm-punctuation: #6a655c;
+  --cm-invalid: #a84f4f;
+  --cm-meta: #8a8074;
+  --cm-heading: #2a2520;
+  --cm-heading-strong: #1f1b17;
+  --cm-emphasis: #5a5048;
+  --cm-strong: #2a2520;
+  --cm-code: #5a4f44;
   background-color: var(--bg);
 }
 body[data-theme="dark"] #editor .cm-editor {
@@ -8424,42 +8455,69 @@ body[data-theme="dark"] #editor .cm-editor {
   --cm-operator: #b5b0a5;
   --cm-punctuation: #b0aca0;
   --cm-invalid: #c9a4a4;
+  /* 关键修复：此前 dark 未定义 variable/function/tag/attr/meta，
+     回落到 :root 浅色值（variable #3d3830 近黑）→ 深底上被背景吞掉。
+     现按暗色板补齐：变量=暖浅灰、函数=暖金橙，与 keyword/string/number 区分。 */
+  --cm-variable: #c5c0b2;
+  --cm-function: #d4a763;
+  --cm-tag: #89a5c0;
+  --cm-attr: #a8b5a5;
+  --cm-meta: #8a9a88;
 }
 body[data-theme="eye"] #editor .cm-editor {
-  /* 编辑器语法高亮：暖沙色调，低饱和墨色 */
+  /* 编辑器语法高亮：暖沙色调，低饱和墨色（2026-11 按对比度加深一档） */
   --cm-link: #6c5e3c;
   --cm-url: #7a6b54;
   --cm-keyword: #7a5c3e;
-  --cm-string: #6b7856;
-  --cm-number: #b08850;
+  --cm-string: #586545;
+  --cm-number: #845a22;
   --cm-type: #7a6856;
-  --cm-property: #8a7a68;
+  --cm-property: #69604e;
   --cm-operator: #5a5048;
-  --cm-comment: #9a8f82;
+  --cm-comment: #7f7468;
   --cm-variable: #3a3530;
-  --cm-function: #a07850;
+  --cm-function: #8f5c34;
   --cm-tag: #7a5c3e;
-  --cm-attr: #8a7a68;
+  --cm-attr: #69604e;
+  --cm-bool: #8f5649;
+  --cm-punctuation: #6a655c;
+  --cm-invalid: #a84f4f;
+  --cm-meta: #8a8074;
+  --cm-heading: #2d3729;
+  --cm-heading-strong: #232b24;
+  --cm-emphasis: #4a5644;
+  --cm-strong: #2d3729;
+  --cm-code: #4a5644;
   background-color: var(--bg);
 }
 body[data-theme="glow"] #editor .cm-editor {
-  /* 编辑器语法高亮：自然绿色调 */
+  /* 编辑器语法高亮：自然绿色调（2026-11 按对比度加深一档） */
   --cm-link: #6e8d3b;
   --cm-url: #88a956;
-  --cm-keyword: #6e8d3b;
-  --cm-string: #6b7856;
-  --cm-number: #b08850;
+  --cm-keyword: #527126;
+  --cm-string: #586545;
+  --cm-number: #845a22;
   --cm-type: #7a6856;
-  --cm-property: #8a9580;
+  --cm-property: #617050;
   --cm-operator: #4a5644;
-  --cm-comment: #8a9580;
+  --cm-comment: #75815f;
   --cm-variable: #2d3729;
-  --cm-function: #5c7a2c;
-  --cm-tag: #6e8d3b;
-  --cm-attr: #8a9580;
+  --cm-function: #557427;
+  --cm-tag: #527126;
+  --cm-attr: #617050;
+  --cm-bool: #8f5649;
+  --cm-punctuation: #5a6450;
+  --cm-invalid: #a84f4f;
+  --cm-meta: #7a8568;
+  --cm-heading: #2d3729;
+  --cm-heading-strong: #232b24;
+  --cm-emphasis: #4a5644;
+  --cm-strong: #2d3729;
+  --cm-code: #4a5644;
   background-color: var(--bg);
 }
 body[data-theme="image"] #editor .cm-editor {
+  /* 默认面向浅色背景图（data-image-text="dark"，深色文字）：全套深色 token */
   --cm-link: #1d4ed8;
   --cm-url: #4338ca;
   --cm-keyword: #6d28d9;
@@ -8468,7 +8526,46 @@ body[data-theme="image"] #editor .cm-editor {
   --cm-type: #0369a1;
   --cm-property: #0f766e;
   --cm-comment: #64748b;
+  --cm-variable: #1f2937;
+  --cm-function: #a34a07;
+  --cm-tag: #6d28d9;
+  --cm-attr: #0f766e;
+  --cm-bool: #b91c1c;
+  --cm-punctuation: #475569;
+  --cm-invalid: #c21c1c;
+  --cm-meta: #64748b;
+  --cm-heading: #1e293b;
+  --cm-heading-strong: #0f172a;
+  --cm-emphasis: #334155;
+  --cm-strong: #0f172a;
+  --cm-code: #334155;
   background-color: transparent;
+}
+/* 深色背景图（data-image-text="light"，浅色文字）：整套装暗色板，
+   与 dark 主题同源，避免深底上浅色值缺省回落被背景吞掉。 */
+body[data-theme="image"][data-image-text="light"] #editor .cm-editor {
+  --cm-heading: #96c9b0;
+  --cm-heading-strong: #b0d5c0;
+  --cm-link: #89b0c0;
+  --cm-url: #a5b0b8;
+  --cm-emphasis: #d8d3c6;
+  --cm-strong: #e2ddd0;
+  --cm-code: #d0cbc0;
+  --cm-comment: #8a9a88;
+  --cm-keyword: #a5b5cc;
+  --cm-string: #b8c9a8;
+  --cm-number: #d9c98b;
+  --cm-bool: #c9a4a4;
+  --cm-type: #96c9b0;
+  --cm-property: #a5c0b5;
+  --cm-operator: #b5b0a5;
+  --cm-punctuation: #b0aca0;
+  --cm-invalid: #c9a4a4;
+  --cm-variable: #c5c0b2;
+  --cm-function: #d4a763;
+  --cm-tag: #89a5c0;
+  --cm-attr: #a8b5a5;
+  --cm-meta: #8a9a88;
 }
 
 .ai-drawer {

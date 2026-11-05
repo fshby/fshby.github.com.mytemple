@@ -1,4 +1,4 @@
-import { createMarkdownEditor } from "/editor-core.js?v=20261104-code-8";
+import { createMarkdownEditor } from "/editor-core.js?v=20261105-syn-10";
 import { getPaperBackgroundUrl } from "./modules/paper-texture.js";
 import { escapeHtml, displayName, displayRelativePath, splitPathRef, joinPathRef, parentPathRef, compactName, splitWorkspaceRef, plainText, headingId } from "./modules/path-utils.js";
 import { extractOutline, addCnEnSpaces } from "./modules/editor-utils.js";
@@ -7,6 +7,7 @@ import { highlightCode } from "./modules/preview-utils.js";
 import { openDrawEditor } from "./modules/draw-editor.js";
 import { createScreenshotEditor } from "./modules/screenshot-editor.js";
 import { initCloudSync } from "./modules/cloud-sync.js";
+import { normalizeColorsByTheme, withThemeColor, withoutTheme } from "./modules/color-themes.js";
 
 // ── 全局错误处理器：捕获模块顶层抛出的未处理异常，输出到 console 便于诊断 ──
 window.addEventListener("error", (e) => {
@@ -42,7 +43,7 @@ const LARGE_PREVIEW_DELAY = 700;
 const CHUNKED_RENDER_BYTES = 500 * 1024;
 const CHUNK_RENDER_SLICE_BYTES = 150 * 1024;
 const GRAPH_WORKER_URL = "/graph-worker.js?v=20260810-graph-1";
-const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20261104-code-8";
+const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20261105-syn-10";
 // Markdown 渲染缓存版本戳：解析器或 CSS 规则升级时递增，确保旧缓存不被复用。
 // 2026-08-29 v1.8.102：安装包 resources 包含 public/ 前端静态文件、端口回滚；修正其他电脑安装后 404 白屏。
 const MARKDOWN_RENDER_VERSION = "20260829-v18102-install-static-bundle-port-scan";
@@ -472,6 +473,7 @@ const els = {
   hlColorOperator: document.querySelector("#hlColorOperator"),
   hlColorMeta: document.querySelector("#hlColorMeta"),
   resetCodeHighlightBtn: document.querySelector("#resetCodeHighlightBtn"),
+  resetMdColorBtn: document.querySelector("#resetMdColorBtn"),
   defaultWorkspaceChoices: document.querySelector("#defaultWorkspaceChoices"),
   screenshotSaveChoices: document.querySelector("#screenshotSaveChoices"),
   pdfShowDate: document.querySelector("#pdfShowDate"),
@@ -1133,16 +1135,31 @@ function showSavedAsToast({ path, formatName = "文档", extraActions = [] }) {
 function loadSettings() {
   const savedFontSize = localStorage.getItem("docFontSize");
   const savedContentFontSize = localStorage.getItem("docContentFontSize");
-  let markdownColors = {};
-  try { markdownColors = JSON.parse(localStorage.getItem("markdownColors") || "{}"); } catch (_) {}
+  const theme = ["light","dark","eye","glow","image"].includes(localStorage.getItem("docTheme")) ? localStorage.getItem("docTheme") : "dark";
+  // 自定义高亮颜色按主题分组存储（旧扁平结构读取时迁移到当前主题名下，
+  // 并回写 localStorage 让迁移持久化）。注意：codeHighlightColors 此前
+  // loadSettings 未读回 → 重启后自定义代码高亮色丢失（既有 bug）。
+  let markdownColorsRaw = {};
+  let codeHighlightColorsRaw = {};
+  try { markdownColorsRaw = JSON.parse(localStorage.getItem("markdownColors") || "{}"); } catch (_) {}
+  try { codeHighlightColorsRaw = JSON.parse(localStorage.getItem("codeHighlightColors") || "{}"); } catch (_) {}
+  const markdownColors = normalizeColorsByTheme(markdownColorsRaw, theme);
+  const codeHighlightColors = normalizeColorsByTheme(codeHighlightColorsRaw, theme);
+  if (Object.keys(markdownColorsRaw).length && JSON.stringify(markdownColors) !== JSON.stringify(markdownColorsRaw)) {
+    localStorage.setItem("markdownColors", JSON.stringify(markdownColors));
+  }
+  if (Object.keys(codeHighlightColorsRaw).length && JSON.stringify(codeHighlightColors) !== JSON.stringify(codeHighlightColorsRaw)) {
+    localStorage.setItem("codeHighlightColors", JSON.stringify(codeHighlightColors));
+  }
   return {
     // 默认暗色主题；用户调整后保存于 docTheme，重启自动恢复用户习惯。
-    theme: ["light","dark","eye","glow","image"].includes(localStorage.getItem("docTheme")) ? localStorage.getItem("docTheme") : "dark",
+    theme,
     bg: localStorage.getItem("docBgImage") || "",
     fontSize: Number(savedFontSize || computeOptimalFontSize()),
     contentFontSize: Number(savedContentFontSize || computeOptimalContentFontSize()),
     fontFamily: localStorage.getItem("docFontFamily") || els.globalFontFamily.value,
-    markdownColors,
+    markdownColors: normalizeColorsByTheme(markdownColorsRaw, theme),
+    codeHighlightColors: normalizeColorsByTheme(codeHighlightColorsRaw, theme),
   };
 }
 
@@ -1302,8 +1319,11 @@ function applySettings(settings = loadSettings()) {
     table: "--md-table-accent",
     tag: "--md-tag",
   };
+  // 自定义颜色按主题记忆：只应用当前主题那一套；该主题未自定义时移除内联
+  // 覆盖，回落主题默认色（切换主题后天然跟随主题兼容，不再全局一套）。
+  const mdThemeColors = settings.markdownColors?.[settings.theme] || {};
   Object.entries(markdownColorVars).forEach(([key, variable]) => {
-    const value = settings.markdownColors?.[key];
+    const value = mdThemeColors[key];
     if (/^#[0-9a-f]{6}$/i.test(String(value || ""))) document.documentElement.style.setProperty(variable, value);
     else document.documentElement.style.removeProperty(variable);
   });
@@ -1322,8 +1342,9 @@ function applySettings(settings = loadSettings()) {
     operator: "--syn-operator",
     meta: "--syn-meta",
   };
+  const synThemeColors = settings.codeHighlightColors?.[settings.theme] || {};
   Object.entries(codeHighlightVars).forEach(([key, variable]) => {
-    const value = settings.codeHighlightColors?.[key];
+    const value = synThemeColors[key];
     if (/^#[0-9a-f]{6}$/i.test(String(value || ""))) document.documentElement.style.setProperty(variable, value);
     else document.documentElement.style.removeProperty(variable);
   });
@@ -1343,7 +1364,7 @@ function applySettings(settings = loadSettings()) {
     tag: els.mdColorTag,
   };
   Object.entries(colorInputs).forEach(([key, input]) => {
-    if (input) input.value = settings.markdownColors?.[key] || getComputedStyle(document.documentElement).getPropertyValue(markdownColorVars[key]).trim() || input.value;
+    if (input) input.value = mdThemeColors[key] || getComputedStyle(document.documentElement).getPropertyValue(markdownColorVars[key]).trim() || input.value;
   });
   // 代码语法颜色输入框回填
   const hlColorInputs = {
@@ -1362,7 +1383,7 @@ function applySettings(settings = loadSettings()) {
   };
   Object.entries(hlColorInputs).forEach(([key, input]) => {
     if (input) {
-      const saved = settings.codeHighlightColors?.[key];
+      const saved = synThemeColors[key];
       const computed = getComputedStyle(document.documentElement).getPropertyValue(codeHighlightVars[key]).trim();
       input.value = saved || computed || input.value;
     }
@@ -9161,7 +9182,14 @@ async function saveCurrentDoc({ refreshTree = false, keepEditorState = true, ren
   const seq = ++state.saveSeq;
   setSaveStatus("\u4fdd\u5b58\u4e2d", true);
   try {
-    const result = await api.post("/api/save", { path: state.currentPath, content, baseHash: state.currentVersion || "", origin });
+    // 保留文件当前编码落盘：打开时识别出的真实编码（gb18030/big5/utf-8-bom 等）原样带回，
+    // 否则后端默认按 UTF-8 写盘，GBK 等老文件一保存就被静默转码。
+    // utf-8 / utf-8-lossy / 空不传（后端默认 UTF-8；lossy 是解码失败的兜底形态，重编码无意义）。
+    // 编码识别与重编码使用同一套编解码器（decode_bytes_smart ↔ encode_text_for），同编解码往返无损。
+    const preserveEncoding = state.currentEncoding && !/^(utf-8|utf-8-lossy)?$/i.test(state.currentEncoding)
+      ? state.currentEncoding
+      : undefined;
+    const result = await api.post("/api/save", { path: state.currentPath, content, baseHash: state.currentVersion || "", origin, encoding: preserveEncoding });
     // currentVersion 更新必须在 seq 检查之后：连续保存时旧请求晚返回会用旧 hash 覆盖新 hash，
     // 导致后续保存的 baseHash 不对，可能引发冲突或覆盖他人修改。
     if (seq !== state.saveSeq) return true;
@@ -9193,6 +9221,8 @@ async function saveCurrentDoc({ refreshTree = false, keepEditorState = true, ren
       // 仅乐观锁检查可能失效，不影响基本保存功能
     } else {
       state.currentVersion = result.contentSha256;
+      // 后端返回实际落盘编码（规范化标签），同步到状态栏基准：保证下一次保存继续按同一编码落盘
+      if (result.encoding) state.currentEncoding = result.encoding;
       // 保存成功后重置外部修改通知状态，下次轮询以新 hash 为基准
       _externalChangeNotified = false;
     }
@@ -16313,10 +16343,20 @@ const markdownColorInputs = [
 markdownColorInputs.forEach(([key, input]) => {
   input?.addEventListener("input", () => {
     const settings = loadSettings();
-    settings.markdownColors = { ...(settings.markdownColors || {}), [key]: input.value };
-    localStorage.setItem("markdownColors", JSON.stringify(settings.markdownColors));
+    const next = withThemeColor(settings.markdownColors, settings.theme, key, input.value);
+    settings.markdownColors = next;
+    localStorage.setItem("markdownColors", JSON.stringify(next));
     applySettings(settings);
   });
+});
+// 一键恢复当前主题的 Markdown 高亮默认配色（只清当前主题的自定义，其他主题不受影响）
+els.resetMdColorBtn?.addEventListener("click", () => {
+  const settings = loadSettings();
+  const next = withoutTheme(settings.markdownColors, settings.theme);
+  settings.markdownColors = next;
+  localStorage.setItem("markdownColors", JSON.stringify(next));
+  applySettings(settings);
+  showToast({ title: "已恢复默认颜色", message: "当前主题的 Markdown 文字高亮已恢复为主题默认配色。", kind: "ok" });
 });
 // 代码语法高亮颜色调整
 const codeHighlightColorInputs = [
@@ -16336,19 +16376,20 @@ const codeHighlightColorInputs = [
 codeHighlightColorInputs.forEach(([key, input]) => {
   input?.addEventListener("input", () => {
     const settings = loadSettings();
-    settings.codeHighlightColors = { ...(settings.codeHighlightColors || {}), [key]: input.value };
-    localStorage.setItem("codeHighlightColors", JSON.stringify(settings.codeHighlightColors));
+    const next = withThemeColor(settings.codeHighlightColors, settings.theme, key, input.value);
+    settings.codeHighlightColors = next;
+    localStorage.setItem("codeHighlightColors", JSON.stringify(next));
     applySettings(settings);
   });
 });
+// 一键恢复当前主题的代码高亮默认配色（只清当前主题的自定义，其他主题不受影响）
 els.resetCodeHighlightBtn?.addEventListener("click", () => {
-  localStorage.removeItem("codeHighlightColors");
-  // 清空 HTML style 上的 --syn-* 覆盖，让主题的默认值生效
-  codeHighlightColorInputs.forEach(([key, input]) => {
-    document.documentElement.style.removeProperty("--syn-" + key);
-  });
   const settings = loadSettings();
+  const next = withoutTheme(settings.codeHighlightColors, settings.theme);
+  settings.codeHighlightColors = next;
+  localStorage.setItem("codeHighlightColors", JSON.stringify(next));
   applySettings(settings);
+  showToast({ title: "已恢复默认颜色", message: "当前主题的代码语法高亮已恢复为主题默认配色。", kind: "ok" });
 });
 els.aiPptBtn?.addEventListener("click", () => exportCurrentDocToPpt());
 els.normalizeMdBtn.addEventListener("click", openNormalizeMdModal);

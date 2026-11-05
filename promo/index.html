@@ -25,7 +25,7 @@
         <a href="#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.2.6</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.2.7</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -33,7 +33,7 @@
     <main id="top">
       <section class="hero section-wrap" aria-labelledby="hero-title">
         <div class="hero-copy reveal">
-          <p class="eyebrow"><span class="status-dot"></span> 本地 Markdown 工作区 <em>v2.2.6 桌面版</em></p>
+          <p class="eyebrow"><span class="status-dot"></span> 本地 Markdown 工作区 <em>v2.2.7 桌面版</em></p>
           <h1 id="hero-title">本地 Markdown 知识库与编辑器</h1>
           <p class="hero-lede">围绕本地 Markdown 文件提供阅读、编辑、目录、图谱、检索、主题与多工作区管理。</p>
           <div class="hero-actions">
@@ -253,7 +253,7 @@
         </div>
         <div class="download-block reveal">
           <div class="download-primary">
-            <span class="download-badge">当前稳定版 v2.2.6</span>
+            <span class="download-badge">当前稳定版 v2.2.7</span>
             <p>独立窗口截图标注、录屏、OCR 文字识别、知识图谱、主题、增量索引、绘图编辑器、代码语法高亮、JSON 格式化预览、版本自更新与可选 AI 辅助功能。</p>
             <a class="button button-primary" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载安装包</a>
             <a class="button button-soft" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Cloud_1.1.2.apk" download>下载 Android 版 (APK v1.1.2)</a>
@@ -261,12 +261,12 @@
           <div class="download-secondary">
             <h3>最近更新</h3>
             <ul class="update-list">
+              <li><span class="ver">v2.2.7</span> 打开即误报「外部修改」修复 + 高亮全面适配主题 — 修复非 UTF-8 文档（GBK/ANSI 等）刚打开几秒就被提示「文件已被外部修改」的死循环误报（指纹口径统一为磁盘字节），普通保存保留文件原编码、不再静默转 UTF-8。暗色主题下代码高亮的<b>变量、函数、参数</b>颜色此前被深色背景吞掉，现按主题补齐全套配色（浅色 / 暗色 / 护眼 / 柔光 / 图片主题深浅背景各一套），浅色主题 24 项低对比颜色按 WCAG AA 加深（六组主题环境 × 15 种 token 对比度实测 90/90 达标）。设置里的 <b>Markdown 文字高亮</b>与<b>代码语法高亮</b>自定义颜色改为按主题分别记忆，切换主题互不串色，两区各新增<b>「恢复默认颜色」</b>一键回落主题最佳配色；顺带修复自定义代码高亮色重启丢失的旧问题。自动化测试 260 项全绿，真浏览器端到端 21/21。</li>
               <li><span class="ver">v2.2.6</span> 状态栏编码切换 + 代码编辑增强 — 底部状态栏的编码项（如 UTF-8）现在可以直接点击，弹出菜单选 UTF-8 / UTF-8 (BOM) / ANSI (GBK) / GB18030 / Big5 / UTF-16 LE·BE / Shift_JIS / EUC-KR / Windows-1252，按所选编码保存覆盖文件（GBK 无法表示的字符写成数字字符引用，不丢内容）。代码文件（vbs/vb/js/ts/java/c/cpp/go/py/sh/bat/sql/lua/ini/json 等约 40 种扩展名）编辑时新增<b>缩进参考线</b>（每层级一条竖线，单位自动探测）与<b>语法着色</b>（关键字 / 方法与函数名 / 内置函数 / 字符串 / 数字 / 注释 / 常量分色），Markdown 等其他文件不受影响；顺手修掉两个窗口缩放即报错的预存缺陷（closeAllMenus / applyLayout 引用越界）。自动化测试 251 项全绿，真浏览器端到端 13/13，编码往返（含 GBK / UTF-16 / BOM）11/11。</li>
               <li><span class="ver">v2.2.5</span> 云同步可靠性修复 — 个别含脚本的 .html 文档点「一键推送」永远传不上云端，原因是正文命中平台内容安全策略被服务端拒写（连空 &lt;script&gt; 标签都算），而该拒绝响应不携带跨源响应头，浏览器一律报成误导性的「缺少 Access-Control-Allow-Origin 头」，看着像跨源问题。现在：推送前把 HTML 的脚本剥离成「云端安全形态」再上传（<b>本机文件一个字节不动</b>），失败改为逐篇定位并把原因写进同步面板，只有被拒的 HTML 走降级重试、同批其他文档不受牵连，失败文档不再被标记为已同步（下次自动重试），从云端拉回时也不会用剥离版覆盖本机完整正文；云端与分享页阅读时会明确提示「云端版已移除脚本」。自动化测试 245→251 全绿，真浏览器端到端验证 13/13。</li>
               <li><span class="ver">v2.2.4</span> HTML 文档阅读体验修复 — 手机上打开 .html 比浏览器里窄一截（响应式网页只剩 91% 宽、固定宽度网页只剩 32%）、长网页被 20000px 高度上限截断成双层滚动、同一文档反复打开完全不收敛（srcdoc 没有 URL，HTTP 缓存用不上）。现在：高度上限提到 200000px、云端与分享页补上「放大」全屏入口（全屏铺满、100vh 恢复真实视口）、补上正文与成品预览的会话内缓存（重开 0 次网络请求 84ms，首次 190ms）；顺手修桌面端放大后关闭不恢复页面滚动。预览仍在沙箱内运行，安全边界不变。</li>
               <li><span class="ver">v2.2.3</span> 图片同步修复 — 桌面端「一键推送」的截图 / 视频此前<b>永远传不上去</b>（真浏览器实测复现：官方 SDK 的存储请求会带两个平台 CORS 白名单里没有的头，预检直接被拦、请求根本不发出；登录与文档的头都在白名单内，所以「文档能同步、图片永远缺失」）。资产上传改为只带白名单头的直连请求，body 契约不变。同时修掉两个放大器：上传失败也照写「已核对」戳（一次失败就永久不再重试）、异常被静默吞掉（现在失败原因会写进同步结果）。旧版本留下的核对戳一律作废，升级后对工作区点一次「一键推送」即可补齐历史缺失的图片。</li>
               <li><span class="ver">v2.2.2</span> 独立的 .html 文件也能同步到云端 — 桌面端一直把 .html 当一等公民（网页预览、去标签检索），只有同步白名单没放行，本机能看、云端永远没有；云端工作台与分享页按扩展名分派渲染（沙箱网页 + 随分享带走的图片），单个文档设 1.2MB 上限，超限会明确报数。.json / .csv 仍不同步（工作区里的配置文件常含密钥，自动上云等于泄漏）。</li>
-              <li><span class="ver">v2.2.1</span> 手机端截图不再「未同步」 — 桌面端「一键推送」补齐图片 / 视频（此前只搬正文，推上去的库文档在、图片全缺，手机与网页只能显示「未同步」占位）；正文没变也会按引用补齐历史缺失图片，云端已有则只探针不重传。分享出去的网页补上内嵌卡片样式与高度自适应，不再被压在 300×150 小窗里。安卓启动第一帧改为品牌方牌与品牌底色（此前是系统占位图标），启动屏受控收起。Android 客户端 1.1.2。</li>
             </ul>
             <p class="download-links">
               <a href="privacy.html">隐私声明</a> ·

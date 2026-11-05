@@ -1290,10 +1290,10 @@ impl AppState {
             normalized.clone()
         };
 
-        let mut entry = self.build_file_entry(&final_normalized, &content).await;
+        let mut entry = self.build_file_entry(&final_normalized, &content, &format!("{:x}", sha2::Sha256::digest(&bytes))).await;
         // build_file_entry 里 encoding 字段默认写 utf-8；这里覆盖为我们真实识别出的编码，
         // 前端 openDoc 拿到后在状态栏可显示（state.currentEncoding = doc.encoding），便于排查编码命中问题。
-        entry.encoding = encoding_detected;
+        entry.encoding = encoding_detected.clone();
 
         // Backfill cache: set content on the cached entry (lazy load)
         {
@@ -1301,6 +1301,10 @@ impl AppState {
             let target_nfc = nfc(&entry.path);
             if let Some(cache_entry) = files.iter_mut().find(|f| f.path == entry.path || nfc(&f.path) == target_nfc) {
                 cache_entry.content = Some(content.clone());
+                // 回填时同步刷新 hash 与真实编码：scan 时的 entry 若早于外部修改，
+                // 陈旧 hash 会让刚打开就误报「外部修改」、陈旧 encoding 会让状态栏显示错。
+                cache_entry.content_sha256 = entry.content_sha256.clone();
+                cache_entry.encoding = encoding_detected;
             }
         }
         Ok(entry)
@@ -1540,7 +1544,7 @@ impl AppState {
             normalized.clone()
         };
 
-        let mut entry = self.build_file_entry(&final_normalized, &content).await;
+        let mut entry = self.build_file_entry(&final_normalized, &content, &format!("{:x}", sha2::Sha256::digest(&bytes))).await;
         entry.encoding = encoding_detected.clone();
 
         // ── 刷新 cache entry（若存在）──
@@ -2047,7 +2051,11 @@ impl AppState {
 
 
 
-    async fn build_file_entry(&self, normalized: &NormalizedPath, content: &str) -> FileEntry {
+    /// `bytes_hash` = 磁盘原始字节的 sha256（调用方已读出 bytes）。hash 必须锚定磁盘字节，
+    /// 与 check_file 轮询 / save_file_as 返回 / 保存冲突检测同口径——
+    /// 若用「解码后字符串按 UTF-8 重编码」口径，非 UTF-8 文件（GBK 等）会与轮询口径
+    /// 必然不等，打开即误报「外部修改」（2026-11-05 实锤）。
+    async fn build_file_entry(&self, normalized: &NormalizedPath, content: &str, bytes_hash: &str) -> FileEntry {
 
         let metadata = std::fs::metadata(&normalized.absolute).ok();
 
@@ -2057,7 +2065,7 @@ impl AppState {
         // `*` `_` `[` `]` `#` `!` 全当 Markdown 标记抹成空格，搜索命中被破坏。
         let plain = plain_text_for(&normalized.relative, content);
 
-        let hash = format!("{:x}", sha2::Sha256::digest(content.as_bytes()));
+        let hash = bytes_hash.to_string();
 
         let tags: Vec<u32> = extract_tags(content).iter().map(|t| self.token_dict.intern(t)).collect();
 
@@ -2701,13 +2709,18 @@ async fn scan_workspace(ws: &Workspace, td: &TokenDictionary) -> Vec<FileEntry> 
 
 
 
-        let content = {
+        let (content, encoding_detected, bytes_hash) = {
             // scan_workspace 也统一走智能解码，保证 GBK/BOM/UTF16LE 的 md 至少能进入 files cache，
             // 使得全局搜索可以命中（否则 UTF-8 失败就 continue，用户搜不到江西电信的 md）。
             match std::fs::read(path) {
                 Ok(bytes) => {
-                    let (decoded, _enc) = decode_bytes_smart(&bytes);
-                    decoded
+                    let (decoded, enc) = decode_bytes_smart(&bytes);
+                    // hash 用磁盘原始字节口径（与 check_file 轮询、save_file_as 保存返回、
+                    // 保存冲突检测四处同源）。此前这里用「解码后字符串按 UTF-8 重编码」口径，
+                    // 对 UTF-8 文件恰好相等，对 GBK 等非 UTF-8 文件必然不同——
+                    // 导致打开后第一个 5s 轮询必报「外部修改」且重新加载也消不掉（2026-11-05 实锤）。
+                    let bh = format!("{:x}", sha2::Sha256::digest(&bytes));
+                    (decoded, enc, bh)
                 }
                 Err(_) => continue,
             }
@@ -2731,11 +2744,9 @@ async fn scan_workspace(ws: &Workspace, td: &TokenDictionary) -> Vec<FileEntry> 
         // 全局搜索会命中成片的标签噪音。
         let plain = plain_text_for(&rel_str, &content);
 
-        let hash = format!("{:x}", sha2::Sha256::digest(content.as_bytes()));
+        let hash = bytes_hash;
 
         let tags: Vec<u32> = extract_tags(&content).iter().map(|t| td.intern(t)).collect();
-
-
 
         let metadata = std::fs::metadata(path).ok();
 
@@ -2801,7 +2812,7 @@ async fn scan_workspace(ws: &Workspace, td: &TokenDictionary) -> Vec<FileEntry> 
 
             modified,
 
-            encoding: "utf-8".to_string(),
+            encoding: encoding_detected,
 
         });
 

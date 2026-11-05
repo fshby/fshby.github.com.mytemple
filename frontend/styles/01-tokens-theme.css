@@ -50,20 +50,22 @@
   --md-tag: #6b5f44;
   --md-search-bg: rgba(200, 149, 108, 0.16);
   --md-search-text: #2a2520;
-  /* syntax highlight tokens - warm neutral palette */
+  /* syntax highlight tokens - warm neutral palette
+     （2026-11 对比度修正：原 string/number/function/property/comment 系
+     在浅底上仅 2.8~4.4:1，按 WCAG AA 加深一档，色相不变） */
   --syn-keyword: #7a5c3e;
-  --syn-string: #6b7856;
-  --syn-comment: #9a8f82;
-  --syn-number: #b08850;
-  --syn-function: #a07850;
-  --syn-title: #a07850;
+  --syn-string: #5d6a4a;
+  --syn-comment: #857a6d;
+  --syn-number: #8a5f26;
+  --syn-function: #96613a;
+  --syn-title: #96613a;
   --syn-type: #7a6856;
-  --syn-builtin: #6b5a44;
+  --syn-builtin: #5f4f3a;
   --syn-variable: #3d3830;
   --syn-operator: #5a5048;
   --syn-tag: #7a5c3e;
-  --syn-attr: #8a7a68;
-  --syn-meta: #9a8f82;
+  --syn-attr: #6e6252;
+  --syn-meta: #857a6d;
   /* callout 主题色：默认暖色调中性主题 */
   --callout-note: #4f8cf7;
   --callout-info: #3b82f6;
@@ -262,19 +264,19 @@ body[data-theme="glow"] {
   --accent-wash: color-mix(in srgb, var(--accent) 6%, transparent);
   --shadow-sm: 0 1px 3px rgba(45, 55, 41, 0.06), 0 8px 20px rgba(45, 55, 41, 0.05);
   --shadow-md: 0 20px 50px rgba(45, 55, 41, 0.10);
-  --syn-keyword: #6e8d3b;
-  --syn-string: #6b7856;
-  --syn-comment: #8a9580;
-  --syn-number: #b08850;
-  --syn-function: #5c7a2c;
-  --syn-title: #5c7a2c;
+  --syn-keyword: #527126;
+  --syn-string: #586545;
+  --syn-comment: #75815f;
+  --syn-number: #845a22;
+  --syn-function: #557427;
+  --syn-title: #557427;
   --syn-type: #7a6856;
-  --syn-builtin: #6b5a44;
+  --syn-builtin: #5f4f3a;
   --syn-variable: #2d3729;
   --syn-operator: #4a5644;
-  --syn-tag: #6e8d3b;
-  --syn-attr: #8a9580;
-  --syn-meta: #8a9580;
+  --syn-tag: #527126;
+  --syn-attr: #617050;
+  --syn-meta: #75815f;
   /* callout 主题色：护眼米黄/米色背景下的自然配色 */
   --callout-note: #3b82f6;
   --callout-info: #2563eb;
@@ -435,6 +437,25 @@ body[data-theme="glow"] *::-webkit-scrollbar-thumb {
 
 body[data-theme="glow"] *::-webkit-scrollbar-track {
   background: transparent;
+}
+
+/* 图片主题：预览侧代码高亮（--syn-*）此前未定义 → 回落浅色值。
+   默认（浅背景图/深色文字）沿用 :root 深色系即可；这里补深背景图变体，
+   与 dark 主题同源，避免深底上变量/函数被背景吞掉。 */
+body[data-theme="image"][data-image-text="light"] {
+  --syn-keyword: #89a5c0;
+  --syn-string: #b8a48c;
+  --syn-comment: #7a8a78;
+  --syn-number: #a8b89a;
+  --syn-function: #c9b87a;
+  --syn-title: #c9b87a;
+  --syn-type: #7ab89a;
+  --syn-builtin: #89b0c0;
+  --syn-variable: #b0b8a8;
+  --syn-operator: #b5b0a5;
+  --syn-tag: #89a5c0;
+  --syn-attr: #a8b5a5;
+  --syn-meta: #7a8a78;
 }
 
 /* ================= Layer 2 · 兼容别名层 =================

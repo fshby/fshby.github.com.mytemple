@@ -1,7 +1,7 @@
 {
-    "version":  "2.2.6",
+    "version":  "2.2.7",
     "downloadUrl":  "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
-    "latestReleaseNotes":  "编辑器两项基础能力补齐：① 文件编码切换——底部状态栏编码项可直接点击，弹出菜单从 UTF-8 / UTF-8 (BOM) / ANSI (GBK) / GB18030 / Big5 / UTF-16 LE·BE / Shift_JIS / EUC-KR / Windows-1252 中直接选择并按所选编码保存覆盖文件（GBK 表示不了的字符写成数字字符引用不丢内容，UTF-16 按码元手工编码规避底层库静默回退的坑，保存后不会误报外部修改）；② 代码文件编辑增强——约 40 种扩展名启用缩进参考线（每层级一条竖线，单位自动探测）与语法着色（关键字/方法与函数名/内置函数/字符串/数字/注释分色），Markdown 等其他文件完全不受影响；顺手修掉两个窗口一缩放就报错的预存缺陷（closeAllMenus / applyLayout 引用越界）。自动化测试 251 项全绿，真浏览器端到端 13/13，编码往返 11/11。",
-    "releaseNotes":  "v2.2.6 release. See changelog for details.",
+    "latestReleaseNotes":  "修复非 UTF-8 文档打开即误报「外部修改」；暗色主题代码高亮变量/函数不可读修复，五套主题配色补齐；自定义高亮颜色按主题记忆 + 一键恢复默认",
+    "releaseNotes":  "v2.2.7 release. See changelog for details.",
     "releaseDate":  "2026-11-05"
 }
