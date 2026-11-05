@@ -21,6 +21,7 @@ import {
   HighlightStyle,
   indentOnInput,
   syntaxHighlighting,
+  StreamLanguage,
 } from "@codemirror/language";
 import { markdown } from "@codemirror/lang-markdown";
 import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
@@ -48,6 +49,14 @@ const markdownHighlightStyle = HighlightStyle.define([
   { tag: tags.operator, color: "var(--cm-operator)" },
   { tag: tags.punctuation, color: "var(--cm-punctuation)" },
   { tag: tags.invalid, color: "var(--cm-invalid)", textDecoration: "underline wavy" },
+  // ── 代码模式（非 Markdown）令牌 ──
+  // 注意：tags.function / tags.definition 是修饰器（接收 Tag 返回 Tag），不能当普通 tag 传
+  { tag: tags.function(tags.variableName), color: "var(--cm-function)" },
+  { tag: tags.definition(tags.function(tags.variableName)), color: "var(--cm-function)", fontWeight: "600" },
+  { tag: tags.variableName, color: "var(--cm-variable)" },
+  { tag: tags.atom, color: "var(--cm-bool)" },
+  { tag: tags.meta, color: "var(--cm-meta)" },
+  { tag: tags.namespace, color: "var(--cm-type)" },
 ]);
 
 const editorTheme = EditorView.theme({
@@ -74,6 +83,11 @@ const editorTheme = EditorView.theme({
     "--cm-operator": "#475569",
     "--cm-punctuation": "var(--muted)",
     "--cm-invalid": "#dc2626",
+    // 代码模式补充令牌：方法名蓝、变量用正文色混少量蓝（与关键字紫/方法蓝都可区分）
+    "--cm-function": "#2563eb",
+    "--cm-variable": "color-mix(in srgb, var(--text) 82%, #2563eb)",
+    "--cm-meta": "#b45309",
+    "--cm-indent-guide": "color-mix(in srgb, var(--muted) 38%, transparent)",
   },
   "&.cm-focused": { outline: "none" },
   ".cm-scroller": {
@@ -115,6 +129,13 @@ const editorTheme = EditorView.theme({
   ".cm-searchMatch.cm-searchMatch-selected": {
     backgroundColor: "color-mix(in srgb, var(--accent-strong) 55%, transparent) !important",
     boxShadow: "0 0 0 2px var(--accent-strong)",
+  },
+  // 缩进参考线：gradient 以 var(--mt-igu)（行装饰内联注入）为周期，尺寸由行内 background-size 限定
+  ".mt-indent-guides": {
+    backgroundImage:
+      "linear-gradient(to right, var(--cm-indent-guide) 0, var(--cm-indent-guide) 1px, transparent 1px, transparent var(--mt-igu, 28px))",
+    backgroundRepeat: "no-repeat",
+    backgroundPosition: "2px 0",
   },
 });
 
@@ -945,6 +966,315 @@ function moveCurrentLine(view, direction) {
   return true;
 }
 
+/* ---------------------------------------------------------------------------
+   代码模式（非 Markdown 的文本/代码文件）：轻量语法高亮 + 缩进参考线
+   ---------------------------------------------------------------------------
+   设计原则与沉浸渲染一致：**默认关闭，运行时热切换**；关闭时编辑器行为与旧版
+   逐字节一致。通过 Compartment 按扩展名装载 StreamLanguage（轻量流式解析器，
+   自带逐行状态缓存，块注释/三引号跨行不会错态），不引入任何新依赖。
+   令牌经 tokenTable 映射到 @lezer/highlight 的 tags，着色复用上方 HighlightStyle。
+--------------------------------------------------------------------------- */
+
+function wordSet(str) {
+  return new Set(String(str).split(/\s+/).filter(Boolean));
+}
+
+const CODE_PROFILE_DEFS = {
+  vb: {
+    caseInsensitive: true,
+    lineComment: /^('|rem\b)/i,
+    strings: ['"'],
+    vbString: true, // "" 转义
+    hexNumber: /^&[hH][0-9a-fA-F]+|^&[oO][0-7]+/,
+    keywords: wordSet(`sub function property end if then elseif else select case for each to step next do while until loop wend exit dim redim preserve set let get call const public private class new me with on error resume goto gosub return not and or xor eqv imp is like mod byval byref optional rem stop erase execute randomize option explicit`), // prettier-ignore
+    constants: wordSet(`true false nothing empty null vbcrlf vbcr vblf vbtab vbnewline`),
+    builtins: wordSet(`cbool cbyte ccur cdate cdbl cint clng csng cstr err createobject getobject wscript msgbox inputbox lcase ucase len left right mid trim ltrim rtrim instr instrrev replace split join filter array ubound lbound abs int fix sgn hex oct chr chrw asc ascw val str space string now date time timer dateadd datediff datepart day month year hour minute second weekday formatnumber formatdatetime formatpercent formatcurrency isarray isdate isempty isnull isnumeric isobject typename vartype rgb`),
+  },
+  c: {
+    lineComment: /^\/\//,
+    blockComment: ["/*", "*/"],
+    strings: ['"', "'"],
+    keywords: wordSet(`if else for while do switch case default break continue return goto new delete try catch finally throw using namespace class struct union enum interface extends implements public private protected static const final abstract virtual override extern inline volatile typedef sizeof template typename this super null nullptr true false int long short char float double void bool signed unsigned auto explicit friend mutable operator readonly sealed unsafe when where yield var dynamic async await import export from as in of typeof instanceof package func type map chan go defer select range fn impl trait pub crate mod match where dyn use make len cap append panic nil`),
+    constants: wordSet(`true false null nullptr nil none`),
+    builtins: wordSet(`console document window alert require module exports print println printf panic`),
+  },
+  python: {
+    lineComment: /^#/,
+    strings: ['"', "'"],
+    triple: true,
+    keywords: wordSet(`and as assert async await break class continue def del elif else except finally for from global if import in is lambda nonlocal not or pass raise return try while with yield match case`),
+    defKeywords: wordSet(`def class`),
+    constants: wordSet(`true false none self cls __name__ __main__`),
+    builtins: wordSet(`print len range str int float list dict set tuple bool abs sum min max sorted enumerate zip map filter open input type isinstance super repr hash id vars dir getattr setattr hasattr callable iter next any all round divmod pow ord hex bin oct format bytes bytearray frozenset complex slice reversed staticmethod classmethod property`),
+  },
+  shell: {
+    lineComment: /^#/,
+    strings: ['"', "'"],
+    keywords: wordSet(`if then else elif fi for while until do done case esac in function select time coproc return exit break continue local export readonly declare typeset unset shift eval exec trap set echo cd source alias sudo`),
+    constants: wordSet(`true false`),
+    builtins: wordSet(`printf read ls grep awk sed cat find chmod chown mkdir rm cp mv tar curl wget git npm node python pip kill ps xargs apt yum dnf systemctl journalctl head tail wc sort uniq cut tr xargs tee which whereis whoami hostname date sleep test`),
+  },
+  bat: {
+    caseInsensitive: true,
+    lineComment: /^(::|rem\b)/,
+    strings: ['"'],
+    keywords: wordSet(`if else for in do goto call exit setlocal endlocal echo off on set errorlevel exist not defined equ neq lss leq gtr geq shift start rem pause del copy move mkdir md rd rmdir ren type cls title pushd popd attrib assoc ftype reg sc net schtasks tasklist taskkill findstr more choice timeout`),
+    constants: wordSet(`true false`),
+    builtins: wordSet(``),
+  },
+  sql: {
+    caseInsensitive: true,
+    lineComment: /^--/,
+    blockComment: ["/*", "*/"],
+    strings: ["'"],
+    sqlString: true, // '' 转义
+    keywords: wordSet(`select from where insert into values update delete create table drop alter add primary key foreign references index view trigger procedure function begin end commit rollback transaction join left right inner outer full cross on as group by order having limit offset union all distinct and or not null is in like between exists case when then else if while declare exec execute return returns int integer varchar nvarchar char text datetime date time bit float real money numeric decimal unique default constraint identity top asc desc count sum avg min max cascade partition over rownumber rank with use database schema grant revoke`),
+    constants: wordSet(`null true false current_date current_timestamp`),
+    builtins: wordSet(``),
+  },
+  lua: {
+    lineComment: /^--(?!\[\[)/,
+    blockComment: ["--[[", "]]"],
+    strings: ['"', "'"],
+    keywords: wordSet(`and break do else elseif end for function goto if in local not or repeat return then until while`),
+    defKeywords: wordSet(`function`),
+    constants: wordSet(`true false nil`),
+    builtins: wordSet(`print pairs ipairs type tostring tonumber require error pcall xpcall select unpack setmetatable getmetatable rawget rawset rawequal next collectgarbage assert load loadstring dofile self`),
+  },
+  ini: {
+    lineComment: /^[;#]/,
+    strings: [],
+    ini: true,
+    keywords: wordSet(``),
+    constants: wordSet(`true false null yes no on off`),
+    builtins: wordSet(``),
+  },
+  json: {
+    lineComment: null,
+    strings: [],
+    stringsJson: true,
+    keywords: wordSet(``),
+    constants: wordSet(`true false null`),
+    builtins: wordSet(``),
+  },
+};
+
+const CODE_IDENTIFIER_RE = /^[A-Za-z_$\u0080-\uFFFF][\w$\u0080-\uFFFF]*/;
+const CODE_NUMBER_RE = /^(0[xX][0-9a-fA-F_]+|0[bB][01_]+|\d[\d_]*(\.\d+)?([eE][+-]?\d+)?)/;
+
+// 令牌名 → lezer tags（HighlightStyle 据此着色）。
+// 注意：function/definition 是修饰器，必须传入具体 Tag（如 tags.variableName）组合使用。
+const CODE_TOKEN_TABLE = {
+  keyword: tags.keyword,
+  string: tags.string,
+  number: tags.number,
+  comment: tags.comment,
+  atom: tags.atom,
+  func: tags.function(tags.variableName),
+  def: tags.definition(tags.function(tags.variableName)),
+  type: tags.typeName,
+  variable: tags.variableName,
+  operator: tags.operator,
+  property: tags.propertyName,
+  meta: tags.meta,
+};
+
+function escapeRegExp(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function buildCodeStreamParser(profileName, profile) {
+  const blockCloseRe = profile.blockComment
+    ? new RegExp(`[\\s\\S]*?${escapeRegExp(profile.blockComment[1])}`)
+    : null;
+  return StreamLanguage.define({
+    name: `mt-code-${profileName}`,
+    startState: () => ({ inBlock: false, triple: null }),
+    token(stream, state) {
+      // 1) 块注释续行
+      if (state.inBlock) {
+        if (blockCloseRe && stream.match(blockCloseRe)) state.inBlock = false;
+        else stream.skipToEnd();
+        return "comment";
+      }
+      // 2) 三引号字符串续行（Python）
+      if (state.triple) {
+        if (state.triple === "d" ? stream.match('"""') : stream.match("'''")) state.triple = null;
+        else stream.skipToEnd();
+        return "string";
+      }
+      // 空白直接跳过
+      if (stream.match(/^[ \t]+/)) return null;
+      // 3) 行注释
+      if (profile.lineComment && stream.match(profile.lineComment)) {
+        stream.skipToEnd();
+        return "comment";
+      }
+      // 4) 块注释开启
+      if (profile.blockComment && stream.match(escapeRegExp(profile.blockComment[0]))) {
+        state.inBlock = true;
+        if (blockCloseRe && stream.match(blockCloseRe)) state.inBlock = false;
+        return "comment";
+      }
+      // 5) 三引号开启
+      if (profile.triple) {
+        if (stream.match('"""')) {
+          state.triple = '"""';
+          return "string";
+        }
+        if (stream.match("'''")) {
+          state.triple = "'''";
+          return "string";
+        }
+      }
+      // 6) 字符串
+      if (profile.stringsJson) {
+        let m = stream.match(/"(?:[^"\\\n]|\\.)*"(?=\s*:)/);
+        if (m) return "property";
+        m = stream.match(/"(?:[^"\\\n]|\\.)*"?/);
+        if (m) return "string";
+      }
+      for (const q of profile.strings || []) {
+        const re =
+          profile.vbString && q === '"'
+            ? /"(?:[^"\n]|"")*"?/
+            : profile.sqlString && q === "'"
+              ? /'(?:[^'\n]|'')*'?/
+              : new RegExp(`${escapeRegExp(q)}(?:[^${escapeRegExp(q)}\\n\\\\]|\\\\.)*${escapeRegExp(q)}?`);
+        if (stream.match(re)) return "string";
+      }
+      // 7) 数字（含 VB 的 &H.. 十六进制）
+      if (profile.hexNumber && stream.match(profile.hexNumber)) return "number";
+      if (stream.match(CODE_NUMBER_RE)) return "number";
+      // 8) 标识符：关键字 / 常量 / 内置 / 函数 / 变量
+      const id = stream.match(CODE_IDENTIFIER_RE);
+      if (id) {
+        const word = id[0];
+        const key = profile.caseInsensitive ? word.toLowerCase() : word;
+        if (profile.keywords && profile.keywords.has(key)) return "keyword";
+        if (profile.defKeywords && profile.defKeywords.has(String(state.prev || "").toLowerCase()))
+          return "def";
+        if (profile.constants && profile.constants.has(key)) return "atom";
+        if (profile.builtins && profile.builtins.has(key)) return "type";
+        const rest = stream.string.slice(stream.pos);
+        if (/^\s*\(/.test(rest)) return "func";
+        if (profile.ini && /^\s*[=:]/.test(rest)) return "property";
+        return "variable";
+      }
+      // 9) INI 分节头
+      if (profile.ini && stream.sol() && stream.match(/^\[[^\]\n]*\]/)) return "meta";
+      // 10) 运算符/标点
+      if (stream.match(/^[=+\-*/\\<>!&|^~%?:;,.[\](){}]+/)) return "operator";
+      stream.next();
+      return null;
+    },
+    tokenTable: CODE_TOKEN_TABLE,
+  });
+}
+
+const codeLanguageCache = new Map();
+function getCodeLanguage(profileName) {
+  const profile = CODE_PROFILE_DEFS[profileName];
+  if (!profile) return null;
+  if (!codeLanguageCache.has(profileName)) {
+    codeLanguageCache.set(profileName, buildCodeStreamParser(profileName, profile));
+  }
+  return codeLanguageCache.get(profileName);
+}
+
+let indentGuidesExtension = null;
+function getIndentGuidesExtension() {
+  if (!indentGuidesExtension) indentGuidesExtension = buildIndentGuidesExtension();
+  return indentGuidesExtension;
+}
+
+/* ── 缩进参考线（方法竖线）─────────────────────────────────────────────────
+   对每个可视行按前导空白宽度画 1px 竖线（每一缩进层级一条，与 VS Code 一致：
+   位于 0、unit、2·unit … (K-1)·unit 处）。实现为行级 Decoration + 背景
+   linear-gradient（尺寸限制在前导空白宽度内，不越界到正文），只在代码模式
+   由 setCodeMode 启用，Markdown 文档不受影响。
+--------------------------------------------------------------------------- */
+const INDENT_GUIDE_MAX_LEVELS = 32;
+
+function buildIndentGuidesExtension() {
+  return ViewPlugin.fromClass(
+    class {
+      constructor(view) {
+        this.unitCache = { doc: view.state.doc, unit: 0 };
+        this.decos = this.compute(view);
+      }
+      update(update) {
+        if (!update.docChanged && !update.viewportChanged) return;
+        if (update.docChanged) this.unitCache = { doc: update.state.doc, unit: 0 };
+        this.decos = this.compute(update.view);
+      }
+      // 探测文档缩进单位：取缩进行前导空白列数的最小正值（限定 2..8，Tab 按 4 列）。
+      detectUnit(view) {
+        if (this.unitCache.doc === view.state.doc && this.unitCache.unit) return this.unitCache.unit;
+        const doc = view.state.doc;
+        let unit = 0;
+        const limit = Math.min(doc.lines, 4000);
+        for (let n = 1; n <= limit; n += 1) {
+          const text = doc.line(n).text;
+          if (text.trim() === "") continue;
+          let cols = 0;
+          for (let i = 0; i < text.length; i += 1) {
+            const ch = text[i];
+            if (ch === " ") cols += 1;
+            else if (ch === "\t") cols += 4;
+            else break;
+          }
+          if (cols > 0 && (unit === 0 || cols < unit)) unit = cols;
+          if (unit <= 2) break;
+        }
+        if (!unit || unit < 2) unit = Math.max(2, Math.min(unit || 4, 8));
+        if (unit > 8) unit = 8;
+        this.unitCache = { doc: view.state.doc, unit };
+        return unit;
+      }
+      compute(view) {
+        const builder = [];
+        const unit = this.detectUnit(view);
+        const charW = view.defaultCharacterWidth || 8;
+        const unitPx = Math.max(2, Math.round(unit * charW));
+        const doc = view.state.doc;
+        for (const range of view.visibleRanges) {
+          let pos = range.from;
+          for (;;) {
+            const line = doc.lineAt(pos);
+            const text = line.text;
+            let cols = 0;
+            for (let i = 0; i < text.length; i += 1) {
+              const ch = text[i];
+              if (ch === " ") cols += 1;
+              else if (ch === "\t") cols += 4;
+              else break;
+            }
+            if (cols > 0 && (text.trim() !== "" || cols >= unit)) {
+              const levels = Math.min(Math.floor(cols / unit), INDENT_GUIDE_MAX_LEVELS);
+              if (levels > 0) {
+                const widthPx = levels * unitPx;
+                builder.push(
+                  Decoration.line({
+                    class: "mt-indent-guides",
+                    attributes: {
+                      style: `--mt-igu:${unitPx}px;background-size:${widthPx}px 100%`,
+                    },
+                  }).range(line.from),
+                );
+              }
+            }
+            if (line.to >= range.to || line.to >= doc.length) break;
+            pos = line.to + 1;
+          }
+        }
+        return Decoration.set(builder, true);
+      }
+    },
+    { decorations: (plugin) => plugin.decos },
+  );
+}
+
 class MarkdownEditorAdapter {
   constructor(host, initialValue = "") {
     this.host = host;
@@ -963,6 +1293,12 @@ class MarkdownEditorAdapter {
         return hook ? (el) => hook(el) : null;
       },
     );
+    // 代码模式（语法高亮 + 缩进参考线）：默认空扩展 = 关闭，行为与旧版逐字节一致
+    this.codeCompartment = new Compartment();
+    // 语言 Compartment：默认 markdown()；代码模式时整体替换为 StreamLanguage
+    //（两个语言并存会让 markdown 抢占解析、代码 token 全部失效，必须互斥）
+    this.langCompartment = new Compartment();
+    this.codeModeActive = false;
     this.view = new EditorView({
       parent: host,
       state: EditorState.create({
@@ -981,7 +1317,7 @@ class MarkdownEditorAdapter {
           indentOnInput(),
           bracketMatching(),
           closeBrackets(),
-          markdown(),
+          this.langCompartment.of([markdown()]),
           syntaxHighlighting(markdownHighlightStyle, { fallback: true }),
           highlightActiveLine(),
           highlightSelectionMatches(),
@@ -991,6 +1327,8 @@ class MarkdownEditorAdapter {
           editorTheme,
           // 默认空扩展：不产生任何装饰，渲染/编辑行为与旧版逐字节一致。
           this.wysiwygCompartment.of([]),
+          // 代码模式 Compartment：非 Markdown 代码/文本文件时由 setCodeMode 热切换。
+          this.codeCompartment.of([]),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) this.events.dispatchEvent(new Event("input"));
             if (update.selectionSet) {
@@ -1157,6 +1495,47 @@ class MarkdownEditorAdapter {
 
   get wysiwygActive() {
     return this.wysiwygEnabled;
+  }
+
+  /**
+   * 开/关代码模式（非 Markdown 文件）：语法高亮 + 缩进参考线。
+   * profileName 为 CODE_PROFILE_DEFS 的键（vb/c/python/shell/bat/sql/lua/ini/json）；
+   * enabled=false 时与旧版行为逐字节一致。通过 Compartment 热切换，不重建 EditorView。
+   */
+  setCodeMode(enabled, profileName) {
+    const next = Boolean(enabled) && Boolean(profileName);
+    const profile = next ? profileName : null;
+    if (this.codeModeActive === next && this.codeProfile === profile) return this.codeModeActive;
+    this.codeModeActive = next;
+    this.codeProfile = profile;
+    const langExt = [];
+    const guideExt = [];
+    if (next) {
+      const lang = getCodeLanguage(profileName);
+      if (lang) langExt.push(lang); else langExt.push(markdown());
+      guideExt.push(getIndentGuidesExtension());
+    } else if (enabled) {
+      // 未知扩展名：保持 markdown 语言，只给缩进参考线
+      langExt.push(markdown());
+      guideExt.push(getIndentGuidesExtension());
+    } else {
+      langExt.push(markdown());
+    }
+    try {
+      this.view.dispatch({
+        effects: [
+          this.langCompartment.reconfigure(langExt),
+          this.codeCompartment.reconfigure(guideExt),
+        ],
+      });
+    } catch (_) {
+      return this.codeModeActive;
+    }
+    return this.codeModeActive;
+  }
+
+  get codeModeIsActive() {
+    return this.codeModeActive;
   }
 
   contains(node) {

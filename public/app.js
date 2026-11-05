@@ -1,4 +1,4 @@
-import { createMarkdownEditor } from "/editor-core.js?v=20261013-html-7";
+import { createMarkdownEditor } from "/editor-core.js?v=20261104-code-8";
 import { getPaperBackgroundUrl } from "./modules/paper-texture.js";
 import { escapeHtml, displayName, displayRelativePath, splitPathRef, joinPathRef, parentPathRef, compactName, splitWorkspaceRef, plainText, headingId } from "./modules/path-utils.js";
 import { extractOutline, addCnEnSpaces } from "./modules/editor-utils.js";
@@ -42,7 +42,7 @@ const LARGE_PREVIEW_DELAY = 700;
 const CHUNKED_RENDER_BYTES = 500 * 1024;
 const CHUNK_RENDER_SLICE_BYTES = 150 * 1024;
 const GRAPH_WORKER_URL = "/graph-worker.js?v=20260810-graph-1";
-const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20261013-html-7";
+const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20261104-code-8";
 // Markdown 渲染缓存版本戳：解析器或 CSS 规则升级时递增，确保旧缓存不被复用。
 // 2026-08-29 v1.8.102：安装包 resources 包含 public/ 前端静态文件、端口回滚；修正其他电脑安装后 404 白屏。
 const MARKDOWN_RENDER_VERSION = "20260829-v18102-install-static-bundle-port-scan";
@@ -773,7 +773,7 @@ const IPC_ROUTE_MAP = (() => {
   add("GET",  "/api/doc-check",             "api_check_doc",            q => ({ path: String(q.path||"") }));
   // origin 缺省时 JSON.stringify 会丢掉该键 → 后端 Option<String> 取 None（人类编辑路径不受影响）。
   // 仅当 origin === "ai"（AI 生成内容后写盘）才触发工作区规则（.mytemple/AGENTS.md）校验。
-  add("POST", "/api/save",                  "api_save_doc",             p => ({ path: String(p.path), content: String(p.content), baseHash: p.baseHash, origin: p.origin }));
+  add("POST", "/api/save",                  "api_save_doc",             p => ({ path: String(p.path), content: String(p.content), baseHash: p.baseHash, origin: p.origin, encoding: p.encoding }));
   add("POST", "/api/delete",                "api_delete_docs",          p => ({ path: p.path }));
   add("POST", "/api/create-folder",         "api_create_folder",        p => ({ parent: String(p.parent), name: String(p.name) }));
   add("POST", "/api/create-doc",            "api_create_document",      p => ({ parent: String(p.parent), name: String(p.name) }));
@@ -6053,6 +6053,12 @@ async function openDoc(docPath, options = {}) {
   state.currentEncoding = doc.encoding || "utf-8";
   state.currentIsMarkdown = /\.md$/i.test(doc.path || "");
   state.currentIsHtml = !state.currentIsMarkdown && isHtmlDocPath(doc.path);
+  // 代码模式（语法高亮 + 缩进参考线）：仅扩展名命中代码表的非 Markdown 文档启用，
+  // md / txt / html / 未知扩展保持旧行为（逐字节一致）。
+  try {
+    const _codeProfile = codeProfileForPath(doc.path);
+    els.editor.setCodeMode?.(Boolean(_codeProfile), _codeProfile);
+  } catch (_) {}
   updateLargeDocumentState(doc.content, true);
   state.selectedNode = doc.path;
   state.selectedFolder = doc.path.includes("/") ? doc.path.split("/").slice(0, -1).join("/") : "";
@@ -6470,8 +6476,120 @@ function updateStatusCreated(createdMs) {
 }
 
 function updateStatusEncoding(enc) {
-  const normalized = (enc || "utf-8").toString().toUpperCase().replace(/_/g, "-");
+  const normalized = encodingDisplayLabel(enc || "utf-8");
   _setStatusField("encodingText", normalized);
+  for (const el of _getStatusFieldEls("encoding")) {
+    el.title = "文档编码格式（点击切换并另存为其他编码）";
+  }
+}
+
+// ===== 文件编码转换（状态栏编码项 → 弹出编码菜单，选择后按该编码保存覆盖） =====
+const ENCODING_OPTIONS = [
+  { value: "utf-8", name: "UTF-8" },
+  { value: "utf-8-bom", name: "UTF-8 (BOM)" },
+  { value: "gbk", name: "ANSI (GBK)" },
+  { value: "gb18030", name: "GB18030" },
+  { value: "big5", name: "Big5（繁体中文）" },
+  { value: "utf-16le-bom", name: "UTF-16 LE" },
+  { value: "utf-16be-bom", name: "UTF-16 BE" },
+  { value: "shift_jis", name: "Shift_JIS（日文）" },
+  { value: "euc-kr", name: "EUC-KR（韩文）" },
+  { value: "windows-1252", name: "Windows-1252（西欧）" },
+];
+
+function encodingDisplayLabel(value) {
+  const v = String(value || "utf-8").toLowerCase();
+  const opt = ENCODING_OPTIONS.find((o) => o.value === v);
+  if (opt) return opt.name;
+  if (v === "utf-8-lossy") return "未知编码";
+  return v.toUpperCase().replace(/_/g, "-");
+}
+
+/** 扩展名 → 代码模式 profile（与 editor-core.js 的 CODE_PROFILE_DEFS 键对应）。 */
+const CODE_PROFILE_BY_EXT = {
+  vbs: "vb", vb: "vb", bas: "vb", frm: "vb", cls: "vb", sba: "vb", psm1: "shell", psd1: "shell",
+  js: "c", mjs: "c", cjs: "c", ts: "c", tsx: "c", jsx: "c", java: "c",
+  c: "c", h: "c", cpp: "c", cc: "c", cxx: "c", hpp: "c", hh: "c", cs: "c", go: "c",
+  rs: "c", swift: "c", kt: "c", kts: "c", php: "c", dart: "c", scala: "c", groovy: "c",
+  py: "python", pyw: "python",
+  sh: "shell", bash: "shell", zsh: "shell", ps1: "shell",
+  bat: "bat", cmd: "bat",
+  sql: "sql",
+  lua: "lua",
+  ini: "ini", cfg: "ini", conf: "ini", toml: "ini", yaml: "ini", yml: "ini", properties: "ini", env: "ini",
+  json: "json", jsonc: "json",
+};
+
+function codeProfileForPath(path) {
+  const m = /\.([A-Za-z0-9_]+)$/.exec(String(path || ""));
+  if (!m) return null;
+  return CODE_PROFILE_BY_EXT[m[1].toLowerCase()] || null;
+}
+
+async function convertDocEncoding(target) {
+  if (!state.currentPath) return;
+  const opt = ENCODING_OPTIONS.find((o) => o.value === target);
+  const labelName = opt ? opt.name : target;
+  const content = els.editor.value;
+  const ok = await customConfirm(
+    `将按「${labelName}」编码把当前文档保存并覆盖磁盘文件：\n\n${displayPath(state.currentPath)}\n\n` +
+      `未保存的修改会一并写入；若文件内有该编码无法表示的字符，写入时会被转成数字字符引用（&#…;）。`,
+    { title: "转换文件编码", confirmText: "转换并保存", cancelText: "取消", danger: true }
+  );
+  if (!ok) return;
+  const seq = ++state.saveSeq;
+  setSaveStatus("转换中", true);
+  try {
+    const result = await api.post("/api/save", {
+      path: state.currentPath,
+      content,
+      baseHash: state.currentVersion || "",
+      encoding: target,
+    });
+    if (seq !== state.saveSeq) return;
+    if (result && result.conflict) {
+      showToast("文件已被外部编辑器修改，转换已取消。请重新打开文档后再试。");
+      setSaveStatus("未保存", true);
+      return;
+    }
+    if (result && typeof result.contentSha256 === "string" && result.contentSha256) {
+      // contentSha256 是磁盘真实字节的 hash（与 UTF-8 字符串 hash 不同），必须以其为新的乐观锁基准
+      state.currentVersion = result.contentSha256;
+    }
+    state.currentEncoding = (result && result.encoding) || target;
+    updateStatusEncoding(state.currentEncoding);
+    state.lastSavedContent = content;
+    state.currentContent = content;
+    clearDraft(state.currentPath);
+    _externalChangeNotified = false;
+    setSaveStatus("已保存", false);
+    showToast(`已按 ${encodingDisplayLabel(state.currentEncoding)} 保存`);
+  } catch (err) {
+    const msg = err?.response?.data?.error || err?.message || "编码转换失败";
+    setSaveStatus("保存失败", false);
+    showToast(msg);
+  }
+}
+
+function showEncodingMenu(anchorEvent) {
+  if (!state.currentPath) {
+    showToast("先打开一个文档，再切换编码");
+    return;
+  }
+  const current = String(state.currentEncoding || "utf-8").toLowerCase();
+  const items = ENCODING_OPTIONS.map((opt) => ({
+    label: `${opt.value === current ? "✓ " : ""}${opt.name}`,
+    action: () => {
+      if (opt.value === current) {
+        showToast(`当前编码已是 ${opt.name}`);
+        return;
+      }
+      convertDocEncoding(opt.value);
+    },
+  }));
+  const x = anchorEvent?.clientX ?? 200;
+  const y = anchorEvent?.clientY ?? 200;
+  showTreeContextMenu(x, y, items);
 }
 
 function updateStatusSystemTime() {
@@ -6554,6 +6672,14 @@ _startSystemTimeInterval();
 // 番茄钟按钮：绑定到所有状态栏中的番茄钟项
 document.querySelectorAll('[data-action="toggle-pomodoro"]').forEach((el) => {
   el.addEventListener("click", _togglePomodoro);
+});
+// 编码项：点击弹出编码切换菜单（复用树右键菜单组件）
+document.querySelectorAll('[data-status-field="encoding"]').forEach((el) => {
+  el.style.cursor = "pointer";
+  el.addEventListener("click", (e) => {
+    e.stopPropagation();
+    showEncodingMenu(e);
+  });
 });
 // 初始渲染
 refreshStatusBar();
@@ -15928,9 +16054,11 @@ function buildExportWatermark(text) {
 initPdfExportSettings();
 initAiEditHintSettings();
 
+// initEditorSplitters 内部的 applyLayout 通过此引用暴露给模块顶层的 resize 处理器
+let _applyLayoutRef = null;
+
 function initEditorSplitters() {
   if (!els.editorBody) return;
-
   const MIN_OUTLINE = 140;
   const MAX_OUTLINE = 400;
   const MIN_EDITOR = 280;
@@ -15957,7 +16085,6 @@ function initEditorSplitters() {
     const outlineVisible = !els.editorBody.classList.contains("outline-hidden");
     const previewVisible = !els.editorBody.classList.contains("preview-hidden");
     const r = Math.max(0.15, Math.min(0.85, layout.editorRatio || 0.5));
-
     if (outlineVisible) {
       const w = Math.max(MIN_OUTLINE, Math.min(MAX_OUTLINE, layout.outlineWidth));
       if (previewVisible) {
@@ -15973,6 +16100,8 @@ function initEditorSplitters() {
       }
     }
   }
+  // 暴露给模块顶层的 resize 处理器（此前它直接引用本函数，触发 ReferenceError）
+  _applyLayoutRef = applyLayout;
 
   applyLayout();
 
@@ -16736,6 +16865,14 @@ els.canvas.addEventListener("keydown", (event) => {
   scheduleGraphDraw();
 });
 
+// 顶栏菜单全局关闭。注意：initMenuBar IIFE 内部还有一个同名局部实现（用缓存的节点列表），
+// 两者语义一致；此前 resize 处理器引用的是模块作用域的这一个，但它是后加的，
+// 曾导致窗口一缩放就抛 ReferenceError: closeAllMenus is not defined。
+function closeAllMenus() {
+  document.querySelectorAll(".menu-item").forEach((m) => m.classList.remove("active"));
+  document.querySelectorAll(".menu-dropdown").forEach((d) => d.classList.add("hidden"));
+}
+
 // 统一的 resize 去抖处理
 let _resizeTimer = null;
 window.addEventListener("resize", () => {
@@ -16750,7 +16887,7 @@ window.addEventListener("resize", () => {
     }
     closeAllMenus();
     updateMultiCursorDisplay();
-    requestAnimationFrame(applyLayout);
+    if (typeof _applyLayoutRef === "function") requestAnimationFrame(_applyLayoutRef);
     restoreSidebarWidth();
     if (state.mode === "graph") {
       resizeCanvas();

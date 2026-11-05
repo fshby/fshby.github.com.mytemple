@@ -24,7 +24,7 @@
         <a href="index.html#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.2.5</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.2.6</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -40,6 +40,7 @@
         <div class="changelog-toc reveal">
           <h3>版本索引</h3>
           <ul>
+            <li><a href="#v2.2.6">v2.2.6</a> — 状态栏编码切换（ANSI/GBK 等 10 种编码直接选择并保存）+ 代码文件语法高亮与缩进参考线（方法/变量/关键字分色），Markdown 不受影响；修两个窗口缩放即报错的预存缺陷</li>
             <li><a href="#v2.2.5">v2.2.5</a> — 云同步可靠性修复：个别含脚本的 .html 文档点「一键推送」永远传不上云端（正文命中平台内容安全策略被拒写，而拒绝响应不带跨源头，浏览器只报一句误导性的「缺少跨源响应头」）。现在：推送前把 HTML 的脚本剥离成云端安全形态再上传（本机文件不动）、失败逐篇定位原因并显示、被拒自动降级重试、失败不再误写同步基线、云端与分享页识别标记并提示</li>
             <li><a href="#v2.2.4">v2.2.4</a> — HTML 文档阅读体验修复：手机端预览变窄（响应式网页只剩 91% 宽、固定宽度网页只剩 32%）、长网页被 20000px 高度上限截断成双层滚动、反复打开无缓存；现在高度上限提到 200000px、云端与分享页补上「放大」全屏入口、正文与成品预览会话内缓存（重开 0 次网络请求）</li>
             <li><a href="#v2.2.3">v2.2.3</a> — 图片同步修复：桌面端「一键推送」的截图 / 视频此前永远传不上去（官方 SDK 的存储请求带了两个平台 CORS 白名单里没有的头，预检被拦、请求根本不发出；登录与文档的头都在白名单内，所以文档能同步、图片永远缺失）。改为只带白名单头的直连上传，并让失败原因可见、失败不再写「已核对」戳；旧核对戳一律作废，升级后点一次「一键推送」即可补齐历史图片</li>
@@ -107,6 +108,36 @@
             <li><a href="#v1.8.93">v1.8.93</a> — 界面与体验升级 + 性能优化</li>
           </ul>
         </div>
+
+                <article class="doc-section reveal" id="v2.2.6">
+          <h3>v2.2.6 · 状态栏编码切换 + 代码编辑增强</h3>
+<p>两项编辑器基础能力补齐：跨编码文件（GBK/ANSI 老文档）与代码文件的编辑体验。</p>
+
+          <h4>文件编码：状态栏直接换，保存即生效</h4>
+          <ul>
+            <li>底部状态栏的编码项（如 <code>UTF-8</code>）现在<b>可以点击</b>，弹出菜单列出 10 种常见编码：UTF-8、UTF-8 (BOM)、<b>ANSI (GBK)</b>、GB18030、Big5、UTF-16 LE / BE、Shift_JIS、EUC-KR、Windows-1252，当前编码带勾选标记。</li>
+            <li>选择后确认即<b>按所选编码保存覆盖磁盘文件</b>（未保存的修改一并写入）；状态栏立即更新，且不会误报「文件已被外部修改」。</li>
+            <li>GBK 无法表示的字符（如 emoji）会写成数字字符引用（<code>&amp;#128512;</code>）而不是丢失或乱码；UTF-16 写盘按码元手工编码，规避了底层库对 UTF-16 编码静默回退 UTF-8 的坑。</li>
+          </ul>
+
+          <h4>代码文件：缩进参考线 + 语法着色</h4>
+          <ul>
+            <li><b>缩进参考线</b>：每个缩进层级画一条竖线（与主流编辑器同规则），缩进单位（2~8 空格或 Tab）按全文自动探测。</li>
+            <li><b>语法着色</b>：按扩展名启用（vbs/vb/js/ts/java/c/cpp/cs/go/py/sh/bat/sql/lua/ini/yaml/json 等约 40 种），关键字、方法与函数名（定义加粗）、内置函数、字符串、数字、注释、常量、运算符分色。</li>
+            <li>零新增依赖；Markdown、txt、html 与未知扩展名保持原有行为，完全不受影响。</li>
+          </ul>
+
+          <h4>顺手修复</h4>
+          <ul>
+            <li>两个预存缺陷：窗口一缩放就抛 <code>closeAllMenus is not defined</code> 与 <code>applyLayout is not defined</code>（处理器引用了局部作用域函数）。</li>
+          </ul>
+
+          <h4>实测与回归</h4>
+          <ul>
+            <li>自动化测试 251 项全绿；真浏览器端到端 13/13（GBK 打开不乱码、菜单/确认/转换/重开全链路、竖线与 8 种 token 颜色、Markdown 零影响）。</li>
+            <li>编码往返专项 11/11（GBK / GB18030 / Big5 / Shift_JIS / EUC-KR / Windows-1252 / UTF-16 LE·BE / UTF-8 BOM，含 BOM 识别与不可映射字符处理）。</li>
+          </ul>
+        </article>
 
                 <article class="doc-section reveal" id="v2.2.5">
           <h3>v2.2.5 · 云同步可靠性修复（被平台拦下的文档不再静默失败）</h3>

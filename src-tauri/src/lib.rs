@@ -1756,9 +1756,9 @@ pub async fn api_check_doc(s: Srv<'_>, path: String) -> Result<serde_json::Value
 }
 #[tauri::command]
 pub async fn api_save_doc(
-    s: Srv<'_>, path: String, content: String, base_hash: Option<String>, origin: Option<String>,
+    s: Srv<'_>, path: String, content: String, base_hash: Option<String>, origin: Option<String>, encoding: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    crate::ipc::save_doc(&s, path, content, base_hash, origin).await
+    crate::ipc::save_doc(&s, path, content, base_hash, origin, encoding).await
 }
 #[tauri::command]
 pub async fn api_delete_docs(s: Srv<'_>, path: serde_json::Value) -> Result<serde_json::Value, String> {

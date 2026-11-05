@@ -132,6 +132,100 @@ pub fn decode_bytes_smart(raw: &[u8]) -> (String, String) {
     (cow.into_owned(), "utf-8-lossy".into())
 }
 
+/// 把 UTF-8 字符串按指定编码标签编码为字节，返回 (字节, 归一化编码标签)。
+/// 与 decode_bytes_smart 的标签族保持一致；未知/空标签按 UTF-8 处理。
+/// "ansi" 在中文 Windows 语境下即 GBK（cp936）。
+/// 无法映射的字符（如 GBK 里没有的生僻字）由 encoding_rs 落成数字字符引用（&#x…;），
+/// 并在调用方日志 warn——这是单行提示，不阻断转换。
+pub fn encode_text_for(content: &str, label: &str) -> (Vec<u8>, String) {
+    use encoding_rs::*;
+    let raw = label.trim().to_ascii_lowercase();
+    match raw.as_str() {
+        "" | "utf-8" | "utf8" => (content.as_bytes().to_vec(), "utf-8".into()),
+        "utf-8-bom" | "utf8-bom" => {
+            let mut v = Vec::with_capacity(content.len() + 3);
+            v.extend_from_slice(&[0xEF, 0xBB, 0xBF]);
+            v.extend_from_slice(content.as_bytes());
+            (v, "utf-8-bom".into())
+        }
+        "ansi" | "gbk" | "cp936" | "gb2312" => {
+            let (cow, _enc, had_err) = GBK.encode(content);
+            if had_err {
+                log::warn!("[encode_text_for] GBK 存在无法映射字符（已写成数字字符引用）| len={}", content.len());
+            }
+            (cow.into_owned(), "gbk".into())
+        }
+        "gb18030" => {
+            let (cow, _enc, had_err) = GB18030.encode(content);
+            if had_err {
+                log::warn!("[encode_text_for] GB18030 存在无法映射字符 | len={}", content.len());
+            }
+            (cow.into_owned(), "gb18030".into())
+        }
+        "big5" => {
+            let (cow, _enc, had_err) = BIG5.encode(content);
+            if had_err {
+                log::warn!("[encode_text_for] Big5 存在无法映射字符 | len={}", content.len());
+            }
+            (cow.into_owned(), "big5".into())
+        }
+        "shift-jis" | "shift_jis" | "sjis" => {
+            let (cow, _enc, had_err) = SHIFT_JIS.encode(content);
+            if had_err {
+                log::warn!("[encode_text_for] Shift_JIS 存在无法映射字符 | len={}", content.len());
+            }
+            (cow.into_owned(), "shift_jis".into())
+        }
+        "euc-kr" | "euckr" => {
+            let (cow, _enc, had_err) = EUC_KR.encode(content);
+            if had_err {
+                log::warn!("[encode_text_for] EUC-KR 存在无法映射字符 | len={}", content.len());
+            }
+            (cow.into_owned(), "euc-kr".into())
+        }
+        "windows-1252" | "cp1252" | "latin1" | "iso-8859-1" => {
+            let (cow, _enc, had_err) = WINDOWS_1252.encode(content);
+            if had_err {
+                log::warn!("[encode_text_for] Windows-1252 存在无法映射字符 | len={}", content.len());
+            }
+            (cow.into_owned(), "windows-1252".into())
+        }
+        // 注意：encoding_rs 的 UTF_16LE/BE 是「仅解码」编码，.encode() 会静默回退成
+        // UTF-8 字节（写出坏文件）——必须手工按码元编码（与 decode_utf32 同理）。
+        "utf-16le" => {
+            let mut v = Vec::with_capacity(content.len() * 2 + 2);
+            for unit in content.encode_utf16() {
+                v.extend_from_slice(&unit.to_le_bytes());
+            }
+            (v, "utf-16le".into())
+        }
+        "utf-16le-bom" | "utf-16" => {
+            let mut v = Vec::with_capacity(content.len() * 2 + 2);
+            v.extend_from_slice(&[0xFF, 0xFE]);
+            for unit in content.encode_utf16() {
+                v.extend_from_slice(&unit.to_le_bytes());
+            }
+            (v, "utf-16le-bom".into())
+        }
+        "utf-16be" => {
+            let mut v = Vec::with_capacity(content.len() * 2 + 2);
+            for unit in content.encode_utf16() {
+                v.extend_from_slice(&unit.to_be_bytes());
+            }
+            (v, "utf-16be".into())
+        }
+        "utf-16be-bom" => {
+            let mut v = Vec::with_capacity(content.len() * 2 + 2);
+            v.extend_from_slice(&[0xFE, 0xFF]);
+            for unit in content.encode_utf16() {
+                v.extend_from_slice(&unit.to_be_bytes());
+            }
+            (v, "utf-16be-bom".into())
+        }
+        _ => (content.as_bytes().to_vec(), "utf-8".into()),
+    }
+}
+
 /// 对齐字符边界工具（中文字节切片不会 panic）：
 /// 把 start/end 向最近的 char boundary 内缩。与项目 memory 中 align_boundary 规则保持一致。
 #[allow(dead_code)]
@@ -1216,6 +1310,17 @@ impl AppState {
 
     pub async fn save_file(&self, path: &str, content: &str, base_hash: Option<&str>) -> anyhow::Result<String> {
 
+        let (hash, _enc) = self.save_file_as(path, content, base_hash, None).await?;
+
+        Ok(hash)
+
+    }
+
+    /// 保存文件（可选指定落盘编码）。encoding=None 时行为与历史版本逐字节一致（UTF-8）。
+    /// 返回 (写盘字节的 sha256, 实际使用的编码标签)——hash 基于磁盘真实字节，
+    /// 转换编码后前端必须以它作为下一轮 baseHash，否则乐观锁必然误报冲突。
+    pub async fn save_file_as(&self, path: &str, content: &str, base_hash: Option<&str>, encoding: Option<&str>) -> anyhow::Result<(String, String)> {
+
         let normalized = self.normalize_doc_path(path)?;
 
         // Issue 2: 保存前冲突检测——如果 base_hash 提供，读磁盘文件 hash 比对，
@@ -1243,15 +1348,20 @@ impl AppState {
 
         }
 
+        let (bytes, enc_label) = match encoding {
+            Some(enc) if !enc.is_empty() => encode_text_for(content, enc),
+            _ => (content.as_bytes().to_vec(), "utf-8".to_string()),
+        };
+
         let tmp = format!("{}.tmp", normalized.absolute);
 
-        std::fs::write(&tmp, content)?;
+        std::fs::write(&tmp, &bytes)?;
 
         std::fs::rename(&tmp, &normalized.absolute)?;
 
 
 
-        let hash = format!("{:x}", sha2::Sha256::digest(content.as_bytes()));
+        let hash = format!("{:x}", sha2::Sha256::digest(&bytes));
 
 
 
@@ -1265,6 +1375,8 @@ impl AppState {
             entry.content = Some(content.to_string());
 
             entry.content_sha256 = hash.clone();
+
+            entry.encoding = enc_label.clone();
 
             entry.plain = plain_text_for(&normalized.relative, content);
 
@@ -1280,7 +1392,7 @@ impl AppState {
 
 
 
-        Ok(hash)
+        Ok((hash, enc_label))
 
     }
 
@@ -3297,5 +3409,106 @@ mod rename_name_tests {
         assert_eq!(ext_of("a/b/photo.JPG"), "jpg");
         assert_eq!(ext_of("no-ext"), "");
         assert_eq!(ext_of("a/b/"), "");
+    }
+}
+
+#[cfg(test)]
+mod encoding_tests {
+
+    use super::{decode_bytes_smart, encode_text_for};
+
+    /// GBK 编码 → decode_bytes_smart 智能解码应还原原文且识别为 GBK 家族标签
+    #[test]
+    fn gbk_roundtrip_via_decode_bytes_smart() {
+        let text = "Option Explicit\n\n' 连接服务器的脚本（河网测站联调）\nDim 名字 As String\n";
+        let (bytes, label) = encode_text_for(text, "gbk");
+        assert_eq!(label, "gbk");
+        assert!(bytes.windows(2).any(|w| w[0] >= 0x80), "应含 GBK 双字节序列");
+        let (decoded, enc) = decode_bytes_smart(&bytes);
+        assert_eq!(decoded, text, "GBK 编码后智能解码应逐字还原");
+        assert!(enc == "gbk" || enc == "gb18030", "识别标签应为 GBK 家族，实际 {enc}");
+    }
+
+    /// ansi 别名在中文 Windows 语境下即 GBK
+    #[test]
+    fn ansi_alias_maps_to_gbk() {
+        let text = "中文内容 ABC 123";
+        let (bytes, label) = encode_text_for(text, "ansi");
+        assert_eq!(label, "gbk");
+        assert_eq!(bytes, encode_text_for(text, "gbk").0);
+    }
+
+    /// UTF-8 BOM：写盘后 decode_bytes_smart 必须识别为 utf-8-bom（而不是把 BOM 当正文）
+    #[test]
+    fn utf8_bom_roundtrip() {
+        let text = "# 标题\n\n正文内容";
+        let (bytes, label) = encode_text_for(text, "utf-8-bom");
+        assert_eq!(label, "utf-8-bom");
+        assert_eq!(&bytes[0..3], &[0xEF, 0xBB, 0xBF]);
+        let (decoded, enc) = decode_bytes_smart(&bytes);
+        assert_eq!(decoded, text, "BOM 不应残留在正文里");
+        assert_eq!(enc, "utf-8-bom");
+    }
+
+    /// UTF-16 LE BOM（中文记事本「Unicode」另存格式）往返
+    #[test]
+    fn utf16le_bom_roundtrip() {
+        let text = "河网测站联调脚本文本";
+        let (bytes, label) = encode_text_for(text, "utf-16le-bom");
+        assert_eq!(label, "utf-16le-bom");
+        assert_eq!(&bytes[0..2], &[0xFF, 0xFE]);
+        let (decoded, enc) = decode_bytes_smart(&bytes);
+        assert_eq!(decoded, text);
+        assert_eq!(enc, "utf-16le-bom");
+    }
+
+    /// GBK 无法表示的字符（emoji）应落成数字字符引用，而不是 panic 或静默丢字
+    #[test]
+    fn unmappable_char_becomes_numeric_ref() {
+        let text = "状态正常 \u{1F600} 结束";
+        let (bytes, label) = encode_text_for(text, "gbk");
+        assert_eq!(label, "gbk");
+        // GBK 字节不是合法 UTF-8，只能按字节断言（「状态正常」的 GBK 编码开头 + ASCII 的 NCR）
+        assert!(
+            bytes.starts_with(&[0xd7, 0xb4, 0xcc, 0xac]),
+            "应为「状」的 GBK 编码开头：{:02x?}",
+            &bytes[..bytes.len().min(20)]
+        );
+        assert!(
+            bytes.windows(9).any(|w| w == b"&#128512;"),
+            "emoji 应写成 &#128512;：{:02x?}",
+            &bytes[..bytes.len().min(40)]
+        );
+    }
+
+    /// UTF-16 无 BOM 变体同样按码元手工编码（encoding_rs encode 会静默回退 UTF-8）
+    #[test]
+    fn utf16_no_bom_roundtrip() {
+        for label in ["utf-16le", "utf-16be"] {
+            let text = "无 BOM 的 UTF-16 文本 Plain";
+            let (bytes, out) = encode_text_for(text, label);
+            assert_eq!(out, label);
+            assert!(!bytes.starts_with(&[0xFF, 0xFE]) && !bytes.starts_with(&[0xFE, 0xFF]));
+            let (decoded, _) = decode_bytes_smart(&bytes);
+            // 无 BOM 的 UTF-16 不在 decode_bytes_smart 的识别范围（与历史行为一致），
+            // 这里只验证编码器本身：手工解码回原文
+            let units: Vec<u16> = if label == "utf-16le" {
+                bytes.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect()
+            } else {
+                bytes.chunks_exact(2).map(|c| u16::from_be_bytes([c[0], c[1]])).collect()
+            };
+            assert_eq!(String::from_utf16(&units).unwrap(), text, "{label} 手工解码应还原");
+            let _ = decoded;
+        }
+    }
+
+    /// 未知/空标签按 UTF-8 处理，行为与历史版本一致
+    #[test]
+    fn unknown_label_falls_back_to_utf8() {
+        for label in ["", "made-up-encoding", "UTF-8"] {
+            let (bytes, out) = encode_text_for("正文", label);
+            assert_eq!(bytes, "正文".as_bytes());
+            assert_eq!(out, "utf-8");
+        }
     }
 }

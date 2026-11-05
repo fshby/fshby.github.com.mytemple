@@ -580,6 +580,10 @@ struct SaveDocRequest {
     /// 写入来源标记；`"ai"` = AI 生成内容写入，先过工作区规则（.mytemple/AGENTS.md）。
     #[serde(default)]
     origin: Option<String>,
+    /// 落盘编码（编码转换功能）：utf-8 / utf-8-bom / gbk(ansi) / gb18030 / big5 /
+    /// shift_jis / euc-kr / windows-1252 / utf-16le(-bom) / utf-16be(-bom)。缺省 = UTF-8。
+    #[serde(rename = "encoding", default)]
+    encoding: Option<String>,
 }
 
 async fn save_doc(
@@ -588,7 +592,7 @@ async fn save_doc(
 ) -> impl IntoResponse {
     // ipc::save_doc 内部处理 __CONFLICT__: 前缀 → 返回 {ok:false,conflict:true,...}（200）
     // 其它错误仍按约定转为 BAD_REQUEST
-    match crate::ipc::save_doc(&state, req.path, req.content, req.base_hash, req.origin).await {
+    match crate::ipc::save_doc(&state, req.path, req.content, req.base_hash, req.origin, req.encoding).await {
         Ok(v) => (StatusCode::OK, Json(v)).into_response(),
         Err(msg) => json_err(StatusCode::BAD_REQUEST, msg),
     }

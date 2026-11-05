@@ -85,7 +85,7 @@ test("两条保存链路都在写盘前校验、写盘成功后才审计", () =>
   for (const [name, body] of [["save_file_raw", fileRaw], ["save_doc", saveDoc]]) {
     assert.ok(body.includes("check_ai_write"), `${name} 缺少 AI 写入校验`);
     const guardIdx = body.indexOf("check_ai_write");
-    const writeIdx = body.indexOf("save_file(");
+    const writeIdx = body.search(/save_file(_as)?\(/);
     assert.ok(writeIdx > guardIdx, `${name} 必须先校验后写盘`);
     assert.ok(body.includes("record_ai_write"), `${name} 写盘成功后必须补审计记录`);
   }
@@ -97,7 +97,7 @@ test("两条保存链路都在写盘前校验、写盘成功后才审计", () =>
 
 test("origin 从 HTTP / IPC / 前端三处贯通到 ipc 层", () => {
   assert.ok(
-    handlersSrc.includes("crate::ipc::save_doc(&state, req.path, req.content, req.base_hash, req.origin)"),
+    handlersSrc.includes("crate::ipc::save_doc(&state, req.path, req.content, req.base_hash, req.origin, req.encoding)"),
     "handlers::save_doc 未透传 origin"
   );
   assert.ok(

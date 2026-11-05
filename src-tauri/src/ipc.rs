@@ -366,15 +366,19 @@ pub async fn check_doc(s: &ServerState, path: String) -> Result<serde_json::Valu
     let (h,m) = s.app.check_file(&path).await.map_err(|e| err(e.to_string()))?;
     Ok(serde_json::json!({"path":path,"sha256":h,"modified":m}))
 }
-pub async fn save_doc(s: &ServerState, path: String, content: String, base_hash: Option<String>, origin: Option<String>) -> Result<serde_json::Value, String> {
+pub async fn save_doc(s: &ServerState, path: String, content: String, base_hash: Option<String>, origin: Option<String>, encoding: Option<String>) -> Result<serde_json::Value, String> {
     // AI 来源的写入须先过工作区规则；非 AI 写入（origin 缺失）行为完全不变
     let guard = check_ai_write(s, &path, origin.as_deref()).await?;
-    match s.app.save_file(&path, &content, base_hash.as_deref()).await {
-        Ok(h) => {
+    // encoding：可选落盘编码（编码转换功能）。None = 历史 UTF-8 行为不变。
+    let enc_req = encoding.as_deref().filter(|e| !e.is_empty());
+    match s.app.save_file_as(&path, &content, base_hash.as_deref(), enc_req).await {
+        Ok((h, enc_label)) => {
             if let Some(ctx) = guard {
                 record_ai_write(s, ctx, "ai.doc.save", Some(&h)).await;
             }
-            Ok(serde_json::json!({"ok":true,"path":path,"contentSha256":h}))
+            // contentSha256 = 磁盘真实字节的 hash（转换编码后与 UTF-8 字符串 hash 不同），
+            // 前端必须以此更新 baseHash，否则下一次保存必触发乐观锁冲突。
+            Ok(serde_json::json!({"ok":true,"path":path,"contentSha256":h,"encoding":enc_label}))
         }
         Err(e) => {
             let m = e.to_string();

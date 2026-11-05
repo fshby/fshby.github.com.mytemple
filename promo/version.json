@@ -1,7 +1,7 @@
 {
-    "version":  "2.2.5",
+    "version":  "2.2.6",
     "downloadUrl":  "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
-    "latestReleaseNotes":  "云同步可靠性修复：个别含脚本的 .html 文档此前永远传不上云端——正文命中平台内容安全策略被服务端拒写（拒绝响应不携带跨源响应头，浏览器与官方 SDK 一律误报为「缺少 Access-Control-Allow-Origin 头」，看着像跨源问题）。现在推送前把 HTML 的脚本剥离成「云端安全形态」再上传（本机文件一个字节都不动），失败改为逐篇定位并将原因写进同步面板，只有被拒的 HTML 走降级重试、同批其他文档不受牵连，失败文档不再被误记为已同步（下次自动重试），从云端拉回时也不会用剥离版覆盖本机完整正文；云端工作台与分享页识别该标记并明确提示「云端版已移除脚本」。自动化测试 245→251 全绿，真浏览器端到端验证 13/13。",
-    "releaseNotes":  "v2.2.5 release. See changelog for details.",
-    "releaseDate":  "2026-10-14"
+    "latestReleaseNotes":  "编辑器两项基础能力补齐：① 文件编码切换——底部状态栏编码项可直接点击，弹出菜单从 UTF-8 / UTF-8 (BOM) / ANSI (GBK) / GB18030 / Big5 / UTF-16 LE·BE / Shift_JIS / EUC-KR / Windows-1252 中直接选择并按所选编码保存覆盖文件（GBK 表示不了的字符写成数字字符引用不丢内容，UTF-16 按码元手工编码规避底层库静默回退的坑，保存后不会误报外部修改）；② 代码文件编辑增强——约 40 种扩展名启用缩进参考线（每层级一条竖线，单位自动探测）与语法着色（关键字/方法与函数名/内置函数/字符串/数字/注释分色），Markdown 等其他文件完全不受影响；顺手修掉两个窗口一缩放就报错的预存缺陷（closeAllMenus / applyLayout 引用越界）。自动化测试 251 项全绿，真浏览器端到端 13/13，编码往返 11/11。",
+    "releaseNotes":  "v2.2.6 release. See changelog for details.",
+    "releaseDate":  "2026-11-05"
 }
