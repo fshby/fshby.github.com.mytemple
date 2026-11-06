@@ -15,7 +15,7 @@
   "use strict";
 
   var CFG = window.__MT_CLOUD__ || {};
-  var ASSET_V = "cloud-20";
+  var ASSET_V = "cloud-21";
   var ENDPOINT = String(CFG.endpoint || "").replace(/\/+$/, "");
   var REST = ENDPOINT + "/.cloud/database/rest/v1";
   var HDR = { apikey: CFG.publishableKey || "", "X-Wb-Webapp-Access-Key": CFG.publishableKey || "" };
@@ -398,6 +398,41 @@
 
     // 内嵌网页（```html / chart 围栏）也挂「放大」
     decorateHtmlBlocks(root);
+
+    // 代码块「复制」：markdown-worker 生成的按钮只有壳，这里补上行为。
+    // 与工作台 cloud/app.js 同语义；分享页没有 toast，反馈直接写在按钮上。
+    // 微信内置浏览器等非安全上下文没有 navigator.clipboard，退回 execCommand。
+    Array.prototype.slice.call(root.querySelectorAll(".code-copy")).forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var pre = btn.parentElement && btn.parentElement.querySelector("pre");
+        if (!pre) return;
+        var text = pre.innerText || pre.textContent || "";
+        var original = btn.textContent;
+        var done = function (ok) {
+          btn.textContent = ok ? "已复制" : "复制失败";
+          setTimeout(function () { btn.textContent = original; }, 1200);
+        };
+        var fallbackCopy = function () {
+          try {
+            var ta = document.createElement("textarea");
+            ta.value = text;
+            ta.setAttribute("readonly", "");
+            ta.style.position = "fixed";
+            ta.style.opacity = "0";
+            document.body.appendChild(ta);
+            ta.select();
+            var ok = document.execCommand("copy");
+            document.body.removeChild(ta);
+            done(ok);
+          } catch (_) { done(false); }
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(function () { done(true); }, fallbackCopy);
+        } else {
+          fallbackCopy();
+        }
+      });
+    });
   }
 
   /* ── 图片：滚动到可见才逐张拉取 ─────────────────────────── */

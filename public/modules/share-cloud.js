@@ -113,13 +113,33 @@ function extractAssetRefs(text) {
   return out;
 }
 
-/** 引用 → source/ 下的相对路径（文档里写 `source/x.png` 或 `./img/x.png` 都能落到同一处）。 */
-function sourceRelative(ref) {
+/**
+ * 引用 → 资产定位。
+ * 返回 { wsId, fetchRel, relPath }，三者各司其职：
+ *  - relPath：写进 shared_assets 的键，必须与云端分享页 assetCandidates 的
+ *    首个候选同构（引用原样归一，保留 source/ 与 ws_ 段）：
+ *      `/source/ws_xxx/f.webp` → `source/ws_xxx/f.webp`
+ *      `source/f.webp`         → `source/f.webp`
+ *      `f.webp`                → `f.webp`（读侧另有「文档目录/f.webp」兜底）
+ *  - wsId + fetchRel：本机取字节用。`/source/ws_xxx/f.webp` 的 ws_ 段是
+ *    **工作区 id**（桌面后端 serve_source 同一解析），不是 source/ 下的子
+ *    文件夹 —— 之前把它当子目录拼进 ws-asset 路径，全部 404、图片全丢。
+ */
+export function refToAsset(ref, fallbackWsId) {
   const clean = String(ref || "").split("#")[0].split("?")[0].trim();
-  if (!clean || clean.startsWith("..")) return "";
-  const noDot = clean.replace(/^\.\//, "").replace(/^\/+/, "");
-  if (noDot.startsWith("source/")) return noDot.slice("source/".length);
-  return noDot;
+  if (!clean || clean.includes("..")) return null;
+  const p = clean.replace(/^\.\//, "").replace(/^\/+/, "");
+  if (!p) return null;
+  let wsId = fallbackWsId;
+  let fetchRel = p;
+  const m = p.match(/^(?:source\/)?(ws_[A-Za-z0-9]+)\/(.+)$/);
+  if (m) {
+    wsId = m[1];
+    fetchRel = m[2];
+  } else if (p.startsWith("source/")) {
+    fetchRel = p.slice("source/".length);
+  }
+  return { wsId, fetchRel, relPath: p };
 }
 
 function wsAssetUrl(wsId, rel) {
@@ -161,18 +181,18 @@ export async function collectShareAssets(wsId, content) {
   for (const ref of extractAssetRefs(content)) {
     if (result.assets.length >= SHARE_ASSET_MAX) break;
     if (SHARE_VIDEO_EXT.test(ref) || !IMG_EXT.test(ref)) continue;
-    const rel = sourceRelative(ref);
-    if (!rel || seen.has(rel)) continue;
-    seen.add(rel);
+    const target = refToAsset(ref, wsId);
+    if (!target || !target.fetchRel || seen.has(target.relPath)) continue;
+    seen.add(target.relPath);
     let blob = null;
     try {
-      const res = await fetch(wsAssetUrl(wsId, rel), { cache: "no-store" });
+      const res = await fetch(wsAssetUrl(target.wsId, target.fetchRel), { cache: "no-store" });
       if (res.ok) blob = await res.blob();
     } catch (_) { /* 下面按 missing 计 */ }
     if (!blob) { result.missing += 1; continue; }
-    const shrunk = await shrinkImageForShare(blob, mimeOfRef(rel));
+    const shrunk = await shrinkImageForShare(blob, mimeOfRef(target.fetchRel));
     if (!shrunk) { result.tooBig += 1; continue; }
-    result.assets.push({ rel_path: rel, mime: shrunk.mime, bytes_b64: shrunk.b64 });
+    result.assets.push({ rel_path: target.relPath, mime: shrunk.mime, bytes_b64: shrunk.b64 });
   }
   return result;
 }

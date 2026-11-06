@@ -57,3 +57,42 @@ test("shareLink：固定指向云端 share.html，带 d 参数", async () => {
     assert.equal(shareLink("abc123"), "https://mytemple-cloud.app.workbuddy.host/share.html?d=abc123");
   });
 });
+
+test("refToAsset：ws_ 前缀段是工作区 id，relPath 与云端读侧候选同构", async () => {
+  await withBrowserStubs(async () => {
+    const { refToAsset } = await import("../public/modules/share-cloud.js");
+    // 绝对 + ws 前缀（真实案例：/source/ws_25a724bd6b/screenshot-x.webp）
+    assert.deepEqual(refToAsset("/source/ws_25a724bd6b/screenshot-x.webp", "temple"), {
+      wsId: "ws_25a724bd6b",
+      fetchRel: "screenshot-x.webp",
+      relPath: "source/ws_25a724bd6b/screenshot-x.webp",
+    });
+    // 无前导斜杠的 ws 形态
+    assert.deepEqual(refToAsset("source/ws_abc1/p.webp", "temple"), {
+      wsId: "ws_abc1",
+      fetchRel: "p.webp",
+      relPath: "source/ws_abc1/p.webp",
+    });
+    // 普通 source/ 引用：本工作区取，键带 source/ 前缀
+    assert.deepEqual(refToAsset("source/screenshot-x.webp", "temple"), {
+      wsId: "temple",
+      fetchRel: "screenshot-x.webp",
+      relPath: "source/screenshot-x.webp",
+    });
+    // 裸文件名：键保持裸名（读侧候选 #1 就是裸名）
+    assert.deepEqual(refToAsset("img/pic.png", "temple"), {
+      wsId: "temple",
+      fetchRel: "img/pic.png",
+      relPath: "img/pic.png",
+    });
+    assert.deepEqual(refToAsset("pic.png", "temple"), {
+      wsId: "temple",
+      fetchRel: "pic.png",
+      relPath: "pic.png",
+    });
+    // 相对 ./ 前缀剥掉；路径穿越拒绝
+    assert.equal(refToAsset("./source/a.webp", "temple").relPath, "source/a.webp");
+    assert.equal(refToAsset("../etc/passwd", "temple"), null);
+    assert.equal(refToAsset("", "temple"), null);
+  });
+});
