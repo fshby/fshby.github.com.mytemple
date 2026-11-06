@@ -24,7 +24,7 @@
         <a href="index.html#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.3.1</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.3.2</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -40,6 +40,7 @@
         <div class="changelog-toc reveal">
           <h3>版本索引</h3>
           <ul>
+            <li><a href="#v2.3.2">v2.3.2</a> — 分享图片丢失修复（ws_ 工作区前缀引用按工作区 id 取图）；分享页补上代码块复制行为与目录索引抽屉</li>
             <li><a href="#v2.3.1">v2.3.1</a> — 分享图片丢失修复（ws_ 工作区前缀引用按工作区 id 取图）；分享页补上代码块复制行为与目录索引抽屉</li>
             <li><a href="#v2.3.0">v2.3.0</a> — 桌面端也能生成临时分享链接，支持 1/7/30 天或永久自动过期；过期由数据层拦截，同文档复用同一条链接，随时可撤销</li>
             <li><a href="#v2.2.7">v2.2.7</a> — 修复非 UTF-8 文档打开即误报「外部修改」（保存保留原编码）；暗色主题代码高亮变量/函数不可读修复，五套主题配色补齐；自定义高亮颜色按主题记忆 + 一键恢复默认</li>
@@ -111,6 +112,27 @@
             <li><a href="#v1.8.93">v1.8.93</a> — 界面与体验升级 + 性能优化</li>
           </ul>
         </div>
+
+                <article class="doc-section reveal" id="v2.3.2">
+          <h3>v2.3.2 · 分享取图兜底链：工作区换 id 后老文档的图也能带走</h3>
+<p>v2.3.1 修完图片丢失的当晚，真实使用又踩出了第三种形态——修复本身没错，但少了一道兜底。</p>
+
+          <h4>这次是什么情况</h4>
+          <ul>
+            <li>截图按<b>工作区</b>归档，老文档里的引用带着当时的工作区 id。工作区一旦重建，id 就换新了，老 id 在注册表里查无此项。</li>
+            <li>v2.3.1 的取图逻辑是「按 id 精确取」——解析是对的，但 id 失效后 404，图片再次静默丢失。</li>
+            <li>而编辑器<b>预览一直显示正常</b>：预览走的端点自带兜底，id 找不到时会按文件名扫描所有工作区。</li>
+          </ul>
+
+          <h4>修复：取图兜底链</h4>
+          <ul>
+            <li>先按工作区 id 精确取（快、准）；取不到自动落到<b>预览用的同一个端点</b>——预览能看到什么，分享就带什么，两条通道彻底同源。</li>
+            <li>写进云端的键保持原样引用路径，访客侧匹配不受影响；老分享<b>重新点一次「生成分享链接」即可补齐图片</b>。</li>
+            <li>缺失依旧如实计数显示（「N 张未找到」），不做静默吞错。</li>
+          </ul>
+
+          <p class="doc-meta">自动化测试 266 项全绿；真浏览器端到端 17/17（新增「失效 ws id 经 /source 兜底取到图」两条断言）。</p>
+</article>
 
                 <article class="doc-section reveal" id="v2.3.1">
           <h3>v2.3.1 · 分享体验修复：图片丢失、复制无响应、缺目录</h3>

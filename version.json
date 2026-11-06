@@ -1,7 +1,7 @@
 {
-    "version":  "2.3.1",
+    "version":  "2.3.2",
     "downloadUrl":  "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
-    "latestReleaseNotes":  "分享体验修复：图片随分享丢失（ws_ 工作区前缀引用按工作区 id 取图）；分享页补上代码块复制行为与目录索引抽屉",
-    "releaseNotes":  "v2.3.1 release. See changelog for details.",
+    "latestReleaseNotes":  "分享取图兜底链：工作区重建换 id 后老文档里的图片也能随分享带走（取不到精确 id 时落到预览同款 /source 端点兜底）",
+    "releaseNotes":  "v2.3.2 release. See changelog for details.",
     "releaseDate":  "2026-11-06"
 }

@@ -175,6 +175,19 @@ async function shrinkImageForShare(blob, fallbackMime) {
  * 收集并压好正文引用的图片。
  * @returns {{assets: {rel_path:string,mime:string,bytes_b64:string}[], missing:number, tooBig:number}}
  */
+/** 取图兜底链：预览能看到，分享就带得走。
+ *  ① /ws-asset/{引用里的wsId}/{文件} —— 精确（v2.3.1 语义：ws_ 段是工作区 id）；
+ *  ② /source/{引用路径} —— 编辑器预览用的同一端点，自带兜底：ws id 失效
+ *     （工作区重建换 id 等）时按文件名扫描所有工作区的 source/ 目录。
+ *     此前只有①，工作区重建后老文档里的旧 ws id 查无此工作区 → 全部 404
+ *     且静默计「未找到」，出现「预览有图、分享丢图」的分叉。 */
+export function fetchCandidates(target) {
+  const urls = [wsAssetUrl(target.wsId, target.fetchRel)];
+  const viaSource = String(target.relPath || "").replace(/^source\//, "");
+  if (viaSource) urls.push("/source/" + viaSource.split("/").map((s) => encodeURIComponent(s)).join("/"));
+  return urls;
+}
+
 export async function collectShareAssets(wsId, content) {
   const result = { assets: [], missing: 0, tooBig: 0 };
   const seen = new Set();
@@ -185,10 +198,12 @@ export async function collectShareAssets(wsId, content) {
     if (!target || !target.fetchRel || seen.has(target.relPath)) continue;
     seen.add(target.relPath);
     let blob = null;
-    try {
-      const res = await fetch(wsAssetUrl(target.wsId, target.fetchRel), { cache: "no-store" });
-      if (res.ok) blob = await res.blob();
-    } catch (_) { /* 下面按 missing 计 */ }
+    for (const url of fetchCandidates(target)) {
+      try {
+        const res = await fetch(url, { cache: "no-store" });
+        if (res.ok) { blob = await res.blob(); break; }
+      } catch (_) { /* 尝试下一跳 */ }
+    }
     if (!blob) { result.missing += 1; continue; }
     const shrunk = await shrinkImageForShare(blob, mimeOfRef(target.fetchRel));
     if (!shrunk) { result.tooBig += 1; continue; }

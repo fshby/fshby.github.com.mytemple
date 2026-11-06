@@ -96,3 +96,27 @@ test("refToAsset：ws_ 前缀段是工作区 id，relPath 与云端读侧候选�
     assert.equal(refToAsset("", "temple"), null);
   });
 });
+
+test("fetchCandidates：ws id 失效时兜底到预览同款 /source 端点", async () => {
+  await withBrowserStubs(async () => {
+    const { fetchCandidates, refToAsset } = await import("../public/modules/share-cloud.js");
+    // 真实案例回归：ws_25a724bd6b 已随工作区重建失效 → 第二跳走 /source
+    const stale = refToAsset("/source/ws_25a724bd6b/screenshot-x.webp", "temple");
+    assert.deepEqual(fetchCandidates(stale), [
+      "/ws-asset/ws_25a724bd6b/screenshot-x.webp",
+      "/source/ws_25a724bd6b/screenshot-x.webp",
+    ]);
+    // 普通 source/ 引用：第二跳剥掉 source/ 前缀
+    const plain = refToAsset("source/pic.webp", "temple");
+    assert.deepEqual(fetchCandidates(plain), [
+      "/ws-asset/temple/pic.webp",
+      "/source/pic.webp",
+    ]);
+    // 裸名引用：/source 兜底同样可用
+    const bare = refToAsset("pic.png", "temple");
+    assert.deepEqual(fetchCandidates(bare), [
+      "/ws-asset/temple/pic.png",
+      "/source/pic.png",
+    ]);
+  });
+});
