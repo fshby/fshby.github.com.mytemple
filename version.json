@@ -1,7 +1,7 @@
 {
-    "version":  "2.2.7",
+    "version":  "2.3.0",
     "downloadUrl":  "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
-    "latestReleaseNotes":  "修复非 UTF-8 文档打开即误报「外部修改」；暗色主题代码高亮变量/函数不可读修复，五套主题配色补齐；自定义高亮颜色按主题记忆 + 一键恢复默认",
-    "releaseNotes":  "v2.2.7 release. See changelog for details.",
-    "releaseDate":  "2026-11-05"
+    "latestReleaseNotes":  "桌面端新增临时分享链接：文件菜单一键生成只读链接，可选 1/7/30 天或永久自动过期，过期由数据层拦截，随时可撤销",
+    "releaseNotes":  "v2.3.0 release. See changelog for details.",
+    "releaseDate":  "2026-11-06"
 }

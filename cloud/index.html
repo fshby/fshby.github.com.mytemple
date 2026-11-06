@@ -340,7 +340,8 @@
 
   <!-- ── 管理面板 ───────────────────────────────────────── -->
   <!-- ── 我的分享（底部抽屉） ───────────────────────────────
-       只在 APK 里能打开（动作条本身是原生专属）。链接永久有效，撤销即时生效。 -->
+       只在 APK 里能打开（动作条本身是原生专属）。链接按所选有效期自动失效，
+       撤销后即时生效。 -->
   <div id="shareSheet" class="sheet" hidden>
     <div class="sheet-backdrop" data-close-sheet></div>
     <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="shareSheetTitle">
@@ -349,7 +350,16 @@
         <button class="icon-btn" type="button" data-close-sheet aria-label="关闭">✕</button>
       </div>
       <div class="sheet-body">
-        <p class="muted sheet-note">链接长期有效，撤销后访客立刻打不开、图片也一并不可读。</p>
+        <label class="share-ttl-row">
+          <span>新分享链接有效期</span>
+          <select id="shareTtlSelect" class="share-ttl-select">
+            <option value="1">1 天</option>
+            <option value="7">7 天</option>
+            <option value="30">30 天</option>
+            <option value="0">永久有效</option>
+          </select>
+        </label>
+        <p class="muted sheet-note">到期后访客打开显示「链接已失效」，图片一并不可读；也可以随时手动撤销。</p>
         <div id="shareList" class="share-list"></div>
       </div>
     </div>

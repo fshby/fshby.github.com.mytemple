@@ -442,6 +442,17 @@ details.ws > .doc-list > .doc-item > .doc-link { padding-left: 34px; }
 .share-item-meta { font-size: 12px; color: var(--muted); word-break: break-all; }
 .share-item-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex: none; }
 .share-item-actions .link-btn { font-size: 12.5px; padding: 2px 0; }
+/* 分享有效期选择：新生成的链接按此自动失效 */
+.share-ttl-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin-bottom: 8px; font-size: 13px; color: var(--text);
+}
+.share-ttl-select {
+  min-height: 32px; padding: 0 8px; border-radius: 8px; font-size: 13px;
+  border: 1px solid var(--line); background: var(--bg-elevated); color: var(--text);
+}
+.share-item-exp { color: var(--accent, #6b5f44); }
+.share-item-exp.is-soon { color: #b45309; }
 .offline-bar {
   position: fixed; left: 0; right: 0; top: 0; z-index: 60;
   padding: calc(6px + env(safe-area-inset-top)) 14px 6px;

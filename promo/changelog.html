@@ -24,7 +24,7 @@
         <a href="index.html#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.2.7</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.3.0</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -40,6 +40,7 @@
         <div class="changelog-toc reveal">
           <h3>版本索引</h3>
           <ul>
+            <li><a href="#v2.3.0">v2.3.0</a> — 桌面端也能生成临时分享链接，支持 1/7/30 天或永久自动过期；过期由数据层拦截，同文档复用同一条链接，随时可撤销</li>
             <li><a href="#v2.2.7">v2.2.7</a> — 修复非 UTF-8 文档打开即误报「外部修改」（保存保留原编码）；暗色主题代码高亮变量/函数不可读修复，五套主题配色补齐；自定义高亮颜色按主题记忆 + 一键恢复默认</li>
             <li><a href="#v2.2.6">v2.2.6</a> — 状态栏编码切换（ANSI/GBK 等 10 种编码直接选择并保存）+ 代码文件语法高亮与缩进参考线（方法/变量/关键字分色），Markdown 不受影响；修两个窗口缩放即报错的预存缺陷</li>
             <li><a href="#v2.2.5">v2.2.5</a> — 云同步可靠性修复：个别含脚本的 .html 文档点「一键推送」永远传不上云端（正文命中平台内容安全策略被拒写，而拒绝响应不带跨源头，浏览器只报一句误导性的「缺少跨源响应头」）。现在：推送前把 HTML 的脚本剥离成云端安全形态再上传（本机文件不动）、失败逐篇定位原因并显示、被拒自动降级重试、失败不再误写同步基线、云端与分享页识别标记并提示</li>
@@ -109,6 +110,34 @@
             <li><a href="#v1.8.93">v1.8.93</a> — 界面与体验升级 + 性能优化</li>
           </ul>
         </div>
+
+                <article class="doc-section reveal" id="v2.3.0">
+          <h3>v2.3.0 · 桌面端临时分享链接（支持自动过期）</h3>
+          <p>手机端早就能把文档临时分享给外部的人，桌面端一直没有入口。这一版补齐，并且把「什么时候失效」交给数据层而不是前端。</p>
+
+          <h4>入口与操作</h4>
+          <ul>
+            <li>「文件」菜单新增 <b>🔗 分享链接…</b>：选有效期（1 天 / 7 天 / 30 天 / 永久有效）→ 一键生成只读链接 → 复制发出，对方无需登录即可阅读。</li>
+            <li>弹窗下半部分是<b>「我的分享」</b>：这条文档已有的链接、还有几天到期（≤2 天转为警示色）、随时<b>撤销</b>。</li>
+            <li>有效期选择会记住，下次打开沿用；同一文档重复分享<b>复用同一条链接</b>，只更新内容与到期时间，不会每点一次堆一条死链。</li>
+          </ul>
+
+          <h4>过期由数据层保证，不是前端判断</h4>
+          <ul>
+            <li>云表新增到期时间字段，公开读取策略改为「未撤销<b>且</b>未过期」才下发 —— 链接到期后连内容都取不到，本地改系统时间也绕不过去。</li>
+            <li>访客侧再做一次兜底：链接已失效时明确提示「可能已到期自动失效，或被分享者撤销」，不再是含糊的「已撤销或输入有误」。</li>
+            <li>分享页会显示具体到期日期，接收方知道这条链接还能用多久。</li>
+          </ul>
+
+          <h4>安全边界不变</h4>
+          <ul>
+            <li>HTML 文档上传前剥离脚本与内联事件，转成「云端安全形态」——<b>本机文件一个字节不动</b>，只有云端那份受限。</li>
+            <li>文档里引用的图片随分享一起带走（最多 20 张，大图压成 WebP），对方打开不会看到一片空白。</li>
+            <li>分享链接只读，不能写入、不能列举你的其他文档；撤销后立即失效。</li>
+          </ul>
+
+          <p class="doc-meta">自动化测试 264 项全绿；真浏览器端到端 13/13（含到期写入、链接形态、剩余天数、复用、撤销、HTML 剥离）。</p>
+</article>
 
                 <article class="doc-section reveal" id="v2.2.7">
           <h3>v2.2.7 · 打开即误报修复 + 高亮全面适配主题</h3>

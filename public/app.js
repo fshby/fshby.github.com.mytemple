@@ -1,4 +1,4 @@
-import { createMarkdownEditor } from "/editor-core.js?v=20261105-syn-10";
+import { createMarkdownEditor } from "/editor-core.js?v=20261106-share-11";
 import { getPaperBackgroundUrl } from "./modules/paper-texture.js";
 import { escapeHtml, displayName, displayRelativePath, splitPathRef, joinPathRef, parentPathRef, compactName, splitWorkspaceRef, plainText, headingId } from "./modules/path-utils.js";
 import { extractOutline, addCnEnSpaces } from "./modules/editor-utils.js";
@@ -8,6 +8,19 @@ import { openDrawEditor } from "./modules/draw-editor.js";
 import { createScreenshotEditor } from "./modules/screenshot-editor.js";
 import { initCloudSync } from "./modules/cloud-sync.js";
 import { normalizeColorsByTheme, withThemeColor, withoutTheme } from "./modules/color-themes.js";
+import {
+  shareReady,
+  shareTtlDays,
+  setShareTtlDays,
+  shareExpiryText,
+  collectShareAssets,
+  writeShare,
+  readMyShares,
+  revokeShare,
+  shareLink,
+  findLiveShare,
+  shareErrMsg,
+} from "./modules/share-cloud.js";
 
 // ── 全局错误处理器：捕获模块顶层抛出的未处理异常，输出到 console 便于诊断 ──
 window.addEventListener("error", (e) => {
@@ -43,7 +56,7 @@ const LARGE_PREVIEW_DELAY = 700;
 const CHUNKED_RENDER_BYTES = 500 * 1024;
 const CHUNK_RENDER_SLICE_BYTES = 150 * 1024;
 const GRAPH_WORKER_URL = "/graph-worker.js?v=20260810-graph-1";
-const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20261105-syn-10";
+const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20261106-share-11";
 // Markdown 渲染缓存版本戳：解析器或 CSS 规则升级时递增，确保旧缓存不被复用。
 // 2026-08-29 v1.8.102：安装包 resources 包含 public/ 前端静态文件、端口回滚；修正其他电脑安装后 404 白屏。
 const MARKDOWN_RENDER_VERSION = "20260829-v18102-install-static-bundle-port-scan";
@@ -474,6 +487,17 @@ const els = {
   hlColorMeta: document.querySelector("#hlColorMeta"),
   resetCodeHighlightBtn: document.querySelector("#resetCodeHighlightBtn"),
   resetMdColorBtn: document.querySelector("#resetMdColorBtn"),
+  shareLinkModal: document.querySelector("#shareLinkModal"),
+  shareDocLabel: document.querySelector("#shareDocLabel"),
+  shareTtlSelect: document.querySelector("#shareTtlSelect"),
+  shareResult: document.querySelector("#shareResult"),
+  shareUrlInput: document.querySelector("#shareUrlInput"),
+  shareCopyBtn: document.querySelector("#shareCopyBtn"),
+  shareStatus: document.querySelector("#shareStatus"),
+  shareList: document.querySelector("#shareList"),
+  shareRevokeBtn: document.querySelector("#shareRevokeBtn"),
+  shareGenBtn: document.querySelector("#shareGenBtn"),
+  shareCloseBtn: document.querySelector("#shareCloseBtn"),
   defaultWorkspaceChoices: document.querySelector("#defaultWorkspaceChoices"),
   screenshotSaveChoices: document.querySelector("#screenshotSaveChoices"),
   pdfShowDate: document.querySelector("#pdfShowDate"),
@@ -13844,6 +13868,7 @@ if (els.workspaceBtn) {
     "export-txt": () => exportCurrentDoc("txt"),
     "export-md": () => exportCurrentDoc("md"),
     "export-wechat": () => copyCurrentDocAsWechat(),
+    "share-link": () => openShareLinkDialog(),
     "export-images": () => exportDocImages(),
     settings: () => openSettings(),
     "toggle-edit": () => state.currentPath && setMode("edit"),
@@ -14503,6 +14528,190 @@ if (els.browseFolderBtn) {
   });
 }
 document.addEventListener("keydown", handleFileBrowserKeydown);
+
+/* ── 分享链接（临时分享，与手机端同一条快照链路）────────────────
+ * 入口：文件菜单「分享链接…」。
+ * 链接指向云端 share.html，访客匿名可读；有效期到点自动失效，也可随时撤销。
+ * 快照是独立副本，改完文档再点一次「生成」即刷新内容与有效期。
+ */
+function currentShareTarget() {
+  if (!state.currentPath) return null;
+  const ref = splitPathRef(state.currentPath);
+  const ws = state.workspaces.find((w) => w.id === ref.workspaceId);
+  const relPath = ref.relative || "";
+  return {
+    wsId: ref.workspaceId,
+    workspace: ws?.name || ref.workspaceId || "我的知识库",
+    relPath,
+    title: state.currentTitle || relPath.split("/").pop() || "笔记",
+    content: els.editor?.value || "",
+  };
+}
+
+function setShareStatus(text, isError = false) {
+  if (!els.shareStatus) return;
+  els.shareStatus.textContent = text || "";
+  els.shareStatus.classList.toggle("is-error", Boolean(isError) && Boolean(text));
+}
+
+function showShareUrl(url) {
+  if (!els.shareResult) return;
+  els.shareResult.classList.remove("hidden");
+  if (els.shareUrlInput) els.shareUrlInput.value = url;
+}
+
+async function copyShareUrl(url) {
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) await navigator.clipboard.writeText(url);
+    else {
+      els.shareUrlInput?.select();
+      document.execCommand("copy");
+    }
+    showToast("链接已复制，发到微信即可");
+  } catch (_) {
+    showToast(`复制失败，链接：${url}`);
+  }
+}
+
+function shareCreatedText(value) {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+async function renderShareMine() {
+  if (!els.shareList) return;
+  els.shareList.innerHTML = '<p class="muted">正在读取…</p>';
+  try {
+    const rows = await readMyShares();
+    if (!rows.length) {
+      els.shareList.innerHTML = '<p class="muted">还没有分享出去的文档。</p>';
+      return;
+    }
+    els.shareList.innerHTML = rows.map((r) => {
+      const where = [r.workspace, r.rel_path].filter(Boolean).join(" / ");
+      const imgs = r.asset_count ? ` · ${r.asset_count} 张图` : "";
+      const created = shareCreatedText(r.created_at);
+      const exp = shareExpiryText(r.expires_at);
+      const soon = exp === "已过期" || /剩 [1-9] 小时/.test(exp) ? " is-soon" : "";
+      return `<div class="share-item" data-share="${escapeHtml(r.id)}" data-share-url="${escapeHtml(shareLink(r.id))}">
+        <div class="share-item-main">
+          <strong class="share-item-title">${escapeHtml(r.title || "（无标题）")}</strong>
+          <span class="share-item-meta">${escapeHtml(where)}${created ? ` · ${escapeHtml(created)}` : ""}${imgs}</span>
+          <span class="share-item-meta share-item-exp${soon}">${escapeHtml(exp)}</span>
+        </div>
+        <div class="share-item-actions">
+          <button type="button" data-share-act="copy">复制</button>
+          <button type="button" data-share-act="revoke" class="danger">撤销</button>
+        </div>
+      </div>`;
+    }).join("");
+  } catch (err) {
+    els.shareList.innerHTML = `<p class="muted">读取失败：${escapeHtml(shareErrMsg(err))}</p>`;
+  }
+}
+
+async function openShareLinkDialog() {
+  if (!state.currentPath) {
+    showToast("先打开一篇文档再分享");
+    return;
+  }
+  if (!shareReady()) {
+    showToast("请先在「云端」面板登录后使用分享");
+    return;
+  }
+  const t = currentShareTarget();
+  if (!t) return;
+  if (els.shareDocLabel) {
+    els.shareDocLabel.textContent = `当前文档：${t.title}（${[t.workspace, t.relPath].filter(Boolean).join("/")}）`;
+  }
+  if (els.shareTtlSelect) els.shareTtlSelect.value = String(shareTtlDays());
+  els.shareResult?.classList.add("hidden");
+  els.shareRevokeBtn?.classList.add("hidden");
+  els.shareRevokeBtn?.removeAttribute("data-share");
+  setShareStatus("");
+  els.shareLinkModal?.classList.remove("hidden");
+
+  // 已有未撤销的分享：直接展示链接与剩余有效期
+  try {
+    const live = await findLiveShare(t.workspace, t.relPath);
+    if (live) {
+      showShareUrl(shareLink(live.id));
+      if (els.shareRevokeBtn) {
+        els.shareRevokeBtn.classList.remove("hidden");
+        els.shareRevokeBtn.dataset.share = live.id;
+      }
+      setShareStatus(`这篇已分享 · ${shareExpiryText(live.expires_at)}（再次「生成」会刷新内容与有效期）`);
+    }
+  } catch (err) {
+    setShareStatus(`读取分享状态失败：${shareErrMsg(err)}`, true);
+  }
+  renderShareMine();
+}
+
+function closeShareLinkDialog() {
+  els.shareLinkModal?.classList.add("hidden");
+}
+
+async function generateShareLink() {
+  const t = currentShareTarget();
+  if (!t) return;
+  if (!t.content.trim()) {
+    setShareStatus("这篇还没有内容可分享", true);
+    return;
+  }
+  const ttl = setShareTtlDays(els.shareTtlSelect?.value);
+  els.shareGenBtn && (els.shareGenBtn.disabled = true);
+  setShareStatus("正在整理图片并上传…");
+  try {
+    const picked = await collectShareAssets(t.wsId, t.content);
+    const { id, expiresAt } = await writeShare({
+      workspace: t.workspace,
+      relPath: t.relPath,
+      title: t.title,
+      content: t.content,
+      assets: picked.assets,
+    });
+    const url = shareLink(id);
+    showShareUrl(url);
+    if (els.shareRevokeBtn) {
+      els.shareRevokeBtn.classList.remove("hidden");
+      els.shareRevokeBtn.dataset.share = id;
+    }
+    const parts = [];
+    if (picked.assets.length) parts.push(`${picked.assets.length} 张图`);
+    if (picked.missing) parts.push(`${picked.missing} 张未找到`);
+    if (picked.tooBig) parts.push(`${picked.tooBig} 张过大未带走`);
+    const tail = parts.length ? `（${parts.join("，")}）` : "";
+    setShareStatus(`已生成${tail} · ${expiresAt ? `${ttl} 天后自动失效` : "永久有效，可随时撤销"}`);
+    renderShareMine();
+  } catch (err) {
+    setShareStatus(`生成失败：${shareErrMsg(err)}`, true);
+  } finally {
+    if (els.shareGenBtn) els.shareGenBtn.disabled = false;
+  }
+}
+
+async function doRevokeShare(id) {
+  if (!id) return;
+  const ok = await customConfirm("撤销这条分享？访客会立刻打不开，链接里的图片也一并不可读。", {
+    title: "撤销分享",
+    confirmText: "撤销",
+    cancelText: "保留",
+    danger: true,
+  });
+  if (!ok) return;
+  try {
+    await revokeShare(id);
+    els.shareRevokeBtn?.classList.add("hidden");
+    els.shareResult?.classList.add("hidden");
+    setShareStatus("已撤销，链接立即失效");
+    renderShareMine();
+  } catch (err) {
+    setShareStatus(`撤销失败：${shareErrMsg(err)}`, true);
+  }
+}
 
 async function openNormalizeMdModal() {
   const data = await api.get("/api/workspaces");
@@ -16357,6 +16566,29 @@ els.resetMdColorBtn?.addEventListener("click", () => {
   localStorage.setItem("markdownColors", JSON.stringify(next));
   applySettings(settings);
   showToast({ title: "已恢复默认颜色", message: "当前主题的 Markdown 文字高亮已恢复为主题默认配色。", kind: "ok" });
+});
+/* 分享链接对话框：生成 / 复制 / 撤销 / 列表 */
+els.shareGenBtn?.addEventListener("click", () => generateShareLink());
+els.shareCopyBtn?.addEventListener("click", () => {
+  const url = els.shareUrlInput?.value;
+  if (url) copyShareUrl(url);
+});
+els.shareCloseBtn?.addEventListener("click", () => closeShareLinkDialog());
+els.shareTtlSelect?.addEventListener("change", () => {
+  setShareTtlDays(els.shareTtlSelect.value);
+  setShareStatus(`新链接按当前选择计时：${shareTtlDays() ? `${shareTtlDays()} 天` : "永久"}（点「生成分享链接」生效）`);
+});
+els.shareRevokeBtn?.addEventListener("click", () => doRevokeShare(els.shareRevokeBtn?.dataset.share));
+els.shareList?.addEventListener("click", (event) => {
+  const btn = event.target.closest("[data-share-act]");
+  if (!btn) return;
+  const item = btn.closest("[data-share]");
+  if (!item) return;
+  if (btn.dataset.shareAct === "copy") copyShareUrl(item.dataset.shareUrl || "");
+  else if (btn.dataset.shareAct === "revoke") doRevokeShare(item.dataset.share);
+});
+els.shareLinkModal?.addEventListener("click", (event) => {
+  if (event.target === els.shareLinkModal) closeShareLinkDialog();
 });
 // 代码语法高亮颜色调整
 const codeHighlightColorInputs = [

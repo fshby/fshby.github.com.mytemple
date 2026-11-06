@@ -481,14 +481,20 @@
     var rows;
     try {
       rows = await rest("/shared_docs?id=eq." + qs(id)
-        + "&select=id,owner_name,workspace,rel_path,title,content,created_at&limit=1");
+        + "&select=id,owner_name,workspace,rel_path,title,content,created_at,expires_at&limit=1");
     } catch (err) {
       fail("暂时打不开", "网络似乎不太顺畅，稍后再试一次吧。");
       return;
     }
     var row = rows && rows[0];
     if (!row) {
-      fail();
+      // RLS 已按「未撤销 + 未过期」过滤，拿不到行 = 撤销 / 过期 / 编号错误
+      fail("这个分享链接已失效", "链接可能已到期自动失效，或被分享者撤销。可以请对方重新分享一次。");
+      return;
+    }
+    // 兜底：策略之外的二次校验（防止缓存/旧数据绕过 RLS）
+    if (row.expires_at && new Date(row.expires_at).getTime() <= Date.now()) {
+      fail("这个分享链接已失效", "链接已到期自动失效。可以请分享者重新分享一次。");
       return;
     }
 
@@ -502,6 +508,13 @@
     var when = fmtDate(row.created_at);
     if (when) bits.push(when);
     if (row.owner_name) bits.push("由 " + row.owner_name + " 分享");
+    // 让访客知道链接何时自动失效（永久链接不显示）
+    if (row.expires_at) {
+      var expDate = new Date(row.expires_at);
+      if (!isNaN(expDate.getTime())) {
+        bits.push(expDate.getFullYear() + "-" + (expDate.getMonth() + 1) + "-" + expDate.getDate() + " 到期");
+      }
+    }
     el.meta.textContent = bits.join(" · ");
 
     el.loading.hidden = true;

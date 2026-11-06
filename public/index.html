@@ -17,9 +17,9 @@
       body.license-locked #licenseModal,
       body.license-locked #settingsModal { pointer-events: auto; }
     </style>
-    <link rel="stylesheet" href="/styles.css?v=20261105-syn-10">
-<link rel="modulepreload" href="/editor-core.js?v=20261105-syn-10">
-<link rel="modulepreload" href="/app.js?v=20261105-syn-10">
+    <link rel="stylesheet" href="/styles.css?v=20261106-share-11">
+<link rel="modulepreload" href="/editor-core.js?v=20261106-share-11">
+<link rel="modulepreload" href="/app.js?v=20261106-share-11">
   </head>
   <body>
     <div id="appSplash" class="app-splash">
@@ -1196,6 +1196,40 @@
         </div>
       </div>
     </div>
+    <!-- 分享链接（临时分享：按有效自动失效，可随时撤销）
+         与手机端同一条快照链路：写 shared_docs / shared_assets，访客匿名打开 share.html。 -->
+    <div id="shareLinkModal" class="modal hidden" role="dialog" aria-modal="true">
+      <div class="modal-dialog share-dialog">
+        <h2>分享链接</h2>
+        <p class="muted" id="shareDocLabel">把当前文档生成一条只读分享链接，对方无需登录即可阅读（支持微信内打开）。</p>
+        <div class="share-ttl-row">
+          <label class="setting-row">
+            <span>链接有效期</span>
+            <select id="shareTtlSelect">
+              <option value="1">1 天</option>
+              <option value="7">7 天</option>
+              <option value="30">30 天</option>
+              <option value="0">永久有效</option>
+            </select>
+          </label>
+          <p class="muted share-hint">到期后链接自动失效；每次重新分享都会按当前选择重算有效期。</p>
+        </div>
+        <div id="shareResult" class="share-result hidden">
+          <input id="shareUrlInput" type="text" readonly aria-label="分享链接">
+          <button type="button" id="shareCopyBtn">复制链接</button>
+        </div>
+        <p id="shareStatus" class="muted share-status"></p>
+        <div class="share-mine">
+          <div class="section-title"><strong>我的分享</strong><span class="muted">最近 50 条</span></div>
+          <div id="shareList" class="share-list"><p class="muted">打开时自动读取…</p></div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" id="shareRevokeBtn" class="danger hidden">撤销当前文档的分享</button>
+          <button type="button" id="shareGenBtn" class="primary">生成分享链接</button>
+          <button type="button" id="shareCloseBtn">关闭</button>
+        </div>
+      </div>
+    </div>
     <div id="semanticTagsModal" class="modal hidden" role="dialog" aria-modal="true">
       <div class="modal-dialog normalize-dialog semantic-tags-dialog">
         <h2>智能适配标签</h2>
@@ -1539,9 +1573,9 @@
     <script src="/vendor/highlight/langs/fortran.min.js?v=20260928-v1"></script>
     <!-- 云端同步：SDK 与公开配置必须是经典脚本（挂到 window），且先于 app.js。
          两者都由 npm run vendor:cloud 与云端页保持一致，桌面端凭它们直连云服务。 -->
-    <script src="/vendor/sdk/workbuddy-cloud-sdk.global.js?v=20261105-syn-10"></script>
-    <script src="/cloud-config.js?v=20261105-syn-10"></script>
-    <script src="/app.js?v=20261105-syn-10" type="module"></script>
+    <script src="/vendor/sdk/workbuddy-cloud-sdk.global.js?v=20261106-share-11"></script>
+    <script src="/cloud-config.js?v=20261106-share-11"></script>
+    <script src="/app.js?v=20261106-share-11" type="module"></script>
 
     <div class="menu-dropdowns" id="menuDropdowns">
       <div class="menu-dropdown hidden" data-dropdown="file" role="menu">
@@ -1560,6 +1594,8 @@
         <button class="menu-option" data-action="export-md"><span class="menu-option-icon">📋</span>导出 Markdown (MD)</button>
         <button class="menu-option" data-action="export-images"><span class="menu-option-icon">🖼️</span>导出截图资源</button>
         <button class="menu-option" data-action="export-wechat"><span class="menu-option-icon">📢</span>复制为公众号</button>
+        <div class="menu-separator"></div>
+        <button class="menu-option" data-action="share-link"><span class="menu-option-icon">🔗</span>分享链接…</button>
         <div class="menu-separator"></div>
         <button class="menu-option" data-action="settings"><span class="menu-option-icon">⚙️</span>设置<kbd>Ctrl+,</kbd></button>
       </div>

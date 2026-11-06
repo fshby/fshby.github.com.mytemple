@@ -186,7 +186,7 @@ const el = {
   confirmOk: $("confirmOk"),
   toast: $("toast"),
   nativeActions: $("nativeActions"), offlineBar: $("offlineBar"),
-  shareSheet: $("shareSheet"), shareList: $("shareList"),
+  shareSheet: $("shareSheet"), shareList: $("shareList"), shareTtlSelect: $("shareTtlSelect"),
 };
 
 const state = {
@@ -2536,6 +2536,26 @@ const SHARE_MAX_WIDTH = 1080;
 const SHARE_QUALITY = 0.72;
 /** 分享页不带视频：体积不可控，微信里多半也是跳转播放。 */
 const SHARE_VIDEO_EXT = /\.(mp4|m4v|webm|mov|ogv)$/i;
+/** 新分享链接的默认有效期（天）。0 = 永久；用户可在「我的分享」抽屉里改。 */
+const SHARE_TTL_KEY = "shareTtlDays";
+const SHARE_TTL_DEFAULT = 7;
+function shareTtlDays() {
+  // 注意 Number(null) === 0：未设置过时不能当成「永久」，必须先判空串/null
+  const raw = localStorage.getItem(SHARE_TTL_KEY);
+  if (raw === null || raw === "") return SHARE_TTL_DEFAULT;
+  const v = Number(raw);
+  return [0, 1, 7, 30].includes(v) ? v : SHARE_TTL_DEFAULT;
+}
+/** 剩余有效期文案（列表展示用）：永久 / 剩 N 天 / 剩 N 小时 */
+function shareExpiryText(expiresAt) {
+  if (!expiresAt) return "永久有效";
+  const left = new Date(expiresAt).getTime() - Date.now();
+  if (!Number.isFinite(left)) return "永久有效";
+  if (left <= 0) return "已过期";
+  const hours = Math.ceil(left / 36e5);
+  if (hours <= 48) return `剩 ${hours} 小时`;
+  return `剩 ${Math.ceil(hours / 24)} 天`;
+}
 
 function newShareId() {
   const b = new Uint8Array(9);
@@ -2635,6 +2655,7 @@ async function collectShareAssets(doc) {
 async function writeShare(doc, content, assets) {
   const db = cloud.database;
   const rel = doc.rel_path || "";
+  const ttl = shareTtlDays();
   const row = {
     workspace: doc.workspace,
     rel_path: rel,
@@ -2642,6 +2663,8 @@ async function writeShare(doc, content, assets) {
     content,
     asset_count: assets.length,
     owner_name: (state.session && state.session.user && state.session.user.name) || null,
+    // 自动过期：null = 永久；每次分享（含刷新）都按当前设置重算
+    expires_at: ttl ? new Date(Date.now() + ttl * 864e5).toISOString() : null,
   };
 
   let id = null;
@@ -2674,7 +2697,7 @@ async function writeShare(doc, content, assets) {
 
 async function readMyShares() {
   const res = await cloud.database.from("shared_docs")
-    .select("id,title,workspace,rel_path,created_at,asset_count")
+    .select("id,title,workspace,rel_path,created_at,asset_count,expires_at")
     .eq("revoked", false).order("created_at", { ascending: false }).limit(50);
   if (res.error) throw res.error;
   return res.data || [];
@@ -2695,6 +2718,8 @@ function shareErrMsg(err) {
 /** 「我的分享」抽屉：列出未撤销的分享，可复制链接 / 撤销 */
 async function openShareSheet() {
   el.shareSheet.hidden = false;
+  // 回填当前默认有效期（新链接按此自动失效）
+  if (el.shareTtlSelect) el.shareTtlSelect.value = String(shareTtlDays());
   el.shareList.innerHTML = '<p class="muted">正在读取…</p>';
   try {
     const rows = await readMyShares();
@@ -2705,10 +2730,13 @@ async function openShareSheet() {
     el.shareList.innerHTML = rows.map((r) => {
       const where = [r.workspace, r.rel_path].filter(Boolean).join(" / ");
       const imgs = r.asset_count ? ` · ${r.asset_count} 张图` : "";
+      const expText = shareExpiryText(r.expires_at);
+      const expCls = expText === "已过期" || /剩 [1-9] 小时/.test(expText) ? " is-soon" : "";
       return `<div class="share-item" data-share="${escapeHtml(r.id)}">
         <div class="share-item-main">
           <strong class="share-item-title">${escapeHtml(r.title || "（无标题）")}</strong>
           <span class="share-item-meta">${escapeHtml(where)} · ${escapeHtml(fmtTime(r.created_at))}${imgs}</span>
+          <span class="share-item-meta share-item-exp${expCls}">${escapeHtml(expText)}</span>
         </div>
         <div class="share-item-actions">
           <button class="link-btn" type="button" data-share-act="copy">复制链接</button>
@@ -2719,6 +2747,14 @@ async function openShareSheet() {
   } catch (err) {
     el.shareList.innerHTML = `<p class="muted">读取失败：${escapeHtml(shareErrMsg(err))}</p>`;
   }
+}
+
+if (el.shareTtlSelect) {
+  el.shareTtlSelect.addEventListener("change", () => {
+    const v = Number(el.shareTtlSelect.value);
+    localStorage.setItem(SHARE_TTL_KEY, String([0, 1, 7, 30].includes(v) ? v : SHARE_TTL_DEFAULT));
+    toast("新分享链接有效期已设为 " + (v ? `${v} 天` : "永久"));
+  });
 }
 
 if (el.shareSheet) {
