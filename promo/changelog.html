@@ -24,7 +24,7 @@
         <a href="index.html#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.3.0</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.3.1</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -40,6 +40,7 @@
         <div class="changelog-toc reveal">
           <h3>版本索引</h3>
           <ul>
+            <li><a href="#v2.3.1">v2.3.1</a> — 分享图片丢失修复（ws_ 工作区前缀引用按工作区 id 取图）；分享页补上代码块复制行为与目录索引抽屉</li>
             <li><a href="#v2.3.0">v2.3.0</a> — 桌面端也能生成临时分享链接，支持 1/7/30 天或永久自动过期；过期由数据层拦截，同文档复用同一条链接，随时可撤销</li>
             <li><a href="#v2.2.7">v2.2.7</a> — 修复非 UTF-8 文档打开即误报「外部修改」（保存保留原编码）；暗色主题代码高亮变量/函数不可读修复，五套主题配色补齐；自定义高亮颜色按主题记忆 + 一键恢复默认</li>
             <li><a href="#v2.2.6">v2.2.6</a> — 状态栏编码切换（ANSI/GBK 等 10 种编码直接选择并保存）+ 代码文件语法高亮与缩进参考线（方法/变量/关键字分色），Markdown 不受影响；修两个窗口缩放即报错的预存缺陷</li>
@@ -110,6 +111,33 @@
             <li><a href="#v1.8.93">v1.8.93</a> — 界面与体验升级 + 性能优化</li>
           </ul>
         </div>
+
+                <article class="doc-section reveal" id="v2.3.1">
+          <h3>v2.3.1 · 分享体验修复：图片丢失、复制无响应、缺目录</h3>
+<p>v2.3.0 把临时分享带上桌面之后，第一批真实用户反馈来了三个问题，这一版全部修掉。</p>
+
+          <h4>图片在生成分享那一刻就丢了</h4>
+          <ul>
+            <li>现象：文档里的截图在分享页全部显示「这张图片没有随分享一起带走」，云端数据里资产数是 0。</li>
+            <li>根因：截图保存时按<b>工作区</b>归档，文档里的引用形如 <code>/source/ws_xxx/截图.webp</code>——ws_ 这一段其实是<b>工作区 id</b>。生成分享时它被当成了 source/ 底下的一个子文件夹，去一条根本不存在的路径找文件，全部按「找不到」静默丢弃。</li>
+            <li>修复：按正确语义解析——ws_ 段还原成工作区 id 去取本机字节；写进云端的键也改成与访客侧匹配规则<b>同一套命名</b>，取到了图还要能对上号才算修完。</li>
+            <li>旧分享<b>重新点一次「生成分享链接」即可自愈</b>：同一文档复用同一条链接并补齐图片，链接不用作废重发。</li>
+          </ul>
+
+          <h4>代码块「复制」点了没反应</h4>
+          <ul>
+            <li>渲染器生成的复制按钮只有个壳：工作台页面自己绑了点击事件，分享页从没绑过。</li>
+            <li>分享页已补上同样的绑定，并加了两处增强：不支持剪贴板 API 的环境（如微信内置浏览器）自动退回老方法；点击后按钮直接显示「已复制 / 复制失败」。此修复已在线上生效，无需升级。</li>
+          </ul>
+
+          <h4>长文档没有目录索引</h4>
+          <ul>
+            <li>工作台阅读区一直有左侧「本文目录」，分享页却没有。现在正文右下角有<b>浮动「目录」按钮</b>，点开右侧抽屉：标题逐级缩进、点击平滑跳转、滚动时高亮当前小节。</li>
+            <li>没有标题的文档（纯文字笔记、独立 HTML 页）不显示按钮。此修复同样已在线上生效。</li>
+          </ul>
+
+          <p class="doc-meta">自动化测试 265 项全绿；真浏览器端到端 13/13（新增 ws_ 引用取图与写库键断言）+ 目录专项 8/8。</p>
+</article>
 
                 <article class="doc-section reveal" id="v2.3.0">
           <h3>v2.3.0 · 桌面端临时分享链接（支持自动过期）</h3>

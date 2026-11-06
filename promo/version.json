@@ -1,7 +1,7 @@
 {
-    "version":  "2.3.0",
+    "version":  "2.3.1",
     "downloadUrl":  "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
-    "latestReleaseNotes":  "桌面端新增临时分享链接：文件菜单一键生成只读链接，可选 1/7/30 天或永久自动过期，过期由数据层拦截，随时可撤销",
-    "releaseNotes":  "v2.3.0 release. See changelog for details.",
+    "latestReleaseNotes":  "分享体验修复：图片随分享丢失（ws_ 工作区前缀引用按工作区 id 取图）；分享页补上代码块复制行为与目录索引抽屉",
+    "releaseNotes":  "v2.3.1 release. See changelog for details.",
     "releaseDate":  "2026-11-06"
 }
