@@ -17,7 +17,7 @@
   <meta name="theme-color" content="#6b5f45" />
 
   <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="/share.css?v=cloud-21" />
+  <link rel="stylesheet" href="/share.css?v=cloud-22" />
 </head>
 <body>
   <!-- 顶部品牌条：进页第一眼就有来源感 -->
@@ -67,6 +67,18 @@
       </p>
     </article>
 
+    <!-- 目录索引：markdown 渲染出标题大纲后才会显示（无标题文档自动隐藏）。
+         长文快速跳转：浮动按钮 → 右侧抽屉，点条目平滑滚动到对应标题。 -->
+    <button id="tocFab" class="toc-fab" type="button" aria-label="打开本文目录" hidden>目录</button>
+    <div id="tocMask" class="toc-mask" hidden></div>
+    <aside id="tocDrawer" class="toc-drawer" aria-label="本文目录" hidden>
+      <div class="toc-head">
+        <span class="toc-head-title">本文目录</span>
+        <button id="tocClose" class="toc-close" type="button" aria-label="关闭目录">&times;</button>
+      </div>
+      <nav id="tocList" class="toc-list"></nav>
+    </aside>
+
     <noscript>
       <section class="state">
         <h2>需要开启 JavaScript</h2>
@@ -89,6 +101,6 @@
   </footer>
 
   <script src="/cloud-config.js"></script>
-  <script src="/share.js?v=cloud-21"></script>
+  <script src="/share.js?v=cloud-22"></script>
 </body>
 </html>

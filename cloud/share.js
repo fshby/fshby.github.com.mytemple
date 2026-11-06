@@ -15,7 +15,7 @@
   "use strict";
 
   var CFG = window.__MT_CLOUD__ || {};
-  var ASSET_V = "cloud-21";
+  var ASSET_V = "cloud-22";
   var ENDPOINT = String(CFG.endpoint || "").replace(/\/+$/, "");
   var REST = ENDPOINT + "/.cloud/database/rest/v1";
   var HDR = { apikey: CFG.publishableKey || "", "X-Wb-Webapp-Access-Key": CFG.publishableKey || "" };
@@ -31,6 +31,11 @@
     title: document.getElementById("docTitle"),
     meta: document.getElementById("docMeta"),
     body: document.getElementById("docBody"),
+    tocFab: document.getElementById("tocFab"),
+    tocMask: document.getElementById("tocMask"),
+    tocDrawer: document.getElementById("tocDrawer"),
+    tocClose: document.getElementById("tocClose"),
+    tocList: document.getElementById("tocList"),
   };
 
   function fail(title, desc) {
@@ -269,15 +274,99 @@
         clearTimeout(timer);
         w.removeEventListener("message", onMsg);
         if (d.useBlob && d.htmlBlob) {
-          d.htmlBlob.text().then(resolve, reject);
+          d.htmlBlob.text().then(function (t) { resolve({ html: t, outline: d.outline || [] }); }, reject);
         } else {
-          resolve(d.html || "");
+          resolve({ html: d.html || "", outline: d.outline || [] });
         }
       }
       w.addEventListener("message", onMsg);
-      w.postMessage({ seq: seq, source: source, searchTerm: "", includeHtml: true, includeOutline: false });
+      // includeOutline：worker 顺带产出标题大纲，分享页用它渲染目录索引。
+      w.postMessage({ seq: seq, source: source, searchTerm: "", includeHtml: true, includeOutline: true });
     });
   }
+
+  /* ── 目录索引：标题大纲 → 浮动按钮 + 抽屉 ─────────────────
+   * 工作台阅读区有左侧目录，分享页此前把 worker 产出的 outline 丢掉了。
+   * 这里补齐：有标题才显示浮动按钮；点条目滚动到标题（heading id 由
+   * worker 生成并写在渲染结果里，同源同构）；滚动时高亮当前所在小节。 */
+  var tocState = { open: false, headings: [], ticking: false };
+
+  function tocOpen() {
+    tocState.open = true;
+    el.tocDrawer.hidden = false;
+    el.tocMask.hidden = false;
+    // 下一帧再加类名，保证过渡动画生效
+    requestAnimationFrame(function () {
+      el.tocDrawer.classList.add("is-open");
+      el.tocMask.classList.add("is-open");
+    });
+  }
+
+  function tocClose() {
+    tocState.open = false;
+    el.tocDrawer.classList.remove("is-open");
+    el.tocMask.classList.remove("is-open");
+    var drawer = el.tocDrawer, mask = el.tocMask;
+    setTimeout(function () {
+      if (!tocState.open) { drawer.hidden = true; mask.hidden = true; }
+    }, 220);
+  }
+
+  function tocScrollTo(id) {
+    var target = document.getElementById(id);
+    if (!target) return;
+    tocClose();
+    target.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function renderToc(outline) {
+    var items = Array.isArray(outline) ? outline : [];
+    if (!items.length) { el.tocFab.hidden = true; el.tocList.innerHTML = ""; return; }
+    tocState.headings = items;
+    var rows = [];
+    for (var i = 0; i < items.length; i += 1) {
+      var item = items[i];
+      var level = Math.min(Math.max(Number(item.level) || 1, 1), 4);
+      rows.push(
+        '<button type="button" class="toc-item lv-' + level + '" data-toc-target="' + escapeHtml(item.id) + '" title="' + escapeHtml(item.title) + '">' +
+        escapeHtml(item.title) + "</button>"
+      );
+    }
+    el.tocList.innerHTML = rows.join("");
+    el.tocFab.hidden = false;
+  }
+
+  function tocHighlight() {
+    // 找到视口顶部之上最近的标题 = 当前小节
+    var currentId = "";
+    var fromTop = 90; // 略过顶部品牌条
+    for (var i = 0; i < tocState.headings.length; i += 1) {
+      var node = document.getElementById(tocState.headings[i].id);
+      if (!node) continue;
+      if (node.getBoundingClientRect().top <= fromTop) currentId = tocState.headings[i].id;
+      else break;
+    }
+    var active = el.tocList.querySelector(".toc-item.is-active");
+    if (active) active.classList.remove("is-active");
+    if (currentId) {
+      var next = el.tocList.querySelector('[data-toc-target="' + CSS.escape(currentId) + '"]');
+      if (next) next.classList.add("is-active");
+    }
+  }
+
+  window.addEventListener("scroll", function () {
+    if (!tocState.headings.length || tocState.ticking) return;
+    tocState.ticking = true;
+    requestAnimationFrame(function () { tocHighlight(); tocState.ticking = false; });
+  }, { passive: true });
+
+  el.tocFab.addEventListener("click", tocOpen);
+  el.tocClose.addEventListener("click", tocClose);
+  el.tocMask.addEventListener("click", tocClose);
+  el.tocList.addEventListener("click", function (event) {
+    var btn = event.target.closest(".toc-item");
+    if (btn) tocScrollTo(btn.getAttribute("data-toc-target"));
+  });
 
   /* ── 内嵌网页卡片：帧内上报内容高度，这里把 iframe 撑到内容高度 ─────
    * worker 渲染的 ```html / chart 围栏 iframe 会在 srcdoc 最前置一段上报脚本。
@@ -564,14 +653,17 @@
       return;
     }
 
-    var html;
+    var html, outline = [];
     try {
-      html = await renderMarkdown(row.content || "");
+      var rendered = await renderMarkdown(row.content || "");
+      html = rendered.html;
+      outline = rendered.outline || [];
     } catch (_) {
       html = '<pre class="fallback-pre">' + escapeHtml(row.content || "") + "</pre>";
     }
     el.body.innerHTML = html;
 
+    renderToc(outline);
     await decorate(el.body);
     wireAssets(el.body, id, row.rel_path || "");
   }
