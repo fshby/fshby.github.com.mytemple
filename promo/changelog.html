@@ -24,7 +24,7 @@
         <a href="index.html#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.3.2</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.3.3</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -40,6 +40,7 @@
         <div class="changelog-toc reveal">
           <h3>版本索引</h3>
           <ul>
+            <li><a href="#v2.3.3">v2.3.3</a> — 局域网共享（6 位口令配对 + 访客白名单 + 只读/可编辑）；13 项安全审计修复（分享不可枚举 / 路径穿越 / DNS rebinding / 保存竞态）</li>
             <li><a href="#v2.3.2">v2.3.2</a> — 分享图片丢失修复（ws_ 工作区前缀引用按工作区 id 取图）；分享页补上代码块复制行为与目录索引抽屉</li>
             <li><a href="#v2.3.1">v2.3.1</a> — 分享图片丢失修复（ws_ 工作区前缀引用按工作区 id 取图）；分享页补上代码块复制行为与目录索引抽屉</li>
             <li><a href="#v2.3.0">v2.3.0</a> — 桌面端也能生成临时分享链接，支持 1/7/30 天或永久自动过期；过期由数据层拦截，同文档复用同一条链接，随时可撤销</li>
@@ -112,6 +113,29 @@
             <li><a href="#v1.8.93">v1.8.93</a> — 界面与体验升级 + 性能优化</li>
           </ul>
         </div>
+
+                <article class="doc-section reveal" id="v2.3.3">
+          <h3>v2.3.3 · 局域网共享 + 13 项安全审计修复</h3>
+<p>这个版本干了两件事：把你的知识库<b>安全地开放给同一局域网的设备</b>，以及把此前一次系统性安全审计里发现的 13 项缺陷全部修掉。</p>
+
+          <h4>局域网共享：口令配对，访客白名单</h4>
+          <ul>
+            <li>设置面板新增<b>「局域网共享」</b>开关。开启后显示访客地址与 6 位口令，同网段设备用浏览器打开、输口令即进轻量访客页。</li>
+            <li>访客可<b>浏览与搜索</b>全部工作区文档；「可编辑」模式下还能新建和修改文档，保存冲突（他人正在改同一篇）会明确提示二选一，不做静默覆盖。</li>
+            <li>安全模型是<b>「白名单内才存在」</b>：删除、移动、重命名、目录浏览、AI 与系统功能对访客不提供任何端点；口令连错 5 次锁定 60 秒；只读 / 可编辑两档运行中随时切换。</li>
+            <li>独立监听通道与桌面应用完全隔离，关闭开关或退出应用端口立即关闭，数据全程不出局域网。</li>
+          </ul>
+
+          <h4>安全审计：13 项修复</h4>
+          <ul>
+            <li><b>分享链接不可枚举</b>：临时分享从「表级读权 + 链接保密」升级为「远程调用白名单 + 链接保密」，第三方无法靠猜 id 批量扫库。</li>
+            <li><b>路径穿越防护</b>：读写删移统一路径净化 + 落点包含性校验（拒 ..、盘符、NTFS 数据流、软链逃逸），独立 Rust 单测锁定。</li>
+            <li><b>DNS rebinding 封堵</b>：本地服务只接受回环 Host，恶意网页无法把自己变成「同源」来调本机接口。</li>
+            <li><b>保存竞态加锁</b>：指纹比对与落盘进同一临界区；撤销分享改为真删数据并验证生效；分享体积上限与超限如实计数等。</li>
+          </ul>
+
+          <p class="doc-meta">自动化测试 282 项全绿；独立 Rust 路径守卫单测 5/5；旧版本漏洞基线实测 4/4 复现后修复。</p>
+</article>
 
                 <article class="doc-section reveal" id="v2.3.2">
           <h3>v2.3.2 · 分享取图兜底链：工作区换 id 后老文档的图也能带走</h3>
