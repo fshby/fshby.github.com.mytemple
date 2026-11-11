@@ -300,20 +300,23 @@ struct LanVerifyRequest {
 }
 
 /// POST /api/lan/verify（访客通道唯一免 token 端点，内部带限速锁定）
+/// 注意：访客配对协议**必须平铺**（lan.rs 的错误响应 401/429 也是平铺 json），
+/// guest.js 直接读 `data.token` / `data.error`；这里绝不能用 json_ok 包 ApiResponse 层。
 async fn lan_verify(
     State(state): State<Arc<ServerState>>,
     Json(req): Json<LanVerifyRequest>,
 ) -> Response {
     match state.app.lan.verify_pin(&req.pin).await {
-        Ok(v) => json_ok(v),
+        Ok(v) => raw_json(v),
         Err((status, v)) => (StatusCode::from_u16(status).unwrap_or(StatusCode::UNAUTHORIZED), Json(v)).into_response(),
     }
 }
 
 /// GET /api/lan/state（访客已配对后的会话态：只读/可编辑）
+/// 同 verify：平铺返回，guest.js 读 `s.readOnly`。
 async fn lan_guest_state(State(state): State<Arc<ServerState>>) -> impl IntoResponse {
     let lan = &state.app.lan;
-    json_ok(serde_json::json!({
+    raw_json(serde_json::json!({
         "ok": true,
         "readOnly": lan.is_read_only().await,
     }))

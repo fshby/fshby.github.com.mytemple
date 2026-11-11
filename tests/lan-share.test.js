@@ -56,6 +56,25 @@ test("LAN: lan_guard 无 token 必须 401 且 verify 免 token", () => {
   assert.ok(writeBody.includes('"/api/create-doc"') && writeBody.includes('"/api/create-folder"'), "只读集合必须包含新建端点");
 });
 
+test("LAN: 访客协议端点（verify/state）必须平铺返回，不得包 ApiResponse", () => {
+  // 回归锁（2026-11-11 真机实测发现的 bug）：lan_verify / lan_guest_state 此前用
+  // json_ok 包了一层 {ok, data:{...}}，而 guest.js 按平铺协议读 data.token /
+  // s.readOnly —— 真机上输对口令也进不去访客页、只读判断恒失效。
+  const src = repoFile("src-tauri", "src", "handlers.rs");
+  const verifyStart = src.indexOf("async fn lan_verify");
+  const verifyBody = src.slice(verifyStart, src.indexOf("async fn lan_guest_state", verifyStart));
+  assert.ok(verifyBody.includes("raw_json"), "lan_verify 成功响应必须 raw_json 平铺");
+  assert.ok(!verifyBody.includes("json_ok"), "lan_verify 不得用 json_ok 包装");
+  const stateStart = src.indexOf("async fn lan_guest_state");
+  const stateBody = src.slice(stateStart, src.indexOf("async fn lan_enable", stateStart));
+  assert.ok(stateBody.includes("raw_json"), "lan_guest_state 成功响应必须 raw_json 平铺");
+  assert.ok(!stateBody.includes("json_ok"), "lan_guest_state 不得用 json_ok 包装");
+  // guest.js 按平铺协议读（护栏：改协议必须两端同步）
+  const guest = repoFile("public", "guest.js");
+  assert.ok(guest.includes("data.ok && data.token"), "guest.js 配对读取 data.token（平铺协议）");
+  assert.ok(guest.includes("s && s.readOnly"), "guest.js 会话态读取 s.readOnly（平铺协议）");
+});
+
 test("LAN: 访客静态白名单不暴露主应用与云端模块", () => {
   const src = repoFile("src-tauri", "src", "lan.rs");
   const start = src.indexOf("pub const LAN_STATIC_ALLOW");
