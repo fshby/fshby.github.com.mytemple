@@ -174,6 +174,30 @@ async fn cloud_read_cors(req: Request, next: Next) -> Response {
     res
 }
 
+// ── Host 头守卫（防 DNS rebinding）─────────────────────────
+//
+// 服务只监听 127.0.0.1，但「只绑回环」并不等于「只有本机页面能调」：
+// 恶意网页可以把自己的域名解析到 127.0.0.1（DNS rebinding），浏览器随后
+// 就把请求当成同源发过来，此时浏览器带来的 Host 是**攻击者域名**。
+// 因此凡 Host 不是回环名的请求一律拒绝（421），正常场景（桌面 WebView、
+// 云端工作台跨源读本机、本机脚本）Host 都是 127.0.0.1 / localhost。
+pub async fn host_guard(req: Request, next: Next) -> Response {
+    let host = req
+        .headers()
+        .get(header::HOST)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    if !crate::path_guard::is_allowed_host(host) {
+        log::warn!("[security] 拒绝非回环 Host 请求 | host={} | path={}", host, req.uri().path());
+        return (
+            StatusCode::MISDIRECTED_REQUEST,
+            Json(ApiResponse::<()>::error("invalid host")),
+        )
+            .into_response();
+    }
+    next.run(req).await
+}
+
 // ── 路由构建 ──────────────────────────────────────────────
 
 pub fn build_native_router(state: Arc<ServerState>) -> Router {

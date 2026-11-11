@@ -186,6 +186,8 @@ pub async fn run(
         Router::new()
             .merge(crate::handlers::build_native_router(state))
             .fallback_service(serve)
+            // Host 白名单：拒绝非回环 Host（防 DNS rebinding 把恶意网页变成「同源」）
+            .layer(axum::middleware::from_fn(crate::handlers::host_guard))
     } else {
         // 异常：前端资源缺失。返回最小错误页（枚举全部 10 条候选，杜绝仅展示 1 条误导）。
         use axum::{
@@ -237,6 +239,7 @@ pub async fn run(
                     .unwrap()
                     .into_response()
             }))
+            .layer(axum::middleware::from_fn(crate::handlers::host_guard))
     };
 
     log::info!(

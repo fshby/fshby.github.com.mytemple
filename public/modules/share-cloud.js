@@ -14,31 +14,40 @@
 //
 // 分享快照是独立副本：之后再改文档不会自动更新，再点一次分享即刷新。
 import { cloudClient, cloudReady, stripCloudUnsafeHtml, CLOUD_WORKBENCH_URL, cloudEndpoint } from "./cloud-client.js";
+// 引用解析 / 候选键 / 各类上限**全部来自单一实现源**（shared/share-core.js → 本目录同名产物）。
+// 这几条规则以前桌面与云端各写一份、靠人工对齐，一天内炸了三次线上事故，见源文件注释。
+import {
+  SHARE_TTL_CHOICES,
+  SHARE_TTL_DEFAULT,
+  SHARE_ASSET_MAX,
+  SHARE_ASSET_KEEP_BYTES,
+  SHARE_ASSET_MAX_BYTES,
+  SHARE_MAX_WIDTH,
+  SHARE_QUALITY,
+  SHARE_VIDEO_EXT,
+  IMG_EXT,
+  HTML_DOC_EXT,
+  SHARE_CONTENT_MAX_BYTES,
+  SHARE_ASSETS_TOTAL_MAX_BYTES,
+  refToAsset,
+  mimeOfRef,
+  extractAssetRefs,
+  parseShareTtl,
+  expiresAtFromTtl,
+  utf8Bytes,
+} from "./share-core.js";
 
-/** 与云端工作台同名同值：有效期记忆存在 localStorage，两端心智一致。 */
-const SHARE_TTL_KEY = "shareTtlDays";
-export const SHARE_TTL_CHOICES = [1, 7, 30, 0];
-const SHARE_TTL_DEFAULT = 7;
+export { SHARE_TTL_CHOICES };
+// 共享核心的实现原样再导出，既有调用方与单测的导入路径保持不变
+export { refToAsset };
 
 const SHARE_PATH = "share.html";
-/** 单篇最多带走的图片数（与云端页一致：再多就该直接给原文）。 */
-const SHARE_ASSET_MAX = 20;
-/** 小图原样带走，不重编码（截图小字不会被转糊）。 */
-const SHARE_ASSET_KEEP_BYTES = 260 * 1024;
-/** 压缩后仍超限则放弃（页面显示占位，不静默丢）。 */
-const SHARE_ASSET_MAX_BYTES = 420 * 1024;
-const SHARE_MAX_WIDTH = 1080;
-const SHARE_QUALITY = 0.72;
-const SHARE_VIDEO_EXT = /\.(mp4|m4v|webm|mov|ogv)$/i;
-const IMG_EXT = /\.(png|jpe?g|jfif|gif|webp|avif|bmp|svg)$/i;
-const HTML_DOC_EXT = /\.html?$/i;
+/** 与云端工作台同名同值：有效期记忆存在 localStorage，两端心智一致。 */
+const SHARE_TTL_KEY = "shareTtlDays";
 
 export function shareTtlDays() {
-  // 注意 Number(null) === 0：未设置过时不能当成「永久」，必须先判空串/null
-  const raw = localStorage.getItem(SHARE_TTL_KEY);
-  if (raw === null || raw === "") return SHARE_TTL_DEFAULT;
-  const v = Number(raw);
-  return SHARE_TTL_CHOICES.includes(v) ? v : SHARE_TTL_DEFAULT;
+  // 注意 Number(null) === 0：未设置过时不能当成「永久」，判定逻辑在共享核心里
+  return parseShareTtl(localStorage.getItem(SHARE_TTL_KEY), SHARE_TTL_CHOICES, SHARE_TTL_DEFAULT);
 }
 
 export function setShareTtlDays(value) {
@@ -94,54 +103,6 @@ function bytesToBase64(buf) {
   return btoa(out);
 }
 
-function mimeOfRef(rel) {
-  const ext = String(rel || "").split(".").pop().toLowerCase();
-  const map = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", jfif: "image/jpeg", gif: "image/gif", webp: "image/webp", avif: "image/avif", bmp: "image/bmp", svg: "image/svg+xml" };
-  return map[ext] || "application/octet-stream";
-}
-
-/** 从正文取图片引用（`![]()`、`<img|video|source src>` 四种写法，与云端同一条正则）。 */
-function extractAssetRefs(text) {
-  const src = String(text || "");
-  const out = [];
-  const re = /!\[[^\]]*\]\(\s*<?([^)>\s]+)[^)]*\)|<(?:img|video|source)\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/gi;
-  let m;
-  while ((m = re.exec(src)) !== null) {
-    const u = m[1] || m[2];
-    if (u && !/^(https?:|data:|blob:)/i.test(u)) out.push(u);
-  }
-  return out;
-}
-
-/**
- * 引用 → 资产定位。
- * 返回 { wsId, fetchRel, relPath }，三者各司其职：
- *  - relPath：写进 shared_assets 的键，必须与云端分享页 assetCandidates 的
- *    首个候选同构（引用原样归一，保留 source/ 与 ws_ 段）：
- *      `/source/ws_xxx/f.webp` → `source/ws_xxx/f.webp`
- *      `source/f.webp`         → `source/f.webp`
- *      `f.webp`                → `f.webp`（读侧另有「文档目录/f.webp」兜底）
- *  - wsId + fetchRel：本机取字节用。`/source/ws_xxx/f.webp` 的 ws_ 段是
- *    **工作区 id**（桌面后端 serve_source 同一解析），不是 source/ 下的子
- *    文件夹 —— 之前把它当子目录拼进 ws-asset 路径，全部 404、图片全丢。
- */
-export function refToAsset(ref, fallbackWsId) {
-  const clean = String(ref || "").split("#")[0].split("?")[0].trim();
-  if (!clean || clean.includes("..")) return null;
-  const p = clean.replace(/^\.\//, "").replace(/^\/+/, "");
-  if (!p) return null;
-  let wsId = fallbackWsId;
-  let fetchRel = p;
-  const m = p.match(/^(?:source\/)?(ws_[A-Za-z0-9]+)\/(.+)$/);
-  if (m) {
-    wsId = m[1];
-    fetchRel = m[2];
-  } else if (p.startsWith("source/")) {
-    fetchRel = p.slice("source/".length);
-  }
-  return { wsId, fetchRel, relPath: p };
-}
-
 function wsAssetUrl(wsId, rel) {
   const encRel = String(rel || "").split("/").map((s) => encodeURIComponent(s)).join("/");
   return `/ws-asset/${encodeURIComponent(wsId)}/${encRel}`;
@@ -189,14 +150,15 @@ export function fetchCandidates(target) {
 }
 
 export async function collectShareAssets(wsId, content) {
-  const result = { assets: [], missing: 0, tooBig: 0 };
+  const result = { assets: [], missing: 0, tooBig: 0, truncated: 0 };
   const seen = new Set();
   for (const ref of extractAssetRefs(content)) {
-    if (result.assets.length >= SHARE_ASSET_MAX) break;
     if (SHARE_VIDEO_EXT.test(ref) || !IMG_EXT.test(ref)) continue;
     const target = refToAsset(ref, wsId);
     if (!target || !target.fetchRel || seen.has(target.relPath)) continue;
     seen.add(target.relPath);
+    // 超出上限如实计数，不静默截断（否则访客看到占位图，分享者以为全带上了）
+    if (result.assets.length >= SHARE_ASSET_MAX) { result.truncated += 1; continue; }
     let blob = null;
     for (const url of fetchCandidates(target)) {
       try {
@@ -248,7 +210,12 @@ function encEq(value) {
 }
 
 async function restRequest(table, { method = "GET", query = "", body = null } = {}) {
-  const headers = await shareHeaders(body ? { "content-type": "application/json", prefer: "return=representation" } : {});
+  // Prefer 一律带上：写/删操作必须**读回**受影响的行才能判断是否真的生效
+  // （被 RLS 拦下时 PostgREST 返回成功状态码 + 空数组，不读回就会误报成功）；
+  // 对 GET 无副作用，省得按方法分叉。
+  const extra = { prefer: "return=representation" };
+  if (body) extra["content-type"] = "application/json";
+  const headers = await shareHeaders(extra);
   const res = await fetch(`${REST_BASE}/${table}${query}`, {
     method,
     headers,
@@ -288,7 +255,22 @@ export async function writeShare({ workspace, relPath, title, content, assets = 
   const safeContent = isHtml
     ? stripCloudUnsafeHtml(String(content || "")).text
     : String(content || "");
-  const expiresAt = ttl ? new Date(Date.now() + ttl * 864e5).toISOString() : null;
+  const expiresAt = expiresAtFromTtl(ttl);
+  // 体积上限：放过去只会在网关/WAF 处被截断，前端再误报成「网络不畅」
+  const contentBytes = utf8Bytes(safeContent);
+  if (contentBytes > SHARE_CONTENT_MAX_BYTES) {
+    throw new Error(
+      `正文约 ${(contentBytes / 1048576).toFixed(1)}MB，超过单篇分享上限 ` +
+      `${(SHARE_CONTENT_MAX_BYTES / 1048576).toFixed(1)}MB，请拆分后再分享`
+    );
+  }
+  const assetBytes = assets.reduce((n, a) => n + String(a.bytes_b64 || "").length, 0);
+  if (assetBytes > SHARE_ASSETS_TOTAL_MAX_BYTES) {
+    throw new Error(
+      `本次要带走的图片合计约 ${(assetBytes / 1048576).toFixed(1)}MB，超过 ` +
+      `${(SHARE_ASSETS_TOTAL_MAX_BYTES / 1048576).toFixed(0)}MB 上限，请精简图片后再分享`
+    );
+  }
   const row = {
     workspace,
     rel_path: relPath,
@@ -339,13 +321,21 @@ export async function readMyShares() {
 }
 
 /** 撤销即失效：RLS 立刻停止下发正文与图片 */
+/**
+ * 撤销 = **删除数据**，不是打标记。只置 revoked 的话正文与图片仍留在云端
+ * （只是 RLS 不让匿名读），属于「以为删了、其实还在」。
+ * 顺序必须是「先删资产、再删主表」：资产表没有 FK 级联，反了会留孤儿行。
+ */
 export async function revokeShare(id) {
-  const rows = await restRequest("shared_docs", {
-    method: "PATCH",
-    query: `?id=${encEq(id)}`,
-    body: { revoked: true },
+  await restRequest("shared_assets", {
+    method: "DELETE",
+    query: `?share_id=${encEq(id)}`,
   });
-  if (!Array.isArray(rows) || !rows.length) throw new Error("撤销没有生效");
+  const rows = await restRequest("shared_docs", {
+    method: "DELETE",
+    query: `?id=${encEq(id)}`,
+  });
+  if (!Array.isArray(rows) || !rows.length) throw new Error("删除没有生效");
 }
 
 export { shareErrMsg, findLiveShare };

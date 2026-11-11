@@ -13,6 +13,7 @@ mod global_capture;
 pub mod handlers;
 pub mod ipc;
 pub mod license;
+pub mod path_guard;
 pub mod rag;
 pub mod security;
 pub mod server;

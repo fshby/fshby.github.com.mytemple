@@ -1,4 +1,4 @@
-import { createMarkdownEditor } from "/editor-core.js?v=20261106-share-13";
+import { createMarkdownEditor } from "/editor-core.js?v=20261111-2a2baecc";
 import { getPaperBackgroundUrl } from "./modules/paper-texture.js";
 import { escapeHtml, displayName, displayRelativePath, splitPathRef, joinPathRef, parentPathRef, compactName, splitWorkspaceRef, plainText, headingId } from "./modules/path-utils.js";
 import { extractOutline, addCnEnSpaces } from "./modules/editor-utils.js";
@@ -55,8 +55,8 @@ const LARGE_PREVIEW_BYTES = 100 * 1024;
 const LARGE_PREVIEW_DELAY = 700;
 const CHUNKED_RENDER_BYTES = 500 * 1024;
 const CHUNK_RENDER_SLICE_BYTES = 150 * 1024;
-const GRAPH_WORKER_URL = "/graph-worker.js?v=20260810-graph-1";
-const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20261106-share-13";
+const GRAPH_WORKER_URL = "/graph-worker.js?v=20261111-2a2baecc";
+const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20261111-2a2baecc";
 // Markdown 渲染缓存版本戳：解析器或 CSS 规则升级时递增，确保旧缓存不被复用。
 // 2026-08-29 v1.8.102：安装包 resources 包含 public/ 前端静态文件、端口回滚；修正其他电脑安装后 404 白屏。
 const MARKDOWN_RENDER_VERSION = "20260829-v18102-install-static-bundle-port-scan";
@@ -8369,7 +8369,7 @@ function loadMermaidAsync() {
     const script = document.createElement("script");
     // 锁定精确版本 + query 缓存破坏：@10 这类范围 URL 永不变，WebView2 磁盘缓存会
     // 永远持有远古版本（早期 10.x 有 flowchart 底部裁切 bug），且 10.x 不支持 architecture-beta。
-    script.src = "https://cdn.jsdelivr.net/npm/mermaid@11.12.2/dist/mermaid.min.js?v=20261003";
+    script.src = "https://cdn.jsdelivr.net/npm/mermaid@11.12.2/dist/mermaid.min.js?v=20261111-2a2baecc";
     script.onload = () => resolve(window.mermaid);
     script.onerror = () => {
       _mermaidLoadingPromise = null;
@@ -14531,7 +14531,7 @@ document.addEventListener("keydown", handleFileBrowserKeydown);
 
 /* ── 分享链接（临时分享，与手机端同一条快照链路）────────────────
  * 入口：文件菜单「分享链接…」。
- * 链接指向云端 share.html，访客匿名可读；有效期到点自动失效，也可随时撤销。
+ * 链接指向云端 share.html，访客匿名可读；有效期到点自动失效，也可随时删除（真删数据）。
  * 快照是独立副本，改完文档再点一次「生成」即刷新内容与有效期。
  */
 function currentShareTarget() {
@@ -14603,7 +14603,7 @@ async function renderShareMine() {
         </div>
         <div class="share-item-actions">
           <button type="button" data-share-act="copy">复制</button>
-          <button type="button" data-share-act="revoke" class="danger">撤销</button>
+          <button type="button" data-share-act="revoke" class="danger">删除</button>
         </div>
       </div>`;
     }).join("");
@@ -14633,7 +14633,7 @@ async function openShareLinkDialog() {
   setShareStatus("");
   els.shareLinkModal?.classList.remove("hidden");
 
-  // 已有未撤销的分享：直接展示链接与剩余有效期
+  // 已有分享：直接展示链接与剩余有效期
   try {
     const live = await findLiveShare(t.workspace, t.relPath);
     if (live) {
@@ -14683,8 +14683,9 @@ async function generateShareLink() {
     if (picked.assets.length) parts.push(`${picked.assets.length} 张图`);
     if (picked.missing) parts.push(`${picked.missing} 张未找到`);
     if (picked.tooBig) parts.push(`${picked.tooBig} 张过大未带走`);
+    if (picked.truncated) parts.push(`${picked.truncated} 张超出 20 张上限未带走`);
     const tail = parts.length ? `（${parts.join("，")}）` : "";
-    setShareStatus(`已生成${tail} · ${expiresAt ? `${ttl} 天后自动失效` : "永久有效，可随时撤销"}`);
+    setShareStatus(`已生成${tail} · ${expiresAt ? `${ttl} 天后自动失效` : "永久有效，可随时删除"}`);
     renderShareMine();
   } catch (err) {
     setShareStatus(`生成失败：${shareErrMsg(err)}`, true);
@@ -14695,9 +14696,9 @@ async function generateShareLink() {
 
 async function doRevokeShare(id) {
   if (!id) return;
-  const ok = await customConfirm("撤销这条分享？访客会立刻打不开，链接里的图片也一并不可读。", {
-    title: "撤销分享",
-    confirmText: "撤销",
+  const ok = await customConfirm("删除这条分享链接？正文与图片会从云端彻底删除（不可恢复），访客立刻打不开。", {
+    title: "删除分享链接",
+    confirmText: "删除",
     cancelText: "保留",
     danger: true,
   });
@@ -14706,10 +14707,10 @@ async function doRevokeShare(id) {
     await revokeShare(id);
     els.shareRevokeBtn?.classList.add("hidden");
     els.shareResult?.classList.add("hidden");
-    setShareStatus("已撤销，链接立即失效");
+    setShareStatus("分享链接已删除，正文与图片已从云端清除");
     renderShareMine();
   } catch (err) {
-    setShareStatus(`撤销失败：${shareErrMsg(err)}`, true);
+    setShareStatus(`删除失败：${shareErrMsg(err)}`, true);
   }
 }
 

@@ -957,12 +957,18 @@ const normFn = (s) => s
   .replace(/\s+/g, " ")                  // 空白
   .trim();
 
-test("对象路径规则两端逐字一致（assetWsSegment / extractAssetRefs / assetRelCandidates）", () => {
+test("对象路径规则两端逐字一致（assetWsSegment / extractAssetRefs / normPath）", () => {
   const desk = readFileSync(new URL("../public/modules/cloud-client.js", import.meta.url), "utf8");
   const web = readFileSync(new URL("../cloud/app.js", import.meta.url), "utf8");
-  for (const fn of ["assetWsSegment", "extractAssetRefs", "assetRelCandidates", "normPath"]) {
+  for (const fn of ["assetWsSegment", "extractAssetRefs", "normPath"]) {
     assert.equal(normFn(extractFn(desk, fn)), normFn(extractFn(web, fn)),
       `${fn} 在桌面内核与云端工作台之间已经分叉 —— 两端会算出不同的对象路径`);
+  }
+  // assetRelCandidates 不再各写一份：两端都从 shared/share-core.js 的 assetCandidates
+  // 导入（写读键不一致曾导致「图明明上传了，访客侧还是白框」）。
+  for (const [name, src] of [["桌面内核", desk], ["云端工作台", web]]) {
+    assert.match(src, /assetCandidates as assetRelCandidates/, `${name}应从共享核心导入候选键`);
+    assert.doesNotMatch(src, /function assetRelCandidates\(/, `${name}不该再自带一份候选键实现`);
   }
 });
 

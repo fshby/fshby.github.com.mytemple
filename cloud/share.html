@@ -5,6 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>知识库云端 · 分享的笔记</title>
 
+  <!-- 内容安全策略：访客看的正文来自**别人分享的内容**，是最需要纵深防御的一面。
+       脚本只允许同源（/share.js、/markdown-worker.js、/vendor/*）与**那一条**固定的哈希
+       （注入到网页文档帧里的高度上报脚本，见 share.js 的 HTML_FRAME_RESIZE_SCRIPT），
+       其余内联脚本一律拒绝；
+       图片允许 data:（随分享带走的 base64）；连接只允许自己这个域名。
+       注：HTML 文档是以 srcdoc 沙箱帧呈现的，帧内脚本由 sandbox 令牌控制，不受这里限制。 -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-r8/iiifp0vQLvZNddylhZfbaLv72IskZQn4CEfSetCM='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://mytemple-cloud.app.workbuddy.host; frame-src 'self' data: blob:; object-src 'none'; base-uri 'none'; form-action 'none'" />
+
   <!-- 抓取器（微信 / 各 IM 的链接预览）不执行 JS，拿不到单篇标题，
        所以这里给的是**通用品牌信息**：链接卡片至少明确是以什么产品分享的。
        单篇标题在页面加载后由脚本改写 document.title（只影响浏览器标签）。 -->
@@ -17,7 +25,7 @@
   <meta name="theme-color" content="#6b5f45" />
 
   <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="/share.css?v=cloud-22" />
+  <link rel="stylesheet" href="/share.css?v=cloud-24" />
 </head>
 <body>
   <!-- 顶部品牌条：进页第一眼就有来源感 -->
@@ -42,10 +50,10 @@
       <p>正在打开这篇笔记…</p>
     </section>
 
-    <!-- 不可用（链接错误 / 已撤销 / 已删除 / 网络失败） -->
+    <!-- 不可用（链接错误 / 已删除 / 已过期 / 网络失败） -->
     <section id="stateGone" class="state" hidden>
       <h2 id="goneTitle">这个分享链接已经不在了</h2>
-      <p id="goneDesc">链接可能已被分享者撤销，或者输入有误。</p>
+      <p id="goneDesc">链接可能已被分享者删除，或已到期自动失效，也可能输入有误。</p>
       <a class="go" href="https://mytemple.fshby.cc/" target="_blank" rel="noopener">了解 MyTemple 知识库</a>
     </section>
 
@@ -101,6 +109,6 @@
   </footer>
 
   <script src="/cloud-config.js"></script>
-  <script src="/share.js?v=cloud-22"></script>
+  <script src="/share.js?v=cloud-24" type="module"></script>
 </body>
 </html>

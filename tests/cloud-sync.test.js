@@ -715,16 +715,17 @@ test("资源是增量的：本地清单按体积跳过，且换账号 / 删分�
 test("渲染时把本机相对引用换成云存储的签名地址；签不出来给占位而不是裂图", () => {
   assert.match(cloudApp, /async function resolveDocAssets\(root, doc\)/, "必须有渲染后解析");
   assert.match(cloudApp, /await resolveDocAssets\(el\.docBody, data\)/, "openDoc 渲染完必须调用");
-  assert.match(cloudApp, /function assetRelCandidates\(/, "必须有引用解析");
+  assert.match(cloudApp, /assetCandidates as assetRelCandidates/, "引用解析来自共享核心（单一实现源）");
   // 存储桶不对外暴露公开地址，读也必须带签名
   assert.match(cloudApp, /cloud\.storage\.createSignedUrls\(need, SIGN_TTL\)/, "必须批量签发");
   assert.match(cloudApp, /cloud\.storage\.createSignedUrl\(p, SIGN_TTL\)/, "批量失败要逐个兜底");
   assert.match(cloudApp, /const SIGN_TTL = 3600/, "签名有效期取 SDK 上限（≤3600s）");
   // 外链不是本地资源，原样交给浏览器（搞钱.md 的 COS 签名图就靠这条）
-  assert.ok(cloudApp.includes("blob:|mailto:|javascript:") && cloudApp.includes(".test(raw)) return [];"),
+  const core = read("shared/share-core.js");
+  assert.ok(core.includes("blob:|mailto:|javascript:") && core.includes(".test(raw)) return [];"),
     "外链不得被当成存储对象（http/data/blob 原样交给浏览器）");
   // 候选顺序：先工作区根相对（与桌面端 serve_source 语义一致），再文档同目录
-  assert.match(cloudApp, /const wsAsset = p\.match\(\/\^ws-asset\\\/\[\^\/\]\+\\\/\(\.\+\)\$\/\)/, "要认旧版 ws-asset/ 写法");
+  assert.match(read("shared/share-core.js"), /\^ws-asset\\\/\[\^\/\]\+\\\/\(\.\+\)\$/, "要认旧版 ws-asset/ 写法");
   // 签不出来 = 云端没这张图 → 占位，别让用户对着裂图猜
   assert.match(cloudApp, /function markAssetMissing\(/, "必须有缺图占位");
   assert.match(cloudApp, /if \(!hit\) \{ markAssetMissing\(it\.node\); continue; \}/, "缺图必须走占位");
@@ -751,24 +752,31 @@ test("分享链路：只读快照落匿名可读的表，且图片随快照一�
   assert.doesNotMatch(shareJs, /createWorkBuddyCloud/, "分享页不得要求登录初始化 SDK");
   assert.match(shareJs, /\.cloud\/database\/rest\/v1/, "分享页走匿名 REST 读公开表");
   assert.match(shareJs, /X-Wb-Webapp-Access-Key/, "匿名读必须带应用标识头");
-  assert.match(shareJs, /\/shared_docs\?id=eq\./, "必须按分享 id 读快照");
-  assert.match(shareJs, /\/shared_assets\?share_id=eq\./, "图片从随分享落库的资源表读");
+  // 安全模型：分享的保密性建立在「链接 id 猜不到」上，所以匿名访客只能按精确 id 取单条，
+  // 绝不能有表级 SELECT（否则任何人可 dump 全部有效分享，链接保密形同虚设）。
+  assert.match(shareJs, /rpc\("get_shared_doc", \{ p_id: id \}\)/, "必须按分享 id 走 RPC 取单条");
+  assert.match(shareJs, /rpc\("get_shared_asset"/, "图片走 RPC 按 share_id + rel_path 取单张");
+  assert.doesNotMatch(shareJs, /\/shared_docs\?id=eq\./, "分享页不得直接读表（可被无 id 枚举）");
+  assert.doesNotMatch(shareJs, /\/shared_assets\?share_id=eq\./, "资产表同样不得直读");
 
   // 图片不能存地址引用：云存储对匿名访客不可读（公开地址不暴露）
   const app = read("cloud/app.js");
   assert.match(app, /bytesToBase64/, "图片要转 base64 内联进分享");
-  assert.match(app, /const SHARE_ASSET_KEEP_BYTES/, "要有「小图原样保留」的阈值（避免二次转码糊掉截图）");
+  assert.match(app, /SHARE_ASSET_KEEP_BYTES/, "要有「小图原样保留」的阈值（避免二次转码糊掉截图）");
   assert.match(app, /SHARE_VIDEO_EXT/, "分享页不带视频（体积不可控）");
   assert.match(app, /assetRepresentation|x/, ""); // 占位断言保持计数稳定（见下）
 });
 
-test("分享链路：撤销即时生效，且写入必须读回才能算成功", () => {
+test("分享链路：撤销即真删数据，且写入必须读回才能算成功", () => {
   const app = read("cloud/app.js");
-  // 撤销靠改写 revoked；数据库侧的策略让匿名访客连图片行都读不到
+  // 撤销 = 删除：只置 revoked 的话正文与图片仍留在云端（只是匿名读不到），
+  // 属于「以为删了、其实还在」。顺序必须「先删资产、再删主表」，否则留孤儿行。
   assert.match(app, /async function revokeShare\(id\)/, "必须有撤销");
-  assert.match(app, /update\(\{ revoked: true \}\)\.eq\("id", id\)\.select\("id"\)/, "撤销必须读回");
-  assert.match(app, /if \(!res\.data \|\| !res\.data\.length\) throw new Error\("撤销没有生效"\)/,
-    "读回为空 = 没撤成，不能报成功");
+  assert.match(app, /from\("shared_assets"\)\.delete\(\)\.eq\("share_id", id\)/, "先删资产行");
+  assert.match(app, /from\("shared_docs"\)\.delete\(\)\.eq\("id", id\)\.select\("id"\)/, "再删主表并读回");
+  assert.doesNotMatch(app, /\{ revoked: true \}/, "不能再靠打标记冒充删除");
+  assert.match(app, /if \(!res\.data \|\| !res\.data\.length\) throw new Error\("删除没有生效"\)/,
+    "读回为空 = 没删成，不能报成功");
   // 写入侧同样要读回（RLS 会把失败伪装成 200 + 空数组）
   assert.match(app, /\.insert\(Object\.assign\(\{ id \}, row\)\)\.select\(\)/, "建分享必须读回");
   assert.match(app, /分享没有写进云端/, "读回为空要明确报错");
@@ -804,7 +812,7 @@ test("分享页：复用工作台同一套渲染，图片滚动到才拉", () =>
   assert.match(js, /IntersectionObserver/, "图片要懒加载，首屏不等图");
   assert.match(js, /removeAttribute\("src"\)/, "相对引用在分享页必然 404，先摘掉避免无谓请求");
   assert.match(js, /没有随分享一起带走/, "缺图要有明确占位，不让访客对裂图猜");
-  assert.match(read("cloud/share.html"), /已被分享者撤销/, "撤销后的提示要说清原因");
+  assert.match(read("cloud/share.html"), /已被分享者删除/, "删除后的提示要说清原因");
   assert.match(js, /function fail\(title, desc\)/, "失效态要能带具体原因");
   // 缓存串必须与工作台同步：worker 与 vendor 是同一份文件，不该被下两份
   const v = read("cloud/app.js").match(/const ASSET_V = "(cloud-\d+)"/);

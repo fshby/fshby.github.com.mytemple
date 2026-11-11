@@ -1,0 +1,28 @@
+name: 线上分享通道守卫
+
+# 分享链接的匿名读通道只能靠线上实测确认（RLS / GRANT / RPC 都是数据库侧状态，
+# 本地单测与桩覆盖不到）。这类回归一旦漏掉，表现是「所有分享链接打不开」，
+# 所以按周定时探测 + 允许手动触发，而不是等用户来报。
+on:
+  schedule:
+    - cron: "0 1 * * 1" # 每周一 09:00（北京时间）
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # 断言：① 分享页可达 ② 两张表匿名 SELECT 必须被拒（不可枚举）
+      #       ③ RPC 可达且不泄露 ④ 可选：指定分享可读
+      - name: 匿名通道探针
+        run: node .verify/share-anon-rest-check.mjs

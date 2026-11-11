@@ -41,6 +41,10 @@ const CFG = (typeof window !== "undefined" && window.__MT_CLOUD__) || {};
 
 /** 云端工作台地址（与 cloud-config.js 的 endpoint 同源）。 */
 export const CLOUD_WORKBENCH_URL = "https://mytemple-cloud.app.workbuddy.host/";
+/* 引用 → 资产候选键只有**一份实现**（shared/share-core.js 生成到 ./share-core.js）。
+ * 同步（本模块）与分享（share-cloud.js）、云端工作台、分享页共用它，
+ * 避免「本机推到 A、访客按 B 找」这类写读键不一致的静默故障。 */
+import { assetCandidates as assetRelCandidates } from "./share-core.js";
 
 /* 文档类白名单（**两端逐字同源**：cloud/app.js 顶部有一份完全相同的拷贝，
  *  tests/three-way-sync.test.js 会逐字比对，防两端算出不同的可同步集合）。
@@ -264,25 +268,6 @@ function extractAssetRefs(md) {
 }
 
 /** 引用 → 候选相对路径（含 `ws-asset/<id>/...` 新写法与同目录相对引用）。 */
-function assetRelCandidates(ref, docRel) {
-  const raw = String(ref || "").trim();
-  if (!raw || /^(https?:|data:|blob:|mailto:|javascript:)/i.test(raw)) return [];
-  let p = raw.split("#")[0].split("?")[0];
-  try { p = decodeURIComponent(p); } catch (_) { /* 保留原样 */ }
-  p = normPath(p);
-  if (!p) return [];
-
-  const out = [];
-  const wsAsset = p.match(/^ws-asset\/[^/]+\/(.+)$/);
-  if (wsAsset) out.push(normPath(`source/${wsAsset[1]}`));
-  out.push(p);
-
-  const dir = normPath(docRel || "").split("/").slice(0, -1).join("/");
-  if (dir) out.push(normPath(`${dir}/${p}`));
-
-  return [...new Set(out.filter((x) => x && !x.split("/").some((s) => s === ".." || s === ".")))];
-}
-
 /** 本机是否存在该文件（HEAD 只看头，不下载整张图）。 */
 async function localAssetSize(rel) {
   try {

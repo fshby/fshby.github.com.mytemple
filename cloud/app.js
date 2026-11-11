@@ -11,6 +11,24 @@
 
 const CFG = window.__MT_CLOUD__ || {};
 const SDK = window.WorkBuddyCloud;
+/* 分享链路的引用解析 / 候选键 / 各类上限来自**单一实现源**（shared/share-core.js，
+ * 由 `npm run build:share` 生成到本目录）。三端共用一份，杜绝「写侧与读侧键不一致」。 */
+import {
+  assetCandidates as assetRelCandidates,
+  SHARE_ASSET_MAX,
+  SHARE_ASSET_KEEP_BYTES,
+  SHARE_ASSET_MAX_BYTES,
+  SHARE_MAX_WIDTH,
+  SHARE_QUALITY,
+  SHARE_VIDEO_EXT,
+  SHARE_TTL_CHOICES,
+  SHARE_TTL_DEFAULT,
+  SHARE_CONTENT_MAX_BYTES,
+  SHARE_ASSETS_TOTAL_MAX_BYTES,
+  parseShareTtl,
+  expiresAtFromTtl,
+  utf8Bytes,
+} from "./share-core.js?v=cloud-24";
 /* 文档类白名单（**两端逐字同源**：public/modules/cloud-client.js 顶部有一份完全相同的
  * 拷贝，tests/three-way-sync.test.js 逐字比对，防两端算出不同的可同步集合）。
  *
@@ -121,7 +139,7 @@ function describeCloudWriteError(err) {
 }
 
 /* 静态资源版本戳：改动 cloud/ 下被页面引用的任何文件时，与 index.html 的三件套一起递增。 */
-const ASSET_V = "cloud-22";
+const ASSET_V = "cloud-24";
 
 /* 第三方库一律同源自托管，见 scripts/vendor-cloud.mjs。
  * 绝不改回第三方 CDN —— 见该脚本头部注释：cdn.jsdelivr.net 在部分网络下 TLS 会被重置，
@@ -380,26 +398,6 @@ function mimeOf(rel) {
  * 依次尝试：① 工作区根相对（桌面端语义）② 文档同目录相对。
  * 外部链接（http/data/blob）不是本地资源，返回空数组。
  */
-function assetRelCandidates(ref, docRel) {
-  const raw = String(ref || "").trim();
-  if (!raw || /^(https?:|data:|blob:|mailto:|javascript:)/i.test(raw)) return [];
-  let p = raw.split("#")[0].split("?")[0];
-  try { p = decodeURIComponent(p); } catch (_) { /* 保留原样 */ }
-  p = normPath(p);
-  if (!p) return [];
-
-  const out = [];
-  // 新版写法 `ws-asset/<ws_id>/source/x.png` 指向工作区 source/ 下的文件
-  const wsAsset = p.match(/^ws-asset\/[^/]+\/(.+)$/);
-  if (wsAsset) out.push(normPath(`source/${wsAsset[1]}`));
-  out.push(p);
-
-  const dir = normPath(docRel || "").split("/").slice(0, -1).join("/");
-  if (dir) out.push(normPath(`${dir}/${p}`));
-
-  return [...new Set(out.filter((x) => x && !x.split("/").some((s) => s === ".." || s === ".")))];
-}
-
 /**
  * 从 Markdown 原文里取出所有「本机资源引用」（图片 / 视频）。
  * 覆盖 `![alt](url)`、`<img src>`、`<video src>`、`<source src>` 四种写法；
@@ -2525,26 +2523,11 @@ el.clearAllBtn.addEventListener("click", async () => {
  * 两张表立刻都返回空 —— 这正是「永久有效 + 可随时撤销」依赖的机制。
  * ------------------------------------------------------------------------- */
 const SHARE_PATH = "share.html";
-/** 单篇最多带走的图片数。再多就该直接给原文了，硬塞只会拖慢首屏。 */
-const SHARE_ASSET_MAX = 20;
-/** 原图小于此值就原样带上：不做二次转码，截图上的小字才不会被转糊。 */
-const SHARE_ASSET_KEEP_BYTES = 260 * 1024;
-/** 压缩后仍大于此值的图放弃带走（页面显示占位，不静默丢）。 */
-const SHARE_ASSET_MAX_BYTES = 420 * 1024;
-/** 压缩目标：移动端阅读分辨率，再宽是浪费流量。 */
-const SHARE_MAX_WIDTH = 1080;
-const SHARE_QUALITY = 0.72;
-/** 分享页不带视频：体积不可控，微信里多半也是跳转播放。 */
-const SHARE_VIDEO_EXT = /\.(mp4|m4v|webm|mov|ogv)$/i;
-/** 新分享链接的默认有效期（天）。0 = 永久；用户可在「我的分享」抽屉里改。 */
+/** 新分享链接的默认有效期记忆键（与桌面端同名同值）。档位、上限、判定逻辑统统
+ *  来自共享核心 shared/share-core.js —— 两端各写一份靠人工对齐，曾一天炸三次事故。 */
 const SHARE_TTL_KEY = "shareTtlDays";
-const SHARE_TTL_DEFAULT = 7;
 function shareTtlDays() {
-  // 注意 Number(null) === 0：未设置过时不能当成「永久」，必须先判空串/null
-  const raw = localStorage.getItem(SHARE_TTL_KEY);
-  if (raw === null || raw === "") return SHARE_TTL_DEFAULT;
-  const v = Number(raw);
-  return [0, 1, 7, 30].includes(v) ? v : SHARE_TTL_DEFAULT;
+  return parseShareTtl(localStorage.getItem(SHARE_TTL_KEY), SHARE_TTL_CHOICES, SHARE_TTL_DEFAULT);
 }
 /** 剩余有效期文案（列表展示用）：永久 / 剩 N 天 / 剩 N 小时 */
 function shareExpiryText(expiresAt) {
@@ -2619,16 +2602,18 @@ async function shrinkImageForShare(blob, fallbackMime) {
  */
 async function collectShareAssets(doc) {
   const uid = state.session && state.session.user && state.session.user.id;
-  const result = { assets: [], missing: 0, tooBig: 0 };
+  const result = { assets: [], missing: 0, tooBig: 0, truncated: 0 };
   const groups = [];
   const allPaths = new Set();
   for (const ref of extractAssetRefs(doc.content || "")) {
-    if (groups.length >= SHARE_ASSET_MAX) break;
     const metas = assetRelCandidates(ref, doc.rel_path || "")
       .filter((p) => ASSET_EXT.test(p) && !SHARE_VIDEO_EXT.test(p))
       .map((rel) => ({ rel, obj: assetObjectPath(uid, doc.workspace, rel) }))
       .filter((x) => x.obj);
     if (!metas.length) continue;
+    // 超出上限的引用如实计数，不能静默截断 —— 否则访客看到占位图
+    // 「这张图片没有随分享一起带走」，而分享者以为自己全带上了。
+    if (groups.length >= SHARE_ASSET_MAX) { result.truncated += 1; continue; }
     metas.forEach((m) => allPaths.add(m.obj));
     groups.push(metas);
   }
@@ -2655,6 +2640,22 @@ async function collectShareAssets(doc) {
 async function writeShare(doc, content, assets) {
   const db = cloud.database;
   const rel = doc.rel_path || "";
+  // 体积上限：超了直接拒绝并说明原因。若放过去，平台网关 / WAF 会在传输中途
+  // 截断或 413，前端只会看到「网络不畅」，排查成本极高（历史踩过）。
+  const contentBytes = utf8Bytes(content);
+  if (contentBytes > SHARE_CONTENT_MAX_BYTES) {
+    throw new Error(
+      `正文约 ${(contentBytes / 1048576).toFixed(1)}MB，超过单篇分享上限 ` +
+      `${(SHARE_CONTENT_MAX_BYTES / 1048576).toFixed(1)}MB，请拆分后再分享`
+    );
+  }
+  const assetBytes = assets.reduce((n, a) => n + String(a.bytes_b64 || "").length, 0);
+  if (assetBytes > SHARE_ASSETS_TOTAL_MAX_BYTES) {
+    throw new Error(
+      `本次要带走的图片合计约 ${(assetBytes / 1048576).toFixed(1)}MB，超过 ` +
+      `${(SHARE_ASSETS_TOTAL_MAX_BYTES / 1048576).toFixed(0)}MB 上限，请精简图片后再分享`
+    );
+  }
   const ttl = shareTtlDays();
   const row = {
     workspace: doc.workspace,
@@ -2664,7 +2665,7 @@ async function writeShare(doc, content, assets) {
     asset_count: assets.length,
     owner_name: (state.session && state.session.user && state.session.user.name) || null,
     // 自动过期：null = 永久；每次分享（含刷新）都按当前设置重算
-    expires_at: ttl ? new Date(Date.now() + ttl * 864e5).toISOString() : null,
+    expires_at: expiresAtFromTtl(ttl),
   };
 
   let id = null;
@@ -2703,12 +2704,19 @@ async function readMyShares() {
   return res.data || [];
 }
 
+/**
+ * 撤销 = **删除数据**，不是打标记。
+ * 只把 revoked 置 true 的话，正文与图片仍然躺在表里（只是 RLS 不让匿名读），
+ * 属于「以为撤了、其实数据还在」。这里按「先删图、再删主表」的顺序清干净：
+ * 资产表没有 FK 级联，顺序反了会留孤儿行。
+ */
 async function revokeShare(id) {
-  const res = await cloud.database.from("shared_docs")
-    .update({ revoked: true }).eq("id", id).select("id");
+  const delAssets = await cloud.database.from("shared_assets").delete().eq("share_id", id).select("rel_path");
+  if (delAssets.error) throw delAssets.error;
+  const res = await cloud.database.from("shared_docs").delete().eq("id", id).select("id");
   if (res.error) throw res.error;
-  // 读回为空 = 没撤成（被 RLS 拦下或不是自己的），不能报成功
-  if (!res.data || !res.data.length) throw new Error("撤销没有生效");
+  // 读回为空 = 没删成（被 RLS 拦下或不是自己的），不能报成功
+  if (!res.data || !res.data.length) throw new Error("删除没有生效");
 }
 
 function shareErrMsg(err) {
@@ -2740,7 +2748,7 @@ async function openShareSheet() {
         </div>
         <div class="share-item-actions">
           <button class="link-btn" type="button" data-share-act="copy">复制链接</button>
-          <button class="link-btn danger-link" type="button" data-share-act="revoke">撤销</button>
+          <button class="link-btn danger-link" type="button" data-share-act="revoke">删除</button>
         </div>
       </div>`;
     }).join("");
@@ -2752,7 +2760,7 @@ async function openShareSheet() {
 if (el.shareTtlSelect) {
   el.shareTtlSelect.addEventListener("change", () => {
     const v = Number(el.shareTtlSelect.value);
-    localStorage.setItem(SHARE_TTL_KEY, String([0, 1, 7, 30].includes(v) ? v : SHARE_TTL_DEFAULT));
+    localStorage.setItem(SHARE_TTL_KEY, String(SHARE_TTL_CHOICES.includes(v) ? v : SHARE_TTL_DEFAULT));
     toast("新分享链接有效期已设为 " + (v ? `${v} 天` : "永久"));
   });
 }
@@ -2776,16 +2784,16 @@ if (el.shareSheet) {
       return;
     }
     if (btn.dataset.shareAct === "revoke") {
-      const ok = await askConfirm("撤销这条分享？访客会立刻打不开，链接里的图片也一并不可读。");
+      const ok = await askConfirm("删除这条分享链接？正文与图片会从云端彻底删除（不可恢复），访客立刻打不开。");
       if (!ok) return;
       btn.disabled = true;
       try {
         await revokeShare(id);
         item.remove();
-        toast("已撤销");
+        toast("分享链接已删除");
       } catch (err) {
         btn.disabled = false;
-        toast("撤销失败：" + shareErrMsg(err), "error");
+        toast("删除失败：" + shareErrMsg(err), "error");
       }
     }
   });
@@ -2905,6 +2913,7 @@ if (NATIVE) {
           if (picked.assets.length) parts.push(`${picked.assets.length} 张图`);
           if (picked.missing) parts.push(`${picked.missing} 张未同步`);
           if (picked.tooBig) parts.push(`${picked.tooBig} 张过大未带走`);
+          if (picked.truncated) parts.push(`${picked.truncated} 张超出 ${SHARE_ASSET_MAX} 张上限未带走`);
           const tail = parts.length ? `（${parts.join("，")}）` : "";
           if (CAP.Share) {
             await CAP.Share.share({

@@ -17,6 +17,14 @@ use sha2::Digest;
 
 use unicode_normalization::UnicodeNormalization;
 
+/// 保存串行化（进程级）。
+///
+/// 保存流程是「读磁盘 hash 比对 base_hash → 校验通过 → tmp 写入 → rename」，
+/// 检查与落盘之间存在时间窗：两路并发保存同一文件时各自都能通过检查，
+/// 后写的会把先写的覆盖掉（TOCTOU）。用一把锁把「检查 + 写入」变成原子段即可。
+/// 保存是本地磁盘短操作，串行化的等待可忽略，也不影响不同文件之间的并发读。
+static SAVE_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 
 
 pub const DEFAULT_WORKSPACE_ID: &str = "default";
@@ -1327,6 +1335,10 @@ impl AppState {
 
         let normalized = self.normalize_doc_path(path)?;
 
+        // 冲突检测与落盘必须在同一临界区里：否则「检查通过」到「rename 落盘」之间
+        // 仍可能被另一路并发写插入，两边各自检查都通过 → 后写覆盖先写（TOCTOU）。
+        let _save_guard = SAVE_LOCK.lock().await;
+
         // Issue 2: 保存前冲突检测——如果 base_hash 提供，读磁盘文件 hash 比对，
         // 不一致说明外部编辑器（如 Notepad）已修改该文件，拒绝保存防止覆盖丢失外部修改。
         if let Some(bh) = base_hash {
@@ -1975,7 +1987,19 @@ impl AppState {
             }
         };
 
-        let relative = relative.trim_start_matches('/').to_string();
+        let relative_trimmed = relative.trim_start_matches('/').to_string();
+
+        // 安全校验（2026-11-11 审计实锤）：此前只做分隔符归一化，`GET /api/doc?path=../../../../Windows/win.ini`
+        // 能直接读到系统文件，保存路径同理。这里统一拒绝 `..`、盘符、NTFS ADS、结尾点/空格等
+        // Windows 别名形态，再做落点包含性校验。空串 = 工作区根目录，属合法输入，单独放行。
+        let relative = if relative_trimmed.trim().is_empty() {
+            String::new()
+        } else {
+            crate::path_guard::sanitize_relative(&relative_trimmed).ok_or_else(|| {
+                log::warn!("[security] 拒绝非法路径 | input={}", input);
+                anyhow::anyhow!("路径不合法：包含越界或非法片段")
+            })?
+        };
 
 
 
@@ -2006,6 +2030,18 @@ impl AppState {
 
 
         let absolute = Path::new(&root).join(&relative);
+
+        // 落点必须仍在工作区内：解析软链接后再比较（新文件按最近的已存在祖先判断），
+        // 因此「工作区内指向工作区外的软链接」也会被拒。root 不存在时跳过（启动建目录前）。
+        if Path::new(&root).exists() && !crate::path_guard::is_within_root(&absolute, Path::new(&root)) {
+            log::warn!(
+                "[security] 拒绝越界路径 | input={} | abs={} | root={}",
+                input,
+                absolute.display(),
+                root
+            );
+            anyhow::bail!("路径越界：{} 不在工作区内", input);
+        }
 
         let abs_str = if absolute.exists() {
 

@@ -11,11 +11,15 @@
  * 图片：云存储对匿名访客不可读（官方明确不暴露公共地址），所以图片字节是
  * 随分享一起落在 `shared_assets` 里的 base64，这里按需（滚动到可见时才）拉取。
  */
+// 引用解析 / 候选键来自单一实现源（shared/share-core.js → 本目录同名产物），
+// 与桌面端、工作台三处共用同一份规则，不再各写一份靠人工对齐。
+import { assetCandidates, HTML_DOC_EXT } from "./share-core.js?v=cloud-24";
+
 (function () {
   "use strict";
 
   var CFG = window.__MT_CLOUD__ || {};
-  var ASSET_V = "cloud-22";
+  var ASSET_V = "cloud-24";
   var ENDPOINT = String(CFG.endpoint || "").replace(/\/+$/, "");
   var REST = ENDPOINT + "/.cloud/database/rest/v1";
   var HDR = { apikey: CFG.publishableKey || "", "X-Wb-Webapp-Access-Key": CFG.publishableKey || "" };
@@ -51,45 +55,22 @@
     return m ? m[1] : "";
   }
 
-  function rest(pathAndQuery) {
-    return fetch(REST + pathAndQuery, { headers: HDR, cache: "no-store" }).then(function (res) {
+  /* 数据一律走 SECURITY DEFINER 的 RPC，不给匿名角色任何表级 SELECT：
+   * 表级读策略只能约束「哪些行可见」，约束不了「能一次读多少 / 能不能不带条件全表 dump」。
+   * 分享的保密模型建立在「链接 id 猜不到」上，所以只暴露「按精确 id 取单条」的入口。 */
+  function rpc(name, body) {
+    return fetch(REST + "/rpc/" + name, {
+      method: "POST",
+      headers: Object.assign({ "Content-Type": "application/json" }, HDR),
+      body: JSON.stringify(body || {}),
+      cache: "no-store",
+    }).then(function (res) {
       if (!res.ok) {
         var err = new Error("HTTP " + res.status);
         err.status = res.status;
         throw err;
       }
       return res.json();
-    });
-  }
-
-  function qs(v) { return encodeURIComponent(String(v)); }
-
-  function normPath(p) {
-    var out = [];
-    String(p || "").replace(/\\/g, "/").split("/").forEach(function (seg) {
-      if (!seg || seg === ".") return;
-      if (seg === "..") { out.pop(); return; }
-      out.push(seg);
-    });
-    return out.join("/");
-  }
-
-  /** 与工作台 app.js 的 assetRelCandidates 同规则：外链一律不当作随分享带走的资源。 */
-  function assetCandidates(ref, docRel) {
-    var raw = String(ref || "").trim();
-    if (!raw || /^(https?:|data:|blob:|mailto:|javascript:)/i.test(raw)) return [];
-    var p = raw.split("#")[0].split("?")[0];
-    try { p = decodeURIComponent(p); } catch (_) { /* 保留原样 */ }
-    p = normPath(p);
-    if (!p) return [];
-    var out = [];
-    var wsAsset = p.match(/^ws-asset\/[^/]+\/(.+)$/);
-    if (wsAsset) out.push(normPath("source/" + wsAsset[1]));
-    out.push(p);
-    var dir = normPath(docRel || "").split("/").slice(0, -1).join("/");
-    if (dir) out.push(normPath(dir + "/" + p));
-    return out.filter(function (x, i, a) {
-      return x && a.indexOf(x) === i && !x.split("/").some(function (s) { return s === ".." || s === "."; });
     });
   }
 
@@ -107,7 +88,6 @@
    *   3) 资源引用只能**字符串级**改写 —— 沙箱帧是 opaque origin，父页摸不到帧内 DOM。
    * 分享页的图片是随快照一起落在 shared_assets 里的 base64（云存储对匿名访客不可读），
    * 所以这里先把该分享的全部资源行取回来建 rel_path → data URL 映射，再改写。 */
-  var HTML_DOC_EXT = /\.(html?|xhtml)$/i;
   var HTML_DOC_SANDBOX = "allow-scripts allow-forms allow-modals";
   /* 「云端安全形态」标记（与 cloud/app.js 的 HTML_CLOUD_STRIP_MARK 同串）：推送时
    * 平台内容策略会拦下含 <script> / onclick= 的正文，工作台因此剥离后再写云端。
@@ -132,8 +112,7 @@
   async function loadShareAssetMap(id) {
     var map = {};
     try {
-      var rows = await rest("/shared_assets?share_id=eq." + qs(id)
-        + "&select=rel_path,mime,bytes_b64&limit=" + ASSET_NODE_MAX);
+      var rows = await rpc("get_shared_assets", { p_share_id: id, p_limit: ASSET_NODE_MAX });
       (rows || []).forEach(function (r) {
         if (r && r.rel_path && r.bytes_b64) {
           map[r.rel_path] = "data:" + (r.mime || "image/webp") + ";base64," + r.bytes_b64;
@@ -537,8 +516,7 @@
     for (var i = 0; i < candidates.length; i++) {
       var rows;
       try {
-        rows = await rest("/shared_assets?share_id=eq." + qs(id)
-          + "&rel_path=eq." + qs(candidates[i]) + "&select=mime,bytes_b64&limit=1");
+        rows = await rpc("get_shared_asset", { p_share_id: id, p_rel_path: candidates[i] });
       } catch (_) { continue; }
       var row = rows && rows[0];
       if (!row || !row.bytes_b64) continue;
@@ -604,16 +582,15 @@
 
     var rows;
     try {
-      rows = await rest("/shared_docs?id=eq." + qs(id)
-        + "&select=id,owner_name,workspace,rel_path,title,content,created_at,expires_at&limit=1");
+      rows = await rpc("get_shared_doc", { p_id: id });
     } catch (err) {
       fail("暂时打不开", "网络似乎不太顺畅，稍后再试一次吧。");
       return;
     }
     var row = rows && rows[0];
     if (!row) {
-      // RLS 已按「未撤销 + 未过期」过滤，拿不到行 = 撤销 / 过期 / 编号错误
-      fail("这个分享链接已失效", "链接可能已到期自动失效，或被分享者撤销。可以请对方重新分享一次。");
+      // RPC 已按「未撤销 + 未过期」过滤，拿不到行 = 已删除 / 已过期 / 编号错误
+      fail("这个分享链接已失效", "链接可能已到期自动失效，或被分享者删除。可以请对方重新分享一次。");
       return;
     }
     // 兜底：策略之外的二次校验（防止缓存/旧数据绕过 RLS）
@@ -626,12 +603,11 @@
     document.title = title + " · MyTemple 知识库";
     el.title.textContent = title;
 
+    /* 元数据只留「读这篇需要知道的」：分享时间与到期时间。
+     * 分享者名字、工作区名、完整相对路径都属多余暴露（访客只需要读正文）。 */
     var bits = [];
-    var where = [row.workspace, row.rel_path].filter(Boolean).join(" / ");
-    if (where) bits.push(where);
     var when = fmtDate(row.created_at);
-    if (when) bits.push(when);
-    if (row.owner_name) bits.push("由 " + row.owner_name + " 分享");
+    if (when) bits.push(when + " 分享");
     // 让访客知道链接何时自动失效（永久链接不显示）
     if (row.expires_at) {
       var expDate = new Date(row.expires_at);

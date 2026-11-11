@@ -39,6 +39,17 @@ jobs:
       - name: Build editor bundle
         run: npm run build:editor
 
+      # 分享共享核心由 shared/share-core.js 生成；生成物必须已提交且与源同步，
+      # 否则「桌面端与云端各用一份旧逻辑」这类漂移会悄悄上线。
+      - name: Rebuild share core and verify no drift
+        run: |
+          npm run build:share
+          git diff --exit-code -- public/modules/share-core.js cloud/share-core.js
+
+      # 静态守卫：缓存戳一致性 / 无第三方 CDN / 分享页不得直读表 …
+      - name: Static guards
+        run: npm run check
+
       - name: Run tests
         run: npm test
 
@@ -62,3 +73,11 @@ jobs:
       - name: cargo test
         working-directory: src-tauri
         run: cargo test
+
+      # 路径/ Host 守卫是纯 std 逻辑，单独编译成测试二进制，不依赖 WebView2 运行时
+      - name: Path & host guard tests (standalone)
+        shell: bash
+        run: |
+          printf '#[path = "src/path_guard.rs"]\nmod path_guard;\n' > guard_test.rs
+          rustc --edition 2021 --test guard_test.rs -o guard_test.exe
+          ./guard_test.exe
