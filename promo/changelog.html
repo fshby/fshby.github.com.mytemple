@@ -24,7 +24,7 @@
         <a href="index.html#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.3.3</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.3.4</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -40,6 +40,7 @@
         <div class="changelog-toc reveal">
           <h3>版本索引</h3>
           <ul>
+            <li><a href="#v2.3.4">v2.3.4</a> — 局域网共享可用性修复（访客配对协议扁平化 + 回归锁）</li>
             <li><a href="#v2.3.3">v2.3.3</a> — 局域网共享（6 位口令配对 + 访客白名单 + 只读/可编辑）；13 项安全审计修复（分享不可枚举 / 路径穿越 / DNS rebinding / 保存竞态）</li>
             <li><a href="#v2.3.2">v2.3.2</a> — 分享图片丢失修复（ws_ 工作区前缀引用按工作区 id 取图）；分享页补上代码块复制行为与目录索引抽屉</li>
             <li><a href="#v2.3.1">v2.3.1</a> — 分享图片丢失修复（ws_ 工作区前缀引用按工作区 id 取图）；分享页补上代码块复制行为与目录索引抽屉</li>
@@ -113,6 +114,23 @@
             <li><a href="#v1.8.93">v1.8.93</a> — 界面与体验升级 + 性能优化</li>
           </ul>
         </div>
+
+                <article class="doc-section reveal" id="v2.3.4">
+          <h3>v2.3.4 · 局域网共享可用性修复</h3>
+<p>v2.3.3 的「局域网共享」在真机端到端验证中发现两处缺陷，本版修复。</p>
+
+          <h4>修复内容</h4>
+          <ul>
+            <li><b>访客配对协议</b>：口令校验接口此前多包了一层响应信封，访客页按扁平格式读取，导致输入正确口令后无法进入访客页。现改为扁平响应，与访客端错误响应及其他接口约定一致。</li>
+            <li><b>会话态读取</b>：只读/可编辑状态接口同样多包一层，访客页的只读标记与保存按钮禁用判断恒失效。同版修复。</li>
+            <li><b>回归锁</b>：新增自动化结构断言，钉住「访客协议端点必须扁平返回」，防止未来重构再次引入包装层。</li>
+            <li><b>验证基建修正</b>：本机安全探针的伪造 Host 探测改用原生 socket 发送——此前使用的 fetch 会忽略自定义 Host 头，把请求的 Host 覆写回本机地址，导致 Host 守卫被误判为失效（实际守卫一直正常）。</li>
+            <li><b>局域网共享行为验证脚本</b>：同步修正管理接口响应解包，端到端探针与真实访客协议对齐。</li>
+            <li><b>升级提示</b>：桌面主界面与既有功能零改动；若你已开启共享，升级后访客需重新输入口令（口令本身不变）。</li>
+          </ul>
+
+          <p class="doc-meta">自动化测试 283 项全绿（新增访客协议回归锁）；主界面与既有功能零改动。</p>
+</article>
 
                 <article class="doc-section reveal" id="v2.3.3">
           <h3>v2.3.3 · 局域网共享 + 13 项安全审计修复</h3>

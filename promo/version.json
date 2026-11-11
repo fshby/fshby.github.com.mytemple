@@ -1,7 +1,7 @@
 {
-    "version":  "2.3.3",
+    "version":  "2.3.4",
     "downloadUrl":  "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
-    "latestReleaseNotes":  "局域网共享（PIN 配对 + 访客白名单）+ 13 项安全审计修复",
-    "releaseNotes":  "v2.3.3 release. See changelog for details.",
+    "latestReleaseNotes":  "局域网共享可用性修复（访客配对协议扁平化）",
+    "releaseNotes":  "v2.3.4 release. See changelog for details.",
     "releaseDate":  "2026-11-11"
 }
