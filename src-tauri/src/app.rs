@@ -381,6 +381,9 @@ pub struct AppState {
     /// 文档浏览记录（温习提醒 / 知识脉络「待温习」维度的数据源）
     pub doc_views: Arc<crate::doc_views::DocViewStore>,
 
+    /// 局域网共享状态（独立访客监听：PIN 配对 + token 鉴权 + 端点白名单）
+    pub lan: Arc<crate::lan::LanShareState>,
+
 }
 
 
@@ -602,6 +605,9 @@ impl AppState {
         // 因为 data_root 随后会被 move 进 Self。与 RagService::new(&data_root) 同一约定。
         let doc_views = Arc::new(crate::doc_views::DocViewStore::new(&data_root));
 
+        // 局域网共享状态同样需要 data_root（lan-share.json 持久化），先于 move 构造
+        let lan = Arc::new(crate::lan::LanShareState::new(data_root.clone()));
+
         Self {
 
             data_root,
@@ -619,6 +625,8 @@ impl AppState {
             token_dict: Arc::new(TokenDictionary::new()),
 
             doc_views,
+
+            lan,
 
         }
 

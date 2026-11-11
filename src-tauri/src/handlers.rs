@@ -15,6 +15,7 @@ use axum::{
 };
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::os::windows::process::CommandExt;
 use crate::server::ServerState;
@@ -198,6 +199,206 @@ pub async fn host_guard(req: Request, next: Next) -> Response {
     next.run(req).await
 }
 
+// ── 局域网共享（LAN Share）────────────────────────────────
+//
+// 访客通道：独立监听 0.0.0.0:17321..17420，lan_guard 鉴权。
+// 白名单原则：访客路由只挂「读 + 保存」类 handler；删除/移动/重命名/
+// 目录浏览/Agent/授权/截图等敏感端点不进路由，对访客根本不存在。
+
+/// 只读模式下对访客 403 的写入端点（method, path）
+const LAN_WRITE_ROUTES: &[(&str, &str)] = &[
+    ("POST", "/api/save"),
+    ("POST", "/api/create-doc"),
+    ("POST", "/api/create-folder"),
+];
+
+/// 访客鉴权中间件：/api/lan/verify 之外的一切请求必须带有效 X-Lan-Token。
+/// 只读模式下写入端点直接 403（模式可运行中切换，这里每请求读实时值）。
+pub async fn lan_guard(
+    State(lan): State<Arc<crate::lan::LanShareState>>,
+    req: Request,
+    next: Next,
+) -> Response {
+    let path = req.uri().path().to_string();
+    if path == "/api/lan/verify" {
+        return next.run(req).await;
+    }
+    let token = req
+        .headers()
+        .get("x-lan-token")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    if !lan.check_token(&token).await {
+        log::warn!("[lan] 拒绝无 token 访客请求 | path={} | ua={:?}", path, req.headers().get(header::USER_AGENT));
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({"ok": false, "error": "需要访问口令"})),
+        )
+            .into_response();
+    }
+    // 只读模式拦截写入端点
+    let method = req.method().as_str();
+    if lan.is_read_only().await
+        && LAN_WRITE_ROUTES.iter().any(|(m, p)| *m == method && *p == path)
+    {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({"ok": false, "error": "当前为只读共享，无法修改文档"})),
+        )
+            .into_response();
+    }
+    next.run(req).await
+}
+
+/// 访客静态资源：白名单内读文件返回（no-cache），根路径返回 guest.html，
+/// 其余 /api/* 404 JSON、其他路径 404。绝不回退到主应用入口 index.html。
+async fn lan_fallback(public_root: PathBuf, req: Request) -> Response {
+    let raw = req.uri().path().trim_start_matches('/');
+    let name = if raw.is_empty() { "guest.html" } else { raw };
+    if name.starts_with("api/") {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"ok": false, "error": "not found"})),
+        )
+            .into_response();
+    }
+    if !crate::lan::LAN_STATIC_ALLOW.contains(&name) {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    let full = public_root.join(name);
+    match tokio::fs::read(&full).await {
+        Ok(bytes) => {
+            let mime = match full.extension().and_then(|e| e.to_str()) {
+                Some("html") => "text/html; charset=utf-8",
+                Some("css") => "text/css; charset=utf-8",
+                Some("js") => "text/javascript; charset=utf-8",
+                Some("png") => "image/png",
+                Some("webp") => "image/webp",
+                Some("ico") => "image/x-icon",
+                Some("svg") => "image/svg+xml",
+                Some("json") => "application/json",
+                _ => "application/octet-stream",
+            };
+            (
+                StatusCode::OK,
+                [
+                    (header::CONTENT_TYPE, mime.to_string()),
+                    (header::CACHE_CONTROL, "no-cache".to_string()),
+                ],
+                bytes,
+            )
+                .into_response()
+        }
+        Err(_) => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+struct LanVerifyRequest {
+    pin: String,
+}
+
+/// POST /api/lan/verify（访客通道唯一免 token 端点，内部带限速锁定）
+async fn lan_verify(
+    State(state): State<Arc<ServerState>>,
+    Json(req): Json<LanVerifyRequest>,
+) -> Response {
+    match state.app.lan.verify_pin(&req.pin).await {
+        Ok(v) => json_ok(v),
+        Err((status, v)) => (StatusCode::from_u16(status).unwrap_or(StatusCode::UNAUTHORIZED), Json(v)).into_response(),
+    }
+}
+
+/// GET /api/lan/state（访客已配对后的会话态：只读/可编辑）
+async fn lan_guest_state(State(state): State<Arc<ServerState>>) -> impl IntoResponse {
+    let lan = &state.app.lan;
+    json_ok(serde_json::json!({
+        "ok": true,
+        "readOnly": lan.is_read_only().await,
+    }))
+}
+
+#[derive(Deserialize)]
+struct LanEnableRequest {
+    #[serde(rename = "readOnly", default)]
+    read_only: Option<bool>,
+}
+
+/// POST /api/lan/enable（仅回环主通道）
+async fn lan_enable(
+    State(state): State<Arc<ServerState>>,
+    Json(req): Json<LanEnableRequest>,
+) -> Response {
+    match state
+        .app
+        .lan
+        .clone()
+        .enable(state.clone(), req.read_only.unwrap_or(false))
+        .await
+    {
+        Ok(v) => json_ok(v),
+        Err(m) => json_err(StatusCode::INTERNAL_SERVER_ERROR, m),
+    }
+}
+
+/// POST /api/lan/disable（仅回环主通道）
+async fn lan_disable(State(state): State<Arc<ServerState>>) -> Response {
+    json_ok(state.app.lan.disable().await)
+}
+
+#[derive(Deserialize)]
+struct LanModeRequest {
+    #[serde(rename = "readOnly", default)]
+    read_only: Option<bool>,
+}
+
+/// POST /api/lan/mode（仅回环主通道：运行中切换只读/可编辑）
+async fn lan_mode(
+    State(state): State<Arc<ServerState>>,
+    Json(req): Json<LanModeRequest>,
+) -> Response {
+    json_ok(state.app.lan.set_mode(req.read_only.unwrap_or(false)).await)
+}
+
+/// POST /api/lan/regenerate-pin（仅回环主通道：换 PIN 同时失效全部访客 token）
+async fn lan_regenerate_pin(State(state): State<Arc<ServerState>>) -> Response {
+    json_ok(state.app.lan.regenerate_pin().await)
+}
+
+/// GET /api/lan/status（仅回环主通道：开关/模式/PIN/端口/局域网 IP/访客数）
+async fn lan_status(State(state): State<Arc<ServerState>>) -> impl IntoResponse {
+    json_ok(state.app.lan.status().await)
+}
+
+/// 访客通道路由（lan.rs start_listener 调用；只挂白名单内的 handler）。
+/// 注意：写端点（save/create-doc/create-folder）也挂载，由 lan_guard 按模式放行/403。
+pub fn build_lan_router(
+    state: Arc<ServerState>,
+    lan: Arc<crate::lan::LanShareState>,
+) -> Router {
+    let public_root = lan.public_root.clone();
+    Router::new()
+        // 配对（唯一免 token 端点）
+        .route("/api/lan/verify", post(lan_verify))
+        // 已配对会话态
+        .route("/api/lan/state", get(lan_guest_state))
+        // 读类
+        .route("/api/workspaces", get(get_workspaces))
+        .route("/api/tree", get(get_tree))
+        .route("/api/doc", get(get_doc))
+        .route("/api/doc-check", get(check_doc))
+        .route("/api/search", get(search))
+        // 写类（只读模式由 lan_guard 403）
+        .route("/api/save", post(save_doc))
+        .route("/api/create-doc", post(create_document))
+        .route("/api/create-folder", post(create_folder))
+        // 静态白名单 + 访客页
+        .fallback(get(move |req| lan_fallback(public_root.clone(), req)))
+        .layer(axum::middleware::from_fn_with_state(lan, lan_guard))
+        .with_state(state)
+}
+
 // ── 路由构建 ──────────────────────────────────────────────
 
 pub fn build_native_router(state: Arc<ServerState>) -> Router {
@@ -294,6 +495,12 @@ pub fn build_native_router(state: Arc<ServerState>) -> Router {
         // Agent 策略
         .route("/api/agent/policy", get(get_agent_policy))
         .route("/api/agent/policy/create", post(create_agent_policy))
+        // 局域网共享管理（仅回环主通道；访客通道另有独立白名单路由）
+        .route("/api/lan/status", get(lan_status))
+        .route("/api/lan/enable", post(lan_enable))
+        .route("/api/lan/disable", post(lan_disable))
+        .route("/api/lan/mode", post(lan_mode))
+        .route("/api/lan/regenerate-pin", post(lan_regenerate_pin))
         // 更新检查
         .route("/api/update/check", post(check_update))
         // 视频上传（base64 编码后体积膨胀 ~33%，100MB 原始视频 ≈ 133MB payload）

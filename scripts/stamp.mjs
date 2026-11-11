@@ -21,7 +21,17 @@ const PUB = path.join(ROOT, "public");
 
 /** 参与指纹的文件（顺序固定，保证可复现）。 */
 function assetFiles() {
-  const files = ["app.js", "styles.css", "editor-core.js", "markdown-worker.js", "graph-worker.js"];
+  const files = [
+    "app.js",
+    "styles.css",
+    "editor-core.js",
+    "markdown-worker.js",
+    "graph-worker.js",
+    // 局域网访客页三件套（guest.html 引用 editor-core.js/styles.css 带同一戳，
+    // 必须一起参与指纹，否则主资源更新后访客页拿旧 editor-core）
+    "guest.js",
+    "guest.css",
+  ];
   const modules = fs
     .readdirSync(path.join(PUB, "modules"))
     .filter((f) => f.endsWith(".js"))
@@ -62,5 +72,5 @@ function restamp(file) {
 }
 
 let changed = false;
-for (const f of ["public/index.html", "public/app.js"]) changed = restamp(f) || changed;
+for (const f of ["public/index.html", "public/app.js", "public/guest.html", "public/guest.js"]) changed = restamp(f) || changed;
 console.log(changed ? `缓存戳已更新为 ${next}` : `缓存戳无需变更（${next}）`);

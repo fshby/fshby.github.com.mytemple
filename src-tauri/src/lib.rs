@@ -12,6 +12,7 @@ pub mod frontmatter;
 mod global_capture;
 pub mod handlers;
 pub mod ipc;
+pub mod lan;
 pub mod license;
 pub mod path_guard;
 pub mod rag;
@@ -468,10 +469,17 @@ pub fn run() {
             let state_for_server = empty_app_state.clone();
             let rag_for_server = empty_rag.clone();
             tauri::async_runtime::spawn(async move {
-                match server::run(requested_port, state_for_server, rag_for_server).await {
+                match server::run(requested_port, state_for_server.clone(), rag_for_server.clone()).await {
                     Ok(bound) => {
                         let _ = server_port_tx.send(bound.port);
                         let _ = crate::SERVER_PORT.set(bound.port);
+                        // 局域网共享自启动：持久化配置 enabled=true 时重新开启访客监听
+                        //（PIN/token 每次启动重新生成，不持久化）
+                        let lan_sstate = std::sync::Arc::new(server::ServerState {
+                            app: state_for_server.clone(),
+                            rag: rag_for_server.clone(),
+                        });
+                        state_for_server.lan.clone().autostart(lan_sstate).await;
                         // server::run 已经内部 tokio::spawn 了 axum.serve 循环，
                         // 这里 await 一个"永不结束的 sleep"让本 task 不退出
                         loop {

@@ -1,4 +1,4 @@
-import { createMarkdownEditor } from "/editor-core.js?v=20261111-982dbf28";
+import { createMarkdownEditor } from "/editor-core.js?v=20261111-a3507902";
 import { getPaperBackgroundUrl } from "./modules/paper-texture.js";
 import { escapeHtml, displayName, displayRelativePath, splitPathRef, joinPathRef, parentPathRef, compactName, splitWorkspaceRef, plainText, headingId } from "./modules/path-utils.js";
 import { extractOutline, addCnEnSpaces } from "./modules/editor-utils.js";
@@ -55,8 +55,8 @@ const LARGE_PREVIEW_BYTES = 100 * 1024;
 const LARGE_PREVIEW_DELAY = 700;
 const CHUNKED_RENDER_BYTES = 500 * 1024;
 const CHUNK_RENDER_SLICE_BYTES = 150 * 1024;
-const GRAPH_WORKER_URL = "/graph-worker.js?v=20261111-982dbf28";
-const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20261111-982dbf28";
+const GRAPH_WORKER_URL = "/graph-worker.js?v=20261111-a3507902";
+const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20261111-a3507902";
 // Markdown 渲染缓存版本戳：解析器或 CSS 规则升级时递增，确保旧缓存不被复用。
 // 2026-08-29 v1.8.102：安装包 resources 包含 public/ 前端静态文件、端口回滚；修正其他电脑安装后 404 白屏。
 const MARKDOWN_RENDER_VERSION = "20260829-v18102-install-static-bundle-port-scan";
@@ -8369,7 +8369,7 @@ function loadMermaidAsync() {
     const script = document.createElement("script");
     // 锁定精确版本 + query 缓存破坏：@10 这类范围 URL 永不变，WebView2 磁盘缓存会
     // 永远持有远古版本（早期 10.x 有 flowchart 底部裁切 bug），且 10.x 不支持 architecture-beta。
-    script.src = "https://cdn.jsdelivr.net/npm/mermaid@11.12.2/dist/mermaid.min.js?v=20261111-982dbf28";
+    script.src = "https://cdn.jsdelivr.net/npm/mermaid@11.12.2/dist/mermaid.min.js?v=20261111-a3507902";
     script.onload = () => resolve(window.mermaid);
     script.onerror = () => {
       _mermaidLoadingPromise = null;
@@ -16047,8 +16047,111 @@ document.querySelectorAll(".settings-nav-item").forEach((tab) => {
     if (target === "knowledge") {
       loadKnowledgeHealth();
     }
+    if (target === "lan") {
+      refreshLanShareUI();
+    }
   });
 });
+
+// ── 局域网共享（设置面板 ⇄ 后端 /api/lan/*） ─────────────────
+
+const lanEls = {
+  toggle: document.getElementById("lanShareToggle"),
+  info: document.getElementById("lanShareInfo"),
+  url: document.getElementById("lanShareUrl"),
+  pin: document.getElementById("lanSharePin"),
+  copyBtn: document.getElementById("lanCopyBtn"),
+  pinRegenBtn: document.getElementById("lanPinRegenBtn"),
+  modeChoices: document.getElementById("lanModeChoices"),
+  guests: document.getElementById("lanGuests"),
+};
+
+let lanShareFirstEnable = true;
+
+function lanShareRender(s) {
+  if (!s) return;
+  lanEls.toggle.checked = !!s.enabled;
+  lanEls.info.hidden = !s.enabled;
+  const ip = (s.ips && s.ips[0]) || "";
+  lanEls.url.textContent = s.enabled && ip ? `http://${ip}:${s.port}/` : "—";
+  lanEls.pin.textContent = s.enabled ? (s.pin || "—") : "—";
+  if (s.enabled && (s.ips || []).length > 1) {
+    lanEls.url.title = "其他候选地址：" + s.ips.slice(1).join("、");
+  } else {
+    lanEls.url.title = "";
+  }
+  lanEls.guests.textContent = s.enabled
+    ? `当前已配对访客：${s.activeGuests} 人${s.lockedFor > 0 ? `（口令已锁定 ${s.lockedFor} 秒）` : ""}`
+    : "—";
+  lanEls.modeChoices.querySelectorAll("button").forEach((b) => {
+    const ro = b.dataset.lanMode === "true";
+    b.classList.toggle("active", s.enabled && ro === !!s.readOnly);
+  });
+}
+
+async function refreshLanShareUI() {
+  try {
+    lanShareRender(await api.get("/api/lan/status"));
+  } catch (err) {
+    showToast(`读取共享状态失败：${err?.message || "未知错误"}`);
+  }
+}
+
+if (lanEls.toggle) {
+  lanEls.toggle.addEventListener("change", async () => {
+    const on = lanEls.toggle.checked;
+    if (on && lanShareFirstEnable) {
+      lanShareFirstEnable = false;
+      showToast("若 Windows 防火墙弹出提示，请选择「允许访问」");
+    }
+    try {
+      lanShareRender(await api.post(on ? "/api/lan/enable" : "/api/lan/disable", {
+        readOnly: lanEls.modeChoices.querySelector("button.active")?.dataset.lanMode === "true",
+      }));
+      showToast(on ? "局域网共享已开启" : "局域网共享已关闭，端口已断开");
+    } catch (err) {
+      lanEls.toggle.checked = !on;
+      showToast(`操作失败：${err?.message || "未知错误"}`);
+    }
+  });
+}
+
+if (lanEls.modeChoices) {
+  lanEls.modeChoices.querySelectorAll("button").forEach((b) => {
+    b.addEventListener("click", async () => {
+      try {
+        lanShareRender(await api.post("/api/lan/mode", { readOnly: b.dataset.lanMode === "true" }));
+        showToast(b.dataset.lanMode === "true" ? "访客已切换为只读" : "访客已切换为可编辑");
+      } catch (err) {
+        showToast(`切换失败：${err?.message || "未知错误"}`);
+      }
+    });
+  });
+}
+
+if (lanEls.pinRegenBtn) {
+  lanEls.pinRegenBtn.addEventListener("click", async () => {
+    try {
+      lanShareRender(await api.post("/api/lan/regenerate-pin", {}));
+      showToast("口令已重新生成，原访客连接已全部失效");
+    } catch (err) {
+      showToast(`操作失败：${err?.message || "未知错误"}`);
+    }
+  });
+}
+
+if (lanEls.copyBtn) {
+  lanEls.copyBtn.addEventListener("click", async () => {
+    const url = lanEls.url.textContent;
+    if (!url || url === "—") return;
+    try {
+      await navigator.clipboard.writeText(url);
+      showToast("访客地址已复制");
+    } catch (_e) {
+      showToast(`复制失败，请手动选择：${url}`);
+    }
+  });
+}
 
 const resetEditorLayoutBtn = document.querySelector("#resetEditorLayoutBtn");
 if (resetEditorLayoutBtn) {

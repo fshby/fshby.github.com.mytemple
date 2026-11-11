@@ -35,6 +35,7 @@ pub struct ServerState {
 /// 内置 404 友好错误页完整展示（绝不向用户只展示 1 条误导性的路径）。
 ///
 /// 优先级（越高越先尝试，目录存在且含 index.html 才返回）：
+/// 优先级（越高越先尝试，目录存在且含 index.html 才返回）：
 ///   1. `MYTEMPLE_PUBLIC_ROOT` 环境变量（强制指定）
 ///   2. `<exe_dir>/resources/public`              — Tauri 2 NSIS 对象映射 target=resources/public（安装位置）
 ///   3. `<exe_dir>/resources/resources/public`    — 打包时 resources 再套 resources 的极端兜底
@@ -48,7 +49,8 @@ pub struct ServerState {
 ///
 /// 所有候选都失败时回退到 candidates[0]（env 优先，否则就是 exe_dir/resources/public），
 /// 但日志和内置 404 HTML 都会列出 **全部 10 条候选**，避免误导。
-fn resolve_public_root() -> (PathBuf, Vec<PathBuf>) {
+/// pub 修饰：lan.rs（局域网共享访客监听）复用同一静态根目录选择逻辑。
+pub fn resolve_public_root() -> (PathBuf, Vec<PathBuf>) {
     let exe_dir = std::env::current_exe()
         .ok()
         .and_then(|p| p.parent().map(|d| d.to_path_buf()));
