@@ -78,12 +78,18 @@ test("图片预览：打开与关闭都重置矢量缩放残留样式", () => {
   }
 });
 
-test("mermaid CDN：锁定精确版本并带缓存破坏参数", () => {
-  // 范围 URL（mermaid@10）永不变化 → WebView2 磁盘缓存会长期持有旧版本，
-  // 早期 10.x 有 flowchart 底部裁切 bug，且 10.x 不支持 architecture-beta。
+test("mermaid 库：同源自托管 + 精确版本 + 缓存破坏参数", () => {
+  // 旧实现指向 cdn.jsdelivr.net/npm/mermaid@11.12.2/...，国内常见线路 TLS 握手被重置
+  // → 所有图表整片降级成「库加载失败」。现改为 public/vendor/ 同源提供，
+  // 版本锁定下沉到 scripts/vendor-cloud.mjs 的下载清单，缓存破坏仍靠 ?v=。
+  const vendorSrc = readFileSync(new URL("../scripts/vendor-cloud.mjs", import.meta.url), "utf8");
+  assert.doesNotMatch(appSrc, /https:\/\/cdn\.jsdelivr\.net\/npm\/mermaid/, "桌面端不得再直连 CDN");
   assert.doesNotMatch(appSrc, /mermaid@10\//, "不得使用 mermaid@10 范围 URL");
   assert.doesNotMatch(appSrc, /mermaid@11\/dist/, "不得使用 mermaid@11 范围 URL（同样有缓存问题）");
-  assert.match(appSrc, /mermaid@11\.\d+\.\d+\/dist\/mermaid\.min\.js\?v=/, "应锁定精确版本并带 ?v= 缓存破坏");
+  assert.match(appSrc, /script\.src = "\/vendor\/mermaid\/mermaid\.min\.js\?v=[^"]+"/,
+    "本地库必须带 ?v= 缓存破坏，否则 WebView2 会长期持有旧版本");
+  assert.match(vendorSrc, /mermaid@11\.12\.2\/dist\/mermaid\.min\.js/,
+    "自托管清单必须锁定精确版本 11.12.2（早期 10.x 有裁切 bug 且不支持 architecture-beta）");
 });
 
 test("mermaid 渲染后：viewBox 双向夹紧（贴合内容且不被异常 bbox 撑大）", () => {

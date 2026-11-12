@@ -1,5 +1,5 @@
 /**
- * 把云端工作台依赖的第三方库自托管到 cloud/vendor/。
+ * 把云端工作台依赖的第三方库自托管到 cloud/vendor/，并镜像一份到桌面端 public/vendor/。
  *
  * ── 为什么必须自托管 ─────────────────────────────────────────────
  * 原先这些库全部挂在 cdn.jsdelivr.net 上。该主机名在部分网络（国内常见线路）
@@ -22,7 +22,7 @@
  *     npm run vendor:cloud            # 缺什么补什么（幂等）
  *     npm run vendor:cloud -- --force # 全部重下
  */
-import { mkdirSync, writeFileSync, existsSync, readFileSync, statSync } from "node:fs";
+import { mkdirSync, writeFileSync, existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import path from "node:path";
 
@@ -90,9 +90,20 @@ const ASSETS = [
  * 为什么：桌面端现在**直连**云服务数据面（实测 CORS 预检对 http://127.0.0.1:<port>
  * 完全放行，含 Authorization / Prefer / X-Wb-Webapp-Access-Key），因此 exe 也需要这份
  * SDK 来做登录。两端用**同一份文件**，避免出现两份实现各自漂移。
+ *
+ * 2026-11-12 补充：桌面端的 Mermaid / KaTeX / Chart.js / ECharts 原先仍直连
+ * cdn.jsdelivr.net，该主机在国内常见线路 TLS 握手被重置（实测 curl 35，0 字节），
+ * 表现为预览里所有 Mermaid 图表显示「Mermaid 库加载失败（需外网连接 CDN）」。
+ * 云端早已全部本地化，这里把同一批文件镜像过去，桌面端也做到零第三方 CDN。
+ * 注意 katex.min.css 用相对路径引用 fonts/*.woff2，字体必须一并镜像（见下方循环）。
  */
 const PUBLIC_MIRRORS = [
   { from: "sdk/workbuddy-cloud-sdk.global.js", what: "桌面端登录 SDK（与云端同源同版本）" },
+  { from: "mermaid/mermaid.min.js", what: "桌面端 Mermaid 图表（离线可用）" },
+  { from: "katex/katex.min.js", what: "桌面端数学公式渲染脚本" },
+  { from: "katex/katex.min.css", what: "桌面端数学公式样式（含 fonts/ 相对引用）" },
+  { from: "chartjs/chart.umd.js", what: "桌面端 Chart.js 自包含图表页" },
+  { from: "echarts/echarts.min.js", what: "桌面端 ECharts 自包含图表页" },
 ];
 
 /** 桌面端要读的公开配置：由 cloud/cloud-config.js 生成，保证两端键值完全一致。 */
@@ -223,8 +234,13 @@ for (const r of fontRows) {
   total += r.size;
 }
 
-// 桌面端需要的同一份 SDK（exe 直连云服务数据面）+ 公开配置
+// 桌面端需要的同一批自托管资产 + 公开配置。
+// KaTeX 字体由 CSS 以相对路径引用，目录内容以云端已下载的文件为准（不硬编码文件名）。
 console.log("\n[vendor:cloud] 镜像到桌面端 public/");
+const fontDir = path.join(vendorDir, "katex", "fonts");
+for (const name of readdirSync(fontDir).filter((f) => f.endsWith(".woff2"))) {
+  PUBLIC_MIRRORS.push({ from: `katex/fonts/${name}`, what: "KaTeX 字体（CSS 相对路径）" });
+}
 for (const m of PUBLIC_MIRRORS) {
   const r = mirrorToPublic(m.from);
   rows.push(r);

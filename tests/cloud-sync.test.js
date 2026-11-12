@@ -389,9 +389,10 @@ test("静态资源缓存戳三处一致，且改动后已递增", () => {
   const assetV = cloudApp.match(/const ASSET_V = "([^"]+)"/);
   assert.ok(assetV, "cloud/app.js 必须有 ASSET_V");
   assert.equal(assetV[1], cloudVersions[0], "cloud/app.js 的 ASSET_V 必须与页面缓存戳一致");
-  // 桌面 app.js 内部引用的两个 URL 必须与页面一致，否则 WebView2 会命中旧缓存
+  // 桌面 app.js 内部引用的两个 URL 必须与页面一致，否则 WebView2 会命中旧缓存。
+  // worker URL 现在还带 &assets=/vendor/，所以戳只取到 & 之前，不能把参数一起算进去。
   for (const target of ["editor-core.js", "markdown-worker.js"]) {
-    const m = appSrc.match(new RegExp(`/${target.replace(".", "\\.")}\\?v=([^"]+)`));
+    const m = appSrc.match(new RegExp(`/${target.replace(".", "\\.")}\\?v=([^"&]+)`));
     assert.ok(m, `app.js 必须引用 ${target}`);
     assert.equal(m[1], unique[0], `app.js 的 ${target} 缓存戳必须与 index.html 一致`);
   }
@@ -467,27 +468,31 @@ test("katex 样式与其字体保持相对路径关系（换域名也不会失�
   }
 });
 
-test("图表库由云端同源提供，且桌面端行为不受牵连", () => {
+test("图表库两端都由 /vendor/ 同源提供（桌面端不再回退 CDN）", () => {
   // markdown-worker 两端共用同一份文件（上面已有字节一致性断言），
-  // 所以不能把库地址写死：云端通过 Worker URL 的 ?assets= 指到 /vendor/，
-  // 桌面端不传该参数，继续走原来的 CDN —— 本轮不动桌面端，不能产生回归。
+  // 所以不能把库地址写死：两端都通过 Worker URL 的 ?assets= 指到 /vendor/。
+  // worker 里保留的 CDN 分支只是「未传 assets」时的兼容回退，两端实际都不会走到。
   const shared = read("public/markdown-worker.js");
   assert.match(shared, /\[\?&\]assets=/, "worker 必须支持 ?assets= 覆盖自托管目录");
   assert.match(shared, /ASSET_BASE\s*\?/, "worker 必须按 ASSET_BASE 分支，不能写死一处地址");
-  // 未传 assets 时的回退值必须还是原来那两个 CDN 地址（桌面端读到的就是这条分支）
+  // 回退值保持原样以兼容旧调用方，但实际加载路径必须两端都带 assets 参数
   assert.ok(
     shared.includes("https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"),
-    "桌面端回退地址必须保持原样（未传 assets 时不得改变既有行为）"
+    "未传 assets 时的兼容回退地址仍应保留"
   );
   assert.ok(
     shared.includes("https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"),
-    "桌面端回退地址必须保持原样（未传 assets 时不得改变既有行为）"
+    "未传 assets 时的兼容回退地址仍应保留"
   );
-  // 云端必须真的带上这个参数，否则还是会去请求 CDN
   assert.match(
     cloudApp,
     /new Worker\(`\/markdown-worker\.js\?v=\$\{ASSET_V\}&assets=\/vendor\/`\)/,
     "云端必须以 assets=/vendor/ 创建渲染 worker"
+  );
+  assert.match(
+    appSrc,
+    /markdown-worker\.js\?v=[^"&]+&assets=\/vendor\//,
+    "桌面端必须以 assets=/vendor/ 创建渲染 worker（否则图表库会回退到被墙的 CDN）"
   );
   // 自托管目录里的文件名必须与 worker 拼出来的路径对得上
   assert.ok(shared.includes('ASSET_BASE + "chartjs/chart.umd.js"'), "worker 的 chart 路径写法变了，需同步 vendor 目录");

@@ -1,4 +1,4 @@
-import { createMarkdownEditor } from "/editor-core.js?v=20261112-f0e3cb5e";
+import { createMarkdownEditor } from "/editor-core.js?v=20261112-97a45ae4";
 import { getPaperBackgroundUrl } from "./modules/paper-texture.js";
 import { escapeHtml, displayName, displayRelativePath, splitPathRef, joinPathRef, parentPathRef, compactName, splitWorkspaceRef, plainText, headingId } from "./modules/path-utils.js";
 import { extractOutline, addCnEnSpaces } from "./modules/editor-utils.js";
@@ -56,8 +56,8 @@ const LARGE_PREVIEW_BYTES = 100 * 1024;
 const LARGE_PREVIEW_DELAY = 700;
 const CHUNKED_RENDER_BYTES = 500 * 1024;
 const CHUNK_RENDER_SLICE_BYTES = 150 * 1024;
-const GRAPH_WORKER_URL = "/graph-worker.js?v=20261112-f0e3cb5e";
-const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20261112-f0e3cb5e";
+const GRAPH_WORKER_URL = "/graph-worker.js?v=20261112-97a45ae4";
+const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20261112-97a45ae4&assets=/vendor/";
 // Markdown 渲染缓存版本戳：解析器或 CSS 规则升级时递增，确保旧缓存不被复用。
 // 2026-08-29 v1.8.102：安装包 resources 包含 public/ 前端静态文件、端口回滚；修正其他电脑安装后 404 白屏。
 const MARKDOWN_RENDER_VERSION = "20260829-v18102-install-static-bundle-port-scan";
@@ -8261,15 +8261,16 @@ function loadKatexAsync() {
     // 先加载 CSS
     const link = document.createElement("link");
     link.rel = "stylesheet";
-    link.href = "https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css";
+    // 同源自托管：katex.min.css 以相对路径引用 fonts/*.woff2，字体已一并镜像到 public/vendor/katex/。
+    link.href = "/vendor/katex/katex.min.css?v=20261112-97a45ae4";
     document.head.appendChild(link);
     // 再加载 JS
     const script = document.createElement("script");
-    script.src = "https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js";
+    script.src = "/vendor/katex/katex.min.js?v=20261112-97a45ae4";
     script.onload = () => resolve(window.katex);
     script.onerror = () => {
       _katexLoadingPromise = null;
-      reject(new Error("KaTeX 库加载失败（可能无外网连接）"));
+      reject(new Error("KaTeX 本地资源加载失败"));
     };
     script.async = true;
     document.head.appendChild(script);
@@ -8374,13 +8375,14 @@ function loadMermaidAsync() {
   if (_mermaidLoadingPromise) return _mermaidLoadingPromise;
   _mermaidLoadingPromise = new Promise((resolve, reject) => {
     const script = document.createElement("script");
-    // 锁定精确版本 + query 缓存破坏：@10 这类范围 URL 永不变，WebView2 磁盘缓存会
-    // 永远持有远古版本（早期 10.x 有 flowchart 底部裁切 bug），且 10.x 不支持 architecture-beta。
-    script.src = "https://cdn.jsdelivr.net/npm/mermaid@11.12.2/dist/mermaid.min.js?v=20261112-f0e3cb5e";
+    // 同源自托管：与云端共用 public/vendor/mermaid/mermaid.min.js（npm 固定 11.12.2）。
+    // 原先指向 cdn.jsdelivr.net，国内常见线路 TLS 握手被重置，所有 Mermaid 图表会
+    // 一起降级成「库加载失败」。query 缓存破坏沿用桌面端统一戳，由 npm run stamp 维护。
+    script.src = "/vendor/mermaid/mermaid.min.js?v=20261112-97a45ae4";
     script.onload = () => resolve(window.mermaid);
     script.onerror = () => {
       _mermaidLoadingPromise = null;
-      reject(new Error("Mermaid 库加载失败（可能无外网连接）"));
+      reject(new Error("Mermaid 本地库加载失败"));
     };
     script.async = true;
     document.head.appendChild(script);
@@ -8639,7 +8641,7 @@ async function renderChartsInPreview(container) {
       mermaidBlocks.forEach((block) => {
         const containerDiv = block.querySelector(".mermaid-container");
         if (containerDiv) {
-          containerDiv.innerHTML = `<div class="chart-error">Mermaid 库加载失败（需外网连接 CDN）。图表源码仍可在编辑模式查看。</div>`;
+          containerDiv.innerHTML = `<div class="chart-error">Mermaid 图表库未加载（本地资源缺失）。图表源码仍可在编辑模式查看。</div>`;
         }
       });
     }
@@ -11730,7 +11732,7 @@ function detectAndBuildChartHtml(content) {
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Chart.js</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script src="/vendor/chartjs/chart.umd.js"></script>
 <style>html,body{margin:0;padding:12px;height:100%;box-sizing:border-box;font-family:Arial,sans-serif;background:#fff}#c{width:100%;height:calc(100vh - 24px);min-height:360px}</style>
 </head>
 <body>
@@ -11763,7 +11765,7 @@ try {
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>ECharts</title>
-<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+<script src="/vendor/echarts/echarts.min.js"></script>
 <style>html,body{margin:0;padding:0;height:100%;background:#fff}#c{width:100%;height:100vh;min-height:420px}</style>
 </head>
 <body>

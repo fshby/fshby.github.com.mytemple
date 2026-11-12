@@ -5,7 +5,7 @@
 //       保存走 /api/save（baseHash 乐观锁，冲突时给「保留我的/加载最新」二选一）。
 // 所有请求带 X-Lan-Token 头；无任何 Tauri / 云端依赖。
 
-import { createMarkdownEditor } from "/editor-core.js?v=20261112-f0e3cb5e";
+import { createMarkdownEditor } from "/editor-core.js?v=20261112-97a45ae4";
 
 const TOKEN_KEY = "mt-lan-token";
 

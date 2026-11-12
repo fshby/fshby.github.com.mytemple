@@ -7,10 +7,16 @@
  * 因此出过两次线上事故。
  *
  * 做法：把「参与打包的前端资源」内容拼起来算 sha256，取前 8 位，配合日期前缀写成
- * `YYYYMMDD-<hash8>`（形如 `20261111-3f9a2c1b`），只改 index.html 与 app.js 里的
- * `?v=` 值。内容没变 → 戳不变 → 无谓 diff 也没有。
+ * `YYYYMMDD-<hash8>`（形如 `20261111-3f9a2c1b`），只改 index.html / app.js /
+ * guest.html / guest.js 里的 `?v=` 值。内容没变 → 戳不变 → 无谓 diff 也没有。
  *
- * 用法：npm run stamp    （改完 public/ 资源后跑一次）
+ * ⚠️ 自引用陷阱（2026-11-12 修复）：app.js 与 guest.js 既参与指纹、又被本脚本改写戳。
+ * 若直接把文件原文喂给 sha256，每跑一次戳都会变（实测连跑 4 次 4 个值），注释里
+ * 「内容没变戳不变」就成了假话，也会产生无谓 diff。所以算指纹前先把桌面端戳形态的
+ * `?v=YYYYMMDD-hash8` 归一化成占位符：真实内容变化仍会改戳，戳自身变化不会。
+ * cloud-N 这类人工云端戳不归一化，改动它们照样会触发桌面端戳更新。
+ *
+ * 用法：npm run stamp    （改完 public/ 资源后跑；幂等，可重复执行）
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -40,11 +46,16 @@ function assetFiles() {
   return files.concat(modules);
 }
 
+/** 归一化桌面端缓存戳，消除「被改写的文件参与自身指纹」的自引用。 */
+function hashable(buf) {
+  return buf.toString("utf8").replace(/\?v=\d{8}-[0-9a-f]{8}/g, "?v=__STAMP__");
+}
+
 const h = crypto.createHash("sha256");
 for (const rel of assetFiles()) {
   const p = path.join(PUB, rel);
   if (!fs.existsSync(p)) continue;
-  h.update(rel).update("\0").update(fs.readFileSync(p)).update("\0");
+  h.update(rel).update("\0").update(hashable(fs.readFileSync(p))).update("\0");
 }
 const digest = h.digest("hex").slice(0, 8);
 const d = new Date();

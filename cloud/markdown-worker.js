@@ -18,9 +18,10 @@ function escapeHtml(value) {
  * 图表库（Chart.js / ECharts）的加载地址。
  *
  * 默认走第三方 CDN；支持同源自托管的站点可以在 Worker URL 上带 `?assets=<目录>` 覆盖，
- * 例如云端工作台用 `/markdown-worker.js?v=…&assets=/vendor/`，从此完全不吃外部 CDN 的
- * 可用性风险（cdn.jsdelivr.net 在部分网络下 TLS 会被重置）。
- * 桌面端不传该参数 → 行为与以前完全一致，继续走 CDN。
+ * 例如 `/markdown-worker.js?v=…&assets=/vendor/`，从此完全不吃外部 CDN 的可用性风险
+ * （cdn.jsdelivr.net 在部分网络下 TLS 握手会被重置）。
+ * 桌面端（public/app.js）与云端工作台（cloud/app.js）现在都带该参数，各自从所在站点的
+ * /vendor/ 同源加载；未传参数时保留 CDN 分支，仅作旧嵌入页的兼容回退，两端实际都不走。
  *
  * 之所以做成运行时可变而不是两端各写死：本文件与 cloud/markdown-worker.js 必须逐字节
  * 相同（见 tests/cloud-sync.test.js 的构建同步断言），不能各留一份分叉的实现。

@@ -7,7 +7,7 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 
 const ROOT = new URL("../", import.meta.url);
 const read = (p) => readFileSync(new URL(p, ROOT), "utf8");
@@ -75,11 +75,21 @@ test("表达力元素只走 CSS，不动三端 markdown 渲染器与工具栏", 
 });
 
 test("体积预算：体验层增量受控（基线 + 小幅余量）", () => {
-  const css = statSync(new URL("public/styles.css", ROOT)).size;
-  const js = statSync(new URL("public/app.js", ROOT)).size;
-  assert.ok(css < 392_000, `styles.css ${css}B 超预算 392000B`);
-  assert.ok(js < 792_000, `app.js ${js}B 超预算 792000B`);
-  assert.ok(statSync(new URL("public/editor-core.js", ROOT)).size < 600_000, "编辑器核心本轮不应变化");
+  // core.autocrlf=true：工作区是 CRLF、git blob 是 LF，同一份代码 statSync 会多出
+  // 近 1.8 万字节（每行 +1）。基线数字是在 LF 形态下测的，这里统一归一化 CRLF→LF
+  // 再比较，避免预算随检出平台/最后一次写文件的工具漂移而误报。
+  const normalizedSize = (p) => {
+    const buf = readFileSync(new URL(p, ROOT));
+    const latin = buf.toString("latin1");
+    let crlf = 0;
+    for (let i = latin.indexOf("\r\n"); i !== -1; i = latin.indexOf("\r\n", i + 2)) crlf++;
+    return buf.length - crlf;
+  };
+  const css = normalizedSize("public/styles.css");
+  const js = normalizedSize("public/app.js");
+  assert.ok(css < 392_000, `styles.css ${css}B 超预算 392000B（LF 归一）`);
+  assert.ok(js < 792_000, `app.js ${js}B 超预算 792000B（LF 归一）`);
+  assert.ok(normalizedSize("public/editor-core.js") < 600_000, "编辑器核心本轮不应变化");
 });
 
 test("挂载点：只增调用，不修改既有 handler 的内部逻辑", () => {
