@@ -8,14 +8,15 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'">
   <title>MyTemple Knowledge · 局域网共享</title>
   <link rel="icon" href="/favicon.ico">
-  <link rel="stylesheet" href="/styles.css?v=20261112-7da9beff">
-  <link rel="stylesheet" href="/guest.css?v=20261112-7da9beff">
+  <link rel="stylesheet" href="/styles.css?v=20261112-1413eb61">
+  <link rel="stylesheet" href="/guest.css?v=20261112-1413eb61">
 </head>
 <body>
   <!-- PIN 配对门（未持有 token 时唯一可见界面） -->
   <div id="gate" class="gate">
     <div class="gate-card">
-      <img src="/logo.png" alt="" class="gate-logo" onerror="this.style.display='none'">
+      <!-- 不用内联 onerror：访客页 CSP default-src 'self' 不放行内联事件处理器 -->
+      <img src="/logo.png" alt="" class="gate-logo" id="gateLogo">
       <h1>局域网共享</h1>
       <p class="gate-sub">请输入桌面端「设置 → 局域网共享」中显示的 6 位口令</p>
       <form id="gateForm">
@@ -28,12 +29,16 @@
     </div>
   </div>
 
-  <!-- 访客主界面：左树右编辑器 -->
+  <!-- 访客主界面：左树 + 右（编辑/预览双视图，与桌面端一致） -->
   <div id="app" class="app hidden">
     <header class="topbar">
       <button id="sidebarToggle" class="tb-btn" type="button" aria-label="切换目录栏">☰</button>
       <strong id="docTitle" class="doc-title">未打开文档</strong>
       <span id="roBadge" class="ro-badge hidden">只读</span>
+      <div id="viewToggle" class="view-toggle" role="tablist" aria-label="视图切换">
+        <button id="editViewBtn" class="vt-btn active" type="button" role="tab" aria-selected="true">编辑</button>
+        <button id="previewViewBtn" class="vt-btn" type="button" role="tab" aria-selected="false">预览</button>
+      </div>
       <span class="tb-spacer"></span>
       <input id="searchInput" class="search-input" type="search" placeholder="搜索文档…" aria-label="搜索">
       <button id="newDocBtn" class="tb-btn primary" type="button">新建</button>
@@ -47,6 +52,9 @@
       </aside>
       <main class="editor-wrap">
         <div id="editorHost" class="editor-host"></div>
+        <div id="readerHost" class="reader-host hidden">
+          <div id="markdownView" class="markdown-body"></div>
+        </div>
         <div id="conflictBar" class="conflict-bar hidden">
           <span>文档已被其他人修改，直接保存会覆盖对方内容。</span>
           <button id="conflictMine" type="button" class="tb-btn primary">保留我的版本</button>
@@ -57,6 +65,6 @@
     </div>
   </div>
 
-  <script type="module" src="/guest.js?v=20261112-7da9beff"></script>
+  <script type="module" src="/guest.js?v=20261112-1413eb61"></script>
 </body>
 </html>

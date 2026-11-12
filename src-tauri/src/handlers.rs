@@ -277,7 +277,17 @@ async fn lan_fallback(public_root: PathBuf, req: Request) -> Response {
         )
             .into_response();
     }
-    if !crate::lan::LAN_STATIC_ALLOW.contains(&name) {
+    // 路径穿越 / Windows 盘符一律拒绝（名称里出现任何 `..`、`:`、`\` 都不放行）
+    if name.contains("..") || name.contains(':') || name.contains('\\') {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    // vendor/ 子树整目录放行：KaTeX/Mermaid/Chart.js/ECharts/highlight 及字体，
+    // 与桌面端 public/vendor 同一份自托管开源库，无任何用户数据。
+    // markdown-worker.js：访客预览渲染（与桌面端同一份 worker）。
+    let is_vendor = name.starts_with("vendor/") && name.len() > "vendor/".len();
+    let allowed_exact =
+        crate::lan::LAN_STATIC_ALLOW.contains(&name) || name == "markdown-worker.js";
+    if !(allowed_exact || is_vendor) {
         return StatusCode::NOT_FOUND.into_response();
     }
     let full = public_root.join(name);
@@ -286,12 +296,15 @@ async fn lan_fallback(public_root: PathBuf, req: Request) -> Response {
             let mime = match full.extension().and_then(|e| e.to_str()) {
                 Some("html") => "text/html; charset=utf-8",
                 Some("css") => "text/css; charset=utf-8",
-                Some("js") => "text/javascript; charset=utf-8",
+                Some("js") | Some("mjs") => "text/javascript; charset=utf-8",
                 Some("png") => "image/png",
                 Some("webp") => "image/webp",
                 Some("ico") => "image/x-icon",
                 Some("svg") => "image/svg+xml",
                 Some("json") => "application/json",
+                Some("woff") => "font/woff",
+                Some("woff2") => "font/woff2",
+                Some("ttf") => "font/ttf",
                 _ => "application/octet-stream",
             };
             (
@@ -511,6 +524,52 @@ async fn lan_search(
     crate::ipc::ok_response(v)
 }
 
+/// GET /source/*path（访客版：文档内嵌图片/媒体资产）
+///
+/// 与桌面端 serve_source 的关键差别（安全收紧）：
+///   ① 只认 `ws_<id>/<相对路径>` 一种格式 —— 桌面端「裸文件名跨全部工作区模糊扫描」
+///     会把未共享工作区里的同名图片泄漏给访客，访客版一律 404；
+///   ② 不查 data_root 全局资产（访客没有全局资产上下文）；
+///   ③ 工作区必须在共享白名单内（空 = 全部），否则 404；
+///   ④ 相对路径额外拒绝 `:` `\\` 与前导 `/`（Windows 下 PathBuf::join 遇绝对路径
+///     或盘符会整体替换前缀，直接逃出工作区目录）。
+async fn lan_serve_source(
+    State(state): State<Arc<ServerState>>,
+    Path(path): Path<String>,
+) -> Response {
+    if path.contains("..") {
+        return (StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
+    let segments: Vec<&str> = path.splitn(2, '/').collect();
+    let valid = segments.len() == 2
+        && segments[0].starts_with("ws_")
+        && !segments[1].is_empty()
+        && !segments[1].contains("..")
+        && !segments[1].contains(':')
+        && !segments[1].contains('\\')
+        && !segments[1].starts_with('/');
+    if !valid {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    let ws_id = segments[0];
+    if !state.app.lan.is_ws_allowed(ws_id).await {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    let workspaces = state.app.get_workspaces().await;
+    let Some(ws) = workspaces.iter().find(|w| w.id == ws_id) else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    let relative = segments[1];
+    let root = std::path::PathBuf::from(&ws.root);
+    // 候选与桌面端一致：<root>/source/<rel>（现布局）、<root>/<rel>（最老布局）
+    for candidate in [root.join("source").join(relative), root.join(relative)] {
+        if candidate.is_file() {
+            return serve_file(candidate);
+        }
+    }
+    StatusCode::NOT_FOUND.into_response()
+}
+
 /// POST /api/save（访客版：工作区白名单校验）
 async fn lan_save(
     State(state): State<Arc<ServerState>>,
@@ -634,6 +693,8 @@ pub fn build_lan_router(
         .route("/api/doc", get(lan_get_doc))
         .route("/api/doc-check", get(lan_check_doc))
         .route("/api/search", get(lan_search))
+        // 图片/媒体资产（访客版：仅 ws_ 前缀格式 + 共享白名单闸门，不跨工作区模糊扫描）
+        .route("/source/*path", get(lan_serve_source))
         // 写类（只读模式由 lan_guard 403；工作区白名单由 lan_* 校验）
         .route("/api/save", post(lan_save))
         .route("/api/create-doc", post(lan_create_doc))

@@ -34,10 +34,15 @@ test("LAN: 访客通道路由白名单不含敏感端点", () => {
     assert.ok(body.includes(`"${route}"`), `访客路由缺少白名单端点 ${route}`);
   }
   // 绝不允许出现的敏感端点（删除/移动/重命名/浏览/Agent/授权/截图/上传/云端资产）
-  const forbidden = ["/api/delete", "/api/move", "/api/rename", "/api/copy", "/api/browse", "/api/agent", "/api/license", "/api/screenshot", "/api/upload", "/api/asset", "/api/import", "/api/export", "/api/ai", "/api/files", "/api/frontmatter", "/ws-asset", "/source/"];
+  // 注意 /source 走的是访客专用包装版（lan_serve_source：白名单闸门 + 无模糊扫描），
+  // 桌面版 serve_source（跨工作区模糊扫描 + cloud_read_cors）绝不允许挂进访客路由。
+  const forbidden = ["/api/delete", "/api/move", "/api/rename", "/api/copy", "/api/browse", "/api/agent", "/api/license", "/api/screenshot", "/api/upload", "/api/asset", "/api/import", "/api/export", "/api/ai", "/api/files", "/api/frontmatter", "/ws-asset"];
   for (const f of forbidden) {
     assert.ok(!body.includes(`"${f}`), `访客路由出现了禁止端点 ${f}`);
   }
+  assert.ok(!body.includes("get(serve_source)"), "桌面版 serve_source 不允许挂访客路由（模糊扫描会跨工作区泄漏）");
+  // 图片/媒体资产端点（访客版）：必须存在且用 lan 包装 handler
+  assert.ok(body.includes('"/source/*path", get(lan_serve_source)'), "访客路由必须有 /source 资产端点且挂 lan_serve_source 包装版");
 });
 
 test("LAN: lan_guard 无 token 必须 401 且 verify 免 token", () => {
@@ -175,4 +180,76 @@ test("LAN: lan-share.json 持久化文件名固定", () => {
   const src = repoFile("src-tauri", "src", "lan.rs");
   assert.ok(src.includes('join("lan-share.json")'), "lan.rs 必须持久化 lan-share.json");
   assert.ok(os.platform() !== "win32" || src.includes("lan_ips"), "lan.rs 缺少局域网 IP 探测");
+});
+
+// ══ 2026-11-12：访客页对齐桌面端（预览视图 / 图片 / 侧栏折叠）════════════
+
+test("LAN: /source 访客资产端点安全收紧（白名单闸门 + 无模糊扫描 + 防穿越）", () => {
+  const src = repoFile("src-tauri", "src", "handlers.rs");
+  const start = src.indexOf("async fn lan_serve_source");
+  assert.ok(start > 0, "缺少 lan_serve_source");
+  const body = src.slice(start, src.indexOf("async fn lan_save", start));
+  assert.ok(body.includes("is_ws_allowed"), "必须校验共享工作区白名单（未共享工作区资产不得 404 之外的响应）");
+  // 桌面版的跨工作区模糊扫描会泄漏未共享工作区的同名图片，访客版禁止
+  assert.ok(!body.includes("read_dir"), "访客版不得做跨工作区模糊扫描（泄漏面不可控）");
+  assert.ok(!body.includes("data_root"), "访客版不得读 data_root 全局资产");
+  // 防路径穿越 / Windows 盘符（PathBuf::join 遇绝对路径会整体替换前缀）
+  assert.ok(body.includes('".."'), "必须拒绝 .. 穿越");
+  assert.ok(body.includes("':'"), "必须拒绝盘符冒号");
+  assert.ok(body.includes("'\\\\'"), "必须拒绝反斜杠");
+});
+
+test("LAN: 访客静态放行 vendor/ 与 markdown-worker.js（预览管线依赖）+ 防穿越", () => {
+  const src = repoFile("src-tauri", "src", "handlers.rs");
+  const start = src.indexOf("async fn lan_fallback");
+  const body = src.slice(start, start + 2200);
+  assert.ok(body.includes('name == "markdown-worker.js"'), "访客预览渲染需要 markdown-worker.js");
+  assert.ok(body.includes('name.starts_with("vendor/")'), "访客预览需要 vendor/ 子树（KaTeX/Mermaid/hljs 自托管库）");
+  // 放行范围扩大后，路径穿越防护必须先行（名称含 .. : \ 一律 404）
+  const guardIdx = body.indexOf('name.contains("..")');
+  const vendorIdx = body.indexOf('name.starts_with("vendor/")');
+  assert.ok(guardIdx > 0 && vendorIdx > 0 && guardIdx < vendorIdx, "穿越防护必须先于 vendor 放行判断");
+  assert.ok(body.includes("woff2"), "KaTeX 字体 woff2 需要 mime");
+  // 主应用入口仍然不可达（vendor 放行是目录级的，不含根级文件）
+  const lanRs = repoFile("src-tauri", "src", "lan.rs");
+  const constBody = lanRs.slice(lanRs.indexOf("pub const LAN_STATIC_ALLOW"), lanRs.indexOf("];", lanRs.indexOf("pub const LAN_STATIC_ALLOW")));
+  for (const banned of ["app.js", "index.html"]) {
+    assert.ok(!constBody.includes(banned), `静态白名单不允许 ${banned}`);
+  }
+});
+
+test("LAN: guest.html/guest.js 有编辑/预览双视图与完整预览管线", () => {
+  const html = repoFile("public", "guest.html");
+  assert.ok(html.includes('id="viewToggle"') && html.includes('id="editViewBtn"') && html.includes('id="previewViewBtn"'), "缺少视图切换控件");
+  assert.ok(html.includes('id="readerHost"') && html.includes('id="markdownView"') && html.includes('markdown-body'), "缺少预览阅读区");
+  assert.ok(html.includes("/vendor/highlight") === false, "hljs 由 guest.js 按需加载，html 里不预载");
+
+  const js = repoFile("public", "guest.js");
+  // 预览管线五件套：worker / KaTeX / Mermaid（含塌缩防护）/ hljs / 图片改写
+  assert.ok(js.includes("/markdown-worker.js?v=") && js.includes("&assets=/vendor/"), "必须用同源 worker + vendor 资产");
+  assert.ok(js.includes("mt-html-frame-height"), "必须监听沙箱帧高度上报");
+  assert.ok(js.includes("HTML_FRAME_MAX_HEIGHT = 200000"), "沙箱帧高度上限必须三端同值 200000");
+  assert.ok(js.includes("renderMathInPreview"), "必须有 KaTeX 公式渲染");
+  assert.ok(js.includes("loadMermaidAsync") && js.includes("renderMermaidSerialized"), "必须有 Mermaid 渲染");
+  // Mermaid 塌缩防护与桌面端同源（页面隐藏期间渲染 → 布局压成一条线）
+  assert.ok(js.includes("waitUntilChartsPageVisible"), "渲染前必须等页面可见（后台标签页渲染会塌缩）");
+  assert.ok(js.includes("mermaidMeasurementDegenerate"), "必须有自测量塌缩检测");
+  assert.ok(js.includes("rewriteMediaSrc"), "必须有图片/视频相对路径改写");
+  assert.ok(js.includes("highlightCodeBlocks") && js.includes("highlight.min.js"), "必须有 hljs 代码高亮");
+  // 只读共享默认进预览（访客主要场景是阅读）
+  assert.ok(js.includes('state.readOnly ? "preview" : "edit"'), "只读共享应默认预览视图");
+});
+
+test("LAN: guest.css 侧栏折叠在所有宽度生效（「目录不能隐藏」回归锁）", () => {
+  const css = repoFile("public", "guest.css");
+  const collapsedIdx = css.indexOf(".sidebar.collapsed");
+  assert.ok(collapsedIdx > 0, "缺少 .sidebar.collapsed 规则");
+  const mediaIdx = css.indexOf("@media");
+  assert.ok(mediaIdx > collapsedIdx, ".sidebar.collapsed 必须在 @media 之外（全局生效；旧实现只在窄屏生效）");
+  // 折叠用 display:none（语义上直接隐藏，不参与布局）
+  const rule = css.slice(collapsedIdx, css.indexOf("}", collapsedIdx));
+  assert.ok(rule.includes("display: none"), "折叠必须 display:none");
+  // 配色必须引用主应用 tokens（观感对齐桌面端）
+  assert.ok(css.includes("var(--accent"), "配色必须使用主应用 accent token");
+  assert.ok(css.includes("var(--bg"), "背景必须使用主应用 bg token");
 });
