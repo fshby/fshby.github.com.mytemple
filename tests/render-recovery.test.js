@@ -85,4 +85,26 @@ test("⑥ 启动护栏恢复流程同时请求 Rust 自愈（覆盖 DOM 探针�
   const recover = guardScript.slice(guardScript.indexOf("__recoverRender = function"), guardScript.indexOf("function showStartupError"));
   assert.match(recover, /fetch\("\/api\/window\/nudge"/, "一键恢复必须触发原生自愈");
   assert.match(recover, /DOM 探针发现不了/, "必须留有盲区说明（防回退注释）");
+  assert.match(recover, /__forceContentRepaint/, "一键恢复必须先做内容级强制提交");
+});
+
+test("⑦ 内容级强制提交（v2.3.11）：__forceContentRepaint 定义且被按钮路径调用", () => {
+  assert.match(guardScript, /window\.__forceContentRepaint = function/, "护栏脚本必须定义内容级重绘");
+  const fn = guardScript.slice(guardScript.indexOf("window.__forceContentRepaint = function"), guardScript.indexOf("window.__forceContentRepaint = function") + 400);
+  assert.match(fn, /willChange = "transform"/, "必须用 will-change 建层制造布局事件");
+  assert.match(fn, /willChange = ""/, "建层后必须立即销毁（不留常驻 GPU 层）");
+  assert.match(fn, /void b\.offsetWidth/, "必须同步 flush 布局");
+  assert.match(fixBlock, /window\.__forceContentRepaint\(\)/, "显示修复按钮必须先本地做内容级重绘");
+});
+
+test("⑧ Rust：自愈升级为表面+失同步+内容三连，挂钩页面就绪与周期兜底", () => {
+  assert.match(lib, /controller\.NotifyParentWindowPositionChanged\(\)/,
+    "必须调用 WebView2 官方位置失同步修复（bounds 抖动救不回的实测场景）");
+  assert.match(lib, /window\.__forceContentRepaint/, "nudge 必须 eval 内容级强制提交");
+  assert.match(lib, /fn schedule_page_load_nudge/, "必须有页面就绪自愈挂钩");
+  assert.match(lib, /schedule_page_load_nudge\(window\)/, "on_page_load 两条路径都必须调度");
+  assert.match(lib, /Duration::from_secs\(45\)/, "必须有周期性静默兜底（虚拟显示器翻转可能无窗口事件）");
+  // eval 只允许调护栏函数本身，不得执行其它任意注入
+  assert.match(lib, /"try\{ if \(window\.__forceContentRepaint\) window\.__forceContentRepaint\(\); \}catch\(e\)\{\}"/,
+    "eval 注入串必须与护栏函数精确匹配");
 });

@@ -1,4 +1,4 @@
-import { createMarkdownEditor } from "/editor-core.js?v=20261112-0829555b";
+import { createMarkdownEditor } from "/editor-core.js?v=20261112-77ebdd4b";
 import { getPaperBackgroundUrl } from "./modules/paper-texture.js";
 import { escapeHtml, displayName, displayRelativePath, splitPathRef, joinPathRef, parentPathRef, compactName, splitWorkspaceRef, plainText, headingId } from "./modules/path-utils.js";
 import { extractOutline, addCnEnSpaces } from "./modules/editor-utils.js";
@@ -56,8 +56,8 @@ const LARGE_PREVIEW_BYTES = 100 * 1024;
 const LARGE_PREVIEW_DELAY = 700;
 const CHUNKED_RENDER_BYTES = 500 * 1024;
 const CHUNK_RENDER_SLICE_BYTES = 150 * 1024;
-const GRAPH_WORKER_URL = "/graph-worker.js?v=20261112-0829555b";
-const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20261112-0829555b&assets=/vendor/";
+const GRAPH_WORKER_URL = "/graph-worker.js?v=20261112-77ebdd4b";
+const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20261112-77ebdd4b&assets=/vendor/";
 // Markdown 渲染缓存版本戳：解析器或 CSS 规则升级时递增，确保旧缓存不被复用。
 // 2026-08-29 v1.8.102：安装包 resources 包含 public/ 前端静态文件、端口回滚；修正其他电脑安装后 404 白屏。
 const MARKDOWN_RENDER_VERSION = "20260829-v18102-install-static-bundle-port-scan";
@@ -8264,11 +8264,11 @@ function loadKatexAsync() {
     const link = document.createElement("link");
     link.rel = "stylesheet";
     // 同源自托管：katex.min.css 以相对路径引用 fonts/*.woff2，字体已一并镜像到 public/vendor/katex/。
-    link.href = "/vendor/katex/katex.min.css?v=20261112-0829555b";
+    link.href = "/vendor/katex/katex.min.css?v=20261112-77ebdd4b";
     document.head.appendChild(link);
     // 再加载 JS
     const script = document.createElement("script");
-    script.src = "/vendor/katex/katex.min.js?v=20261112-0829555b";
+    script.src = "/vendor/katex/katex.min.js?v=20261112-77ebdd4b";
     script.onload = () => resolve(window.katex);
     script.onerror = () => {
       _katexLoadingPromise = null;
@@ -8380,7 +8380,7 @@ function loadMermaidAsync() {
     // 同源自托管：与云端共用 public/vendor/mermaid/mermaid.min.js（npm 固定 11.12.2）。
     // 原先指向 cdn.jsdelivr.net，国内常见线路 TLS 握手被重置，所有 Mermaid 图表会
     // 一起降级成「库加载失败」。query 缓存破坏沿用桌面端统一戳，由 npm run stamp 维护。
-    script.src = "/vendor/mermaid/mermaid.min.js?v=20261112-0829555b";
+    script.src = "/vendor/mermaid/mermaid.min.js?v=20261112-77ebdd4b";
     script.onload = () => resolve(window.mermaid);
     script.onerror = () => {
       _mermaidLoadingPromise = null;
@@ -16338,7 +16338,9 @@ els.coffeeBtn.addEventListener("click", () => {
 });
 
 // ── 显示修复（渲染自愈）：窗口只剩背景、界面不画（合成层丢失）时的用户出口。──
-// 第一次点击：POST /api/window/nudge 让 WebView2 重绘整棵视觉树（DOM 不动、不丢状态）；
+// 第一次点击：本地先做内容级强制提交（合成器「脏但不提交」卡死态只有内容布局
+// 变化能踢出，v2.3.11 实测 Ctrl+Q 切侧栏同理），再 POST /api/window/nudge 让
+// WebView2 重绘整棵视觉树（DOM 不动、不丢状态）；
 // 5 秒内再次点击：认为自愈无效，直接 location.reload() 兜底。
 els.renderFixBtn = document.querySelector("#renderFixBtn");
 let renderFixLastAt = 0;
@@ -16347,6 +16349,7 @@ if (els.renderFixBtn) {
     const now = Date.now();
     const isFirst = now - renderFixLastAt > 5000;
     renderFixLastAt = now;
+    try { if (window.__forceContentRepaint) window.__forceContentRepaint(); } catch (_) {}
     let nudged = false;
     try {
       const res = await fetch("/api/window/nudge", {

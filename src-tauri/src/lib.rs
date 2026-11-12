@@ -48,6 +48,18 @@ pub static SERVER_PORT: OnceLock<u16> = OnceLock::new();
 static TRAY_READY: AtomicBool = AtomicBool::new(false);
 
 // ── 主窗口创建 / 重建 ─────────────────────────────────────
+/// 页面加载完成后延迟触发一次合成层自愈（force=false 走 1.5s 去抖）。
+/// 背景（v2.3.11 实测）：冷启动时 GPU 进程比主进程晚 ~18s 才创建，setup 里的
+/// 2.5s/6s 自愈落在页面加载完成之前，等于空抖；以「页面真正就绪」为基准再补
+/// 一次，覆盖首绘后的脆弱窗口期。多次触发无害（去抖 + 每次成本约 1 帧）。
+fn schedule_page_load_nudge(window: &tauri::WebviewWindow) {
+    let h = window.app_handle().clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(1200));
+        crate::nudge_webview_composition(&h, false);
+    });
+}
+
 /// 创建主窗口（冷启动与「关闭后重开」共用同一套窗口参数，避免两处走样）。
 /// 一律以 visible(false) 创建：显示时机由调用方决定（冷启动等 splash DOM ready；
 /// 重开等页面 on_page_load），避免先露出白底一帧。
@@ -68,6 +80,12 @@ fn create_main_window(
         builder = builder.on_page_load(|window, _payload| {
             let _ = window.show();
             let _ = window.set_focus();
+            schedule_page_load_nudge(&window);
+        });
+    } else {
+        // 冷启动（splash 模式）也要挂钩：页面真正就绪才是自愈的正确基准时刻。
+        builder = builder.on_page_load(|window, _payload| {
+            schedule_page_load_nudge(&window);
         });
     }
     let win = builder.build()?;
@@ -209,13 +227,26 @@ pub fn nudge_webview_composition(app: &tauri::AppHandle, force: bool) -> bool {
                 if let Err(e) = controller.SetBounds(rect) {
                     log::warn!("[render-nudge] SetBounds(还原) 失败: {}", e);
                 }
+                // 位置失同步修复（v2.3.11 实测补充）：虚拟显示器拓扑 / DPI 翻转后，
+                // DComp 视觉树可能与实际窗口位置失同步——画面只剩背景、fixed 独立层
+                // 幸存，bounds 抖动与 GPU 进程重启都救不回；NotifyParentWindowPositionChanged
+                // 是 WebView2 官方为该失同步提供的修复入口，与 bounds 往返互补。
+                if let Err(e) = controller.NotifyParentWindowPositionChanged() {
+                    log::warn!("[render-nudge] NotifyParentWindowPositionChanged 失败: {}", e);
+                }
             }
         });
         if let Err(e) = r {
             log::warn!("[render-nudge] with_webview 调度失败: {}", e);
             return false;
         }
-        log::info!("[render-nudge] 已触发 WebView2 合成层自愈（bounds 1px 往返）");
+        log::info!("[render-nudge] 已触发 WebView2 合成层自愈（bounds 1px 往返 + 位置失同步修复 + 内容级提交）");
+        // 内容级强制提交：仅有表面动作不够——实测合成器会卡在「脏但不提交」，
+        // 只有页面内容布局变化能踢出（Ctrl+Q 切侧栏立即恢复）。
+        // __forceContentRepaint 用 will-change 层创建/销毁制造等效布局事件。
+        let _ = win.eval(
+            "try{ if (window.__forceContentRepaint) window.__forceContentRepaint(); }catch(e){}",
+        );
         true
     }
     #[cfg(not(windows))]
@@ -484,6 +515,18 @@ pub fn run() {
                     std::thread::sleep(std::time::Duration::from_millis(2500));
                     crate::nudge_webview_composition(&h, true);
                     std::thread::sleep(std::time::Duration::from_millis(3500));
+                    crate::nudge_webview_composition(&h, false);
+                });
+            }
+
+            // ── 周期性静默自愈兜底（v2.3.11）：虚拟显示器（远程会话/模拟器）连入
+            //    断开造成的合成失效未必产生任何到达应用的窗口事件，事件驱动覆盖不了
+            //    所有触发点；每 45s 走一次轻量自愈（force=false，1.5s 去抖内不重复），
+            //    成本约 1 帧、不可感知。窗口不存在时 nudge 内部会安全跳过。──
+            {
+                let h = app.handle().clone();
+                std::thread::spawn(move || loop {
+                    std::thread::sleep(std::time::Duration::from_secs(45));
                     crate::nudge_webview_composition(&h, false);
                 });
             }
