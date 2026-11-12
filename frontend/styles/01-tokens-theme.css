@@ -132,6 +132,15 @@
      --accent 自身继续承担氛围角色（hover 底、径向渐变、柔光）。 */
   --accent-solid: color-mix(in srgb, var(--accent) 68%, #1a1408);
   --on-accent: #ffffff;
+
+  /* ---- 工作区空间色（体验层，默认继承当前主题强调色）----
+     由 modules/workspace-accent.js 以 inline style 覆盖到 :root；
+     这里只给「还没选中工作区」时的兜底值。刻意不覆盖 --accent：
+     主题契约与令牌基线（tests/css-architecture.test.js）要求主题色只由 body[data-theme] 决定。 */
+  --ws-accent: var(--accent);
+  --ws-accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
+  --ws-accent-wash: color-mix(in srgb, var(--accent) 5%, transparent);
+  --ws-accent-line: color-mix(in srgb, var(--accent) 35%, transparent);
 }
 
 body[data-theme="dark"] {

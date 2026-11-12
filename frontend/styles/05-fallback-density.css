@@ -1407,3 +1407,152 @@ body[data-theme="image"] {
     inset 0 1px 0 color-mix(in srgb, #fff 22%, transparent);
 }
 
+
+/* ── 体验层增强（借鉴 Arc/ArcMD 的空间美学，纯 CSS，不改架构）──────────────
+   约束：① 只新增选择器，不改任何既有规则；② 颜色只走 --ws-accent*，
+   绝不覆盖 --accent（主题契约与令牌基线保持不变）；③ 无 backdrop-filter、
+   无 will-change 常驻层、无 JS 动画循环 —— 全部用一次性 CSS transition。 */
+
+/* 1) 工作区空间色：活动工作区、品牌环、顶栏氛围、选区 */
+.app-shell .tree-workspace.active-workspace {
+  border-color: var(--ws-accent-line);
+}
+.app-shell .tree-workspace.active-workspace .tree-workspace-head .ws-dot {
+  background: var(--ws-accent);
+  box-shadow: 0 0 0 3px var(--ws-accent-soft);
+}
+.app-shell:not(.immersive) .sidebar .brand-mark {
+  box-shadow: 0 0 0 2px var(--ws-accent-line);
+}
+.app-shell:not(.immersive) .topbar .doc-meta {
+  background: linear-gradient(90deg, var(--ws-accent-wash), transparent 46%);
+}
+.app-shell ::selection {
+  background: var(--ws-accent-soft);
+}
+
+/* 2) 表达力视觉语言：高亮笔、标题锚点、表格呼吸感、代码块顶线 */
+.markdown-body mark:not(.search-hit) {
+  background: linear-gradient(180deg, transparent 52%, var(--ws-accent-soft) 52%);
+  color: inherit;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+.app-shell:not(.immersive) .markdown-body h2::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 10px;
+  border-radius: 50%;
+  background: var(--ws-accent);
+  vertical-align: middle;
+}
+.markdown-body table tbody tr:nth-child(even) {
+  background: var(--ws-accent-wash);
+}
+.markdown-body table tbody tr:hover {
+  background: var(--ws-accent-soft);
+}
+.markdown-body .code-block::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: linear-gradient(90deg, var(--ws-accent), transparent);
+  pointer-events: none;
+}
+
+/* 3) 文档卡片：用伪元素做「纸」，不改 .markdown-body 的宽/内边距/行高，
+      因而三视图行高比与版心宽度基线完全不受影响。 */
+@media (min-width: 861px) {
+  .app-shell:not(.immersive) #readerPanel.reader-panel::before {
+    content: "";
+    position: absolute;
+    inset: 14px 22px;
+    border-radius: 18px;
+    background: linear-gradient(180deg, var(--ws-accent-wash), transparent 58%);
+    border: 1px solid var(--ws-accent-soft);
+    box-shadow: 0 12px 34px color-mix(in srgb, var(--text) 9%, transparent);
+    pointer-events: none;
+    z-index: 0;
+  }
+  .app-shell:not(.immersive) #markdownView.markdown-body {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* 4) 侧栏触缘浮出：只在桌面宽度 + 折叠态 + 非沉浸下生效。
+         纯 CSS 状态机（:has 热区/侧栏 hover）—— 零 JS 监听、零定时器、零常驻 GPU 层；
+         热区 10px，浮层用 transform/opacity 过渡，不设 will-change。 */
+  .sidebar-peek-zone {
+    display: none;
+  }
+  .app-shell.sidebar-collapsed:not(.immersive) .sidebar-peek-zone {
+    display: block;
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 10px;
+    height: 100vh;
+    z-index: calc(var(--z-sticky) - 1);
+    pointer-events: auto;
+  }
+  .app-shell.sidebar-collapsed:not(.immersive) .sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: var(--sidebar-width);
+    height: 100vh;
+    z-index: calc(var(--z-sticky) + 1);
+    transform: translateX(-101%);
+    opacity: 0;
+    pointer-events: none;
+    background: var(--panel);
+    border-right: 1px solid var(--ws-accent-line);
+    box-shadow: 14px 0 40px color-mix(in srgb, var(--text) 16%, transparent);
+    transition: transform 0.18s var(--ease-standard), opacity 0.18s var(--ease-standard);
+  }
+  /* 指针在热区上 → 滑出；滑出后侧栏盖住热区，靠 :hover 保持；
+     指针移出侧栏右缘或离开窗口 → 两个 :has 都不成立 → 自动收回。 */
+  .app-shell.sidebar-collapsed:not(.immersive):has(.sidebar-peek-zone:hover) .sidebar,
+  .app-shell.sidebar-collapsed:not(.immersive):has(.sidebar:hover) .sidebar {
+    transform: translateX(0);
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+/* 5) 空间色板（工作路径弹窗内的 6 枚色点） */
+.ws-accent-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 2px 0;
+}
+.ws-accent-picker > strong {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.ws-accent-swatch {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.ws-accent-swatch[aria-pressed="true"] {
+  border-color: var(--text);
+  box-shadow: 0 0 0 2px var(--panel);
+}
+.ws-accent-label {
+  font-size: 12px;
+  color: var(--muted);
+}

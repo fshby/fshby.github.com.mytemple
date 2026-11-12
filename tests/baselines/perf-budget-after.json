@@ -1,0 +1,38 @@
+{
+  "mode": "check",
+  "at": "2026-11-12T04:37:16.730Z",
+  "budget": {
+    "cssBytes": 392000,
+    "appJsBytes": 792000,
+    "editorJsBytes": 600000,
+    "bootHeapMB": 6.5,
+    "bootDomNodes": 1680,
+    "dispatchP95Ms": 8.3,
+    "frameP95Ms": 16.7,
+    "longTasks": 0,
+    "editorHeapDeltaMB": 14
+  },
+  "boot": {
+    "domNodes": 1648,
+    "resourceBytes": 2496986,
+    "firstPaint": 1028,
+    "cssBytes": 384767,
+    "appJsBytes": 782343,
+    "editorJsBytes": 596564,
+    "heapMB": 5.24
+  },
+  "editor": {
+    "chars": 200000,
+    "dispatchP50Ms": 3.3,
+    "dispatchP95Ms": 4.7,
+    "frameP95Ms": 5.7,
+    "longTasks": 0,
+    "heapDeltaMB": 6.51
+  },
+  "pageErrors": [],
+  "files": {
+    "cssBytes": 384767,
+    "appJsBytes": 782343,
+    "editorJsBytes": 596564
+  }
+}

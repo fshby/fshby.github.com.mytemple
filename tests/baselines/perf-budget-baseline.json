@@ -1,0 +1,38 @@
+{
+  "mode": "baseline",
+  "at": "2026-11-12T04:27:54.812Z",
+  "budget": {
+    "cssBytes": 470000,
+    "appJsBytes": 900000,
+    "editorJsBytes": 1150000,
+    "bootHeapMB": 40,
+    "bootDomNodes": 2600,
+    "dispatchP95Ms": 8.3,
+    "frameP95Ms": 33,
+    "longTasks": 0,
+    "editorHeapDeltaMB": 90
+  },
+  "boot": {
+    "domNodes": 1638,
+    "resourceBytes": 2484392,
+    "firstPaint": 788,
+    "cssBytes": 379201,
+    "appJsBytes": 778345,
+    "editorJsBytes": 596564,
+    "heapMB": 5.23
+  },
+  "editor": {
+    "chars": 200000,
+    "dispatchP50Ms": 3.3,
+    "dispatchP95Ms": 5.6,
+    "frameP95Ms": 5.8,
+    "longTasks": 0,
+    "heapDeltaMB": 6.47
+  },
+  "pageErrors": [],
+  "files": {
+    "cssBytes": 379201,
+    "appJsBytes": 778345,
+    "editorJsBytes": 596564
+  }
+}

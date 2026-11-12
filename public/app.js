@@ -1,4 +1,4 @@
-import { createMarkdownEditor } from "/editor-core.js?v=20261112-60e24f66";
+import { createMarkdownEditor } from "/editor-core.js?v=20261112-fc76f102";
 import { getPaperBackgroundUrl } from "./modules/paper-texture.js";
 import { escapeHtml, displayName, displayRelativePath, splitPathRef, joinPathRef, parentPathRef, compactName, splitWorkspaceRef, plainText, headingId } from "./modules/path-utils.js";
 import { extractOutline, addCnEnSpaces } from "./modules/editor-utils.js";
@@ -8,6 +8,7 @@ import { openDrawEditor } from "./modules/draw-editor.js";
 import { createScreenshotEditor } from "./modules/screenshot-editor.js";
 import { initCloudSync } from "./modules/cloud-sync.js";
 import { normalizeColorsByTheme, withThemeColor, withoutTheme } from "./modules/color-themes.js";
+import { WORKSPACE_ACCENTS, accentForWorkspace, setWorkspaceAccent, applyWorkspaceAccent } from "./modules/workspace-accent.js";
 import {
   shareReady,
   shareTtlDays,
@@ -55,8 +56,8 @@ const LARGE_PREVIEW_BYTES = 100 * 1024;
 const LARGE_PREVIEW_DELAY = 700;
 const CHUNKED_RENDER_BYTES = 500 * 1024;
 const CHUNK_RENDER_SLICE_BYTES = 150 * 1024;
-const GRAPH_WORKER_URL = "/graph-worker.js?v=20261112-60e24f66";
-const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20261112-60e24f66";
+const GRAPH_WORKER_URL = "/graph-worker.js?v=20261112-fc76f102";
+const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20261112-fc76f102";
 // Markdown 渲染缓存版本戳：解析器或 CSS 规则升级时递增，确保旧缓存不被复用。
 // 2026-08-29 v1.8.102：安装包 resources 包含 public/ 前端静态文件、端口回滚；修正其他电脑安装后 404 白屏。
 const MARKDOWN_RENDER_VERSION = "20260829-v18102-install-static-bundle-port-scan";
@@ -411,6 +412,9 @@ const els = {
   sidebarResizer: document.querySelector("#sidebarResizer"),
   sidebarHideBtn: document.querySelector("#sidebarHideBtn"),
   sidebarShowBtn: document.querySelector("#sidebarShowBtn"),
+  sidebarPeekZone: document.querySelector("#sidebarPeekZone"),
+  wsAccentPicker: document.querySelector("#wsAccentPicker"),
+  wsAccentLabel: document.querySelector("#wsAccentLabel"),
   settingsBtn: document.querySelector("#settingsBtn"),
   settingsModal: document.querySelector("#settingsModal"),
   closeSettingsBtn: document.querySelector("#closeSettingsBtn"),
@@ -5154,6 +5158,7 @@ function rerenderWorkspacePanel(node, panel) {
 }
 
 function renderTree(nodes, container = els.tree) {
+  if (container === els.tree) syncWorkspaceAccentFromTree(nodes);
   container.innerHTML = "";
   for (const node of nodes) {
     if (node.type === "workspace") {
@@ -5526,6 +5531,7 @@ async function openWorkspaceModal() {
   state.workspaces = data.workspaces || [];
   if (data.defaultWorkspaceId) state.defaultWorkspaceId = data.defaultWorkspaceId;
   renderWorkspaceList(state.workspaces);
+  renderWsAccentPicker();
   els.workspacePath.value = "";
   if (els.workspaceName) els.workspaceName.value = "";
   els.workspaceModal.classList.remove("hidden");
@@ -6091,6 +6097,7 @@ async function openDoc(docPath, options = {}) {
 
   const item = state.flatFilesByPath.get(doc.path) || doc;
   state.activeWorkspaceId = item.workspaceId || doc.path.split(":", 1)[0] || state.activeWorkspaceId;
+  applyActiveWorkspaceAccent();
   state.currentPath = doc.path;
   state.currentContent = doc.content;
   state.currentVersion = doc.contentSha256 || "";
@@ -8369,7 +8376,7 @@ function loadMermaidAsync() {
     const script = document.createElement("script");
     // 锁定精确版本 + query 缓存破坏：@10 这类范围 URL 永不变，WebView2 磁盘缓存会
     // 永远持有远古版本（早期 10.x 有 flowchart 底部裁切 bug），且 10.x 不支持 architecture-beta。
-    script.src = "https://cdn.jsdelivr.net/npm/mermaid@11.12.2/dist/mermaid.min.js?v=20261112-60e24f66";
+    script.src = "https://cdn.jsdelivr.net/npm/mermaid@11.12.2/dist/mermaid.min.js?v=20261112-fc76f102";
     script.onload = () => resolve(window.mermaid);
     script.onerror = () => {
       _mermaidLoadingPromise = null;
@@ -17822,6 +17829,88 @@ ipToolbar?.addEventListener("click", (event) => {
   }
   applyImagePreviewTransform();
 });
+
+/* ══ 体验层：工作区空间色 + 侧栏触缘浮出 ══════════════════════════════════
+   借鉴 Arc/ArcMD 的空间美学，但全部落在「表现层」：
+     · 不新增后端字段 / API / 数据文件；颜色偏好只存 localStorage；
+     · 侧栏浮出是纯 CSS :has 状态机 —— 本模块**不注册任何指针监听器、不设定时器**；
+     · 空间色切换只写 4 个 CSS 变量，且有「同一工作区不重复写」的短路，
+       树重绘时不会引发无谓的样式重算。
+   与既有功能的关系：只增调用，不修改任何既有 handler 的内部逻辑。 */
+
+let appliedAccentWsId = "";
+
+function currentWsAccentId() {
+  if (appliedAccentWsId) return appliedAccentWsId;
+  const raw = String(state.activeWorkspaceId || state.defaultWorkspaceId || "");
+  if (raw) return raw.split(/[:/]/)[0];
+  const first = (state.workspaces || []).find((ws) => ws && ws.visible);
+  return first ? String(first.id) : "";
+}
+
+function setActiveWorkspaceAccent(wsId, force = false) {
+  const id = String(wsId || "").split(/[:/]/)[0];
+  if (!id || (!force && id === appliedAccentWsId)) return;
+  appliedAccentWsId = id;
+  try { applyWorkspaceAccent(id); } catch (_) { /* 纯展示增强，失败静默降级 */ }
+}
+
+function applyActiveWorkspaceAccent() {
+  setActiveWorkspaceAccent(state.activeWorkspaceId || state.defaultWorkspaceId);
+}
+
+function syncWorkspaceAccentFromTree(nodes) {
+  const list = Array.isArray(nodes) ? nodes : [];
+  const active = list.find((n) => n && n.type === "workspace" && n.workspaceId === state.activeWorkspaceId);
+  const fallback = list.find((n) => n && n.type === "workspace");
+  const wsId = (active || fallback)?.workspaceId;
+  if (wsId) setActiveWorkspaceAccent(wsId);
+}
+
+function renderWsAccentPicker() {
+  const picker = els.wsAccentPicker;
+  if (!picker) return;
+  const active = accentForWorkspace(currentWsAccentId());
+  picker.querySelectorAll(".ws-accent-swatch").forEach((node) => node.remove());
+  const frag = document.createDocumentFragment();
+  for (const accent of WORKSPACE_ACCENTS) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "ws-accent-swatch";
+    btn.dataset.accent = accent.id;
+    btn.style.background = accent.hex;
+    btn.title = accent.name;
+    btn.setAttribute("aria-label", `空间色：${accent.name}`);
+    btn.setAttribute("aria-pressed", String(accent.id === active.id));
+    frag.appendChild(btn);
+  }
+  picker.appendChild(frag);
+  if (els.wsAccentLabel) els.wsAccentLabel.textContent = `当前：${active.name}`;
+}
+
+function initExperienceLayer() {
+  // 工作区树：一个委托监听覆盖所有点击路径，不动既有 handler。
+  els.tree?.addEventListener("click", (event) => {
+    const panel = event.target.closest(".tree-workspace");
+    if (panel?.dataset.workspaceId) setActiveWorkspaceAccent(panel.dataset.workspaceId);
+  }, { capture: true, passive: true });
+
+  // 空间色板：点色点即存偏好并立刻生效。
+  els.wsAccentPicker?.addEventListener("click", (event) => {
+    const btn = event.target.closest(".ws-accent-swatch");
+    if (!btn?.dataset.accent) return;
+    const wsId = currentWsAccentId();
+    if (!wsId) return;
+    setWorkspaceAccent(wsId, btn.dataset.accent);
+    setActiveWorkspaceAccent(wsId, true);
+    renderWsAccentPicker();
+  }, { passive: true });
+
+  renderWsAccentPicker();
+  setActiveWorkspaceAccent(state.defaultWorkspaceId || "default");
+}
+
+initExperienceLayer();
 
 // 启动入口：开机图片已在 HTML 中直接渲染显示，立即并行加载后台服务。
 beginLoading();
