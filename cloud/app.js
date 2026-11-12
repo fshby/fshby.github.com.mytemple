@@ -28,7 +28,7 @@ import {
   parseShareTtl,
   expiresAtFromTtl,
   utf8Bytes,
-} from "./share-core.js?v=cloud-24";
+} from "./share-core.js?v=cloud-25";
 /* 文档类白名单（**两端逐字同源**：public/modules/cloud-client.js 顶部有一份完全相同的
  * 拷贝，tests/three-way-sync.test.js 逐字比对，防两端算出不同的可同步集合）。
  *
@@ -139,7 +139,7 @@ function describeCloudWriteError(err) {
 }
 
 /* 静态资源版本戳：改动 cloud/ 下被页面引用的任何文件时，与 index.html 的三件套一起递增。 */
-const ASSET_V = "cloud-24";
+const ASSET_V = "cloud-25";
 
 /* 第三方库一律同源自托管，见 scripts/vendor-cloud.mjs。
  * 绝不改回第三方 CDN —— 见该脚本头部注释：cdn.jsdelivr.net 在部分网络下 TLS 会被重置，
@@ -1551,24 +1551,58 @@ async function decorateContent(root) {
         if (document.fonts && document.fonts.ready) await document.fonts.ready;
       } catch (_) {}
       let uid = 0;
+      // ⚠️ 页面隐藏期间（后台标签页等）getBBox 对文本返回 0 尺寸 —— mermaid 自测量
+      // 整体塌缩，图会被压成一条线（与桌面端同源缺陷）。渲染前等页面可见（最多 3s），
+      // 渲染后检测塌缩（真实内容双向 >3× 自报 viewBox）并重渲染一次兜底。
+      const waitVisible = () => new Promise((resolve) => {
+        try {
+          if (document.visibilityState === "visible") return resolve(true);
+          const timer = setTimeout(done, 3000);
+          function done() {
+            clearTimeout(timer);
+            document.removeEventListener("visibilitychange", done);
+            resolve(document.visibilityState === "visible");
+          }
+          document.addEventListener("visibilitychange", done);
+        } catch (_) { resolve(true); }
+      });
+      const measurementDegenerate = (el) => {
+        try {
+          const vb = (el.getAttribute("viewBox") || "").split(/[\s,]+/).map(Number);
+          if (vb.length !== 4 || !(vb[2] > 0) || !(vb[3] > 0)) return false;
+          const b = el.getBBox();
+          return !!(b && b.width > vb[2] * 3 && b.height > vb[3] * 3);
+        } catch (_) { return false; }
+      };
       for (const box of blocks) {
         const src = box.parentElement.querySelector(".mermaid-source");
         if (!src) continue;
         const def = src.textContent || "";
         try {
-          const { svg } = await mermaid.render(`mtc-mmd-${Date.now()}-${++uid}`, def);
-          box.innerHTML = svg;
+          await waitVisible();
+          let renderId = `mtc-mmd-${Date.now()}-${++uid}`;
+          let rendered = null;
+          try { rendered = await mermaid.render(renderId, def); } catch (_) { rendered = null; }
+          if (rendered && rendered.svg) box.innerHTML = rendered.svg;
           const svgEl = box.querySelector("svg");
-          if (svgEl) {
-            const vb = (svgEl.getAttribute("viewBox") || "").split(/[\s,]+/).map(Number);
-            svgEl.removeAttribute("width");
-            svgEl.removeAttribute("height");
-            svgEl.style.width = "100%";
-            svgEl.style.height = "auto";
-            svgEl.style.display = "block";
+          // 塌缩兜底：重渲染一次（此时页面大概率已可见）；仍塌缩则保留现状，避免死循环
+          if (svgEl && measurementDegenerate(svgEl)) {
+            renderId = `mtc-mmd-${Date.now()}-${++uid}`;
+            try { rendered = await mermaid.render(renderId, def); } catch (_) { rendered = null; }
+            if (rendered && rendered.svg) box.innerHTML = rendered.svg;
+          }
+          const svgEl2 = box.querySelector("svg");
+          if (!svgEl2) throw new Error((rendered && rendered.svg) ? "渲染输出为空" : "Mermaid 渲染失败");
+          if (svgEl2) {
+            const vb = (svgEl2.getAttribute("viewBox") || "").split(/[\s,]+/).map(Number);
+            svgEl2.removeAttribute("width");
+            svgEl2.removeAttribute("height");
+            svgEl2.style.width = "100%";
+            svgEl2.style.height = "auto";
+            svgEl2.style.display = "block";
             // 自然尺寸作上限：不把小图画布拉满整屏
-            if (vb.length === 4 && vb[2] > 0) svgEl.style.maxWidth = Math.round(vb[2]) + "px";
-            svgEl.style.margin = "0 auto";
+            if (vb.length === 4 && vb[2] > 0) svgEl2.style.maxWidth = Math.round(vb[2]) + "px";
+            svgEl2.style.margin = "0 auto";
           }
           src.hidden = true;
         } catch (err) {

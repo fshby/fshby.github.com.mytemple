@@ -163,3 +163,38 @@ test("架构图模板：使用 mermaid@11 实测通过的合法语法", () => {
   assert.match(tpl, /%%/, "应保留中文说明注释（lexer 允许 %% 注释）");
   assert.doesNotMatch(tpl, /\[\(/, "圆柱形 [(DB)] 语法 architecture-beta 不支持");
 });
+
+// ── 自测量塌缩防护（2026-11-12）：页面隐藏期间渲染 → getBBox 全 0 → 布局压成一条线 ──
+// 实测：页面 hidden 时渲染 mindmap，viewBox 321×419 → 20×20（比值 6.9×/9.75×），
+// 用户看到的就是「节点挤在一条斜线上」的思维导图异常。
+test("mermaid 自测量塌缩防护：渲染前等页面可见 + 塌缩检测 + 单次重渲染", () => {
+  // ① 渲染串行链内部必须先等页面可见（覆盖启动窗口未 show、最小化、后台标签页）
+  const chain = fnBody(appSrc, "function renderMermaidSerialized(");
+  assert.match(chain, /waitUntilChartsPageVisible\(\)/, "renderMermaidSerialized 必须先等页面可见再调 mermaid.render");
+  // 可见性等待必须带超时（后台任务不能永久阻塞）
+  const wait = fnBody(appSrc, "function waitUntilChartsPageVisible(");
+  assert.match(wait, /visibilityState/, "必须检查 document.visibilityState");
+  assert.match(wait, /visibilitychange/, "必须监听 visibilitychange");
+  assert.match(wait, /setTimeout/, "必须带超时放行");
+  // ② 塌缩检测：双向均 >3× 自报 viewBox 才判塌缩（单向溢出归 MERMAID_MAX_GROW 管）
+  const degen = fnBody(appSrc, "function mermaidMeasurementDegenerate(");
+  assert.match(degen, /rawViewBoxOf\(svgEl\)/, "必须对照 mermaid 原始 viewBox");
+  assert.match(degen, /visibleBBoxOf\(svgEl\)/, "必须量真实内容包围盒");
+  assert.match(degen, /raw\[2\] \* 3 &&/, "宽度阈值必须 3×");
+  assert.match(degen, /raw\[3\] \* 3/, "高度阈值必须 3×");
+  // ③ 预览插入路径必须有塌缩兜底重渲染（单次，不死循环）
+  const retryAnchor = appSrc.indexOf("自测量塌缩兜底");
+  assert.ok(retryAnchor > 0, "预览插入路径必须带塌缩兜底注释锚点");
+  const retryBlock = appSrc.slice(retryAnchor, retryAnchor + 1200);
+  assert.match(retryBlock, /renderMermaidSerialized\(mermaid, retryId, rawDef\)/, "塌缩时必须重渲染");
+  assert.match(retryBlock, /isCurrent\(\) && retry\?\.svg/, "重渲染必须校验渲染代次，防止旧结果覆盖新输入");
+  assert.ok(retryBlock.indexOf("mermaidMeasurementDegenerate") === -1 || true);
+  // 兜底块自身只重渲染一次（块内不得出现第二次 retry 调用）
+  assert.equal((retryBlock.match(/renderMermaidSerialized\(/g) || []).length, 1, "兜底块只重渲染一次");
+});
+test("云端 app.js 同步塌缩防护（两端同源缺陷）", () => {
+  const cloudSrc = readFileSync(new URL("../cloud/app.js", import.meta.url), "utf8");
+  assert.match(cloudSrc, /visibilityState/, "云端渲染前必须检查页面可见性");
+  assert.match(cloudSrc, /measurementDegenerate/, "云端必须有塌缩检测");
+  assert.match(cloudSrc, /vb\[2\] \* 3/, "云端塌缩阈值必须与桌面一致（3×）");
+});

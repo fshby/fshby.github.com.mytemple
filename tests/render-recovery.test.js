@@ -102,7 +102,7 @@ test("⑧ Rust：自愈升级为表面+失同步+内容三连，挂钩页面就�
     "必须调用 WebView2 官方位置失同步修复（bounds 抖动救不回的实测场景）");
   assert.match(lib, /window\.__forceContentRepaint/, "nudge 必须 eval 内容级强制提交");
   assert.match(lib, /fn schedule_page_load_nudge/, "必须有页面就绪自愈挂钩");
-  assert.match(lib, /schedule_page_load_nudge\(window\)/, "on_page_load 两条路径都必须调度");
+  assert.match(lib, /schedule_page_load_nudge\(&?window\)/, "on_page_load 两条路径都必须调度");
   assert.match(lib, /Duration::from_secs\(45\)/, "必须有周期性静默兜底（虚拟显示器翻转可能无窗口事件）");
   // eval 只允许调护栏函数本身，不得执行其它任意注入
   assert.match(lib, /"try\{ if \(window\.__forceContentRepaint\) window\.__forceContentRepaint\(\); \}catch\(e\)\{\}"/,

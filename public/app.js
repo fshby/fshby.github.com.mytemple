@@ -1,4 +1,4 @@
-import { createMarkdownEditor } from "/editor-core.js?v=20261112-77ebdd4b";
+import { createMarkdownEditor } from "/editor-core.js?v=20261112-7da9beff";
 import { getPaperBackgroundUrl } from "./modules/paper-texture.js";
 import { escapeHtml, displayName, displayRelativePath, splitPathRef, joinPathRef, parentPathRef, compactName, splitWorkspaceRef, plainText, headingId } from "./modules/path-utils.js";
 import { extractOutline, addCnEnSpaces } from "./modules/editor-utils.js";
@@ -56,8 +56,8 @@ const LARGE_PREVIEW_BYTES = 100 * 1024;
 const LARGE_PREVIEW_DELAY = 700;
 const CHUNKED_RENDER_BYTES = 500 * 1024;
 const CHUNK_RENDER_SLICE_BYTES = 150 * 1024;
-const GRAPH_WORKER_URL = "/graph-worker.js?v=20261112-77ebdd4b";
-const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20261112-77ebdd4b&assets=/vendor/";
+const GRAPH_WORKER_URL = "/graph-worker.js?v=20261112-7da9beff";
+const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20261112-7da9beff&assets=/vendor/";
 // Markdown 渲染缓存版本戳：解析器或 CSS 规则升级时递增，确保旧缓存不被复用。
 // 2026-08-29 v1.8.102：安装包 resources 包含 public/ 前端静态文件、端口回滚；修正其他电脑安装后 404 白屏。
 const MARKDOWN_RENDER_VERSION = "20260829-v18102-install-static-bundle-port-scan";
@@ -8264,11 +8264,11 @@ function loadKatexAsync() {
     const link = document.createElement("link");
     link.rel = "stylesheet";
     // 同源自托管：katex.min.css 以相对路径引用 fonts/*.woff2，字体已一并镜像到 public/vendor/katex/。
-    link.href = "/vendor/katex/katex.min.css?v=20261112-77ebdd4b";
+    link.href = "/vendor/katex/katex.min.css?v=20261112-7da9beff";
     document.head.appendChild(link);
     // 再加载 JS
     const script = document.createElement("script");
-    script.src = "/vendor/katex/katex.min.js?v=20261112-77ebdd4b";
+    script.src = "/vendor/katex/katex.min.js?v=20261112-7da9beff";
     script.onload = () => resolve(window.katex);
     script.onerror = () => {
       _katexLoadingPromise = null;
@@ -8347,6 +8347,27 @@ let _mermaidRenderUid = 0;
 // 1 张量出 2412×512 的失真 viewBox（同一份 flowchart 正常应是 282×334）。
 // 沉浸模式每个块各自触发渲染、天然并发，因此这里用一条全局串行链把真正的 render 排成队。
 let _mermaidRenderChain = Promise.resolve();
+// ⚠️ 页面隐藏期间（启动窗口尚未 show、最小化、或合成器停摆把页面判定为不可见），
+// getBBox 对所有文本返回 0 尺寸 —— mermaid 的自测量整体塌缩，mindmap / flowchart
+// 布局会被压成一条线（实测 viewBox 321×419 → 20×20，节点挤在一条近竖直线上）。
+// 渲染前先等页面可见，最多 3s；超时放行（后台任务不能永久阻塞，
+// 塌缩兜底由 mermaidMeasurementDegenerate + 重渲染负责）。
+function waitUntilChartsPageVisible(timeoutMs = 3000) {
+  return new Promise((resolve) => {
+    try {
+      if (document.visibilityState === "visible") return resolve(true);
+      const timer = setTimeout(done, timeoutMs);
+      function done() {
+        clearTimeout(timer);
+        document.removeEventListener("visibilitychange", done);
+        resolve(document.visibilityState === "visible");
+      }
+      document.addEventListener("visibilitychange", done);
+    } catch (_) {
+      resolve(true);
+    }
+  });
+}
 function renderMermaidSerialized(mermaid, id, rawDef, timeoutMs = 12000) {
   const task = _mermaidRenderChain.then(
     () =>
@@ -8359,6 +8380,7 @@ function renderMermaidSerialized(mermaid, id, rawDef, timeoutMs = 12000) {
           reject(new Error("Mermaid 渲染超时"));
         }, timeoutMs);
         Promise.resolve()
+          .then(() => waitUntilChartsPageVisible())
           .then(() => mermaid.render(id, rawDef))
           .then(
             (r) => { if (!settled) { settled = true; clearTimeout(timer); resolve(r); } },
@@ -8380,7 +8402,7 @@ function loadMermaidAsync() {
     // 同源自托管：与云端共用 public/vendor/mermaid/mermaid.min.js（npm 固定 11.12.2）。
     // 原先指向 cdn.jsdelivr.net，国内常见线路 TLS 握手被重置，所有 Mermaid 图表会
     // 一起降级成「库加载失败」。query 缓存破坏沿用桌面端统一戳，由 npm run stamp 维护。
-    script.src = "/vendor/mermaid/mermaid.min.js?v=20261112-77ebdd4b";
+    script.src = "/vendor/mermaid/mermaid.min.js?v=20261112-7da9beff";
     script.onload = () => resolve(window.mermaid);
     script.onerror = () => {
       _mermaidLoadingPromise = null;
@@ -8482,6 +8504,22 @@ function fixMermaidViewBox(svgEl) {
     if (svgEl.getAttribute("viewBox") !== fitted) svgEl.setAttribute("viewBox", fitted);
   } catch (_) {}
 }
+// 检测 mermaid 自测量塌缩：页面隐藏时 getBBox 对文本返回 0 尺寸 → mermaid 自报
+// viewBox 塌成 20×20 量级，但节点文本按自然字号渲染，真实内容远大于此。
+// 实测比值 6.9×/9.75×；正常渲染内容与自报 viewBox 基本一致（≈1×）。
+// 双向均超 3× 才判塌缩（单向溢出是「裁切」场景，由 fitViewBoxToContent 的
+// MERMAID_MAX_GROW 上限负责，两者职责不重叠）。
+function mermaidMeasurementDegenerate(svgEl) {
+  try {
+    const raw = rawViewBoxOf(svgEl);
+    if (!raw || !(raw[2] > 0) || !(raw[3] > 0)) return false;
+    const b = visibleBBoxOf(svgEl);
+    if (!b) return false;
+    return b.width > raw[2] * 3 && b.height > raw[3] * 3;
+  } catch (_) {
+    return false;
+  }
+}
 // 图表的「自然呈现宽度」= 修正后 viewBox 的宽度（紧贴内容、已双向夹紧）。
 //
 // 为什么需要它：mermaid 会给自己算一个 max-width，但那是失真的自测量 ——
@@ -8548,6 +8586,21 @@ async function renderChartsInPreview(container) {
             // 先留存 mermaid 原始 viewBox（供夹紧与序列化对照），再做修正
             if (_svgForFix) markRawViewBox(_svgForFix);
             if (_svgForFix) fixMermaidViewBox(_svgForFix);
+            // 自测量塌缩兜底：页面隐藏期间渲染的图布局已毁（节点被压成一条线）。
+            // 现在页面已可见，重渲染一次换回正确布局（renderMermaidSerialized 内部
+            // 已等页面可见）；若二次仍塌缩则保留现状，避免死循环。
+            if (_svgForFix && mermaidMeasurementDegenerate(_svgForFix)) {
+              const retryId = `mermaid-svg-${++_mermaidRenderUid}`;
+              const retry = await renderMermaidSerialized(mermaid, retryId, rawDef);
+              if (isCurrent() && retry?.svg) {
+                containerDiv.innerHTML = retry.svg;
+                const _svgRetry = containerDiv.querySelector("svg");
+                if (_svgRetry) {
+                  markRawViewBox(_svgRetry);
+                  fixMermaidViewBox(_svgRetry);
+                }
+              }
+            }
             // 添加点击放大提示
             if (!block.querySelector(".chart-zoom-hint")) {
               const hint = document.createElement("div");
