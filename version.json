@@ -1,7 +1,7 @@
 {
-    "version":  "2.3.8",
+    "version":  "2.3.9",
     "downloadUrl":  "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
-    "latestReleaseNotes":  "图表与公式彻底离线可用：Mermaid/KaTeX/Chart.js/ECharts 同源自托管，桌面端零第三方 CDN；静态缓存戳幂等修复",
-    "releaseNotes":  "v2.3.8 release. See changelog for details.",
+    "latestReleaseNotes":  "启动护栏：启动期异常不再静默白屏，新增可见恢复浮层 + 主界面 watchdog + 自动重试上限",
+    "releaseNotes":  "v2.3.9 release. See changelog for details.",
     "releaseDate":  "2026-11-12"
 }
