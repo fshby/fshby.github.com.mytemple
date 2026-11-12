@@ -1,7 +1,7 @@
 {
-    "version":  "2.3.4",
+    "version":  "2.3.5",
     "downloadUrl":  "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
-    "latestReleaseNotes":  "局域网共享可用性修复（访客配对协议扁平化）",
-    "releaseNotes":  "v2.3.4 release. See changelog for details.",
-    "releaseDate":  "2026-11-11"
+    "latestReleaseNotes":  "局域网共享增强：共享工作区白名单 + 设置面板 UI 修复",
+    "releaseNotes":  "v2.3.5 release. See changelog for details.",
+    "releaseDate":  "2026-11-12"
 }

@@ -24,7 +24,7 @@
         <a href="index.html#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.3.4</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.3.5</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -40,6 +40,7 @@
         <div class="changelog-toc reveal">
           <h3>版本索引</h3>
           <ul>
+            <li><a href="#v2.3.5">v2.3.5</a> — 局域网共享增强（共享工作区白名单 + 设置面板 UI 修复）</li>
             <li><a href="#v2.3.4">v2.3.4</a> — 局域网共享可用性修复（访客配对协议扁平化 + 回归锁）</li>
             <li><a href="#v2.3.3">v2.3.3</a> — 局域网共享（6 位口令配对 + 访客白名单 + 只读/可编辑）；13 项安全审计修复（分享不可枚举 / 路径穿越 / DNS rebinding / 保存竞态）</li>
             <li><a href="#v2.3.2">v2.3.2</a> — 分享图片丢失修复（ws_ 工作区前缀引用按工作区 id 取图）；分享页补上代码块复制行为与目录索引抽屉</li>
@@ -114,6 +115,28 @@
             <li><a href="#v1.8.93">v1.8.93</a> — 界面与体验升级 + 性能优化</li>
           </ul>
         </div>
+
+                <article class="doc-section reveal" id="v2.3.5">
+          <h3>v2.3.5 · 局域网共享增强：可指定共享范围</h3>
+<p>这个版本让「局域网共享」更可控，并修复了设置面板的三处显示缺陷。</p>
+
+          <h4>共享工作区白名单</h4>
+          <ul>
+            <li>设置面板新增<b>「共享工作区」</b>多选列表：只把勾选的工作区开放给局域网访客；不勾选任何工作区时默认共享全部。</li>
+            <li>白名单在<b>访客通道全部端点</b>生效：目录、文档读取、搜索、新建、保存都按范围过滤，白名单外的工作区对访客完全不可见。</li>
+            <li>被拒请求一律返回 404（而不是 403），不向访客泄露受限工作区的存在。</li>
+            <li>白名单实时生效并持久化，重启后保留；主应用自身功能零改动。</li>
+          </ul>
+
+          <h4>设置面板修复</h4>
+          <ul>
+            <li><b>开关视觉</b>：共享开关改为滑动开关样式，开启/关闭状态一目了然。</li>
+            <li><b>信息区显隐</b>：关闭共享后访客地址/口令区块现在会正确隐藏（此前被样式覆盖无法隐藏）。</li>
+            <li><b>地址与口令刷新</b>：修复响应解包缺陷——此前开启共享后地址与口令一直显示「—」、复制按钮无效。</li>
+          </ul>
+
+          <p class="doc-meta">自动化测试 284 项全绿；局域网共享端到端探针新增共享范围断言。</p>
+</article>
 
                 <article class="doc-section reveal" id="v2.3.4">
           <h3>v2.3.4 · 局域网共享可用性修复</h3>
