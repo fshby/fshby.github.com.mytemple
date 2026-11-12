@@ -17,9 +17,9 @@
       body.license-locked #licenseModal,
       body.license-locked #settingsModal { pointer-events: auto; }
     </style>
-    <link rel="stylesheet" href="/styles.css?v=20261112-97a45ae4">
-<link rel="modulepreload" href="/editor-core.js?v=20261112-97a45ae4">
-<link rel="modulepreload" href="/app.js?v=20261112-97a45ae4">
+    <link rel="stylesheet" href="/styles.css?v=20261112-cfc36f67">
+<link rel="modulepreload" href="/editor-core.js?v=20261112-cfc36f67">
+<link rel="modulepreload" href="/app.js?v=20261112-cfc36f67">
   </head>
   <body>
     <div id="appSplash" class="app-splash">
@@ -1553,18 +1553,119 @@
     </div>
     <div id="toast" class="toast hidden"></div>
     <div id="printRoot" class="print-root hidden" aria-hidden="true"></div>
+    <!-- 启动护栏：启动期异常 / 主界面未绘制时的可见恢复入口（默认隐藏） -->
+    <div id="startupGuard" class="startup-guard hidden" role="alertdialog" aria-labelledby="startupGuardTitle">
+      <div class="startup-guard-card">
+        <div class="startup-guard-head">
+          <span class="startup-guard-icon" aria-hidden="true">!</span>
+          <div class="startup-guard-text">
+            <strong id="startupGuardTitle">界面未能正常显示</strong>
+            <p id="startupGuardMsg">应用启动或界面绘制出现异常。</p>
+          </div>
+        </div>
+        <pre id="startupGuardDetail" class="startup-guard-detail hidden"></pre>
+        <div class="startup-guard-actions">
+          <button type="button" id="startupGuardRecoverBtn" class="secondary">尝试恢复</button>
+          <button type="button" id="startupGuardCopyBtn" class="secondary">复制诊断</button>
+          <button type="button" id="startupGuardReloadBtn" class="primary">重新加载</button>
+        </div>
+      </div>
+    </div>
     <script>
-      // 全局错误捕获：防止模块加载失败时卡在 0%
+      // 启动护栏：全局错误捕获 + 可见错误浮层 + 主界面可见性 watchdog。
+      // 契约：启动完成前出错 → 显示可恢复的浮层；启动完成后的运行时错误 → 仅 warn，
+      // 绝不弹窗/刷新（避免粘贴长文、切换设置时的偶发异常打断编辑心流）。
       (function () {
         var splash = document.getElementById("appSplash");
         var fill = document.getElementById("splashProgressFill");
         var pct = document.getElementById("splashProgressPct");
         var txt = document.getElementById("splashProgressText");
         var errShown = false;
-        // 应用启动完成后置为 true，启动后的运行时错误不再触发自动刷新，
-        // 避免粘贴长文、切换设置等操作中的偶发异常打断编辑心流。
         var appStarted = false;
-        window.__markAppStarted = function () { appStarted = true; };
+        var autoReloadTimer = null;
+        var guard = document.getElementById("startupGuard");
+        var guardTitle = document.getElementById("startupGuardTitle");
+        var guardMsg = document.getElementById("startupGuardMsg");
+        var guardDetail = document.getElementById("startupGuardDetail");
+        var lastDetail = "";
+
+        function shellHealthy() {
+          var shell = document.querySelector(".app-shell");
+          if (!shell) return false;
+          var cs = window.getComputedStyle(shell);
+          if (cs.display === "none" || cs.visibility === "hidden" || parseFloat(cs.opacity) < 0.05) return false;
+          var r = shell.getBoundingClientRect();
+          if (r.width < 200 || r.height < 200) return false;
+          return !!shell.querySelector(".sidebar, .topbar, .workspace, #editor, #readerPanel");
+        }
+        window.__shellHealthy = shellHealthy;
+
+        // 静默重绘探测：只做一次同步 layout 读取，不改颜色/transform/不派发事件，
+        // 因此不会影响 fixed 浮层、主题基线与既有 resize 监听。
+        window.__kickRepaint = function () {
+          var shell = document.querySelector(".app-shell");
+          if (!shell) return false;
+          void shell.offsetWidth;
+          try { window.requestAnimationFrame(function () { void shell.getBoundingClientRect(); }); } catch (_) {}
+          return true;
+        };
+
+        function hideGuard() {
+          if (guard) guard.classList.add("hidden");
+          if (autoReloadTimer) { clearTimeout(autoReloadTimer); autoReloadTimer = null; }
+          errShown = false;
+        }
+        window.__hideStartupGuard = hideGuard;
+
+        // 启动完成时清掉 watchdog 类提示，但保留「启动失败」浮层（带 autoReloadTimer）。
+        window.__markAppStarted = function () {
+          appStarted = true;
+          try { sessionStorage.removeItem("mtStartupReload"); } catch (_) {}
+          if (guard && !guard.classList.contains("hidden") && !autoReloadTimer) hideGuard();
+        };
+        window.__isAppStarted = function () { return appStarted; };
+
+        function showGuard(title, msg, detail, autoReload) {
+          if (guard && !guard.classList.contains("hidden") && errShown) return;
+          errShown = true;
+          if (guardTitle) guardTitle.textContent = title || "界面未能正常显示";
+          if (guardMsg) guardMsg.textContent = msg || "应用启动或界面绘制出现异常。";
+          lastDetail = String(detail || msg || "");
+          if (guardDetail) {
+            guardDetail.textContent = lastDetail;
+            guardDetail.classList.remove("hidden");
+          }
+          if (guard) guard.classList.remove("hidden");
+          if (autoReload && !autoReloadTimer) {
+            // 连续失败最多自动重试 2 次，避免 10 秒一轮的无限刷新；启动成功会清零。
+            var reloads = 0;
+            try { reloads = Number(sessionStorage.getItem("mtStartupReload") || 0); } catch (_) {}
+            if (reloads < 2) {
+              try { sessionStorage.setItem("mtStartupReload", String(reloads + 1)); } catch (_) {}
+              autoReloadTimer = setTimeout(function () { window.location.reload(); }, 10000);
+            } else if (guardMsg) {
+              guardMsg.textContent = "已自动重试多次仍失败，请点击「重新加载」或复制诊断信息反馈。";
+            }
+          }
+        }
+        window.__showStartupGuard = showGuard;
+
+        // 一键恢复：清掉误加在 .app-shell 上的隐藏样式，强制重绘后再体检。
+        window.__recoverRender = function () {
+          var shell = document.querySelector(".app-shell");
+          if (shell) {
+            shell.classList.remove("hidden");
+            ["display", "visibility", "opacity", "transform"].forEach(function (prop) {
+              if (shell.style && shell.style[prop]) shell.style.removeProperty(prop);
+            });
+          }
+          window.__kickRepaint();
+          setTimeout(function () {
+            if (shellHealthy()) hideGuard();
+            else if (guardMsg) guardMsg.textContent = "自动恢复未生效，请点击「重新加载」重建界面。";
+          }, 250);
+          return !!shell;
+        };
 
         function showStartupError(msg) {
           // 启动完成后的运行时错误仅记录，不刷新页面、不卡启动屏。
@@ -1577,15 +1678,12 @@
           if (fill) fill.style.width = "100%";
           if (fill) fill.style.background = "#dc2626";
           if (pct) pct.textContent = "!";
-          if (txt) {
-            txt.textContent = "启动失败：" + msg;
-            txt.style.color = "#dc2626";
-          }
-          // 仅在启动阶段失败时 10 秒后自动刷新页面
-          setTimeout(function () { window.location.reload(); }, 10000);
+          if (txt) { txt.textContent = "启动失败：" + msg; txt.style.color = "#dc2626"; }
+          // splash 在 skipSplash 模式下已被移除，必须有一个独立可见的浮层，
+          // 否则用户只能看到一片空白（v2.3.8 实测缺陷）。
+          showGuard("启动失败", "应用未能完成启动，下方是错误详情。", msg, true);
         }
 
-        // 捕获模块脚本加载失败
         window.addEventListener("error", function (e) {
           var msg = e.message || "未知错误";
           if (e.filename) msg += " (" + e.filename + ":" + (e.lineno || 0) + ")";
@@ -1596,40 +1694,82 @@
           showStartupError(msg);
         });
 
-        // 15 秒超时：如果进度仍为 0，说明 app.js 未成功执行
+        // 15 秒超时：进度仍为 0 说明 app.js 根本没执行
         setTimeout(function () {
-          if (fill && fill.style.width === "0%") {
-            showStartupError("应用加载超时，正在自动刷新…");
-          }
+          if (fill && fill.style.width === "0%") showStartupError("应用加载超时，正在自动刷新…");
         }, 15000);
+
+        // 主界面可见性 watchdog：DOM 层能发现「主界面被隐藏 / 内容被清空」。
+        // 纯 GPU 合成层丢失检测不到，但浮层提供的一键恢复 / 重新加载能兜底。
+        function runGuardCheck() {
+          if (errShown || shellHealthy()) return;
+          showGuard(
+            "界面未能正常显示",
+            "主界面未绘制或被隐藏。可先尝试恢复，无效再重新加载。",
+            "theme=" + (document.body.dataset.theme || "") + "\nappStarted=" + appStarted +
+              "\nshellHealthy=false\nurl=" + window.location.href +
+              "\nua=" + navigator.userAgent, false);
+        }
+        window.__runStartupGuardCheck = runGuardCheck;
+        var guardMs = Number(window.__STARTUP_GUARD_MS) > 0 ? Number(window.__STARTUP_GUARD_MS) : 12000;
+        setTimeout(runGuardCheck, guardMs);
+        // 启动流程长时间未完成（DOM 健康但 license/bootstrap 卡住）→ 只提示，不自动刷新
+        setTimeout(function () {
+          if (errShown || appStarted) return;
+          showGuard("启动流程未完成", "初始化仍在等待，可尝试恢复或重新加载。",
+            "appStarted=false after 30s\nurl=" + window.location.href, false);
+        }, 30000);
+
+        var reloadBtn = document.getElementById("startupGuardReloadBtn");
+        var recoverBtn = document.getElementById("startupGuardRecoverBtn");
+        var copyBtn = document.getElementById("startupGuardCopyBtn");
+        if (reloadBtn) reloadBtn.addEventListener("click", function () { window.location.reload(); });
+        if (recoverBtn) recoverBtn.addEventListener("click", function () { window.__recoverRender(); });
+        if (copyBtn) copyBtn.addEventListener("click", function () {
+          var text = lastDetail + "\n\ntheme=" + (document.body.dataset.theme || "") +
+            "\nappStarted=" + appStarted + "\nshellHealthy=" + shellHealthy() +
+            "\nurl=" + window.location.href + "\ntime=" + new Date().toISOString();
+          function fallback() {
+            var ta = document.createElement("textarea");
+            ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+            document.body.appendChild(ta); ta.select();
+            try { document.execCommand("copy"); } catch (_) {}
+            document.body.removeChild(ta);
+          }
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).catch(fallback);
+          } else fallback();
+          copyBtn.textContent = "已复制";
+          setTimeout(function () { copyBtn.textContent = "复制诊断"; }, 1500);
+        });
       })();
     </script>
-    <script src="/vendor/highlight/highlight.min.js?v=20261112-97a45ae4"></script>
+    <script src="/vendor/highlight/highlight.min.js?v=20261112-cfc36f67"></script>
     <!-- highlight.js 扩展语言包（不在 common 版中的语言） -->
-    <script src="/vendor/highlight/langs/powershell.min.js?v=20261112-97a45ae4"></script>
-    <script src="/vendor/highlight/langs/dockerfile.min.js?v=20261112-97a45ae4"></script>
-    <script src="/vendor/highlight/langs/cmake.min.js?v=20261112-97a45ae4"></script>
-    <script src="/vendor/highlight/langs/groovy.min.js?v=20261112-97a45ae4"></script>
-    <script src="/vendor/highlight/langs/dart.min.js?v=20261112-97a45ae4"></script>
-    <script src="/vendor/highlight/langs/nginx.min.js?v=20261112-97a45ae4"></script>
-    <script src="/vendor/highlight/langs/nsis.min.js?v=20261112-97a45ae4"></script>
-    <script src="/vendor/highlight/langs/apache.min.js?v=20261112-97a45ae4"></script>
-    <script src="/vendor/highlight/langs/properties.min.js?v=20261112-97a45ae4"></script>
-    <script src="/vendor/highlight/langs/haskell.min.js?v=20261112-97a45ae4"></script>
-    <script src="/vendor/highlight/langs/elixir.min.js?v=20261112-97a45ae4"></script>
-    <script src="/vendor/highlight/langs/clojure.min.js?v=20261112-97a45ae4"></script>
+    <script src="/vendor/highlight/langs/powershell.min.js?v=20261112-cfc36f67"></script>
+    <script src="/vendor/highlight/langs/dockerfile.min.js?v=20261112-cfc36f67"></script>
+    <script src="/vendor/highlight/langs/cmake.min.js?v=20261112-cfc36f67"></script>
+    <script src="/vendor/highlight/langs/groovy.min.js?v=20261112-cfc36f67"></script>
+    <script src="/vendor/highlight/langs/dart.min.js?v=20261112-cfc36f67"></script>
+    <script src="/vendor/highlight/langs/nginx.min.js?v=20261112-cfc36f67"></script>
+    <script src="/vendor/highlight/langs/nsis.min.js?v=20261112-cfc36f67"></script>
+    <script src="/vendor/highlight/langs/apache.min.js?v=20261112-cfc36f67"></script>
+    <script src="/vendor/highlight/langs/properties.min.js?v=20261112-cfc36f67"></script>
+    <script src="/vendor/highlight/langs/haskell.min.js?v=20261112-cfc36f67"></script>
+    <script src="/vendor/highlight/langs/elixir.min.js?v=20261112-cfc36f67"></script>
+    <script src="/vendor/highlight/langs/clojure.min.js?v=20261112-cfc36f67"></script>
     <!-- 补齐白名单中缺失的语言（dos=bat/cmd，latex=tex，protobuf=proto，handlebars=hbs） -->
-    <script src="/vendor/highlight/langs/dos.min.js?v=20261112-97a45ae4"></script>
-    <script src="/vendor/highlight/langs/latex.min.js?v=20261112-97a45ae4"></script>
-    <script src="/vendor/highlight/langs/protobuf.min.js?v=20261112-97a45ae4"></script>
-    <script src="/vendor/highlight/langs/handlebars.min.js?v=20261112-97a45ae4"></script>
-    <script src="/vendor/highlight/langs/scala.min.js?v=20261112-97a45ae4"></script>
-    <script src="/vendor/highlight/langs/fortran.min.js?v=20261112-97a45ae4"></script>
+    <script src="/vendor/highlight/langs/dos.min.js?v=20261112-cfc36f67"></script>
+    <script src="/vendor/highlight/langs/latex.min.js?v=20261112-cfc36f67"></script>
+    <script src="/vendor/highlight/langs/protobuf.min.js?v=20261112-cfc36f67"></script>
+    <script src="/vendor/highlight/langs/handlebars.min.js?v=20261112-cfc36f67"></script>
+    <script src="/vendor/highlight/langs/scala.min.js?v=20261112-cfc36f67"></script>
+    <script src="/vendor/highlight/langs/fortran.min.js?v=20261112-cfc36f67"></script>
     <!-- 云端同步：SDK 与公开配置必须是经典脚本（挂到 window），且先于 app.js。
          两者都由 npm run vendor:cloud 与云端页保持一致，桌面端凭它们直连云服务。 -->
-    <script src="/vendor/sdk/workbuddy-cloud-sdk.global.js?v=20261112-97a45ae4"></script>
-    <script src="/cloud-config.js?v=20261112-97a45ae4"></script>
-    <script src="/app.js?v=20261112-97a45ae4" type="module"></script>
+    <script src="/vendor/sdk/workbuddy-cloud-sdk.global.js?v=20261112-cfc36f67"></script>
+    <script src="/cloud-config.js?v=20261112-cfc36f67"></script>
+    <script src="/app.js?v=20261112-cfc36f67" type="module"></script>
 
     <div class="menu-dropdowns" id="menuDropdowns">
       <div class="menu-dropdown hidden" data-dropdown="file" role="menu">

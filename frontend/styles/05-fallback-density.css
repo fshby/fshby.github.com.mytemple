@@ -1556,3 +1556,83 @@ body[data-theme="image"] {
   font-size: 12px;
   color: var(--muted);
 }
+
+/* ═══ 启动护栏浮层 · v2.3.9 ═══════════════════════════════════════════════
+ * 启动期异常 / 主界面未绘制时的可见恢复入口。只使用既有主题令牌，
+ * 不新增自定义属性、不改任何既有规则；z-index 需高于 appSplash(99999)。
+ * 配套：public/index.html #startupGuard + 内联启动护栏脚本。
+ * 改动后必须 npm run build:css（本文件是样式唯一可编辑源）。
+ * ═══════════════════════════════════════════════════════════════════════ */
+.startup-guard {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  /* 不用 backdrop-filter：体验层契约禁止为常年隐藏的浮层常驻 GPU 合成层。 */
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+}
+.startup-guard.hidden { display: none !important; }
+.startup-guard-card {
+  width: min(520px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  padding: 20px 22px 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 18px 60px rgba(15, 23, 42, 0.22);
+}
+.startup-guard-head { display: flex; align-items: flex-start; gap: 12px; }
+.startup-guard-icon {
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--warn);
+  color: #fff;
+  font-weight: 700;
+}
+.startup-guard-text { min-width: 0; flex: 1; }
+.startup-guard-text strong { display: block; font-size: 15px; margin-bottom: 4px; }
+.startup-guard-text p { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.6; }
+.startup-guard-detail {
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  max-height: 160px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.startup-guard-detail.hidden { display: none !important; }
+.startup-guard-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+.startup-guard-actions button {
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--control-bg);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+}
+.startup-guard-actions button.primary {
+  background: var(--accent-solid);
+  color: var(--on-accent);
+  border-color: transparent;
+}

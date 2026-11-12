@@ -1,4 +1,4 @@
-import { createMarkdownEditor } from "/editor-core.js?v=20261112-97a45ae4";
+import { createMarkdownEditor } from "/editor-core.js?v=20261112-cfc36f67";
 import { getPaperBackgroundUrl } from "./modules/paper-texture.js";
 import { escapeHtml, displayName, displayRelativePath, splitPathRef, joinPathRef, parentPathRef, compactName, splitWorkspaceRef, plainText, headingId } from "./modules/path-utils.js";
 import { extractOutline, addCnEnSpaces } from "./modules/editor-utils.js";
@@ -56,8 +56,8 @@ const LARGE_PREVIEW_BYTES = 100 * 1024;
 const LARGE_PREVIEW_DELAY = 700;
 const CHUNKED_RENDER_BYTES = 500 * 1024;
 const CHUNK_RENDER_SLICE_BYTES = 150 * 1024;
-const GRAPH_WORKER_URL = "/graph-worker.js?v=20261112-97a45ae4";
-const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20261112-97a45ae4&assets=/vendor/";
+const GRAPH_WORKER_URL = "/graph-worker.js?v=20261112-cfc36f67";
+const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20261112-cfc36f67&assets=/vendor/";
 // Markdown 渲染缓存版本戳：解析器或 CSS 规则升级时递增，确保旧缓存不被复用。
 // 2026-08-29 v1.8.102：安装包 resources 包含 public/ 前端静态文件、端口回滚；修正其他电脑安装后 404 白屏。
 const MARKDOWN_RENDER_VERSION = "20260829-v18102-install-static-bundle-port-scan";
@@ -8262,11 +8262,11 @@ function loadKatexAsync() {
     const link = document.createElement("link");
     link.rel = "stylesheet";
     // 同源自托管：katex.min.css 以相对路径引用 fonts/*.woff2，字体已一并镜像到 public/vendor/katex/。
-    link.href = "/vendor/katex/katex.min.css?v=20261112-97a45ae4";
+    link.href = "/vendor/katex/katex.min.css?v=20261112-cfc36f67";
     document.head.appendChild(link);
     // 再加载 JS
     const script = document.createElement("script");
-    script.src = "/vendor/katex/katex.min.js?v=20261112-97a45ae4";
+    script.src = "/vendor/katex/katex.min.js?v=20261112-cfc36f67";
     script.onload = () => resolve(window.katex);
     script.onerror = () => {
       _katexLoadingPromise = null;
@@ -8378,7 +8378,7 @@ function loadMermaidAsync() {
     // 同源自托管：与云端共用 public/vendor/mermaid/mermaid.min.js（npm 固定 11.12.2）。
     // 原先指向 cdn.jsdelivr.net，国内常见线路 TLS 握手被重置，所有 Mermaid 图表会
     // 一起降级成「库加载失败」。query 缓存破坏沿用桌面端统一戳，由 npm run stamp 维护。
-    script.src = "/vendor/mermaid/mermaid.min.js?v=20261112-97a45ae4";
+    script.src = "/vendor/mermaid/mermaid.min.js?v=20261112-cfc36f67";
     script.onload = () => resolve(window.mermaid);
     script.onerror = () => {
       _mermaidLoadingPromise = null;
@@ -17489,12 +17489,13 @@ _deferIdle(() => {
 // 启动流程：开机图片 logo.png 立即显示，后台并行加载服务，加载完成后直接进入应用。
 async function beginLoading() {
   // 双 splash 合并：Rust 端 splash.html 已展示过进度，导航到 /?skipSplash=1
-  // 时前端跳过 appSplash 进度条，立即隐藏启动层并标记 appStarted（避免
-  // index.html 内 15s 超时误判触发自动刷新），后台仍正常跑 license + bootstrap。
+  // 时前端跳过 appSplash 进度条并立即移除启动层；但**不**在这里标记 appStarted ——
+  // 启动完成标记由 hideSplash() 在 bootstrap 成功（或授权门禁就绪）后设置。
+  // 否则 license/bootstrap 阶段抛错会被全局钩子当成「运行时错误」静默吞掉，
+  // 用户只看到一片空白（v2.3.8 实测缺陷）。
   try {
     const skip = new URLSearchParams(window.location.search).get("skipSplash") === "1";
     if (skip) {
-      if (typeof window.__markAppStarted === "function") window.__markAppStarted();
       _splashProgress = 100;
       if (splashProgressFill) splashProgressFill.style.width = "100%";
       if (appSplash && !appSplash.classList.contains("hidden")) {
@@ -17504,12 +17505,22 @@ async function beginLoading() {
     }
   } catch (e) { console.warn("skipSplash detection failed:", e); }
   // 直接启动授权与文档库加载，与开机图片并行进行。
-  await startupLicenseCheck();
+  try {
+    await startupLicenseCheck();
+  } catch (e) {
+    const msg = (e && e.message) || String(e || "未知错误");
+    console.error("[startup] 启动流程异常:", e);
+    // 不 rethrow：避免 unhandledrejection 再触发一次；浮层本身带 10s 自动刷新。
+    if (typeof window.__showStartupGuard === "function") {
+      window.__showStartupGuard("启动流程异常", "初始化中断，可尝试恢复或重新加载。", msg, true);
+    }
+  }
 }
-
 function hideSplash() {
   // 标记应用启动完成：此后运行时错误不再触发自动刷新，避免打断编辑心流。
   if (typeof window.__markAppStarted === "function") window.__markAppStarted();
+  // 启动完成后做一次静默 layout flush，唤醒 WebView2 主图层合成（零视觉改动）。
+  if (typeof window.__kickRepaint === "function") window.__kickRepaint();
   if (appSplash && !appSplash.classList.contains("hidden")) {
     setSplashProgress(100, "加载完成");
     // 立即移除启动图层，避免窗口缩放时 WebView 重新合成出旧的背景图。
@@ -17915,4 +17926,11 @@ function initExperienceLayer() {
 initExperienceLayer();
 
 // 启动入口：开机图片已在 HTML 中直接渲染显示，立即并行加载后台服务。
-beginLoading();
+// 双保险：beginLoading 内部已捕获启动异常，这里再兜一层，避免任何未捕获的 rejection。
+beginLoading().catch((e) => {
+  console.error("[startup] 未捕获的启动异常:", e);
+  if (typeof window.__showStartupGuard === "function") {
+    window.__showStartupGuard("启动流程异常", "初始化中断，可尝试恢复或重新加载。",
+      (e && e.message) || String(e), true);
+  }
+});
