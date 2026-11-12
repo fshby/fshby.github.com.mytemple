@@ -24,7 +24,7 @@
         <a href="index.html#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.3.9</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.3.10</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -40,6 +40,7 @@
         <div class="changelog-toc reveal">
           <h3>版本索引</h3>
           <ul>
+            <li><a href="#v2.3.10">v2.3.10</a> — 合成层自愈：DOM 健康但画面不绘制时强制重绘 + 常显「显示修复」按钮</li>
             <li><a href="#v2.3.9">v2.3.9</a> — 启动护栏：启动期异常不再静默白屏 + 主界面 watchdog</li>
             <li><a href="#v2.3.8">v2.3.8</a> — 桌面端图表/公式库同源自托管（离线可用）+ 缓存戳幂等修复</li>
             <li><a href="#v2.3.7">v2.3.7</a> — 体验层升级（工作区空间色 + 触缘浮出 + 文档卡片 + 表达力视觉语言）</li>
@@ -119,6 +120,42 @@
             <li><a href="#v1.8.93">v1.8.93</a> — 界面与体验升级 + 性能优化</li>
           </ul>
         </div>
+
+                <article class="doc-section reveal" id="v2.3.10">
+          <h3>v2.3.10 · 合成层自愈：画面没画出来的那半边</h3>
+<p>上一版补的是「启动异常被静默吞掉」，靠 DOM 探针判断主界面是否正常。但实测反馈里还有一种白屏：<b>DOM 完全健康</b>——侧栏、列表、编辑器节点齐备，尺寸与位置都对，控制台零报错，可屏幕上就是只有背景。<b>探针全绿，画面空白</b>，watchdog 自然也不会触发。这类故障不在页面层，而在渲染管线：WebView2 的合成层（视觉树到屏幕的那一层）丢了，页面以为自己画完了，屏幕上什么也没有。</p>
+
+          <h4>为什么 DOM 探针查不出来</h4>
+          <ul>
+            <li>页面渲染分两步：先把 DOM 排版绘制成视觉树，再由合成器把这棵树提交到屏幕上。丢的是后一步，前一步的所有可观测指标（节点、尺寸、样式、脚本执行）都正常。</li>
+            <li>因此 v2.3.9 的可见性检查在这类场景里全是通过——这正是「提示已修复、白屏还在」的原因。</li>
+            <li>已知触发点集中在<b>窗口重新聚焦</b>（尤其最小化后恢复）与<b>缩放 / DPI 变化</b>：这两类事件会让合成器重建表面，重建失败就只剩背景。</li>
+          </ul>
+
+          <h4>修复：从渲染管线一侧强行让整棵树重画一次</h4>
+          <ul>
+            <li>新增进程内自愈动作 <code>nudge_webview_composition</code>：读取 WebView2 控制器当前的 bounds，<b>宽度 +1 像素再还原</b>。尺寸变化会强制合成器重建表面并重新提交整棵视觉树。</li>
+            <li>为什么抖 bounds 而不是缩放窗口 / 刷新页面：<b>不重建页面、不丢编辑状态</b>（未保存的光标与草稿都在）、<b>不动窗口尺寸与最大化状态</b>、全程约 1 帧（约 16ms），肉眼不可感知。</li>
+            <li><b>自动触发</b>：启动完成后的 2.5 秒与 6 秒各一次（覆盖首帧最脆弱的窗口期）；窗口重新聚焦、缩放 / DPI 变化后各补一次；同类事件 1.5 秒内去抖，反复切换窗口不会抖个不停。</li>
+            <li><b>用户出口常显</b>：主界面右下角新增「显示修复」按钮。第一次点击执行强制重绘并给出提示，<b>5 秒内再点一次</b>则判定自愈无效、直接刷新页面兜底——不需要记快捷键，触屏与纯鼠标环境都可用。</li>
+            <li>新增 <code>POST /api/window/nudge</code>（HTTP 与 IPC 双通道）：按钮、watchdog 与启动流程共用同一入口。</li>
+          </ul>
+
+          <h4>边界说清楚</h4>
+          <ul>
+            <li>绘制结果无法从进程内自证，所以自愈动作只保证「已提交一次重绘」，不谎报「已修复」——按钮文案是「若仍空白请在 5 秒内再次点击刷新页面」，把判断权交回给你。</li>
+            <li>若刷新后依旧白屏，问题不在渲染合成层，需要看 WebView2 Runtime 版本与显卡驱动，可用恢复浮层里的「复制诊断」把环境信息一起反馈。</li>
+          </ul>
+
+          <h4>验证</h4>
+          <ul>
+            <li>自动化测试 <b>315/315</b> 通过；新增 7 条渲染自愈契约锁（端点注册、去抖、按钮双阶段、不得误碰页面状态）。</li>
+            <li>渲染自愈真浏览器验收 <b>7/7</b>：按钮存在且可点、首次点击只重绘不刷新、二次点击才刷新、按钮不遮挡既有浮层；启动护栏回归 <b>22/22</b> 仍全通过。</li>
+            <li>性能预算 <b>9/9</b>：自愈动作不在启动关键路径上，首屏体积与 DOM 计数零变化，输入延迟与帧时间基线未动。</li>
+          </ul>
+
+          <p class="doc-meta">升级后无需迁移任何文档或配置；编辑中的草稿、主题与窗口布局全部保留。</p>
+</article>
 
                 <article class="doc-section reveal" id="v2.3.9">
           <h3>v2.3.9 · 启动护栏：异常不再静默白屏</h3>

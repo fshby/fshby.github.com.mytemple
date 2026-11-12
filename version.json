@@ -1,7 +1,7 @@
 {
-    "version":  "2.3.9",
+    "version":  "2.3.10",
     "downloadUrl":  "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
-    "latestReleaseNotes":  "启动护栏：启动期异常不再静默白屏，新增可见恢复浮层 + 主界面 watchdog + 自动重试上限",
-    "releaseNotes":  "v2.3.9 release. See changelog for details.",
+    "latestReleaseNotes":  "合成层自愈：DOM 健康但画面不绘制时强制重绘，新增常显「显示修复」按钮",
+    "releaseNotes":  "v2.3.10 release. See changelog for details.",
     "releaseDate":  "2026-11-12"
 }
