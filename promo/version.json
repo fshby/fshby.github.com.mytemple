@@ -1,7 +1,7 @@
 {
-    "version":  "2.3.10",
+    "version":  "2.3.11",
     "downloadUrl":  "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
-    "latestReleaseNotes":  "合成层自愈：DOM 健康但画面不绘制时强制重绘，新增常显「显示修复」按钮",
-    "releaseNotes":  "v2.3.10 release. See changelog for details.",
+    "latestReleaseNotes":  "白屏根因闭环：自愈升级为内容级强制提交；Mermaid 塌缩防护；LAN 访客页对齐桌面端（预览/图片/折叠/观感）",
+    "releaseNotes":  "v2.3.11 release. See changelog for details.",
     "releaseDate":  "2026-11-12"
 }
