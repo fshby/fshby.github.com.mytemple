@@ -1,4 +1,4 @@
-import { createMarkdownEditor } from "/editor-core.js?v=20261111-a3507902";
+import { createMarkdownEditor } from "/editor-core.js?v=20261112-92560e6b";
 import { getPaperBackgroundUrl } from "./modules/paper-texture.js";
 import { escapeHtml, displayName, displayRelativePath, splitPathRef, joinPathRef, parentPathRef, compactName, splitWorkspaceRef, plainText, headingId } from "./modules/path-utils.js";
 import { extractOutline, addCnEnSpaces } from "./modules/editor-utils.js";
@@ -55,8 +55,8 @@ const LARGE_PREVIEW_BYTES = 100 * 1024;
 const LARGE_PREVIEW_DELAY = 700;
 const CHUNKED_RENDER_BYTES = 500 * 1024;
 const CHUNK_RENDER_SLICE_BYTES = 150 * 1024;
-const GRAPH_WORKER_URL = "/graph-worker.js?v=20261111-a3507902";
-const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20261111-a3507902";
+const GRAPH_WORKER_URL = "/graph-worker.js?v=20261112-92560e6b";
+const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20261112-92560e6b";
 // Markdown 渲染缓存版本戳：解析器或 CSS 规则升级时递增，确保旧缓存不被复用。
 // 2026-08-29 v1.8.102：安装包 resources 包含 public/ 前端静态文件、端口回滚；修正其他电脑安装后 404 白屏。
 const MARKDOWN_RENDER_VERSION = "20260829-v18102-install-static-bundle-port-scan";
@@ -8369,7 +8369,7 @@ function loadMermaidAsync() {
     const script = document.createElement("script");
     // 锁定精确版本 + query 缓存破坏：@10 这类范围 URL 永不变，WebView2 磁盘缓存会
     // 永远持有远古版本（早期 10.x 有 flowchart 底部裁切 bug），且 10.x 不支持 architecture-beta。
-    script.src = "https://cdn.jsdelivr.net/npm/mermaid@11.12.2/dist/mermaid.min.js?v=20261111-a3507902";
+    script.src = "https://cdn.jsdelivr.net/npm/mermaid@11.12.2/dist/mermaid.min.js?v=20261112-92560e6b";
     script.onload = () => resolve(window.mermaid);
     script.onerror = () => {
       _mermaidLoadingPromise = null;
@@ -16064,14 +16064,31 @@ const lanEls = {
   pinRegenBtn: document.getElementById("lanPinRegenBtn"),
   modeChoices: document.getElementById("lanModeChoices"),
   guests: document.getElementById("lanGuests"),
+  wsList: document.getElementById("lanWsList"),
 };
 
 let lanShareFirstEnable = true;
 
-function lanShareRender(s) {
-  if (!s) return;
+// /api/lan/* 管理端点走 json_ok（{ok, data:{...}}），而 api 层（fetchOrInvoke）不做解包；
+// 访客协议与 /api/workspaces 是平铺的。这里统一兜一层，两种形态都接受。
+function lanUnwrap(r) {
+  if (r && typeof r === "object" && !("enabled" in r) && r.data && typeof r.data === "object") {
+    return r.data;
+  }
+  return r || {};
+}
+
+// 工作区多选缓存（refreshLanShareUI 每次刷新）
+let lanWsCache = [];
+let lanWsShared = []; // 共享白名单（空 = 全部共享）
+
+function lanShareRender(sRaw) {
+  const s = lanUnwrap(sRaw);
+  if (!s || typeof s !== "object") return;
   lanEls.toggle.checked = !!s.enabled;
-  lanEls.info.hidden = !s.enabled;
+  // 注意用 .hidden 类（带 !important）：HTML hidden 属性会被 .settings-section 的
+  // display 规则覆盖导致隐藏不掉（2026-11-12 用户实测教训）。
+  lanEls.info.classList.toggle("hidden", !s.enabled);
   const ip = (s.ips && s.ips[0]) || "";
   lanEls.url.textContent = s.enabled && ip ? `http://${ip}:${s.port}/` : "—";
   lanEls.pin.textContent = s.enabled ? (s.pin || "—") : "—";
@@ -16087,11 +16104,63 @@ function lanShareRender(s) {
     const ro = b.dataset.lanMode === "true";
     b.classList.toggle("active", s.enabled && ro === !!s.readOnly);
   });
+  if (Array.isArray(s.sharedWorkspaces)) lanWsShared = s.sharedWorkspaces;
+  renderLanWsList();
+}
+
+function renderLanWsList() {
+  if (!lanEls.wsList) return;
+  lanEls.wsList.textContent = "";
+  if (!lanWsCache.length) {
+    const p = document.createElement("p");
+    p.className = "muted lan-ws-empty";
+    p.textContent = "尚未添加工作区";
+    lanEls.wsList.appendChild(p);
+    return;
+  }
+  const shared = new Set(lanWsShared);
+  for (const ws of lanWsCache) {
+    const label = document.createElement("label");
+    label.className = "lan-ws-item";
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.value = ws.id;
+    box.checked = shared.size === 0 || shared.has(ws.id);
+    box.addEventListener("change", async () => {
+      const ids = Array.from(lanEls.wsList.querySelectorAll("input:checked")).map((b) => b.value);
+      try {
+        lanShareRender(await api.post("/api/lan/workspaces", { ids }));
+        showToast(ids.length
+          ? `已更新共享范围（${ids.length} 个工作区）`
+          : "未勾选任何工作区：当前共享全部工作区");
+      } catch (err) {
+        showToast(`更新共享范围失败：${err?.message || "未知错误"}`);
+      }
+    });
+    const name = document.createElement("span");
+    name.textContent = ws.name || ws.id;
+    name.title = ws.root || "";
+    label.appendChild(box);
+    label.appendChild(name);
+    lanEls.wsList.appendChild(label);
+  }
+  const hint = document.createElement("p");
+  hint.className = "muted lan-ws-hint";
+  hint.textContent = "不勾选任何工作区 = 共享全部；勾选后访客只能看到所选工作区。";
+  lanEls.wsList.appendChild(hint);
 }
 
 async function refreshLanShareUI() {
   try {
-    lanShareRender(await api.get("/api/lan/status"));
+    const [status, wsData] = await Promise.all([
+      api.get("/api/lan/status"),
+      api.get("/api/workspaces").catch(() => null),
+    ]);
+    const s = lanUnwrap(status);
+    if (wsData && Array.isArray(wsData.workspaces)) {
+      lanWsCache = wsData.workspaces.filter((w) => w.visible !== false);
+    }
+    lanShareRender(s);
   } catch (err) {
     showToast(`读取共享状态失败：${err?.message || "未知错误"}`);
   }

@@ -5563,6 +5563,80 @@ button.primary.full:hover {
   color: var(--text);
 }
 
+
+/* ── 局域网共享设置（LAN Share）────────────────────────── */
+
+.lan-switch {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 44px;
+  height: 24px;
+  flex: 0 0 auto;
+  border-radius: 12px;
+  background: var(--muted, rgba(0, 0, 0, 0.18));
+  position: relative;
+  cursor: pointer;
+  outline: none;
+  transition: background 0.18s ease;
+}
+.lan-switch::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  transition: transform 0.18s ease;
+}
+.lan-switch:checked {
+  background: var(--accent-solid, var(--accent));
+}
+.lan-switch:checked::after {
+  transform: translateX(20px);
+}
+.lan-switch:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent-soft, rgba(138, 124, 92, 0.35));
+}
+
+.lan-ws-row {
+  align-items: flex-start;
+}
+.lan-ws-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 190px;
+  overflow: auto;
+  padding: 8px 10px;
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.12));
+  border-radius: 8px;
+  min-width: 220px;
+  flex: 0 1 320px;
+}
+.lan-ws-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+.lan-ws-item input {
+  accent-color: var(--accent-solid, var(--accent));
+}
+.lan-ws-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lan-ws-hint,
+.lan-ws-empty {
+  font-size: 12px;
+  margin: 2px 0 0;
+}
 /* ═══ 层 3/5 · 03-workspace-views.css — 内嵌文件浏览器 / 工作区树 / 搜索 / 主题变体 / 响应式前段
    本层是样式表唯一可编辑的源；public/styles.css 是由本层按序合并出的产物，请勿手改。
    ⚠ 级联顺序 = 文件名字典序（build-css.mjs 按序合并），请勿调换文件顺序或在本层内

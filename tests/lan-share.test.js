@@ -66,7 +66,7 @@ test("LAN: 访客协议端点（verify/state）必须平铺返回，不得包 Ap
   assert.ok(verifyBody.includes("raw_json"), "lan_verify 成功响应必须 raw_json 平铺");
   assert.ok(!verifyBody.includes("json_ok"), "lan_verify 不得用 json_ok 包装");
   const stateStart = src.indexOf("async fn lan_guest_state");
-  const stateBody = src.slice(stateStart, src.indexOf("async fn lan_enable", stateStart));
+  const stateBody = src.slice(stateStart, src.indexOf("// ── 访客工作区白名单", stateStart));
   assert.ok(stateBody.includes("raw_json"), "lan_guest_state 成功响应必须 raw_json 平铺");
   assert.ok(!stateBody.includes("json_ok"), "lan_guest_state 不得用 json_ok 包装");
   // guest.js 按平铺协议读（护栏：改协议必须两端同步）
@@ -130,6 +130,36 @@ test("LAN: 桌面设置面板与持久化配置存在", () => {
   assert.ok(libRs.includes("autostart"), "lib.rs 缺少开机自启动调用");
   const appRs = repoFile("src-tauri", "src", "app.rs");
   assert.ok(appRs.includes("lan: Arc<crate::lan::LanShareState>"), "AppState 缺少 lan 字段");
+});
+
+test("LAN: 共享工作区白名单（后端执行点 + 桌面 UI）", () => {
+  const lanRs = repoFile("src-tauri", "src", "lan.rs");
+  assert.ok(lanRs.includes("shared_ws"), "lan.rs 缺少 shared_ws 白名单存储");
+  assert.ok(lanRs.includes("pub async fn is_ws_allowed"), "缺少 is_ws_allowed");
+  assert.ok(lanRs.includes("pub async fn set_workspaces"), "缺少 set_workspaces");
+  assert.ok(lanRs.includes('"workspaces"'), "lan-share.json 持久化必须包含 workspaces 字段");
+  const handlers = repoFile("src-tauri", "src", "handlers.rs");
+  for (const fn of ["lan_get_workspaces", "lan_get_tree", "lan_get_doc", "lan_check_doc", "lan_search", "lan_save", "lan_create_doc", "lan_create_folder", "lan_ws_gate", "lan_set_workspaces"]) {
+    assert.ok(handlers.includes(`async fn ${fn}`), `handlers.rs 缺少访客包装 handler ${fn}`);
+  }
+  // 白名单外一律 404（不泄露存在性）
+  const gateStart = handlers.indexOf("async fn lan_ws_gate");
+  const gateBody = handlers.slice(gateStart, handlers.indexOf("async fn lan_filter_ws_array", gateStart));
+  assert.ok(gateBody.includes("NOT_FOUND"), "白名单外工作区必须 404（不泄露存在性）");
+  // 访客路由必须挂包装版（不能回落主通道 handler）
+  const routerStart = handlers.indexOf("pub fn build_lan_router");
+  const routerBody = handlers.slice(routerStart, handlers.indexOf("pub fn build_native_router", routerStart));
+  for (const route of ['"/api/workspaces", get(lan_get_workspaces)', '"/api/tree", get(lan_get_tree)', '"/api/doc", get(lan_get_doc)', '"/api/save", post(lan_save)']) {
+    assert.ok(routerBody.includes(route), `访客路由必须挂 lan 包装版：${route}`);
+  }
+  // 桌面 UI
+  const indexHtml = repoFile("public", "index.html");
+  assert.ok(indexHtml.includes('id="lanWsList"'), "设置面板缺少共享工作区多选列表");
+  assert.ok(indexHtml.includes("lan-switch"), "LAN 开关需要自定义滑动样式（裸 checkbox 无勾选视觉）");
+  const appJs = repoFile("public", "app.js");
+  assert.ok(appJs.includes("lanUnwrap"), "app.js 必须解包 /api/lan/* 的 ApiResponse 包装层（否则开关弹回、地址恒「—」）");
+  assert.ok(appJs.includes("/api/lan/workspaces"), "app.js 缺少共享范围设置调用");
+  assert.ok(appJs.includes('classList.toggle("hidden", !s.enabled)'), "info 显隐必须用 .hidden 类（HTML hidden 属性会被 CSS 覆盖）");
 });
 
 // 环境自检：本机（Windows 工作区）应有 lan-share.json 的 data_root 写入路径约定

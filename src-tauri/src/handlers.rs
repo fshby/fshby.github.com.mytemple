@@ -322,6 +322,234 @@ async fn lan_guest_state(State(state): State<Arc<ServerState>>) -> impl IntoResp
     }))
 }
 
+// ── 访客工作区白名单（共享工作区限制）────────────────────────
+//
+// 桌面端可选择只共享哪些工作区（lan.rs shared_ws；空 = 共享全部）。
+// 执行原则与端点白名单一致：**过滤发生在访客通道的包装 handler 里**，
+// 主通道 handler 一行不动；被拒一律 404（不向访客泄露该工作区的存在）。
+
+/// 从访客请求的路径引用解析出 workspace id：
+///   - 绝对路径（盘符/UNC）→ 按各工作区 root 前缀反查；
+///   - "ws_id/rel" 或 "ws_id:rel" → 校验前缀确为已知工作区 id；
+///   - 其余相对路径 → 归属默认工作区（与 normalize_doc_path 的默认语义一致）。
+async fn lan_ws_of_ref(state: &ServerState, r: &str) -> Option<String> {
+    let d = r.replace('\\', "/");
+    let b = d.as_bytes();
+    let looks_absolute = (b.len() >= 2 && b[1] == b':') || d.starts_with("//");
+    let ws_list = state.app.get_workspaces().await;
+    if looks_absolute {
+        for w in &ws_list {
+            if crate::path_guard::path_within(&d, &w.root.replace('\\', "/")) {
+                return Some(w.id.clone());
+            }
+        }
+        return None;
+    }
+    let known = |id: &str| ws_list.iter().any(|w| w.id == id);
+    let candidate = if let Some(idx) = d.find(':') {
+        let prefix = &d[..idx];
+        (!prefix.is_empty() && prefix.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-'))
+            .then(|| prefix.to_string())
+    } else {
+        d.find('/').and_then(|idx| {
+            let prefix = &d[..idx];
+            (!prefix.is_empty()).then(|| prefix.to_string())
+        })
+    };
+    match candidate {
+        Some(id) if known(&id) => Some(id),
+        // 无工作区前缀或前缀不是已知 id：默认工作区（可能不在列表 → 拒绝）
+        _ => {
+            let def = state.app.get_default_workspace_id().await;
+            if def.is_empty() { None } else { Some(def) }
+        }
+    }
+}
+
+/// 访客请求的工作区不在白名单 → Err(404)（不泄露存在性）
+async fn lan_ws_gate(
+    state: &ServerState,
+    lan: &Arc<crate::lan::LanShareState>,
+    r: &str,
+) -> Result<(), Response> {
+    match lan_ws_of_ref(state, r).await {
+        Some(ws) if lan.is_ws_allowed(&ws).await => Ok(()),
+        _ => Err((
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"ok": false, "error": "not found"})),
+        )
+            .into_response()),
+    }
+}
+
+/// 按 id 过滤 json 里的工作区对象数组（workspaces / visible / recent 共用）
+async fn lan_filter_ws_array(state: &ServerState, arr: &serde_json::Value) -> serde_json::Value {
+    use serde_json::Value as V;
+    let lan = &state.app.lan;
+    match arr {
+        V::Array(items) => {
+            let mut out = Vec::new();
+            for it in items {
+                let id = it.get("id").and_then(|x| x.as_str()).unwrap_or("");
+                if lan.is_ws_allowed(id).await {
+                    out.push(it.clone());
+                }
+            }
+            V::Array(out)
+        }
+        other => other.clone(),
+    }
+}
+
+/// GET /api/workspaces（访客版：只暴露白名单内的工作区）
+async fn lan_get_workspaces(State(state): State<Arc<ServerState>>) -> impl IntoResponse {
+    let mut v = crate::ipc::get_workspaces(&state).await;
+    if let Some(obj) = v.as_object_mut() {
+        for key in ["workspaces", "visible", "recent"] {
+            if let Some(arr) = obj.get(key).cloned() {
+                obj.insert(key.to_string(), lan_filter_ws_array(&state, &arr).await);
+            }
+        }
+    }
+    crate::ipc::ok_response(v)
+}
+
+/// GET /api/tree（访客版：过滤 workspaces 数组与树顶层工作区节点）
+async fn lan_get_tree(
+    State(state): State<Arc<ServerState>>,
+    Query(query): Query<TreeQuery>,
+) -> impl IntoResponse {
+    let mut v = crate::ipc::get_tree(&state, query.refresh).await;
+    if let Some(obj) = v.as_object_mut() {
+        if let Some(arr) = obj.get("workspaces").cloned() {
+            obj.insert("workspaces".into(), lan_filter_ws_array(&state, &arr).await);
+        }
+        if let Some(nodes) = obj.get_mut("tree").and_then(|t| t.as_array_mut()) {
+            let mut kept = Vec::new();
+            for n in nodes.iter() {
+                let ws = n
+                    .get("workspace_id")
+                    .or_else(|| n.get("workspaceId"))
+                    .and_then(|x| x.as_str())
+                    .unwrap_or("");
+                if state.app.lan.is_ws_allowed(ws).await {
+                    kept.push(n.clone());
+                }
+            }
+            obj.insert("tree".into(), serde_json::Value::Array(kept));
+        }
+    }
+    crate::ipc::ok_response(v)
+}
+
+/// GET /api/doc（访客版：工作区白名单校验）
+async fn lan_get_doc(
+    State(state): State<Arc<ServerState>>,
+    Query(params): Query<DocQuery>,
+) -> impl IntoResponse {
+    if let Err(resp) = lan_ws_gate(&state, &state.app.lan, &params.path).await {
+        return resp.into_response();
+    }
+    crate::ipc::to_response_err(
+        crate::ipc::get_doc(&state, params.path, params.force).await,
+        StatusCode::NOT_FOUND,
+    )
+    .into_response()
+}
+
+/// GET /api/doc-check（访客版：工作区白名单校验）
+async fn lan_check_doc(
+    State(state): State<Arc<ServerState>>,
+    Query(params): Query<DocQuery>,
+) -> impl IntoResponse {
+    if let Err(resp) = lan_ws_gate(&state, &state.app.lan, &params.path).await {
+        return resp;
+    }
+    crate::ipc::to_response_err(
+        crate::ipc::check_doc(&state, params.path).await,
+        StatusCode::NOT_FOUND,
+    )
+    .into_response()
+}
+
+/// GET /api/search（访客版：过滤白名单外工作区的命中项）
+async fn lan_search(
+    State(state): State<Arc<ServerState>>,
+    Query(params): Query<SearchQuery>,
+) -> impl IntoResponse {
+    let offset = params.offset.unwrap_or(0);
+    let limit = params.limit.unwrap_or(80).min(500);
+    let mut v = crate::ipc::search(&state, params.q, offset, limit).await;
+    if let Some(obj) = v.as_object_mut() {
+        if let Some(results) = obj.get_mut("results").and_then(|r| r.as_array_mut()) {
+            let mut kept = Vec::new();
+            for item in results.iter() {
+                let p = item.get("path").and_then(|x| x.as_str()).unwrap_or("");
+                if matches!(lan_ws_of_ref(&state, p).await, Some(ws) if state.app.lan.is_ws_allowed(&ws).await) {
+                    kept.push(item.clone());
+                }
+            }
+            let kept_len = kept.len();
+            obj.insert("results".into(), serde_json::Value::Array(kept));
+            obj.insert("total".into(), serde_json::json!(kept_len));
+        }
+    }
+    crate::ipc::ok_response(v)
+}
+
+/// POST /api/save（访客版：工作区白名单校验）
+async fn lan_save(
+    State(state): State<Arc<ServerState>>,
+    Json(req): Json<SaveDocRequest>,
+) -> Response {
+    if let Err(resp) = lan_ws_gate(&state, &state.app.lan, &req.path).await {
+        return resp;
+    }
+    crate::ipc::save_doc(&state, req.path, req.content, req.base_hash, req.origin, req.encoding)
+        .await
+        .map(|v| (StatusCode::OK, Json(v)).into_response())
+        .unwrap_or_else(|msg| json_err(StatusCode::BAD_REQUEST, msg))
+}
+
+/// POST /api/create-doc（访客版：工作区白名单校验）
+async fn lan_create_doc(
+    State(state): State<Arc<ServerState>>,
+    Json(req): Json<CreateDocRequest>,
+) -> impl IntoResponse {
+    if let Err(resp) = lan_ws_gate(&state, &state.app.lan, &req.parent).await {
+        return resp.into_response();
+    }
+    crate::ipc::to_response(crate::ipc::create_document(&state, req.parent, req.name).await)
+        .into_response()
+}
+
+/// POST /api/create-folder（访客版：工作区白名单校验）
+async fn lan_create_folder(
+    State(state): State<Arc<ServerState>>,
+    Json(req): Json<CreateFolderRequest>,
+) -> impl IntoResponse {
+    if let Err(resp) = lan_ws_gate(&state, &state.app.lan, &req.parent).await {
+        return resp.into_response();
+    }
+    crate::ipc::to_response(crate::ipc::create_folder(&state, req.parent, req.name).await)
+        .into_response()
+}
+
+#[derive(Deserialize)]
+struct LanSharedWsRequest {
+    /// 空数组 = 共享全部
+    #[serde(default)]
+    ids: Vec<String>,
+}
+
+/// POST /api/lan/workspaces（仅回环主通道：设置共享工作区白名单，空 = 全部）
+async fn lan_set_workspaces(
+    State(state): State<Arc<ServerState>>,
+    Json(req): Json<LanSharedWsRequest>,
+) -> Response {
+    json_ok(state.app.lan.set_workspaces(req.ids).await)
+}
+
 #[derive(Deserialize)]
 struct LanEnableRequest {
     #[serde(rename = "readOnly", default)]
@@ -386,16 +614,16 @@ pub fn build_lan_router(
         .route("/api/lan/verify", post(lan_verify))
         // 已配对会话态
         .route("/api/lan/state", get(lan_guest_state))
-        // 读类
-        .route("/api/workspaces", get(get_workspaces))
-        .route("/api/tree", get(get_tree))
-        .route("/api/doc", get(get_doc))
-        .route("/api/doc-check", get(check_doc))
-        .route("/api/search", get(search))
-        // 写类（只读模式由 lan_guard 403）
-        .route("/api/save", post(save_doc))
-        .route("/api/create-doc", post(create_document))
-        .route("/api/create-folder", post(create_folder))
+        // 读类（lan_* 包装版：按共享工作区白名单过滤，白名单外一律 404）
+        .route("/api/workspaces", get(lan_get_workspaces))
+        .route("/api/tree", get(lan_get_tree))
+        .route("/api/doc", get(lan_get_doc))
+        .route("/api/doc-check", get(lan_check_doc))
+        .route("/api/search", get(lan_search))
+        // 写类（只读模式由 lan_guard 403；工作区白名单由 lan_* 校验）
+        .route("/api/save", post(lan_save))
+        .route("/api/create-doc", post(lan_create_doc))
+        .route("/api/create-folder", post(lan_create_folder))
         // 静态白名单 + 访客页
         .fallback(get(move |req| lan_fallback(public_root.clone(), req)))
         .layer(axum::middleware::from_fn_with_state(lan, lan_guard))
@@ -504,6 +732,7 @@ pub fn build_native_router(state: Arc<ServerState>) -> Router {
         .route("/api/lan/disable", post(lan_disable))
         .route("/api/lan/mode", post(lan_mode))
         .route("/api/lan/regenerate-pin", post(lan_regenerate_pin))
+        .route("/api/lan/workspaces", post(lan_set_workspaces))
         // 更新检查
         .route("/api/update/check", post(check_update))
         // 视频上传（base64 编码后体积膨胀 ~33%，100MB 原始视频 ≈ 133MB payload）

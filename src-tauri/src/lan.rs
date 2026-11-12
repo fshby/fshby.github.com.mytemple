@@ -64,6 +64,8 @@ pub struct LanShareState {
     server: Mutex<Option<tokio::task::JoinHandle<()>>>,
     /// 实际监听端口（0 = 未开启）
     port: AtomicU16,
+    /// 共享工作区白名单（workspace id 列表；**空 = 共享全部**，保持「简单校验」默认体验）
+    shared_ws: RwLock<Vec<String>>,
 }
 
 impl LanShareState {
@@ -80,6 +82,7 @@ impl LanShareState {
             attempts: Mutex::new((0, 0)),
             server: Mutex::new(None),
             port: AtomicU16::new(0),
+            shared_ws: RwLock::new(Vec::new()),
         }
     }
 
@@ -100,6 +103,16 @@ impl LanShareState {
                 let read_only = v.get("readOnly").and_then(|x| x.as_bool()).unwrap_or(false);
                 self.enabled.store(enabled, Ordering::SeqCst);
                 *self.read_only.write().await = read_only;
+                let ws = v
+                    .get("workspaces")
+                    .and_then(|x| x.as_array())
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+                *self.shared_ws.write().await = ws;
             }
         }
     }
@@ -108,6 +121,7 @@ impl LanShareState {
         let cfg = json!({
             "enabled": self.enabled.load(Ordering::SeqCst),
             "readOnly": *self.read_only.read().await,
+            "workspaces": *self.shared_ws.read().await,
         });
         if let Some(parent) = self.config_path().parent() {
             let _ = std::fs::create_dir_all(parent);
@@ -243,7 +257,38 @@ impl LanShareState {
             "activeGuests": active_tokens,
             "attemptsLeft": if lock_until > now { 0 } else { LAN_PIN_MAX_FAILS - fails },
             "lockedFor": if lock_until > now { (lock_until - now).div_ceil(1000) } else { 0 },
+            "sharedWorkspaces": *self.shared_ws.read().await,
         })
+    }
+
+    /// 某工作区是否对访客可见。**白名单为空 = 全部共享**（默认体验）。
+    pub async fn is_ws_allowed(&self, ws_id: &str) -> bool {
+        self.ensure_loaded().await;
+        let list = self.shared_ws.read().await;
+        list.is_empty() || list.iter().any(|s| s == ws_id)
+    }
+
+    /// 当前共享白名单（空 = 全部）
+    pub async fn shared_workspaces(&self) -> Vec<String> {
+        self.ensure_loaded().await;
+        self.shared_ws.read().await.clone()
+    }
+
+    /// 设置共享工作区白名单（空列表 = 共享全部）。立即生效并持久化。
+    pub async fn set_workspaces(&self, ids: Vec<String>) -> Value {
+        self.ensure_loaded().await;
+        // 去重去空，保持顺序
+        let mut cleaned: Vec<String> = Vec::new();
+        for id in ids {
+            let id = id.trim().to_string();
+            if !id.is_empty() && !cleaned.contains(&id) {
+                cleaned.push(id);
+            }
+        }
+        *self.shared_ws.write().await = cleaned;
+        self.save_config().await;
+        log::info!("[lan] 共享工作区白名单已更新（{:?}）", self.shared_ws.read().await);
+        self.status().await
     }
 
     /// 开启共享（生成/保留 PIN + 启动访客监听）。重复开启是幂等的（只更新模式）。
