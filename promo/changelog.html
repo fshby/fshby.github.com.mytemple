@@ -24,7 +24,7 @@
         <a href="index.html#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.3.5</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.3.6</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -40,6 +40,7 @@
         <div class="changelog-toc reveal">
           <h3>版本索引</h3>
           <ul>
+            <li><a href="#v2.3.6">v2.3.6</a> — 局域网共享真机修复（访客页可达 + 关闭即断 + 开关样式）</li>
             <li><a href="#v2.3.5">v2.3.5</a> — 局域网共享增强（共享工作区白名单 + 设置面板 UI 修复）</li>
             <li><a href="#v2.3.4">v2.3.4</a> — 局域网共享可用性修复（访客配对协议扁平化 + 回归锁）</li>
             <li><a href="#v2.3.3">v2.3.3</a> — 局域网共享（6 位口令配对 + 访客白名单 + 只读/可编辑）；13 项安全审计修复（分享不可枚举 / 路径穿越 / DNS rebinding / 保存竞态）</li>
@@ -115,6 +116,34 @@
             <li><a href="#v1.8.93">v1.8.93</a> — 界面与体验升级 + 性能优化</li>
           </ul>
         </div>
+
+                <article class="doc-section reveal" id="v2.3.6">
+          <h3>v2.3.6 · 局域网共享真机修复：访客页可达、关闭即断、开关样式</h3>
+<p>这个版本由端到端探针在真实安装环境实测驱动，一次修复三处问题。</p>
+
+          <h4>访客页现在可以打开了</h4>
+          <ul>
+            <li><b>问题</b>：访客浏览器打开访客地址只会看到错误提示——访客页所需的静态资源（页面/脚本/样式）被鉴权中间件一并拦截，口令配对页根本无法加载。</li>
+            <li><b>修复</b>：鉴权中间件对访客静态白名单（含根路径）放行，白名单之外的文件依旧 404，主应用入口（index.html / app.js）对访客仍不可见。</li>
+            <li>现在打开访客地址即可看到口令输入页，配对流程完整可用。</li>
+          </ul>
+
+          <h4>关闭共享后立即断开</h4>
+          <ul>
+            <li><b>问题</b>：关闭共享开关后，访客浏览器里已建立的连接仍可继续请求（监听端口已关，但浏览器与服务器间的旧连接还会存活一段时间）。</li>
+            <li><b>修复</b>：关闭开关后所有访客请求一律拒绝服务（503），并主动验证监听端口已真实关闭；新连接直接被拒。</li>
+            <li>口令、访问令牌同时立即作废。</li>
+          </ul>
+
+          <h4>设置面板开关样式修复</h4>
+          <ul>
+            <li><b>问题</b>：共享开关被设置弹窗的通用输入框样式拉成通栏长条，勾选状态几乎看不出变化。</li>
+            <li><b>修复</b>：样式优先级缺陷修正，开关恢复为标准滑动开关；「共享工作区」列表里的勾选框尺寸同步修正。</li>
+            <li>关闭共享后，访客地址/口令区块现在会正确隐藏。</li>
+          </ul>
+
+          <p class="doc-meta">自动化测试 284 项全绿；端到端探针的 4 条失败断言全部转绿。</p>
+</article>
 
                 <article class="doc-section reveal" id="v2.3.5">
           <h3>v2.3.5 · 局域网共享增强：可指定共享范围</h3>
