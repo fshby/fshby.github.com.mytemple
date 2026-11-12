@@ -1,7 +1,7 @@
 {
-    "version":  "2.3.7",
+    "version":  "2.3.8",
     "downloadUrl":  "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
-    "latestReleaseNotes":  "体验层升级：工作区空间色 + 触缘浮出 + 文档卡片 + 表达力视觉语言",
-    "releaseNotes":  "v2.3.7 release. See changelog for details.",
+    "latestReleaseNotes":  "图表与公式彻底离线可用：Mermaid/KaTeX/Chart.js/ECharts 同源自托管，桌面端零第三方 CDN；静态缓存戳幂等修复",
+    "releaseNotes":  "v2.3.8 release. See changelog for details.",
     "releaseDate":  "2026-11-12"
 }

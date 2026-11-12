@@ -24,7 +24,7 @@
         <a href="index.html#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.3.7</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.3.8</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -40,6 +40,7 @@
         <div class="changelog-toc reveal">
           <h3>版本索引</h3>
           <ul>
+            <li><a href="#v2.3.8">v2.3.8</a> — 桌面端图表/公式库同源自托管（离线可用）+ 缓存戳幂等修复</li>
             <li><a href="#v2.3.7">v2.3.7</a> — 体验层升级（工作区空间色 + 触缘浮出 + 文档卡片 + 表达力视觉语言）</li>
             <li><a href="#v2.3.6">v2.3.6</a> — 局域网共享真机修复（访客页可达 + 关闭即断 + 开关样式）</li>
             <li><a href="#v2.3.5">v2.3.5</a> — 局域网共享增强（共享工作区白名单 + 设置面板 UI 修复）</li>
@@ -117,6 +118,41 @@
             <li><a href="#v1.8.93">v1.8.93</a> — 界面与体验升级 + 性能优化</li>
           </ul>
         </div>
+
+                <article class="doc-section reveal" id="v2.3.8">
+          <h3>v2.3.8 · 图表与公式彻底离线可用：桌面端零第三方 CDN</h3>
+<p>这一版修的是一个真实可见的故障：部分网络下预览里所有 Mermaid 图表整片显示「Mermaid 库加载失败」。渲染逻辑本身没有问题，问题在于桌面端仍向境外 CDN 动态加载第三方库。修复后桌面端与云端工作台使用同一批随包资产，断网也能正常出图出公式。</p>
+
+          <h4>根因：主机名级 TLS 阻断，不是语法也不是缓存</h4>
+          <ul>
+            <li>实测 <code>curl https://cdn.jsdelivr.net/npm/mermaid@11.12.2/…</code> 返回 <b>(35) schannel: failed to receive handshake</b>、HTTP 000、0 字节；同一时刻另一个镜像主机能正常返回 200，说明不是断网，而是该主机名在国内常见线路上握手被重置。</li>
+            <li>云端工作台早已把全部第三方库自托管，桌面端却只镜像了登录 SDK，于是<b>同一篇文档在云端能出图、装到本机就报红</b>。</li>
+            <li>影响面不止 Mermaid：数学公式、Chart.js / ECharts 图表会静默降级，<b>导出 PDF 与打印</b>同样缺图（打印路径复用同一个加载函数）。</li>
+          </ul>
+
+          <h4>修复：四个库 + 公式字体随安装包自带</h4>
+          <ul>
+            <li>Mermaid 11.12.2、KaTeX 0.16.9、Chart.js 4.4.7、ECharts 5.5.1，外加 KaTeX 的 20 个 woff2 字体，共 <b>26 个文件 / 4.79 MB</b>，与云端 <code>vendor/</code> 逐字节一致，由同一脚本镜像生成，不会出现两份实现各自漂移。</li>
+            <li>六个加载点全部改为同源路径：Mermaid、KaTeX 的 JS 与 CSS、两段自包含图表模板、Markdown 渲染 worker 的资源目录参数。云端与桌面端的渲染 worker 仍是同一份文件，<b>三端 Markdown 渲染器零改动</b>。</li>
+            <li>内嵌图表页运行在不含 <code>allow-same-origin</code> 的沙箱 iframe 里；真浏览器实测根相对路径在该沙箱中可正常加载，因此模板<b>不写死端口或域名</b>，文档换设备、换端口依然可用。</li>
+            <li>错误提示不再把用户指向外网；桌面端运行时<b>零第三方域名请求</b>。</li>
+          </ul>
+
+          <h4>顺手修掉静态缓存戳的自引用</h4>
+          <ul>
+            <li>缓存戳由参与打包的前端文件内容算出，但其中两个文件又会被脚本改写戳，形成自引用：<b>每跑一次戳都会变</b>（曾连跑 4 次得到 4 个不同值），产生无谓 diff。</li>
+            <li>现在算指纹前先把戳本身归一化成占位符：真实内容变化仍会刷新缓存，戳自身变化不会；云端人工戳不归一化，改它照样触发更新。实测连跑三次：首次定稿，后两次均「无需变更」。</li>
+          </ul>
+
+          <h4>验证</h4>
+          <ul>
+            <li>自动化测试 <b>301/301</b> 通过；新增「桌面端零 CDN」「缓存戳幂等」两组回归锁。</li>
+            <li>真浏览器验收 <b>18/18</b>：Mermaid 真渲染出含 viewBox 的 SVG、KaTeX 真出公式且字体 200、沙箱 iframe 与 worker 均加载本地库、<b>零 404 / 零请求失败 / 零外部域名请求</b>。</li>
+            <li>资产镜像脚本二次运行 54 个文件全部跳过（幂等）；静态资源缓存戳 35 处统一。</li>
+          </ul>
+
+          <p class="doc-meta">升级后无需迁移任何文档或配置；首次启动会多占用约 4.8 MB 安装包体积。</p>
+</article>
 
                 <article class="doc-section reveal" id="v2.3.7">
           <h3>v2.3.7 · 体验层升级：空间色彩、触缘浮出与文档卡片</h3>
