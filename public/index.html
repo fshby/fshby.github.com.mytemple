@@ -17,9 +17,9 @@
       body.license-locked #licenseModal,
       body.license-locked #settingsModal { pointer-events: auto; }
     </style>
-    <link rel="stylesheet" href="/styles.css?v=20261112-cfc36f67">
-<link rel="modulepreload" href="/editor-core.js?v=20261112-cfc36f67">
-<link rel="modulepreload" href="/app.js?v=20261112-cfc36f67">
+    <link rel="stylesheet" href="/styles.css?v=20261112-0829555b">
+<link rel="modulepreload" href="/editor-core.js?v=20261112-0829555b">
+<link rel="modulepreload" href="/app.js?v=20261112-0829555b">
   </head>
   <body>
     <div id="appSplash" class="app-splash">
@@ -1419,6 +1419,13 @@
         </div>
       </div>
     </div>
+    <!-- 显示修复：合成层丢失（白屏）时的用户出口；fixed 定位与 coffeeBtn 同层，实测能在主图层丢失时仍被绘制 -->
+    <button type="button" id="renderFixBtn" class="coffee-button render-fix-button" title="显示修复：界面空白/内容不显示时点我">
+      <svg viewBox="0 0 48 48" fill="none">
+        <path d="M24 10a14 14 0 1 1-9.9 4.1" stroke="currentColor" stroke-width="4" stroke-linecap="round"></path>
+        <path d="M14 6v9h9" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></path>
+      </svg>
+    </button>
     <button type="button" id="coffeeBtn" class="coffee-button" title="请我喝杯咖啡">
       <div class="coffee-steam">
         <span></span>
@@ -1660,6 +1667,16 @@
             });
           }
           window.__kickRepaint();
+          // 同时请求 Rust 端抖动 WebView2 bounds，强制合成层重绘：
+          // DOM 探针发现不了「computed style 正常但窗口不绘制」的场景（v2.3.9 实测盲区），
+          // 只有原生侧的 SetBounds 1px 往返能让整棵视觉树重新绘制。
+          try {
+            fetch("/api/window/nudge", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: "{}",
+            }).catch(function () {});
+          } catch (_) {}
           setTimeout(function () {
             if (shellHealthy()) hideGuard();
             else if (guardMsg) guardMsg.textContent = "自动恢复未生效，请点击「重新加载」重建界面。";
@@ -1744,32 +1761,32 @@
         });
       })();
     </script>
-    <script src="/vendor/highlight/highlight.min.js?v=20261112-cfc36f67"></script>
+    <script src="/vendor/highlight/highlight.min.js?v=20261112-0829555b"></script>
     <!-- highlight.js 扩展语言包（不在 common 版中的语言） -->
-    <script src="/vendor/highlight/langs/powershell.min.js?v=20261112-cfc36f67"></script>
-    <script src="/vendor/highlight/langs/dockerfile.min.js?v=20261112-cfc36f67"></script>
-    <script src="/vendor/highlight/langs/cmake.min.js?v=20261112-cfc36f67"></script>
-    <script src="/vendor/highlight/langs/groovy.min.js?v=20261112-cfc36f67"></script>
-    <script src="/vendor/highlight/langs/dart.min.js?v=20261112-cfc36f67"></script>
-    <script src="/vendor/highlight/langs/nginx.min.js?v=20261112-cfc36f67"></script>
-    <script src="/vendor/highlight/langs/nsis.min.js?v=20261112-cfc36f67"></script>
-    <script src="/vendor/highlight/langs/apache.min.js?v=20261112-cfc36f67"></script>
-    <script src="/vendor/highlight/langs/properties.min.js?v=20261112-cfc36f67"></script>
-    <script src="/vendor/highlight/langs/haskell.min.js?v=20261112-cfc36f67"></script>
-    <script src="/vendor/highlight/langs/elixir.min.js?v=20261112-cfc36f67"></script>
-    <script src="/vendor/highlight/langs/clojure.min.js?v=20261112-cfc36f67"></script>
+    <script src="/vendor/highlight/langs/powershell.min.js?v=20261112-0829555b"></script>
+    <script src="/vendor/highlight/langs/dockerfile.min.js?v=20261112-0829555b"></script>
+    <script src="/vendor/highlight/langs/cmake.min.js?v=20261112-0829555b"></script>
+    <script src="/vendor/highlight/langs/groovy.min.js?v=20261112-0829555b"></script>
+    <script src="/vendor/highlight/langs/dart.min.js?v=20261112-0829555b"></script>
+    <script src="/vendor/highlight/langs/nginx.min.js?v=20261112-0829555b"></script>
+    <script src="/vendor/highlight/langs/nsis.min.js?v=20261112-0829555b"></script>
+    <script src="/vendor/highlight/langs/apache.min.js?v=20261112-0829555b"></script>
+    <script src="/vendor/highlight/langs/properties.min.js?v=20261112-0829555b"></script>
+    <script src="/vendor/highlight/langs/haskell.min.js?v=20261112-0829555b"></script>
+    <script src="/vendor/highlight/langs/elixir.min.js?v=20261112-0829555b"></script>
+    <script src="/vendor/highlight/langs/clojure.min.js?v=20261112-0829555b"></script>
     <!-- 补齐白名单中缺失的语言（dos=bat/cmd，latex=tex，protobuf=proto，handlebars=hbs） -->
-    <script src="/vendor/highlight/langs/dos.min.js?v=20261112-cfc36f67"></script>
-    <script src="/vendor/highlight/langs/latex.min.js?v=20261112-cfc36f67"></script>
-    <script src="/vendor/highlight/langs/protobuf.min.js?v=20261112-cfc36f67"></script>
-    <script src="/vendor/highlight/langs/handlebars.min.js?v=20261112-cfc36f67"></script>
-    <script src="/vendor/highlight/langs/scala.min.js?v=20261112-cfc36f67"></script>
-    <script src="/vendor/highlight/langs/fortran.min.js?v=20261112-cfc36f67"></script>
+    <script src="/vendor/highlight/langs/dos.min.js?v=20261112-0829555b"></script>
+    <script src="/vendor/highlight/langs/latex.min.js?v=20261112-0829555b"></script>
+    <script src="/vendor/highlight/langs/protobuf.min.js?v=20261112-0829555b"></script>
+    <script src="/vendor/highlight/langs/handlebars.min.js?v=20261112-0829555b"></script>
+    <script src="/vendor/highlight/langs/scala.min.js?v=20261112-0829555b"></script>
+    <script src="/vendor/highlight/langs/fortran.min.js?v=20261112-0829555b"></script>
     <!-- 云端同步：SDK 与公开配置必须是经典脚本（挂到 window），且先于 app.js。
          两者都由 npm run vendor:cloud 与云端页保持一致，桌面端凭它们直连云服务。 -->
-    <script src="/vendor/sdk/workbuddy-cloud-sdk.global.js?v=20261112-cfc36f67"></script>
-    <script src="/cloud-config.js?v=20261112-cfc36f67"></script>
-    <script src="/app.js?v=20261112-cfc36f67" type="module"></script>
+    <script src="/vendor/sdk/workbuddy-cloud-sdk.global.js?v=20261112-0829555b"></script>
+    <script src="/cloud-config.js?v=20261112-0829555b"></script>
+    <script src="/app.js?v=20261112-0829555b" type="module"></script>
 
     <div class="menu-dropdowns" id="menuDropdowns">
       <div class="menu-dropdown hidden" data-dropdown="file" role="menu">

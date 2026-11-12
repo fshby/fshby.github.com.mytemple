@@ -706,6 +706,8 @@ pub fn build_native_router(state: Arc<ServerState>) -> Router {
         .route("/api/open-folder", post(open_folder))
         .route("/api/open-url", post(open_url))
         .route("/api/browse-folder", post(browse_folder))
+        // 渲染自愈：强制 WebView2 重新合成一帧（修复合成层丢失导致的白屏）
+        .route("/api/window/nudge", post(window_nudge))
         // AI 智能功能
         .route("/api/ai/status", get(ai_status))
         .route("/api/ai/test", post(ai_test))
@@ -1269,6 +1271,18 @@ async fn open_url(
 
 async fn browse_folder() -> impl IntoResponse {
     crate::ipc::ok_response(crate::ipc::browse_folder().await)
+}
+
+/// 渲染自愈：强制 WebView2 重新合成一帧。
+/// 修复合成层丢失（DOM 健康但窗口不绘制）导致的白屏；前端「显示修复」按钮调用。
+/// 返回 { ok, nudged }：ok=false 表示 AppHandle 未初始化或主窗口不存在。
+async fn window_nudge() -> impl IntoResponse {
+    let app_handle = match crate::APP_HANDLE.get() {
+        Some(h) => h,
+        None => return json_err(StatusCode::INTERNAL_SERVER_ERROR, "AppHandle 未初始化"),
+    };
+    let ok = crate::nudge_webview_composition(app_handle, true);
+    json_ok(serde_json::json!({ "ok": ok, "nudged": ok }))
 }
 
 // ── AI 智能功能 ──────────────────────────────────────────

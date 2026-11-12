@@ -2879,6 +2879,8 @@ dependencies = [
  "url",
  "uuid",
  "walkdir",
+ "webview2-com",
+ "windows 0.61.3",
  "xcap",
  "zip",
 ]

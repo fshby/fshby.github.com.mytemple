@@ -97,6 +97,13 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg"]
 # 工作集实测可省 10~30%；local_dynamic_ticks 关闭 tick 计数再省一点 CPU。
 mimalloc = { version = "0.1", default-features = false }
 
+# Windows 专属：WebView2 合成层自愈（nudge_webview_composition）。
+# webview2-com 必须与 tauri/wry 依赖链里的版本同源（Cargo.lock 锁定 0.38.2），
+# 否则 ICoreWebView2Controller 类型不一致编译不过；windows 0.61 与 webview2-com-sys 0.38.2 同源。
+[target."cfg(windows)".dependencies]
+webview2-com = "0.38"
+windows = { version = "0.61", default-features = false, features = ["Win32_Foundation"] }
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

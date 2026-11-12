@@ -70,7 +70,27 @@ fn create_main_window(
             let _ = window.set_focus();
         });
     }
-    builder.build()
+    let win = builder.build()?;
+    // 合成层自愈挂钩（详见 nudge_webview_composition）：最小化恢复（重新聚焦）与
+    // DPI 变化是实测的白屏触发点；事件后抖动 webview bounds 强制整棵视觉树重绘。
+    // 去抖在 nudge_webview_composition 内部（1.5s）。
+    {
+        use tauri::Manager as _;
+        let h = win.app_handle().clone();
+        win.on_window_event(move |event| {
+            if matches!(
+                event,
+                tauri::WindowEvent::Focused(true) | tauri::WindowEvent::ScaleFactorChanged { .. }
+            ) {
+                let h2 = h.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(250));
+                    crate::nudge_webview_composition(&h2, false);
+                });
+            }
+        });
+    }
+    Ok(win)
 }
 
 /// 主窗口已被关闭（销毁）后重新打开。
@@ -127,6 +147,81 @@ fn show_or_reopen_main(app: &tauri::AppHandle) {
             log::info!("[main-window] 主窗口已存在，还原并聚焦到前台");
         }
         None => reopen_main_window(app),
+    }
+}
+
+// ── WebView2 合成层自愈 ───────────────────────────────────
+/// 强制 WebView2 重新合成一帧（修复「窗口只剩主题背景、界面整体不画」的合成层丢失）。
+///
+/// 背景：DirectComposition 下 WebView2 有一个已知类别的缺陷——窗口尺寸/DPI 变化或
+/// 最小化恢复后，合成树只更新部分区域：DOM 全部健康、computed style 全部可见，
+/// 但屏幕上就是不画（v2.3.9 的 DOM watchdog 正是检测不到这种场景，用户实测复现）。
+/// 把 WebView2 控件的 bounds 抖动 1px 再复原，强制整棵视觉树重新排版重绘：
+///   · 不重建页面、不丢编辑状态（区别于 reload）；
+///   · 不动窗口本身，最大化状态不受影响（区别于 set_size 抖动窗口）；
+///   · 全程约 1 帧（16ms），肉眼不可感知。
+/// 触发时机：启动完成后 2.5s/6s 各一次；窗口重新聚焦（覆盖最小化恢复）与 DPI 变化后；
+/// 以及用户点「显示修复」按钮（POST /api/window/nudge / tauri 命令 api_window_nudge）。
+/// 返回是否找到主窗口（便于诊断；真正的绘制结果无法从进程内验证）。
+/// 去抖：同类事件（如连续聚焦）在 1.5s 内只抖一次。
+static LAST_NUDGE_MS: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(0);
+
+pub fn nudge_webview_composition(app: &tauri::AppHandle, force: bool) -> bool {
+    use std::sync::atomic::Ordering;
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0);
+    if !force {
+        let last = LAST_NUDGE_MS.load(Ordering::Relaxed);
+        if now_ms - last < 1500 {
+            return false; // 去抖窗口内，跳过
+        }
+    }
+    LAST_NUDGE_MS.store(now_ms, Ordering::Relaxed);
+    let Some(win) = app.get_webview_window("main") else {
+        log::warn!("[render-nudge] 主窗口不存在，跳过合成层自愈");
+        return false;
+    };
+    #[cfg(windows)]
+    {
+        let r = win.with_webview(move |webview| {
+            // with_webview 的回调在主线程执行；两次 SetBounds 之间不 sleep，
+            // 依靠 WebView2 消息泵处理两个改尺寸消息，等效于「抖一下再回来」。
+            let controller = webview.controller();
+            unsafe {
+                use windows::Win32::Foundation::RECT;
+                let mut rect = RECT::default();
+                if controller.Bounds(&mut rect).is_err() {
+                    log::warn!("[render-nudge] 读取 WebView2 bounds 失败，跳过");
+                    return;
+                }
+                let bumped = RECT {
+                    left: rect.left,
+                    top: rect.top,
+                    right: rect.right + 1,
+                    bottom: rect.bottom,
+                };
+                if let Err(e) = controller.SetBounds(bumped) {
+                    log::warn!("[render-nudge] SetBounds(+1px) 失败: {}", e);
+                    return;
+                }
+                if let Err(e) = controller.SetBounds(rect) {
+                    log::warn!("[render-nudge] SetBounds(还原) 失败: {}", e);
+                }
+            }
+        });
+        if let Err(e) = r {
+            log::warn!("[render-nudge] with_webview 调度失败: {}", e);
+            return false;
+        }
+        log::info!("[render-nudge] 已触发 WebView2 合成层自愈（bounds 1px 往返）");
+        true
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = win;
+        false
     }
 }
 
@@ -341,6 +436,7 @@ pub fn run() {
             tauri_cmd::api_open_folder,
             tauri_cmd::api_open_url,
             tauri_cmd::api_browse_folder,
+            tauri_cmd::api_window_nudge,
             // ── 版本 & 系统路径 & 健康检查 ──
             tauri_cmd::api_get_version,
             tauri_cmd::api_get_system_paths,
@@ -379,6 +475,18 @@ pub fn run() {
             // 注入全局 AppHandle 单例：HTTP handler（axum）需要弹原生对话框
             // （save-as / 打开文件 / 定位文件夹），必须通过此句柄调用 dialog plugin。
             let _ = APP_HANDLE.set(app.handle().clone());
+
+            // ── 启动期合成层自愈：用户实测「启动完成即白屏」且 DOM watchdog 检测不到，
+            //    主动在 2.5s/6s 各抖一次 webview bounds（1px 往返，不可感知）。──
+            {
+                let h = app.handle().clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(2500));
+                    crate::nudge_webview_composition(&h, true);
+                    std::thread::sleep(std::time::Duration::from_millis(3500));
+                    crate::nudge_webview_composition(&h, false);
+                });
+            }
 
             // ── 安全防护初始化 ──
             {
@@ -1839,6 +1947,15 @@ pub async fn api_open_url(url: String) -> Result<serde_json::Value, String> {
 #[tauri::command]
 pub async fn api_browse_folder() -> Result<serde_json::Value, String> {
     Ok(crate::ipc::browse_folder().await)
+}
+
+// 渲染自愈（1）
+/// 强制 WebView2 重新合成一帧（详见 crate::nudge_webview_composition）。
+/// 前端「显示修复」按钮与启动护栏恢复流程都会触发；force=true 跳过去抖。
+#[tauri::command]
+pub async fn api_window_nudge(app_handle: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    let ok = crate::nudge_webview_composition(&app_handle, true);
+    Ok(serde_json::json!({ "ok": ok, "nudged": ok }))
 }
 
 // 授权（4）

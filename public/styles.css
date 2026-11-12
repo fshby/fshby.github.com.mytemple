@@ -12509,3 +12509,30 @@ body[data-theme="image"] {
   color: var(--on-accent);
   border-color: transparent;
 }
+
+/* ═══ 显示修复按钮（渲染自愈） · v2.3.9 ═════════════════════════════════
+ * 合成层丢失（白屏）时的用户出口。复用 .coffee-button 的 fixed 定位骨架，
+ * 视觉上用中性色与咖啡按钮区分；实测 fixed 独立层在主图层丢失时仍能绘制。
+ * 位置在咖啡按钮正上方。03 层后段把咖啡按钮覆盖为 46×46 / right 20 / bottom 20
+ * / scale(0.92)，这里按该生效几何对齐：bottom = 20 + 46 + 10 = 76px，right 与
+ * 宽高一致 → 水平天然居中。配套 public/app.js #renderFixBtn。
+ * ═════════════════════════════════════════════════════════════════════ */
+.render-fix-button {
+  bottom: 76px;
+  right: 20px;
+  width: 46px;
+  height: 46px;
+  background: var(--control-bg);
+  border: 1px solid var(--line);
+  color: var(--text);
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.18);
+}
+
+.render-fix-button:hover {
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.24);
+}
+
+.render-fix-button svg {
+  width: 25px;
+  height: 25px;
+}
