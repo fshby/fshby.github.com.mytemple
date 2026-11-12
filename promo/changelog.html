@@ -24,7 +24,7 @@
         <a href="index.html#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.3.6</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.3.7</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -40,6 +40,7 @@
         <div class="changelog-toc reveal">
           <h3>版本索引</h3>
           <ul>
+            <li><a href="#v2.3.7">v2.3.7</a> — 体验层升级（工作区空间色 + 触缘浮出 + 文档卡片 + 表达力视觉语言）</li>
             <li><a href="#v2.3.6">v2.3.6</a> — 局域网共享真机修复（访客页可达 + 关闭即断 + 开关样式）</li>
             <li><a href="#v2.3.5">v2.3.5</a> — 局域网共享增强（共享工作区白名单 + 设置面板 UI 修复）</li>
             <li><a href="#v2.3.4">v2.3.4</a> — 局域网共享可用性修复（访客配对协议扁平化 + 回归锁）</li>
@@ -116,6 +117,44 @@
             <li><a href="#v1.8.93">v1.8.93</a> — 界面与体验升级 + 性能优化</li>
           </ul>
         </div>
+
+                <article class="doc-section reveal" id="v2.3.7">
+          <h3>v2.3.7 · 体验层升级：空间色彩、触缘浮出与文档卡片</h3>
+<p>这一版只打磨「看得见的手感」：渲染架构、数据格式、同步与共享逻辑一行未改，三端 Markdown 渲染器零改动。</p>
+
+          <h4>每个工作区有了自己的颜色</h4>
+          <ul>
+            <li>6 种低饱和主色（砂金 / 胭粉 / 苔绿 / 雾蓝 / 藕紫 / 琥珀）由工作区 id 稳定哈希得出：同一个工作区在任何设备、任何启动顺序下颜色都一致。</li>
+            <li>可在「工作路径」弹窗里手动改色，覆盖关系只写本机 localStorage；<b>不改 workspaces.json、不新增后端字段、不动任何 API</b>。</li>
+            <li>对外只下发 4 个 CSS 变量，染色全在样式层完成，原有主题令牌基线零漂移。</li>
+          </ul>
+
+          <h4>折叠的侧栏会在鼠标靠近时浮出</h4>
+          <ul>
+            <li>侧栏收起后，鼠标靠近屏幕左缘时它会临时滑出、移开自动收回，沉浸式写作时不必先点按钮展开。</li>
+            <li>用纯 CSS <code>:has()</code> 状态机实现，<b>无定时器、无观察器、无逐节点遍历</b>，静息时零常驻开销。</li>
+          </ul>
+
+          <h4>阅读区变成文档卡片，正文排版一个像素没动</h4>
+          <ul>
+            <li>用 <code>::before</code> 伪元素给阅读区加卡片衬底与细边，不新增 DOM 节点、不包裹正文容器。</li>
+            <li>刻意不改 <code>.markdown-body</code> 的宽度、内边距与行高：换行位置、复制结果与打印输出与旧版完全一致。</li>
+          </ul>
+
+          <h4>表达力细节全部用 CSS 补齐</h4>
+          <ul>
+            <li>二级标题锚点、行内高亮、表格斑马纹、代码块顶线等视觉层次均为样式规则，不注入内容、不改写文档字节。</li>
+            <li>Markdown 语法能力此前已完整（提示块、任务列表、脚注等），本版<b>没有引入任何新语法</b>，老文档无需迁移。</li>
+          </ul>
+
+          <h4>性能与内存仍在预算内</h4>
+          <ul>
+            <li>CSS 379,201 → 384,767 B（+5.6 KB），app.js 778,345 → 782,343 B（+4.0 KB），DOM 节点 1638 → 1648（+10）。</li>
+            <li>首屏 JS 堆 5.23 → 5.24 MB；输入延迟 P95 5.1~5.6 → 4.7 ms，帧间隔 P95 5.8~6.0 → 5.8 ms；大文档堆增量 6.55 MB，长任务 0 个。</li>
+          </ul>
+
+          <p class="doc-meta">自动化测试 291 项全绿；体验层真浏览器断言 11/11、性能预算断言 9/9。</p>
+</article>
 
                 <article class="doc-section reveal" id="v2.3.6">
           <h3>v2.3.6 · 局域网共享真机修复：访客页可达、关闭即断、开关样式</h3>

@@ -1,4 +1,4 @@
-import { createMarkdownEditor } from "/editor-core.js?v=20261112-fc76f102";
+import { createMarkdownEditor } from "/editor-core.js?v=20261112-f0e3cb5e";
 import { getPaperBackgroundUrl } from "./modules/paper-texture.js";
 import { escapeHtml, displayName, displayRelativePath, splitPathRef, joinPathRef, parentPathRef, compactName, splitWorkspaceRef, plainText, headingId } from "./modules/path-utils.js";
 import { extractOutline, addCnEnSpaces } from "./modules/editor-utils.js";
@@ -56,8 +56,8 @@ const LARGE_PREVIEW_BYTES = 100 * 1024;
 const LARGE_PREVIEW_DELAY = 700;
 const CHUNKED_RENDER_BYTES = 500 * 1024;
 const CHUNK_RENDER_SLICE_BYTES = 150 * 1024;
-const GRAPH_WORKER_URL = "/graph-worker.js?v=20261112-fc76f102";
-const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20261112-fc76f102";
+const GRAPH_WORKER_URL = "/graph-worker.js?v=20261112-f0e3cb5e";
+const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20261112-f0e3cb5e";
 // Markdown 渲染缓存版本戳：解析器或 CSS 规则升级时递增，确保旧缓存不被复用。
 // 2026-08-29 v1.8.102：安装包 resources 包含 public/ 前端静态文件、端口回滚；修正其他电脑安装后 404 白屏。
 const MARKDOWN_RENDER_VERSION = "20260829-v18102-install-static-bundle-port-scan";
@@ -8376,7 +8376,7 @@ function loadMermaidAsync() {
     const script = document.createElement("script");
     // 锁定精确版本 + query 缓存破坏：@10 这类范围 URL 永不变，WebView2 磁盘缓存会
     // 永远持有远古版本（早期 10.x 有 flowchart 底部裁切 bug），且 10.x 不支持 architecture-beta。
-    script.src = "https://cdn.jsdelivr.net/npm/mermaid@11.12.2/dist/mermaid.min.js?v=20261112-fc76f102";
+    script.src = "https://cdn.jsdelivr.net/npm/mermaid@11.12.2/dist/mermaid.min.js?v=20261112-f0e3cb5e";
     script.onload = () => resolve(window.mermaid);
     script.onerror = () => {
       _mermaidLoadingPromise = null;
