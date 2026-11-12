@@ -310,14 +310,34 @@ impl LanShareState {
         Ok(self.status().await)
     }
 
-    /// 关闭共享：abort 访客监听 + 清空 token
+    /// 关闭共享：abort 访客监听 + 清空 token + 验证端口确实关闭。
+    /// abort 只取消 accept 循环；已建立的 keep-alive 连接由 lan_guard 的
+    /// is_enabled 闸门拒绝（503），这里再兜底确认监听套接字已关。
     pub async fn disable(&self) -> Value {
         self.ensure_loaded().await;
-        if let Some(handle) = self.server.lock().await.take() {
-            handle.abort();
-        }
-        self.port.store(0, Ordering::SeqCst);
         self.enabled.store(false, Ordering::SeqCst);
+        let handle = self.server.lock().await.take();
+        if let Some(h) = &handle {
+            h.abort();
+        }
+        let port = self.port.swap(0, Ordering::SeqCst);
+        if port != 0 {
+            let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
+            for i in 0..20 {
+                if std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_millis(50))
+                    .is_err()
+                {
+                    break;
+                }
+                if i == 10 {
+                    log::warn!("[lan] disable 后端口 {} 仍在响应，再次 abort", port);
+                    if let Some(h) = &handle {
+                        h.abort();
+                    }
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            }
+        }
         self.tokens.lock().await.clear();
         self.save_config().await;
         log::info!("[lan] 局域网共享已关闭");

@@ -3380,21 +3380,26 @@ button.primary.full:hover {
 
 
 /* ── 局域网共享设置（LAN Share）────────────────────────── */
+/* ⚠️ 设置弹窗里 `.modal-dialog input`（特异性 0,1,1）会把 input 拉成
+   width:100%/height:38px——开关必须用更高特异性选择器（0,2,1）压制，
+   并显式归零 border/padding。共享工作区的 checkbox 同理。 */
 
-.lan-switch {
+.setting-row input.lan-switch {
   -webkit-appearance: none;
   appearance: none;
   width: 44px;
   height: 24px;
   flex: 0 0 auto;
+  padding: 0;
+  border: 0;
   border-radius: 12px;
-  background: var(--muted, rgba(0, 0, 0, 0.18));
+  background: var(--soft, rgba(0, 0, 0, 0.14));
   position: relative;
   cursor: pointer;
   outline: none;
   transition: background 0.18s ease;
 }
-.lan-switch::after {
+.setting-row input.lan-switch::after {
   content: "";
   position: absolute;
   left: 3px;
@@ -3406,13 +3411,13 @@ button.primary.full:hover {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
   transition: transform 0.18s ease;
 }
-.lan-switch:checked {
+.setting-row input.lan-switch:checked {
   background: var(--accent-solid, var(--accent));
 }
-.lan-switch:checked::after {
+.setting-row input.lan-switch:checked::after {
   transform: translateX(20px);
 }
-.lan-switch:focus-visible {
+.setting-row input.lan-switch:focus-visible {
   box-shadow: 0 0 0 2px var(--accent-soft, rgba(138, 124, 92, 0.35));
 }
 
@@ -3439,7 +3444,11 @@ button.primary.full:hover {
   color: var(--text);
   cursor: pointer;
 }
-.lan-ws-item input {
+.lan-ws-item input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  padding: 0;
   accent-color: var(--accent-solid, var(--accent));
 }
 .lan-ws-item span {

@@ -212,15 +212,29 @@ const LAN_WRITE_ROUTES: &[(&str, &str)] = &[
     ("POST", "/api/create-folder"),
 ];
 
-/// 访客鉴权中间件：/api/lan/verify 之外的一切请求必须带有效 X-Lan-Token。
-/// 只读模式下写入端点直接 403（模式可运行中切换，这里每请求读实时值）。
+/// 访客鉴权中间件。三层闸门，顺序敏感：
+///   1. 共享已关闭 → 一律 503（含残留 keep-alive 连接上的请求：disable abort
+///      只关监听套接字，hyper 的已建立连接任务会存活到空闲超时，绝不能继续服务）；
+///   2. 免鉴权：/api/lan/verify（PIN 配对）+ 访客静态白名单（含根路径=guest.html，
+///      访客浏览器必须能先拿到 PIN 门页面才能配对；白名单外的静态文件由
+///      lan_fallback 兜底 404，绝不暴露 index.html/app.js）；
+///   3. 其余 /api/* 必须带有效 X-Lan-Token；只读模式下写入端点 403。
 pub async fn lan_guard(
     State(lan): State<Arc<crate::lan::LanShareState>>,
     req: Request,
     next: Next,
 ) -> Response {
     let path = req.uri().path().to_string();
-    if path == "/api/lan/verify" {
+    if !lan.is_enabled().await {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"ok": false, "error": "局域网共享已关闭"})),
+        )
+            .into_response();
+    }
+    let is_static = path == "/"
+        || crate::lan::LAN_STATIC_ALLOW.iter().any(|f| path == format!("/{f}"));
+    if path == "/api/lan/verify" || is_static {
         return next.run(req).await;
     }
     let token = req

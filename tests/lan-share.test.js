@@ -54,6 +54,14 @@ test("LAN: lan_guard 无 token 必须 401 且 verify 免 token", () => {
   const writeBody = src.slice(writeStart, src.indexOf("];", writeStart));
   assert.ok(writeBody.includes('"/api/save"'), "只读集合必须包含 /api/save");
   assert.ok(writeBody.includes('"/api/create-doc"') && writeBody.includes('"/api/create-folder"'), "只读集合必须包含新建端点");
+  // 回归锁（2026-11-12 真机端到端实测）：① 共享关闭后守卫必须 503 拒绝一切
+  //（disable abort 只关监听，残留 keep-alive 连接仍在服务，不能放行）；
+  // ② 访客静态白名单（含根路径）必须免 token，否则访客浏览器拿不到 PIN 门页面。
+  assert.ok(guardBody.includes("is_enabled"), "lan_guard 必须先检查共享开关（关闭后 503 拒绝残留连接）");
+  assert.ok(guardBody.includes("SERVICE_UNAVAILABLE"), "关闭态必须 503");
+  assert.ok(guardBody.includes("LAN_STATIC_ALLOW"), "lan_guard 必须豁免访客静态白名单（否则 PIN 页拿不到）");
+  // 豁免必须精确匹配白名单文件名（format! 逐字比对），不得用前缀放行
+  assert.ok(guardBody.includes('path == format!("/{f}")'), "静态豁免必须按精确文件名匹配");
 });
 
 test("LAN: 访客协议端点（verify/state）必须平铺返回，不得包 ApiResponse", () => {
