@@ -1490,6 +1490,14 @@ body[data-theme="image"] {
   .app-shell:not(.immersive) #readerPanel.reader-panel.has-outline::before {
     inset: 14px 22px 14px 242px;
   }
+  /* 滚动区必须与卡片重合：markdownView 原本占满 grid 行（顶到面板边缘），滚动时
+     文字会穿过卡片上下边缘之外的条带——「阅读模式文字超出背景板」（v2.3.13 实测反馈）。
+     margin 与卡片 inset 对齐（has-outline 时卡片左缘 = 列2 起点 + 22px，md 在列2 内，
+     margin-left 22 恰好重合），滚动条与文字全程都在纸卡内。 */
+  .app-shell:not(.immersive) #readerPanel.reader-panel > #markdownView.markdown-body {
+    height: auto;
+    margin: 14px 22px;
+  }
 
   /* 4) 侧栏触缘浮出：只在桌面宽度 + 折叠态 + 非沉浸下生效。
          纯 CSS 状态机（:has 热区/侧栏 hover）—— 零 JS 监听、零定时器、零常驻 GPU 层；

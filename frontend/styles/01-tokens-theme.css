@@ -2055,6 +2055,10 @@ body.resizing-sidebar {
 
 .reader-panel > .markdown-body {
   height: 100%;
+  /* content-box 下 padding（48/16px）撑在 height 之外，盒子比 grid 行高出一截，
+     滚动时文字会进入文档卡片（::before）上下边缘之外的条带——「文字超出背景板」。
+     border-box 后滚动区与卡片完全贴合。 */
+  box-sizing: border-box;
   overflow: auto;
   padding-bottom: 16px;
   grid-row: 1;

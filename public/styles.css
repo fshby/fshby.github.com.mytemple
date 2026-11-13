@@ -2055,6 +2055,10 @@ body.resizing-sidebar {
 
 .reader-panel > .markdown-body {
   height: 100%;
+  /* content-box 下 padding（48/16px）撑在 height 之外，盒子比 grid 行高出一截，
+     滚动时文字会进入文档卡片（::before）上下边缘之外的条带——「文字超出背景板」。
+     border-box 后滚动区与卡片完全贴合。 */
+  box-sizing: border-box;
   overflow: auto;
   padding-bottom: 16px;
   grid-row: 1;
@@ -12367,6 +12371,14 @@ body[data-theme="image"] {
      视觉上「目录文字与背景板不对应」（v2.3.11 实测反馈）。左偏移 = 220px 列 + 22px。 */
   .app-shell:not(.immersive) #readerPanel.reader-panel.has-outline::before {
     inset: 14px 22px 14px 242px;
+  }
+  /* 滚动区必须与卡片重合：markdownView 原本占满 grid 行（顶到面板边缘），滚动时
+     文字会穿过卡片上下边缘之外的条带——「阅读模式文字超出背景板」（v2.3.13 实测反馈）。
+     margin 与卡片 inset 对齐（has-outline 时卡片左缘 = 列2 起点 + 22px，md 在列2 内，
+     margin-left 22 恰好重合），滚动条与文字全程都在纸卡内。 */
+  .app-shell:not(.immersive) #readerPanel.reader-panel > #markdownView.markdown-body {
+    height: auto;
+    margin: 14px 22px;
   }
 
   /* 4) 侧栏触缘浮出：只在桌面宽度 + 折叠态 + 非沉浸下生效。
