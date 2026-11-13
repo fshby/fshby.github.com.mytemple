@@ -492,10 +492,15 @@ pub fn precreate_windows(app: &AppHandle, port: u16) {
                 .position(0.0, 0.0)
                 .build()
             {
-                Ok(_) => {
+                Ok(win) => {
                     if let Ok(mut guard) = screenshot_rect().lock() {
                         *guard = Some((mon_w as u32, mon_h as u32, 0, 0));
                     }
+                    // 继承低显存模式（MemoryUsageTargetLevel），别让重建的窗口丢状态
+                    let _ = crate::apply_memory_target_to_window(
+                        &win,
+                        crate::MEMORY_TARGET_LOW.load(std::sync::atomic::Ordering::Relaxed),
+                    );
                     log::info!("[screenshot-window] 截图窗口预创建成功（已在最终位置，显示时零位移）");
                 }
                 Err(e) => log::warn!("[screenshot-window] 截图窗口预创建失败: {}", e),
@@ -523,10 +528,15 @@ pub fn precreate_windows(app: &AppHandle, port: u16) {
                 .position(0.0, 0.0)
                 .build()
             {
-                Ok(_) => {
+                Ok(win) => {
                     if let Ok(mut guard) = recorder_rect().lock() {
                         *guard = Some((mon_w as u32, mon_h as u32, 0, 0));
                     }
+                    // 继承低显存模式（MemoryUsageTargetLevel），别让重建的窗口丢状态
+                    let _ = crate::apply_memory_target_to_window(
+                        &win,
+                        crate::MEMORY_TARGET_LOW.load(std::sync::atomic::Ordering::Relaxed),
+                    );
                     log::info!("[recorder-window] 录屏窗口预创建成功（已在最终位置，显示时零位移）");
                 }
                 Err(e) => log::warn!("[recorder-window] 录屏窗口预创建失败: {}", e),
@@ -667,6 +677,11 @@ fn prepare_screenshot_window(app: &AppHandle) {
             if let Ok(mut guard) = screenshot_rect().lock() {
                 *guard = Some((mon_w as u32, mon_h as u32, 0, 0));
             }
+            // 继承低显存模式（MemoryUsageTargetLevel），别让重建的窗口丢状态
+            let _ = crate::apply_memory_target_to_window(
+                &win,
+                crate::MEMORY_TARGET_LOW.load(std::sync::atomic::Ordering::Relaxed),
+            );
             let _ = win.hide();
             // 首次创建：等待前端加载完成后由前端调用 ready 显示
             // 30 秒超时监控
@@ -1080,6 +1095,11 @@ fn prepare_recorder_window(app: &AppHandle) {
             if let Ok(mut guard) = recorder_rect().lock() {
                 *guard = Some((mon_w as u32, mon_h as u32, 0, 0));
             }
+            // 继承低显存模式（MemoryUsageTargetLevel），别让重建的窗口丢状态
+            let _ = crate::apply_memory_target_to_window(
+                &win,
+                crate::MEMORY_TARGET_LOW.load(std::sync::atomic::Ordering::Relaxed),
+            );
             let _ = win.hide();
 
             // 超时监控：30 秒内前端未就绪则自动清理

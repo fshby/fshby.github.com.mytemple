@@ -9088,6 +9088,11 @@ body.low-gpu-mode #graphCanvas {
   filter: none !important;
   will-change: auto !important;
 }
+/* 预览滚动容器的常驻合成层（will-change: scroll-position 会让整篇预览
+   常驻光栅缓存）在低显存模式下退回按需合成；源码行号同步不受影响。 */
+body.low-gpu-mode #preview {
+  will-change: auto !important;
+}
 /* 低显存模式禁用持续动画：咖啡蒸汽 */
 body.low-gpu-mode .coffee-steam span {
   animation: none !important;

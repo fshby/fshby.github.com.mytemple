@@ -1,4 +1,4 @@
-import { createMarkdownEditor } from "/editor-core.js?v=20261113-7a7b96d8";
+import { createMarkdownEditor } from "/editor-core.js?v=20261113-1ead6fb7";
 import { getPaperBackgroundUrl } from "./modules/paper-texture.js";
 import { escapeHtml, displayName, displayRelativePath, splitPathRef, joinPathRef, parentPathRef, compactName, splitWorkspaceRef, plainText, headingId } from "./modules/path-utils.js";
 import { extractOutline, addCnEnSpaces } from "./modules/editor-utils.js";
@@ -56,8 +56,8 @@ const LARGE_PREVIEW_BYTES = 100 * 1024;
 const LARGE_PREVIEW_DELAY = 700;
 const CHUNKED_RENDER_BYTES = 500 * 1024;
 const CHUNK_RENDER_SLICE_BYTES = 150 * 1024;
-const GRAPH_WORKER_URL = "/graph-worker.js?v=20261113-7a7b96d8";
-const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20261113-7a7b96d8&assets=/vendor/";
+const GRAPH_WORKER_URL = "/graph-worker.js?v=20261113-1ead6fb7";
+const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20261113-1ead6fb7&assets=/vendor/";
 // Markdown 渲染缓存版本戳：解析器或 CSS 规则升级时递增，确保旧缓存不被复用。
 // 2026-08-29 v1.8.102：安装包 resources 包含 public/ 前端静态文件、端口回滚；修正其他电脑安装后 404 白屏。
 const MARKDOWN_RENDER_VERSION = "20260829-v18102-install-static-bundle-port-scan";
@@ -820,6 +820,8 @@ const IPC_ROUTE_MAP = (() => {
   add("POST", "/api/browse-folder",         "api_browse_folder",        () => ({}));
   // 渲染自愈：强制 WebView2 重新合成一帧（修复合成层丢失白屏，详见 lib.rs nudge_webview_composition）
   add("POST", "/api/window/nudge",          "api_window_nudge",         () => ({}));
+  // 低显存模式：切 WebView2 MemoryUsageTargetLevel（LOW/NORMAL），削减解码图/光栅/GPU 缓存
+  add("POST", "/api/memory/target",         "api_memory_target",        p => ({ low: Boolean(p.low) }));
   add("GET",  "/api/license/status",        "api_license_status",       () => ({}));
   add("GET",  "/api/license/check",         "api_license_check",        () => ({}));
   add("POST", "/api/license/activate",      "api_license_activate",     p => ({ licenseKey: String(p.licenseKey || p.license_key || "") }));
@@ -8264,11 +8266,11 @@ function loadKatexAsync() {
     const link = document.createElement("link");
     link.rel = "stylesheet";
     // 同源自托管：katex.min.css 以相对路径引用 fonts/*.woff2，字体已一并镜像到 public/vendor/katex/。
-    link.href = "/vendor/katex/katex.min.css?v=20261113-7a7b96d8";
+    link.href = "/vendor/katex/katex.min.css?v=20261113-1ead6fb7";
     document.head.appendChild(link);
     // 再加载 JS
     const script = document.createElement("script");
-    script.src = "/vendor/katex/katex.min.js?v=20261113-7a7b96d8";
+    script.src = "/vendor/katex/katex.min.js?v=20261113-1ead6fb7";
     script.onload = () => resolve(window.katex);
     script.onerror = () => {
       _katexLoadingPromise = null;
@@ -8402,7 +8404,7 @@ function loadMermaidAsync() {
     // 同源自托管：与云端共用 public/vendor/mermaid/mermaid.min.js（npm 固定 11.12.2）。
     // 原先指向 cdn.jsdelivr.net，国内常见线路 TLS 握手被重置，所有 Mermaid 图表会
     // 一起降级成「库加载失败」。query 缓存破坏沿用桌面端统一戳，由 npm run stamp 维护。
-    script.src = "/vendor/mermaid/mermaid.min.js?v=20261113-7a7b96d8";
+    script.src = "/vendor/mermaid/mermaid.min.js?v=20261113-1ead6fb7";
     script.onload = () => resolve(window.mermaid);
     script.onerror = () => {
       _mermaidLoadingPromise = null;
@@ -9191,12 +9193,19 @@ function setEditorVisible(visible) {
 }
 
 // 低 GPU 模式：移除所有 backdrop-filter 和大范围 box-shadow，节省 GPU 合成层
+// v2.3.12 起同时切换 WebView2 MemoryUsageTargetLevel（LOW/NORMAL）：
+// 运行时会削减解码图片缓存、光栅 tile 缓存与 GPU 纹理缓存——这是真正
+// 能看到显存/内存下降的杠杆（CSS 削减只作用于合成层本身）。
 function setLowGpuMode(enabled) {
   state.lowGpuMode = Boolean(enabled);
   document.body.classList.toggle("low-gpu-mode", state.lowGpuMode);
   if (els.lowGpuToggle) els.lowGpuToggle.checked = state.lowGpuMode;
   try {
     localStorage.setItem("lowGpuMode", String(state.lowGpuMode));
+  } catch (_) {}
+  // 同步到 WebView2 运行时（桌面端）；云端页无 /api 后端，静默失败
+  try {
+    fetchOrInvoke("POST", "/api/memory/target", { low: state.lowGpuMode }).catch(() => {});
   } catch (_) {}
   // 强制重排以应用新样式
   requestAnimationFrame(() => {
@@ -17573,6 +17582,12 @@ _deferIdle(() => {
   try { renderAiMessages(); } catch (e) { console.error("renderAiMessages failed:", e); }
   try { loadRecentDocs(); } catch (e) { console.error("loadRecentDocs failed:", e); }
   try { renderRecentDocs(); } catch (e) { console.error("renderRecentDocs failed:", e); }
+});
+// 启动时把低显存模式同步到 WebView2 运行时（Rust 侧读不到 localStorage，需前端告知）。
+// 无论开关状态都要调用一次：用户此前手动关闭过时也要把运行时恢复 NORMAL。
+// 放在首次空闲时机，避开启动关键路径；失败静默（云端页无 /api 后端）。
+_deferIdle(() => {
+  try { fetchOrInvoke("POST", "/api/memory/target", { low: Boolean(state.lowGpuMode) }).catch(() => {}); } catch (_) {}
 });
 
 // 启动流程：开机图片 logo.png 立即显示，后台并行加载服务，加载完成后直接进入应用。

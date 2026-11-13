@@ -17,9 +17,9 @@
       body.license-locked #licenseModal,
       body.license-locked #settingsModal { pointer-events: auto; }
     </style>
-    <link rel="stylesheet" href="/styles.css?v=20261113-7a7b96d8">
-<link rel="modulepreload" href="/editor-core.js?v=20261113-7a7b96d8">
-<link rel="modulepreload" href="/app.js?v=20261113-7a7b96d8">
+    <link rel="stylesheet" href="/styles.css?v=20261113-1ead6fb7">
+<link rel="modulepreload" href="/editor-core.js?v=20261113-1ead6fb7">
+<link rel="modulepreload" href="/app.js?v=20261113-1ead6fb7">
   </head>
   <body>
     <div id="appSplash" class="app-splash">
@@ -640,10 +640,10 @@
               <section class="settings-section gpu-settings-section">
                 <strong>显示性能</strong>
                 <label class="setting-row">
-                  <span>低显存模式（移除毛玻璃与大阴影，减少 GPU 合成层）</span>
+                  <span>低显存模式（移除毛玻璃与大阴影，减少 GPU 合成层，削减渲染缓存）</span>
                   <input type="checkbox" id="lowGpuToggle" checked="">
                 </label>
-                <p class="muted">默认开启以降低 GPU 占用；关闭后恢复完整毛玻璃与阴影效果。</p>
+                <p class="muted">默认开启：降低 GPU 与内存占用（含 WebView2 解码图片/光栅缓存）；关闭后恢复完整毛玻璃、阴影与缓存性能。</p>
               </section>
               <section class="settings-section markdown-color-settings-section">
                 <strong>Markdown 文字高亮</strong>
@@ -1787,32 +1787,32 @@
         });
       })();
     </script>
-    <script src="/vendor/highlight/highlight.min.js?v=20261113-7a7b96d8"></script>
+    <script src="/vendor/highlight/highlight.min.js?v=20261113-1ead6fb7"></script>
     <!-- highlight.js 扩展语言包（不在 common 版中的语言） -->
-    <script src="/vendor/highlight/langs/powershell.min.js?v=20261113-7a7b96d8"></script>
-    <script src="/vendor/highlight/langs/dockerfile.min.js?v=20261113-7a7b96d8"></script>
-    <script src="/vendor/highlight/langs/cmake.min.js?v=20261113-7a7b96d8"></script>
-    <script src="/vendor/highlight/langs/groovy.min.js?v=20261113-7a7b96d8"></script>
-    <script src="/vendor/highlight/langs/dart.min.js?v=20261113-7a7b96d8"></script>
-    <script src="/vendor/highlight/langs/nginx.min.js?v=20261113-7a7b96d8"></script>
-    <script src="/vendor/highlight/langs/nsis.min.js?v=20261113-7a7b96d8"></script>
-    <script src="/vendor/highlight/langs/apache.min.js?v=20261113-7a7b96d8"></script>
-    <script src="/vendor/highlight/langs/properties.min.js?v=20261113-7a7b96d8"></script>
-    <script src="/vendor/highlight/langs/haskell.min.js?v=20261113-7a7b96d8"></script>
-    <script src="/vendor/highlight/langs/elixir.min.js?v=20261113-7a7b96d8"></script>
-    <script src="/vendor/highlight/langs/clojure.min.js?v=20261113-7a7b96d8"></script>
+    <script src="/vendor/highlight/langs/powershell.min.js?v=20261113-1ead6fb7"></script>
+    <script src="/vendor/highlight/langs/dockerfile.min.js?v=20261113-1ead6fb7"></script>
+    <script src="/vendor/highlight/langs/cmake.min.js?v=20261113-1ead6fb7"></script>
+    <script src="/vendor/highlight/langs/groovy.min.js?v=20261113-1ead6fb7"></script>
+    <script src="/vendor/highlight/langs/dart.min.js?v=20261113-1ead6fb7"></script>
+    <script src="/vendor/highlight/langs/nginx.min.js?v=20261113-1ead6fb7"></script>
+    <script src="/vendor/highlight/langs/nsis.min.js?v=20261113-1ead6fb7"></script>
+    <script src="/vendor/highlight/langs/apache.min.js?v=20261113-1ead6fb7"></script>
+    <script src="/vendor/highlight/langs/properties.min.js?v=20261113-1ead6fb7"></script>
+    <script src="/vendor/highlight/langs/haskell.min.js?v=20261113-1ead6fb7"></script>
+    <script src="/vendor/highlight/langs/elixir.min.js?v=20261113-1ead6fb7"></script>
+    <script src="/vendor/highlight/langs/clojure.min.js?v=20261113-1ead6fb7"></script>
     <!-- 补齐白名单中缺失的语言（dos=bat/cmd，latex=tex，protobuf=proto，handlebars=hbs） -->
-    <script src="/vendor/highlight/langs/dos.min.js?v=20261113-7a7b96d8"></script>
-    <script src="/vendor/highlight/langs/latex.min.js?v=20261113-7a7b96d8"></script>
-    <script src="/vendor/highlight/langs/protobuf.min.js?v=20261113-7a7b96d8"></script>
-    <script src="/vendor/highlight/langs/handlebars.min.js?v=20261113-7a7b96d8"></script>
-    <script src="/vendor/highlight/langs/scala.min.js?v=20261113-7a7b96d8"></script>
-    <script src="/vendor/highlight/langs/fortran.min.js?v=20261113-7a7b96d8"></script>
+    <script src="/vendor/highlight/langs/dos.min.js?v=20261113-1ead6fb7"></script>
+    <script src="/vendor/highlight/langs/latex.min.js?v=20261113-1ead6fb7"></script>
+    <script src="/vendor/highlight/langs/protobuf.min.js?v=20261113-1ead6fb7"></script>
+    <script src="/vendor/highlight/langs/handlebars.min.js?v=20261113-1ead6fb7"></script>
+    <script src="/vendor/highlight/langs/scala.min.js?v=20261113-1ead6fb7"></script>
+    <script src="/vendor/highlight/langs/fortran.min.js?v=20261113-1ead6fb7"></script>
     <!-- 云端同步：SDK 与公开配置必须是经典脚本（挂到 window），且先于 app.js。
          两者都由 npm run vendor:cloud 与云端页保持一致，桌面端凭它们直连云服务。 -->
-    <script src="/vendor/sdk/workbuddy-cloud-sdk.global.js?v=20261113-7a7b96d8"></script>
-    <script src="/cloud-config.js?v=20261113-7a7b96d8"></script>
-    <script src="/app.js?v=20261113-7a7b96d8" type="module"></script>
+    <script src="/vendor/sdk/workbuddy-cloud-sdk.global.js?v=20261113-1ead6fb7"></script>
+    <script src="/cloud-config.js?v=20261113-1ead6fb7"></script>
+    <script src="/app.js?v=20261113-1ead6fb7" type="module"></script>
 
     <div class="menu-dropdowns" id="menuDropdowns">
       <div class="menu-dropdown hidden" data-dropdown="file" role="menu">

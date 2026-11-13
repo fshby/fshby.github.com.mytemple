@@ -201,6 +201,12 @@ pub fn nudge_webview_composition(app: &tauri::AppHandle, force: bool) -> bool {
         log::warn!("[render-nudge] 主窗口不存在，跳过合成层自愈");
         return false;
     };
+    // 最小化时不白抖：窗口最小化期间 DWM 不需要新帧，周期性 nudge 只会
+    // 白白制造一次整窗重排/重绘（GPU/内存白白消耗，v2.3.12 实测）。
+    // force=true（用户点「显示修复」）不受限——用户主动触发就该执行。
+    if !force && win.is_minimized().unwrap_or(false) {
+        return false;
+    }
     #[cfg(windows)]
     {
         let r = win.with_webview(move |webview| {
@@ -254,6 +260,73 @@ pub fn nudge_webview_composition(app: &tauri::AppHandle, force: bool) -> bool {
         let _ = win;
         false
     }
+}
+
+// ── 低显存模式：WebView2 内存使用目标 ─────────────────────
+/// 当前低显存目标（前端开关状态；截图/录屏窗口按需重建时据此继承）。
+pub static MEMORY_TARGET_LOW: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// 对单个 webview 窗口设置 MemoryUsageTargetLevel。
+/// 返回 true = 接口调用成功（false = 运行时版本过旧不支持 ICoreWebView2_19）。
+pub fn apply_memory_target_to_window(win: &tauri::WebviewWindow, low: bool) -> bool {
+    #[cfg(windows)]
+    {
+        use webview2_com::Microsoft::Web::WebView2::Win32::{
+            ICoreWebView2_19, COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW,
+            COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL,
+        };
+        use windows::core::Interface as _;
+        let target = if low {
+            COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW
+        } else {
+            COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL
+        };
+        let name = win.label().to_string();
+        win.with_webview(move |webview| {
+            let controller = webview.controller();
+            unsafe {
+                if let Ok(core) = controller.CoreWebView2() {
+                    if let Ok(w19) = core.cast::<ICoreWebView2_19>() {
+                        if let Err(e) = w19.SetMemoryUsageTargetLevel(target) {
+                            log::warn!("[memory-target] {} SetMemoryUsageTargetLevel 失败: {}", name, e);
+                        }
+                    }
+                }
+            }
+        })
+        .is_ok()
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (win, low);
+        false
+    }
+}
+
+/// 通过 ICoreWebView2_19::MemoryUsageTargetLevel 告诉 WebView2 运行时
+/// 「以低内存为目标」。这是 WebView2 官方为降低内存占用提供的入口：
+/// 运行时会削减解码图片缓存、光栅 tile 缓存、GPU 纹理/命令缓存等，
+/// 前端「低显存模式」开关（POST /api/memory/target）实时切换，关闭时恢复 NORMAL。
+///
+/// 遍历全部 webview 窗口（主窗口 + 预创建的截图/录屏窗口；GPU 进程是
+/// 同一浏览器进程树共享的，逐窗口设置即可覆盖整个进程树）。
+/// 返回设置成功的窗口数（0 = 运行时版本过旧不支持该接口，前端静默忽略）。
+pub fn set_memory_usage_target(app: &tauri::AppHandle, low: bool) -> usize {
+    use tauri::Manager as _;
+    use std::sync::atomic::Ordering;
+    MEMORY_TARGET_LOW.store(low, Ordering::Relaxed);
+    let mut applied = 0usize;
+    for (_name, win) in app.webview_windows() {
+        if apply_memory_target_to_window(&win, low) {
+            applied += 1;
+        }
+    }
+    log::info!(
+        "[memory-target] MemoryUsageTargetLevel -> {}（覆盖 {} 个 webview）",
+        if low { "LOW" } else { "NORMAL" },
+        applied
+    );
+    applied
 }
 
 // ── 系统托盘 ──────────────────────────────────────────────
@@ -468,6 +541,7 @@ pub fn run() {
             tauri_cmd::api_open_url,
             tauri_cmd::api_browse_folder,
             tauri_cmd::api_window_nudge,
+            tauri_cmd::api_memory_target,
             // ── 版本 & 系统路径 & 健康检查 ──
             tauri_cmd::api_get_version,
             tauri_cmd::api_get_system_paths,
@@ -1999,6 +2073,18 @@ pub async fn api_browse_folder() -> Result<serde_json::Value, String> {
 pub async fn api_window_nudge(app_handle: tauri::AppHandle) -> Result<serde_json::Value, String> {
     let ok = crate::nudge_webview_composition(&app_handle, true);
     Ok(serde_json::json!({ "ok": ok, "nudged": ok }))
+}
+
+// 低显存模式（1）
+/// 设置 WebView2 内存使用目标（详见 crate::set_memory_usage_target）。
+/// 前端「低显存模式」开关切换时调用；low=true 走 LOW，false 恢复 NORMAL。
+#[tauri::command]
+pub async fn api_memory_target(
+    app_handle: tauri::AppHandle,
+    low: bool,
+) -> Result<serde_json::Value, String> {
+    let applied = crate::set_memory_usage_target(&app_handle, low);
+    Ok(serde_json::json!({ "ok": true, "low": low, "applied": applied }))
 }
 
 // 授权（4）

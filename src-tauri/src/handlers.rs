@@ -781,6 +781,8 @@ pub fn build_native_router(state: Arc<ServerState>) -> Router {
         .route("/api/browse-folder", post(browse_folder))
         // 渲染自愈：强制 WebView2 重新合成一帧（修复合成层丢失导致的白屏）
         .route("/api/window/nudge", post(window_nudge))
+        // 低显存模式：切 ICoreWebView2_19::MemoryUsageTargetLevel（LOW/NORMAL）
+        .route("/api/memory/target", post(memory_target))
         // AI 智能功能
         .route("/api/ai/status", get(ai_status))
         .route("/api/ai/test", post(ai_test))
@@ -1356,6 +1358,22 @@ async fn window_nudge() -> impl IntoResponse {
     };
     let ok = crate::nudge_webview_composition(app_handle, true);
     json_ok(serde_json::json!({ "ok": ok, "nudged": ok }))
+}
+
+/// POST /api/memory/target  body {low: bool}
+/// 低显存模式 → ICoreWebView2_19::MemoryUsageTargetLevel 切 LOW；
+/// low=false 恢复 NORMAL（完整缓存，毛玻璃/阴影性能不受影响）。
+/// applied=0 表示 WebView2 运行时版本过旧不支持该接口（前端静默忽略）。
+async fn memory_target(
+    Json(req): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let low = req.get("low").and_then(|v| v.as_bool()).unwrap_or(true);
+    let app_handle = match crate::APP_HANDLE.get() {
+        Some(h) => h,
+        None => return json_err(StatusCode::INTERNAL_SERVER_ERROR, "AppHandle 未初始化"),
+    };
+    let applied = crate::set_memory_usage_target(app_handle, low);
+    json_ok(serde_json::json!({ "ok": true, "low": low, "applied": applied }))
 }
 
 // ── AI 智能功能 ──────────────────────────────────────────
