@@ -344,3 +344,66 @@ test("LAN: 访客资产端点安全收紧（白名单 + 只读拦截 + 图片扩
   assert.ok(fn.includes("LAN_ASSET_MAX_BYTES") || handlers.includes("DefaultBodyLimit::max(LAN_ASSET_MAX_BYTES)"),
     "资产端点必须有体量上限");
 });
+
+// ══ 2026-11-13 第二轮：预览区删图 / 桌面端快捷键对齐 / 行点击预览跳转 ══
+
+test("LAN: 访客删图端点（白名单 + 媒体扩展名 + 只读拦截）", () => {
+  const handlers = repoFile("src-tauri", "src", "handlers.rs");
+  assert.ok(handlers.includes("async fn lan_delete_asset"), "缺少 lan_delete_asset handler");
+  assert.ok(handlers.includes("LanDeleteAssetRequest"), "缺少请求结构");
+  const routerStart = handlers.indexOf("pub fn build_lan_router");
+  const routerBody = handlers.slice(routerStart, handlers.indexOf("pub fn build_native_router", routerStart));
+  assert.ok(routerBody.includes('"/api/lan/asset-delete"'), "访客路由缺少 /api/lan/asset-delete");
+  const writeIdx = handlers.indexOf("const LAN_WRITE_ROUTES");
+  const writeBody = handlers.slice(writeIdx, writeIdx + 500);
+  assert.ok(writeBody.includes('"/api/lan/asset-delete"'), "只读模式必须拦截删图（LAN_WRITE_ROUTES）");
+  const fnIdx = handlers.indexOf("async fn lan_delete_asset");
+  const fn = handlers.slice(fnIdx, handlers.indexOf("async fn lan_set_workspaces", fnIdx));
+  assert.ok(fn.includes("is_ws_allowed"), "删图必须校验共享工作区白名单");
+  assert.ok(fn.includes("MEDIA_EXT"), "删图必须限制媒体扩展名（禁删任意文件）");
+  assert.ok(fn.includes('rel.contains("..")'), "删图必须拒绝路径穿越");
+  assert.ok(fn.includes('join("source")'), "删图落点必须与读取端点一致（source/ 目录）");
+});
+
+test("LAN: 访客页预览区删图按钮 + 引用移除（对齐桌面端）", () => {
+  const js = repoFile("public", "guest.js");
+  assert.ok(js.includes("attachMediaDeleteButtons"), "缺少预览媒体删除按钮挂载");
+  assert.ok(js.includes("deleteMediaFromDoc"), "缺少删除流程");
+  assert.ok(js.includes("/api/lan/asset-delete"), "删除必须走访客专用端点");
+  assert.ok(js.includes('el.dataset.docSrc = src'), "必须记录文档原始引用路径供删除反查");
+  assert.ok(js.includes("dataset.deleteAttached"), "必须防重复挂载");
+  assert.ok(js.includes('state.readOnly') && /readOnly.*无法删除|无法删除/.test(js), "只读共享必须拒绝删除");
+  const css = repoFile("public", "guest.css");
+  assert.ok(css.includes(".image-delete-wrapper") && css.includes(".image-delete-btn"), "缺少删图按钮样式");
+  assert.ok(css.includes("@media (hover: none)"), "触屏设备删除按钮必须常显（无 hover）");
+});
+
+test("LAN: 访客页桌面端快捷键对齐（Ctrl+Q/Alt+Q/Alt+E/Alt+W/Ctrl+±0）", () => {
+  const js = repoFile("public", "guest.js");
+  assert.ok(js.includes('toggleSidebar()'), "Ctrl+Q 必须切换侧栏");
+  assert.ok(js.includes("setTocOpen(!state.tocOpen)"), "Alt+Q 必须切换标题目录");
+  assert.ok(js.includes('setView(state.view === "preview" ? state.lastEditView : "preview")'), "Alt+E 必须编辑/预览切换");
+  assert.ok(js.includes('setView(state.view === "split" ? state.lastEditView : "split")'), "Alt+W 必须双栏开/关");
+  assert.ok(js.includes("adjustEditorFontSize(1)") && js.includes("adjustEditorFontSize(-1)") && js.includes("adjustEditorFontSize(0)"), "Ctrl+±/0 必须调整编辑器字号");
+  assert.ok(js.includes("--doc-font-size"), "字号必须走 --doc-font-size（CM6 同一变量）");
+  assert.ok(js.includes("guestEditorFontSize"), "字号必须持久化");
+  assert.ok(js.includes("guestSidebar"), "侧栏折叠状态必须持久化");
+  const css = repoFile("public", "guest.css");
+  assert.ok(css.includes(".pane-editor .cm-content"), "编辑器内容必须应用字号变量");
+});
+
+test("LAN: 访客页点击编辑行 → 预览跳转对应标题", () => {
+  const js = repoFile("public", "guest.js");
+  assert.ok(js.includes("sourceHeadingLines"), "缺少源码标题行扫描");
+  // 与 worker extractOutline 同序：代码块跳过 + 四类标题模式都在
+  assert.ok(js.includes("#{1,6}"), "标准 # 标题");
+  assert.ok(js.includes("[一二三四五六七八九十]"), "中文序号标题");
+  assert.ok(js.includes("\\d+(?:\\.\\d+)+"), "点分编号标题");
+  assert.ok(js.includes('startsWith("```")'), "必须跳过代码块（与 worker 一致）");
+  assert.ok(js.includes("syncPreviewToCursor"), "缺少光标→预览跳转");
+  assert.ok(js.includes('addEventListener("mouseup"'), "点击编辑区必须触发跳转");
+  assert.ok(js.includes('"ArrowUp"'), "方向键导航必须触发跳转");
+  assert.ok(js.includes("wireCursorJump()"), "编辑器创建后必须接线跳转");
+  assert.ok(js.includes("state.scrollLock = true"), "跳转期间必须挂起比例同步防抖动");
+  assert.ok(js.includes("lastJumpedHeadingId"), "同一节内移动光标不得反复跳转");
+});

@@ -211,6 +211,7 @@ const LAN_WRITE_ROUTES: &[(&str, &str)] = &[
     ("POST", "/api/create-doc"),
     ("POST", "/api/create-folder"),
     ("POST", "/api/lan/asset"),
+    ("POST", "/api/lan/asset-delete"),
 ];
 
 /// 访客鉴权中间件。三层闸门，顺序敏感：
@@ -679,6 +680,85 @@ async fn lan_upload_asset(
 }
 
 #[derive(Deserialize)]
+struct LanDeleteAssetRequest {
+    /// 文档里的相对引用（source/xxx.png）或 /source/ws_xxx/xxx.png 形态
+    path: String,
+    /// 工作区归属；path 未带 ws_ 前缀时必须提供
+    #[serde(rename = "workspaceId", default)]
+    workspace_id: Option<String>,
+}
+
+/// POST /api/lan/asset-delete（访客预览区删除图片/视频：清理磁盘文件，引用由前端移除）
+///
+/// 与桌面端 /api/asset/delete 对齐，但入口收紧三条：
+///   ① 只删媒体文件（图片+视频扩展名白名单），不能借端点删任意文件；
+///   ② 文件必须落在共享白名单工作区内（path 带 ws_ 前缀或显式 workspaceId）；
+///   ③ 只读共享时由 lan_guard 直接 403（本端点登记在 LAN_WRITE_ROUTES）。
+async fn lan_delete_asset(
+    State(state): State<Arc<ServerState>>,
+    Json(req): Json<LanDeleteAssetRequest>,
+) -> Response {
+    let raw = req.path.replace('\\', "/");
+    let raw = raw.trim_start_matches('/').to_string();
+    // 形态一：/source/ws_<id>/<rel> —— 工作区在 path 里
+    // 形态二：source/<rel> —— 工作区必须由 workspaceId 显式给出
+    let (ws_id, rel) = if let Some(rest) = raw.strip_prefix("source/") {
+        let seg: Vec<&str> = rest.splitn(2, '/').collect();
+        if seg.len() == 2 && seg[0].starts_with("ws_") && !seg[1].is_empty() {
+            (seg[0].to_string(), seg[1].to_string())
+        } else if seg.len() == 1 && !seg[0].is_empty() {
+            match req.workspace_id.as_deref().filter(|s| !s.is_empty()) {
+                Some(id) => (id.to_string(), seg[0].to_string()),
+                None => return json_err(StatusCode::BAD_REQUEST, "缺少工作区归属".to_string()),
+            }
+        } else {
+            return json_err(StatusCode::BAD_REQUEST, "路径格式不合法".to_string());
+        }
+    } else {
+        return json_err(StatusCode::BAD_REQUEST, "路径格式不合法".to_string());
+    };
+    if rel.contains("..") || rel.contains(':') || rel.contains('\\') || rel.starts_with('/') {
+        return json_err(StatusCode::FORBIDDEN, "Forbidden".to_string());
+    }
+    if ws_id.is_empty() || !state.app.lan.is_ws_allowed(&ws_id).await {
+        return json_err(StatusCode::NOT_FOUND, "not found".to_string());
+    }
+    // 媒体扩展名白名单：与上传闸门（图片）+ 常见录屏格式（视频）对齐
+    let ext = std::path::Path::new(&rel)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|s| s.to_ascii_lowercase())
+        .unwrap_or_default();
+    const MEDIA_EXT: &[&str] = &[
+        "png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "avif",
+        "mp4", "webm", "mov", "m4v", "mkv",
+    ];
+    if !MEDIA_EXT.contains(&ext.as_str()) {
+        return json_err(
+            StatusCode::BAD_REQUEST,
+            "仅支持删除图片/视频文件".to_string(),
+        );
+    }
+    let workspaces = state.app.get_workspaces().await;
+    let Some(ws) = workspaces.iter().find(|w| w.id == ws_id) else {
+        return json_err(StatusCode::NOT_FOUND, "not found".to_string());
+    };
+    let root = std::path::PathBuf::from(&ws.root);
+    // 候选与读取端点 lan_serve_source 一致：<root>/source/<rel>（现布局）、<root>/<rel>（最老布局）
+    let mut removed = false;
+    for candidate in [root.join("source").join(&rel), root.join(&rel)] {
+        if candidate.is_file() {
+            if std::fs::remove_file(&candidate).is_ok() {
+                removed = true;
+            }
+            break;
+        }
+    }
+    log::info!("[lan-asset-delete] ws={} rel={} removed={}", ws_id, rel, removed);
+    raw_json(serde_json::json!({ "ok": true, "removed": removed }))
+}
+
+#[derive(Deserialize)]
 struct LanSharedWsRequest {
     /// 空数组 = 共享全部
     #[serde(default)]
@@ -774,6 +854,8 @@ pub fn build_lan_router(
             "/api/lan/asset",
             post(lan_upload_asset).layer(DefaultBodyLimit::max(LAN_ASSET_MAX_BYTES)),
         )
+        // 访客删除图片/视频（预览区 × 按钮；只读模式下 lan_guard 403）
+        .route("/api/lan/asset-delete", post(lan_delete_asset))
         // 静态白名单 + 访客页
         .fallback(get(move |req| lan_fallback(public_root.clone(), req)))
         .layer(axum::middleware::from_fn_with_state(lan, lan_guard))

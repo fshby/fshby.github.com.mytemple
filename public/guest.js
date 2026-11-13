@@ -8,7 +8,7 @@
 //       自测量塌缩防护）→ hljs 代码高亮 → 图片/视频经 /source/<wsId>/… 资产端点。
 // 所有请求带 X-Lan-Token 头；无任何 Tauri / 云端依赖、无任何外链。
 
-import { createMarkdownEditor } from "/editor-core.js?v=20261113-0163d42f";
+import { createMarkdownEditor } from "/editor-core.js?v=20261113-5ac8970f";
 
 const TOKEN_KEY = "mt-lan-token";
 // 第三方库缓存戳：与桌面端同源自托管（public/vendor），戳由 npm run stamp 统一维护
@@ -364,6 +364,7 @@ function ensureEditor() {
   state.editor.addEventListener("input", () => schedulePreview());
   wireScrollSync();
   wireEditorPaste();
+  wireCursorJump();
 }
 
 function hideConflict() {
@@ -409,18 +410,77 @@ els.conflictTheirs.addEventListener("click", () => {
 });
 
 document.addEventListener("keydown", (e) => {
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+  const mod = e.ctrlKey || e.metaKey;
+  if (mod && e.key.toLowerCase() === "s") {
     e.preventDefault();
     saveDoc();
     return;
   }
+  // 与桌面端一致的布局/视图快捷键
+  if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "q") {
+    e.preventDefault();
+    toggleSidebar();
+    return;
+  }
+  if (e.altKey && !mod && !e.shiftKey && !e.repeat) {
+    const k = e.key.toLowerCase();
+    if (k === "q") { e.preventDefault(); setTocOpen(!state.tocOpen); return; }
+    // Alt+E：编辑/预览切换（与桌面端编辑↔阅读一致）
+    if (k === "e") { e.preventDefault(); setView(state.view === "preview" ? state.lastEditView : "preview"); return; }
+    // Alt+W：双栏开/关（与桌面端显示/隐藏预览栏对应）
+    if (k === "w") { e.preventDefault(); setView(state.view === "split" ? state.lastEditView : "split"); return; }
+  }
+  // 编辑器字号（与桌面端 Ctrl+±/0 一致）
+  if (mod && !e.shiftKey && !e.altKey && (e.key === "=" || e.key === "+")) {
+    e.preventDefault();
+    adjustEditorFontSize(1);
+    return;
+  }
+  if (mod && !e.shiftKey && !e.altKey && e.key === "-") {
+    e.preventDefault();
+    adjustEditorFontSize(-1);
+    return;
+  }
+  if (mod && !e.shiftKey && !e.altKey && e.key === "0") {
+    e.preventDefault();
+    adjustEditorFontSize(0);
+    return;
+  }
+  // Ctrl+F：焦点不在编辑器时定位搜索框（编辑器内保留 CM6 默认查找面板）
+  if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "f") {
+    const inEditor = e.target && typeof e.target.closest === "function" && e.target.closest(".cm-editor");
+    if (!inEditor) {
+      e.preventDefault();
+      els.searchInput.focus();
+      els.searchInput.select();
+    }
+    return;
+  }
   // 常用强调快捷键与桌面端一致（仅在有编辑区时生效）
-  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && state.view !== "preview") {
+  if (mod && !e.shiftKey && !e.altKey && state.view !== "preview") {
     const k = e.key.toLowerCase();
     if (k === "b") { e.preventDefault(); runToolbarCmd("bold"); }
     else if (k === "i") { e.preventDefault(); runToolbarCmd("italic"); }
   }
 });
+
+// ── 编辑器字号（CM6 内容字体走 --doc-font-size 变量，与桌面端同一入口） ──
+const GUEST_EDITOR_FONT_DEFAULT = 14;
+let editorFontSize = GUEST_EDITOR_FONT_DEFAULT;
+try { editorFontSize = Number(localStorage.getItem("guestEditorFontSize")) || GUEST_EDITOR_FONT_DEFAULT; } catch (_) {}
+editorFontSize = Math.min(32, Math.max(10, editorFontSize));
+function applyEditorFontSize() {
+  document.documentElement.style.setProperty("--doc-font-size", `${editorFontSize}px`);
+}
+function adjustEditorFontSize(delta) {
+  editorFontSize = delta === 0
+    ? GUEST_EDITOR_FONT_DEFAULT
+    : Math.min(32, Math.max(10, editorFontSize + delta));
+  try { localStorage.setItem("guestEditorFontSize", String(editorFontSize)); } catch (_) {}
+  applyEditorFontSize();
+  toast(`编辑器字号 ${editorFontSize}px`);
+}
+applyEditorFontSize();
 
 // ── 新建文档 ────────────────────────────────────────────────
 
@@ -701,6 +761,61 @@ els.imageInput?.addEventListener("change", () => {
   uploadAndInsertImages(files);
 });
 
+// ── 预览区图片/视频删除（对齐桌面端：移除引用 + 清理磁盘文件） ──
+function attachMediaDeleteButtons(container) {
+  if (!container || state.readOnly) return;
+  container.querySelectorAll("img, video").forEach((el) => {
+    const docSrc = el.dataset.docSrc || "";
+    if (!docSrc || el.dataset.deleteAttached) return;
+    // 只对工作区 source/ 引用提供删除（外链/data 图不涉及磁盘文件）
+    if (!/^\/?(source|ws-asset)\//.test(docSrc)) return;
+    el.dataset.deleteAttached = "1";
+    const parent = el.parentElement;
+    if (!parent) return;
+    parent.classList.add("image-delete-wrapper");
+    if (parent.querySelector(".image-delete-btn")) return;
+    const btn = document.createElement("button");
+    btn.className = "image-delete-btn";
+    btn.type = "button";
+    btn.title = "删除该媒体（同时清理磁盘文件）";
+    btn.setAttribute("aria-label", "删除图片或视频");
+    btn.textContent = "×";
+    btn.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      deleteMediaFromDoc(docSrc);
+    });
+    parent.appendChild(btn);
+  });
+}
+
+async function deleteMediaFromDoc(docSrc) {
+  if (!docSrc) return;
+  if (state.readOnly) { toast("当前为只读共享，无法删除"); return; }
+  if (!state.editor) return;
+  const ok = window.confirm(
+    "确定删除该图片/视频吗？\n\n将同时执行：\n1. 移除文档中的引用\n2. 删除磁盘上的文件以释放空间",
+  );
+  if (!ok) return;
+  const content = state.editor.value;
+  const escaped = docSrc.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`\\s*!\\[[^\\]]*\\]\\(${escaped}\\)\\s*\\n?`, "g");
+  const next = content.replace(pattern, "\n").replace(/\n{3,}/g, "\n\n");
+  if (next !== content) {
+    state.editor.value = next;
+    schedulePreview(true);
+  }
+  try {
+    await api("POST", "/api/lan/asset-delete", {
+      path: docSrc,
+      workspaceId: state.currentWs || undefined,
+    });
+    toast(next !== content ? "已删除：文档引用已移除，磁盘文件已清理" : "磁盘文件已清理（文档中未找到引用）");
+  } catch (err) {
+    if (err.message !== "需要访问口令") toast(`磁盘文件清理失败：${err.message}`);
+  }
+}
+
 // ── 双栏滚动同步（按比例，双向；带互斥锁防抖） ──
 function wireScrollSync() {
   if (state.scrollWired || !state.editor || !els.readerScroll) return;
@@ -837,11 +952,81 @@ function renderSearchResults(results, q) {
   }
 }
 
-// ── 侧栏折叠（所有宽度都生效，与桌面端行为一致） ─────────────
+// ── 侧栏折叠（所有宽度都生效，与桌面端行为一致；Ctrl+Q 同款） ─────────────
 
-els.sidebarToggle.addEventListener("click", () => {
+function toggleSidebar() {
   els.sidebar.classList.toggle("collapsed");
-});
+  try {
+    localStorage.setItem("guestSidebar", els.sidebar.classList.contains("collapsed") ? "0" : "1");
+  } catch (_) {}
+}
+
+els.sidebarToggle.addEventListener("click", toggleSidebar);
+
+// ── 点击编辑区 → 预览跳到对应标题（与 worker extractOutline 同序扫描） ──
+//
+// worker 的大纲按文档顺序提取（代码块跳过 + 四类标题模式），本函数按同一
+// 规则只记录「第 i 个标题所在行」，行序天然与 state.outline 对齐 ——
+// 光标上方最近的标题 = outline[target]，直接复用 jumpToHeading。
+
+function sourceHeadingLines(source) {
+  const out = [];
+  let inCode = false;
+  String(source || "").replace(/\r\n/g, "\n").split("\n").forEach((line, i) => {
+    if (line.startsWith("```")) { inCode = !inCode; return; }
+    if (inCode) return;
+    const isHeading =
+      /^(\s*)(#{1,6})\s+(.+)$/.test(line) ||
+      /^(\s*)([一二三四五六七八九十]{1,4}[、．.)]\s*.+)$/.test(line) ||
+      /^(\s*)(\d+(?:\.\d+)+)[、．.)]\s*([^-*].+)$/.test(line) ||
+      (/^(\s*)(\((?:\d{1,3})\)|(\d{1,3})([、．.)]))\s*([^-*].+)$/.test(line)
+        && !/^\s*\d+[.)]\s+\[[ xX]\](?:\s|$)/.test(line));
+    if (isHeading) out.push(i);
+  });
+  return out;
+}
+
+let cursorJumpTimer = 0;
+let lastJumpedHeadingId = "";
+
+function scheduleCursorJump(delay = 120) {
+  if (state.view !== "split") return;
+  clearTimeout(cursorJumpTimer);
+  cursorJumpTimer = setTimeout(syncPreviewToCursor, delay);
+}
+
+function syncPreviewToCursor() {
+  if (state.view !== "split" || !state.editor || !state.outline.length) return;
+  const ed = state.editor;
+  const cursorLine = String(ed.value).slice(0, ed.selectionStart || 0).split("\n").length - 1;
+  const marks = sourceHeadingLines(ed.value);
+  let target = -1;
+  for (let i = 0; i < marks.length; i++) {
+    if (marks[i] <= cursorLine) target = i;
+    else break;
+  }
+  if (target < 0) return;
+  const h = state.outline[target];
+  if (!h || h.id === lastJumpedHeadingId) return; // 同一节内移动光标不打断滚动
+  lastJumpedHeadingId = h.id;
+  // 跳转期间挂起双向比例同步，避免平滑滚动被 ratio 联动打断
+  state.scrollLock = true;
+  setTimeout(() => { state.scrollLock = false; }, 600);
+  jumpToHeading(h.id);
+}
+
+function wireCursorJump() {
+  if (state.cursorJumpWired || !els.editorHost) return;
+  state.cursorJumpWired = true;
+  // 点击定位：mouseup 后光标已落位，稍候即跳
+  els.editorHost.addEventListener("mouseup", () => scheduleCursorJump(140));
+  // 方向键翻页等导航键也跟随（输入打字不触发，避免打断预览位置）
+  els.editorHost.addEventListener("keydown", (e) => {
+    if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End"].includes(e.key)) {
+      scheduleCursorJump(160);
+    }
+  }, true);
+}
 
 // ══ 预览渲染管线（与桌面端 app.js 同源策略的访客版） ════════════════════
 
@@ -914,6 +1099,8 @@ function rewriteMediaSrc(container, wsId) {
   const withToken = (url) => (t ? url + (url.includes("?") ? "&" : "?") + "lan_token=" + encodeURIComponent(t) : url);
   container.querySelectorAll("img, video").forEach((el) => {
     const src = el.getAttribute("src") || "";
+    // 记录文档里的原始引用路径（预览区删除按钮靠它反查 markdown 引用）
+    if (src && !/^(data:|blob:)/i.test(src)) el.dataset.docSrc = src;
     if (!src || /^(data:|blob:|https?:)/i.test(src)) return;
     // 已带工作区前缀（/source/ws_xxx/…）的改为绝对路径并追加 token；Rust 端白名单闸门会校验
     if (/^\/?source\/ws_[A-Za-z0-9_-]+\//.test(src)) {
@@ -1284,12 +1471,15 @@ async function renderPreview() {
     return;
   }
   container.innerHTML = html;
-  // 图片 / 视频：相对路径改写到访客资产端点
+  // 图片 / 视频：相对路径改写到访客资产端点（并记录 docSrc 供删除反查）
   rewriteMediaSrc(container, state.currentWs);
+  // 图片/视频删除按钮（可编辑共享才有；只读访客不提供删除入口）
+  attachMediaDeleteButtons(container);
   // Excalidraw 占位
   decorateExcalidrawHint(container);
   // 标题目录（worker 与正文同源生成 id，点击即滚动到对应标题）
   renderToc(outline);
+  lastJumpedHeadingId = ""; // 新一轮渲染后允许光标跳转重新定位
   // 公式 / 图表 / 代码高亮（与桌面端同一顺序）
   renderMathInPreview(container);
   renderMermaidInPreview(container);
@@ -1315,6 +1505,10 @@ async function initApp() {
   let tocSaved = null;
   try { tocSaved = localStorage.getItem("guestToc"); } catch (_) {}
   setTocOpen(tocSaved === null ? true : tocSaved === "1", { persist: false });
+  // 侧栏折叠状态恢复（默认展开）
+  try {
+    if (localStorage.getItem("guestSidebar") === "0") els.sidebar.classList.add("collapsed");
+  } catch (_) {}
   // 视图恢复：只读 → 预览；可编辑 → 上次选择，未选择时宽屏默认双栏、窄屏编辑
   let savedView = null;
   try { savedView = localStorage.getItem("guestView"); } catch (_) {}
