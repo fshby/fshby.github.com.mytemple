@@ -2877,7 +2877,9 @@ html body[data-theme="image"] .markdown-body .callout .callout-title::before {
 .markdown-body table {
   width: 100%;
   max-width: 100%;
-  min-width: 620px;
+  /* min() 而非固定 620px：min-width 优先级高于 max-width，固定值会在容器 <620px 时
+     撑破父容器（阅读模式整页横滚、左缘被裁，实测 +144px）；超宽内容由 overflow-x 内部滚动 */
+  min-width: min(620px, 100%);
   table-layout: fixed;
   border-collapse: collapse;
   margin: 0;
@@ -12356,9 +12358,12 @@ body[data-theme="image"] {
     position: absolute;
     inset: 14px 22px;
     border-radius: 18px;
-    background: linear-gradient(180deg, var(--ws-accent-wash), transparent 58%);
-    border: 1px solid var(--ws-accent-soft);
-    box-shadow: 0 12px 34px color-mix(in srgb, var(--text) 9%, transparent);
+    /* 纸面 surface-1 实底：旧渐变 alpha 0.047 且 58% 全透明，肉眼等于没有背景板 */
+    background:
+      linear-gradient(180deg, var(--ws-accent-wash), transparent 120px),
+      var(--surface-1);
+    border: 1px solid color-mix(in srgb, var(--ws-accent) 30%, var(--line));
+    box-shadow: 0 12px 34px color-mix(in srgb, var(--text) 14%, transparent);
     pointer-events: none;
     z-index: 0;
   }

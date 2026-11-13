@@ -679,7 +679,9 @@ html body[data-theme="image"] .markdown-body .callout .callout-title::before {
 .markdown-body table {
   width: 100%;
   max-width: 100%;
-  min-width: 620px;
+  /* min() 而非固定 620px：min-width 优先级高于 max-width，固定值会在容器 <620px 时
+     撑破父容器（阅读模式整页横滚、左缘被裁，实测 +144px）；超宽内容由 overflow-x 内部滚动 */
+  min-width: min(620px, 100%);
   table-layout: fixed;
   border-collapse: collapse;
   margin: 0;

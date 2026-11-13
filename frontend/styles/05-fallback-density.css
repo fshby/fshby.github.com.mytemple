@@ -1474,9 +1474,12 @@ body[data-theme="image"] {
     position: absolute;
     inset: 14px 22px;
     border-radius: 18px;
-    background: linear-gradient(180deg, var(--ws-accent-wash), transparent 58%);
-    border: 1px solid var(--ws-accent-soft);
-    box-shadow: 0 12px 34px color-mix(in srgb, var(--text) 9%, transparent);
+    /* 纸面 surface-1 实底：旧渐变 alpha 0.047 且 58% 全透明，肉眼等于没有背景板 */
+    background:
+      linear-gradient(180deg, var(--ws-accent-wash), transparent 120px),
+      var(--surface-1);
+    border: 1px solid color-mix(in srgb, var(--ws-accent) 30%, var(--line));
+    box-shadow: 0 12px 34px color-mix(in srgb, var(--text) 14%, transparent);
     pointer-events: none;
     z-index: 0;
   }

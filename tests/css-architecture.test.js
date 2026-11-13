@@ -364,3 +364,14 @@ test("PR-5：两个浏览器护栏脚本与夹具都必须存在", () => {
     assert.ok(pkg.scripts[name], `package.json 缺少 npm script：${name}`);
   }
 });
+
+test("PR-6：阅读模式表格 min-width 必须用 min() 钳制（防整页横向溢出）", () => {
+  // 固定 620px 时 min-width 优先级高于 max-width:100%，容器 <620px 会让表格元素
+  // 本身撑破 markdownView（整页横向滚动、内容左缘被裁，实测 1080 视口 +144px）。
+  // 位置：02-shell-editor.css 的 .markdown-body table。
+  assert.ok(
+    /\.markdown-body table\s*\{[^}]*min-width:\s*min\(620px,\s*100%\)/.test(layerSources.join("\n")),
+    "表格 min-width 被改回固定值会让阅读模式在窄窗口出现整页横滚",
+  );
+});
+
