@@ -1,7 +1,7 @@
 {
-    "version":  "2.3.14",
+    "version":  "2.3.15",
     "downloadUrl":  "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
-    "latestReleaseNotes":  "云端分享链接修复（平台升级 sharecode 适配，桌面端生成链接直接可开）+ 阅读模式排版优化（宽表格不再撑破横向溢出、文档纸卡真正可见）",
-    "releaseNotes":  "v2.3.14 release. See changelog for details.",
+    "latestReleaseNotes":  "阅读模式版心居中与顶部留白 + 局域网手机端保存按钮修复与粘贴图片自动保存",
+    "releaseNotes":  "v2.3.15 release. See changelog for details.",
     "releaseDate":  "2026-11-13"
 }
