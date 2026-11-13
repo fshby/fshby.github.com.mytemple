@@ -8,8 +8,8 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'">
   <title>MyTemple Knowledge · 局域网共享</title>
   <link rel="icon" href="/favicon.ico">
-  <link rel="stylesheet" href="/styles.css?v=20261113-d8a7b510">
-  <link rel="stylesheet" href="/guest.css?v=20261113-d8a7b510">
+  <link rel="stylesheet" href="/styles.css?v=20261113-7ed29981">
+  <link rel="stylesheet" href="/guest.css?v=20261113-7ed29981">
 </head>
 <body>
   <!-- PIN 配对门（未持有 token 时唯一可见界面） -->
@@ -77,15 +77,16 @@
           <button type="button" class="mt-btn" data-cmd="hr" title="分隔线">—</button>
         </div>
         <div id="panes" class="panes" data-view="edit">
+          <!-- 目录列独立于阅读面板，始终停靠最左侧（编辑/双栏/预览通用） -->
+          <aside id="tocPanel" class="toc-panel">
+            <div class="toc-head">
+              <span>本文件目录</span>
+              <button id="tocClose" class="toc-close" type="button" aria-label="收起目录">×</button>
+            </div>
+            <nav id="tocList" class="toc-list" aria-label="标题目录"></nav>
+          </aside>
           <div id="editorHost" class="pane pane-editor"></div>
           <div id="readerHost" class="pane pane-reader hidden">
-            <aside id="tocPanel" class="toc-panel">
-              <div class="toc-head">
-                <span>本文件目录</span>
-                <button id="tocClose" class="toc-close" type="button" aria-label="收起目录">×</button>
-              </div>
-              <nav id="tocList" class="toc-list" aria-label="标题目录"></nav>
-            </aside>
             <div id="readerScroll" class="reader-scroll">
               <div id="markdownView" class="markdown-body"></div>
             </div>
@@ -102,6 +103,6 @@
     <input id="imageInput" type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/bmp" multiple class="hidden">
   </div>
 
-  <script type="module" src="/guest.js?v=20261113-d8a7b510"></script>
+  <script type="module" src="/guest.js?v=20261113-7ed29981"></script>
 </body>
 </html>

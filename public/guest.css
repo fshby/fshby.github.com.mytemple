@@ -286,18 +286,25 @@ html, body {
 .pane-editor { background: var(--panel, #fcf9f4); overflow: hidden; }
 .pane-editor .cm-editor { height: 100%; }
 
-/* 阅读面板：左侧标题目录列 + 右侧正文滚动区 */
+/* 阅读面板：正文滚动区（标题目录列已独立到 panes 最左侧） */
 .pane-reader {
   background: var(--panel, #fcf9f4);
   overflow: hidden;
   display: grid;
-  grid-template-columns: 196px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
 }
 
-.pane-reader.no-toc { grid-template-columns: minmax(0, 1fr); }
-.pane-reader.no-toc .toc-panel { display: none; }
+/* 目录列：独立停靠最左侧，编辑/双栏/预览三种视图通用（no-toc 时列位收回） */
+.panes { position: relative; }
+.panes[data-view="edit"],
+.panes[data-view="preview"] { grid-template-columns: minmax(0, 1fr); }
+.panes[data-view="split"] { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.panes:not(.no-toc)[data-view="edit"],
+.panes:not(.no-toc)[data-view="preview"] { grid-template-columns: 196px minmax(0, 1fr); }
+.panes:not(.no-toc)[data-view="split"] { grid-template-columns: 196px minmax(0, 1fr) minmax(0, 1fr); }
 
-.panes[data-view="split"] .pane-reader { border-left: 1px solid var(--line, rgba(158, 140, 116, .2)); }
+.panes[data-view="split"] .pane-reader,
+.panes[data-view="preview"] .pane-reader { border-left: 1px solid var(--line, rgba(158, 140, 116, .2)); }
 
 .reader-scroll {
   min-width: 0;
@@ -464,8 +471,10 @@ html, body {
   .view-toggle { margin-left: 4px; }
   .reader-scroll { padding: 16px 14px 32px; }
   /* 手机上目录不占列宽，改为抽屉浮层（点「目录」开合，× 或再点按钮收起） */
-  .pane-reader { position: relative; grid-template-columns: minmax(0, 1fr); }
-  .pane-reader .toc-panel {
+  .panes[data-view="edit"],
+  .panes[data-view="preview"] { grid-template-columns: minmax(0, 1fr); }
+  .panes[data-view="split"] { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); }
+  .panes .toc-panel {
     position: absolute;
     top: 0;
     bottom: 0;
@@ -474,8 +483,8 @@ html, body {
     max-width: 78vw;
     z-index: 6;
     box-shadow: 8px 0 24px rgba(61, 56, 48, .16);
+    border-right: 1px solid var(--line, rgba(158, 140, 116, .2));
   }
-  .pane-reader.no-toc .toc-panel { display: none; }
 }
 
 /* 双栏：中等宽度起才同行显示；窄屏改为上下堆叠，避免两列都被压到不可读 */
@@ -489,6 +498,6 @@ html, body {
 
 /* 双栏下目录列会挤占正文宽度：视口不够宽时先收起目录（用户仍可点「目录」在预览里查看） */
 @media (max-width: 1240px) {
-  .panes[data-view="split"] .pane-reader { grid-template-columns: minmax(0, 1fr); }
+  .panes:not(.no-toc)[data-view="split"] { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .panes[data-view="split"] .toc-panel { display: none; }
 }

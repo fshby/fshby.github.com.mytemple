@@ -8,7 +8,7 @@
 //       自测量塌缩防护）→ hljs 代码高亮 → 图片/视频经 /source/<wsId>/… 资产端点。
 // 所有请求带 X-Lan-Token 头；无任何 Tauri / 云端依赖、无任何外链。
 
-import { createMarkdownEditor } from "/editor-core.js?v=20261113-d8a7b510";
+import { createMarkdownEditor } from "/editor-core.js?v=20261113-7ed29981";
 
 const TOKEN_KEY = "mt-lan-token";
 // 第三方库缓存戳：与桌面端同源自托管（public/vendor），戳由 npm run stamp 统一维护
@@ -199,7 +199,7 @@ els.previewViewBtn.addEventListener("click", () => setView("preview"));
 function setTocOpen(open, { persist = true } = {}) {
   state.tocOpen = Boolean(open);
   els.tocPanel?.classList.toggle("hidden", !state.tocOpen);
-  els.readerHost?.classList.toggle("no-toc", !state.tocOpen);
+  els.panes?.classList.toggle("no-toc", !state.tocOpen); // 列位收回（目录已独立为 panes 最左列）
   els.tocToggle?.classList.toggle("active", state.tocOpen);
   els.tocToggle?.setAttribute("aria-pressed", String(state.tocOpen));
   if (persist) {
@@ -338,6 +338,8 @@ async function openDoc(docPath, wsId) {
     els.docTitle.textContent = doc.title || state.currentPath;
     ensureEditor();
     state.editor.value = doc.content;
+    // 切换文档：预览从顶部开始（否则上一篇的滚动快照会被 restorePreviewScroll 带进新文档）
+    if (els.readerScroll) els.readerScroll.scrollTop = 0;
     hideConflict();
     if (state.view !== "edit") renderPreview();
   } catch (err) {
@@ -371,12 +373,15 @@ function hideConflict() {
   els.conflictBar.classList.add("hidden");
 }
 
+let _saveInFlight = false; // 防连按 Ctrl+S 并发写（竞态会让 baseHash 混乱）
 async function saveDoc({ force = false } = {}) {
   if (!state.editor || !state.currentPath) return;
   if (state.readOnly) {
     toast("当前为只读共享，无法保存");
     return;
   }
+  if (_saveInFlight) return; // 上一次保存还在路上：本次内容等下次自动/手动保存
+  _saveInFlight = true;
   const content = state.editor.value;
   try {
     const r = await api("POST", "/api/save", {
@@ -396,6 +401,8 @@ async function saveDoc({ force = false } = {}) {
     }
   } catch (err) {
     if (err.message !== "需要访问口令") toast(`保存失败：${err.message}`);
+  } finally {
+    _saveInFlight = false;
   }
 }
 
@@ -506,6 +513,48 @@ document.addEventListener("keydown", (e) => {
     const k = e.key.toLowerCase();
     if (k === "b") { e.preventDefault(); runToolbarCmd("bold"); }
     else if (k === "i") { e.preventDefault(); runToolbarCmd("italic"); }
+    else if (k === "k") { e.preventDefault(); runToolbarCmd("link"); }
+    else if (k === "z" || k === "y") {
+      // 焦点已落在编辑器（含刚保存完点过别处）时也要能撤销/重做：
+      // CM6 自带处理；焦点在编辑器外（预览区/侧栏/按钮）则转发给编辑器
+      const inEditor = e.target && typeof e.target.closest === "function" && e.target.closest(".cm-editor");
+      if (!inEditor) {
+        e.preventDefault();
+        state.editor.focus();
+        if (k === "z" && !e.shiftKey) state.editor.undo();
+        else state.editor.redo();
+      }
+    }
+  }
+  // Ctrl+Shift+Z 重做（与桌面端/CM6 一致）
+  if (mod && e.shiftKey && !e.altKey && e.key.toLowerCase() === "z" && state.view !== "preview") {
+    const inEditor = e.target && typeof e.target.closest === "function" && e.target.closest(".cm-editor");
+    if (!inEditor) {
+      e.preventDefault();
+      state.editor.focus();
+      state.editor.redo();
+    }
+  }
+});
+
+// ── 双击 Shift 调起全局搜索（与桌面端同一交互：350ms 内连按两次 Shift） ──
+const _guestShiftTracker = { lastTime: 0 };
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Shift" && !e.repeat && !e.ctrlKey && !e.altKey && !e.metaKey) {
+    const now = Date.now();
+    if (now - _guestShiftTracker.lastTime < 350) {
+      e.preventDefault();
+      _guestShiftTracker.lastTime = 0;
+      // 侧栏折叠先展开，再聚焦全局搜索框
+      if (els.sidebar.classList.contains("collapsed")) toggleSidebar();
+      els.searchInput.focus();
+      els.searchInput.select();
+      toast("全局搜索");
+    } else {
+      _guestShiftTracker.lastTime = now;
+    }
+  } else if (e.key !== "Shift") {
+    _guestShiftTracker.lastTime = 0;
   }
 });
 
@@ -1093,7 +1142,16 @@ function ensureMdWorker() {
         pending(d);
       }
     };
-    _mdWorker.onerror = () => { /* 渲染失败由调用侧超时兜底 */ };
+    _mdWorker.onerror = (err) => {
+      // worker 崩溃后必须丢弃死实例并重建：否则 _mdWorker 永远非空，
+      // 后续渲染全部走 15s 超时，预览从此失效（稳定性硬伤）。
+      for (const pending of _mdWorkerPending.values()) pending({ error: "渲染服务异常，已自动恢复" });
+      _mdWorkerPending.clear();
+      _mdWorker = null;
+      toast("Markdown 渲染服务已自动恢复");
+      if (state.view !== "edit" && state.currentPath) schedulePreview(true);
+      if (err && err.preventDefault) err.preventDefault(); // 阻止控制台未捕获错误刷屏
+    };
   } catch (_err) {
     _mdWorker = null;
   }
@@ -1491,6 +1549,24 @@ function decorateExcalidrawHint(container) {
 }
 
 // ── 预览主入口 ──
+// 渲染前记录预览滚动比例：innerHTML 重建会把 readerScroll.scrollTop 打回 0，
+// 随后 reader→editor 比例同步会把编辑器拉回文档顶部（「保存/输入后跳回开头」）。
+// 渲染后按比例恢复，恢复期间挂 scrollLock 防双向同步拉扯。
+function previewScrollSnapshot() {
+  const reader = els.readerScroll;
+  if (!reader) return { ratio: 0, had: false };
+  const max = reader.scrollHeight - reader.clientHeight;
+  return { ratio: max > 2 ? reader.scrollTop / max : 0, had: reader.scrollTop > 2 };
+}
+function restorePreviewScroll(snap) {
+  const reader = els.readerScroll;
+  if (!reader || !snap.had) return;
+  state.scrollLock = true;
+  const max = reader.scrollHeight - reader.clientHeight;
+  if (max > 2) reader.scrollTop = Math.round(snap.ratio * max);
+  setTimeout(() => { state.scrollLock = false; }, 160);
+}
+
 async function renderPreview() {
   const container = els.markdownView;
   if (!container) return;
@@ -1500,6 +1576,7 @@ async function renderPreview() {
     renderToc([]);
     return;
   }
+  const snap = previewScrollSnapshot();
   const seq = ++state.previewSeq;
   container.innerHTML = `<div class="chart-placeholder">正在渲染…</div>`;
   let html = "";
@@ -1513,6 +1590,7 @@ async function renderPreview() {
     if (seq !== state.previewSeq) return;
     const msg = String((err && err.message) || err).replace(/[<>&]/g, "");
     container.innerHTML = `<div class="chart-error">Markdown 渲染失败：${msg}（可切回编辑视图查看源码）</div>`;
+    restorePreviewScroll(snap);
     return;
   }
   container.innerHTML = html;
@@ -1524,6 +1602,8 @@ async function renderPreview() {
   decorateExcalidrawHint(container);
   // 标题目录（worker 与正文同源生成 id，点击即滚动到对应标题）
   renderToc(outline);
+  // 先恢复预览滚动位置，再解锁同步（编辑器位置全程不被拉扯）
+  restorePreviewScroll(snap);
   lastJumpedHeadingId = ""; // 新一轮渲染后允许光标跳转重新定位
   // 公式 / 图表 / 代码高亮（与桌面端同一顺序）
   renderMathInPreview(container);

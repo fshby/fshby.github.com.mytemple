@@ -421,3 +421,49 @@ test("LAN: 访客页预览区代码块复制按钮（非安全上下文兜底）
     "非安全上下文必须退回 execCommand 复制");
   assert.ok(js.includes("复制失败，请手动选择代码复制"), "复制失败必须有可见反馈");
 });
+
+test("LAN: 访客目录独立停靠最左侧（编辑/双栏/预览通用）", () => {
+  const html = repoFile("public", "guest.html");
+  const js = repoFile("public", "guest.js");
+  const css = repoFile("public", "guest.css");
+  // DOM：tocPanel 是 panes 第一个子元素（editorHost 之前）——贴屏幕左缘
+  const panesIdx = html.indexOf('id="panes"');
+  const tocIdx = html.indexOf('id="tocPanel"');
+  const edIdx = html.indexOf('id="editorHost"');
+  assert.ok(panesIdx !== -1 && tocIdx > panesIdx && tocIdx < edIdx, "tocPanel 必须在 panes 内且位于编辑区之前");
+  assert.ok(!/pane-reader[^"]*"[^>]*>\s*<aside id="tocPanel"/.test(html.replace(/\r?\n/g, "")), "tocPanel 不得再嵌在阅读面板内");
+  // JS：no-toc 状态挂在 panes（列位收回）
+  assert.ok(/panes\?\.classList\.toggle\("no-toc"/.test(js), "目录开关必须切换 panes 的 no-toc");
+  // CSS：目录列组合（编辑/预览 196+1fr；双栏 196+1fr+1fr；no-toc 回退）
+  assert.ok(css.includes('.panes:not(.no-toc)[data-view="edit"]'), "编辑视图目录列规则缺失");
+  assert.ok(css.includes('.panes:not(.no-toc)[data-view="split"] { grid-template-columns: 196px minmax(0, 1fr) minmax(0, 1fr); }'), "双栏三列规则缺失");
+  assert.ok(!css.includes("196px minmax(0, 1fr);\n}"), "pane-reader 内不得再保留目录列");
+});
+
+test("LAN: 访客页双击 Shift 调起全局搜索 + 保存防并发 + worker 自愈", () => {
+  const js = repoFile("public", "guest.js");
+  // 双击 Shift（与桌面端同一 350ms 窗口）→ 展开侧栏并聚焦搜索框
+  assert.ok(js.includes("_guestShiftTracker"), "缺少双击 Shift 跟踪器");
+  assert.ok(/lastTime < 350/.test(js) && /lastTime = 0;/.test(js) && js.includes("searchInput.focus()"), "双击 Shift 必须聚焦全局搜索框");
+  assert.ok(/collapsed"\)\)\s*toggleSidebar\(\)/.test(js), "折叠态必须先展开侧栏");
+  // 保存防并发：in-flight 标志包住整个请求
+  assert.ok(js.includes("_saveInFlight"), "保存缺少 in-flight 互斥");
+  assert.ok(/if \(_saveInFlight\) return;/.test(js) && /finally \{\s*_saveInFlight = false;/.test(js), "保存互斥必须在 finally 释放");
+  // worker 崩溃自愈：丢弃死实例 + 拒绝 pending + 自动重渲染
+  assert.ok(/_mdWorker\.onerror = \(err\) => \{/.test(js), "worker onerror 必须接管");
+  assert.ok(/onerror[\s\S]{0,400}_mdWorker = null;/.test(js), "worker 崩溃后必须置空以便重建");
+  assert.ok(/onerror[\s\S]{0,400}schedulePreview\(true\)/.test(js), "worker 恢复后必须自动重渲染");
+});
+
+test("LAN: 访客页渲染不回顶（滚动快照恢复）+ 编辑快捷键转发", () => {
+  const js = repoFile("public", "guest.js");
+  // 渲染前记录预览滚动比例，渲染后恢复（防 reader→editor 同步把编辑器拉回顶部）
+  assert.ok(js.includes("previewScrollSnapshot") && js.includes("restorePreviewScroll"), "缺少渲染滚动快照/恢复");
+  assert.ok(/restorePreviewScroll\(snap\);\s*\n\s*lastJumpedHeadingId/.test(js), "渲染主路径必须在恢复滚动后才解锁同步");
+  // 打开新文档必须重置预览滚动（否则上一篇快照带入新文档）
+  assert.ok(/els\.readerScroll\) els\.readerScroll\.scrollTop = 0;/.test(js), "openDoc 必须重置预览滚动");
+  // 焦点在编辑器外时转发撤销/重做与链接快捷键
+  assert.ok(/k === "z" \|\| k === "y"/.test(js), "Ctrl+Z/Y 转发缺失");
+  assert.ok(/k === "k"\) \{ e\.preventDefault\(\); runToolbarCmd\("link"\);/.test(js), "Ctrl+K 链接快捷键缺失");
+  assert.ok(/state\.editor\.undo\(\)/.test(js) && /state\.editor\.redo\(\)/.test(js), "撤销/重做必须走编辑器实例");
+});
