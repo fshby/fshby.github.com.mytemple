@@ -41,6 +41,22 @@ const CFG = (typeof window !== "undefined" && window.__MT_CLOUD__) || {};
 
 /** 云端工作台地址（与 cloud-config.js 的 endpoint 同源）。 */
 export const CLOUD_WORKBENCH_URL = "https://mytemple-cloud.app.workbuddy.host/";
+
+/* 站点访问参数（WorkBuddy 站点平台的防爬口令，绑定 applicationId）。
+ *
+ * 2026-11-13 平台升级：任何页面不带它一律 403「链接不完整」，裸域名不再是入口
+ * （只有浏览器已带 cookie 时才放行，而首次访问必须由带参链接种下）。
+ * 桌面端所有「打开云端 / 分享」出去的链接都要补上，否则对方看到的是平台占位页。
+ * 事实源是 cloud/cloud-config.js 的 shareCode —— 改一处要同步这里（反之亦然）；
+ * 实测同一 appId 反复重新发布该值不变。 */
+export const CLOUD_SHARE_CODE = "XEPPD6GHYK";
+
+/** 给云端链接补齐访问参数：已带 sharecode 原样返回，已有 query 用 & 续接。 */
+export function withShareCode(url) {
+  const u = String(url || "");
+  if (!u || /[?&]sharecode=/.test(u)) return u;
+  return u + (u.includes("?") ? "&" : "?") + "sharecode=" + CLOUD_SHARE_CODE;
+}
 /* 引用 → 资产候选键只有**一份实现**（shared/share-core.js 生成到 ./share-core.js）。
  * 同步（本模块）与分享（share-cloud.js）、云端工作台、分享页共用它，
  * 避免「本机推到 A、访客按 B 找」这类写读键不一致的静默故障。 */

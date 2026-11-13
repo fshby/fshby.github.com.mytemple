@@ -28,7 +28,7 @@ import {
   parseShareTtl,
   expiresAtFromTtl,
   utf8Bytes,
-} from "./share-core.js?v=cloud-25";
+} from "./share-core.js?v=cloud-26";
 /* 文档类白名单（**两端逐字同源**：public/modules/cloud-client.js 顶部有一份完全相同的
  * 拷贝，tests/three-way-sync.test.js 逐字比对，防两端算出不同的可同步集合）。
  *
@@ -139,7 +139,7 @@ function describeCloudWriteError(err) {
 }
 
 /* 静态资源版本戳：改动 cloud/ 下被页面引用的任何文件时，与 index.html 的三件套一起递增。 */
-const ASSET_V = "cloud-25";
+const ASSET_V = "cloud-26";
 
 /* 第三方库一律同源自托管，见 scripts/vendor-cloud.mjs。
  * 绝不改回第三方 CDN —— 见该脚本头部注释：cdn.jsdelivr.net 在部分网络下 TLS 会被重置，
@@ -2584,10 +2584,13 @@ function newShareId() {
   return Array.from(b, (x) => x.toString(36).padStart(2, "0")).join("");
 }
 
-/** 分享链接用当前站点域名：分享页就部署在同一个源下，不引外部域名。 */
+/** 分享链接用当前站点域名：分享页就部署在同一个源下，不引外部域名。
+ *  必须带 sharecode：平台升级后裸路径一律 403「链接不完整」（访客没有 cookie），
+ *  参数值来自 cloud-config.js 的 shareCode（绑定 appId，重新发布不变）。 */
 function shareLink(id) {
   const base = (location.origin || CFG.endpoint || "").replace(/\/+$/, "");
-  return `${base}/${SHARE_PATH}?d=${id}`;
+  const sc = CFG.shareCode ? `&sharecode=${encodeURIComponent(CFG.shareCode)}` : "";
+  return `${base}/${SHARE_PATH}?d=${id}${sc}`;
 }
 
 function bytesToBase64(buf) {

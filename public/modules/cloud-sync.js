@@ -15,6 +15,7 @@
 
 import {
   CLOUD_WORKBENCH_URL,
+  withShareCode,
   cloudReady,
   cloudEndpoint,
   getSession,
@@ -206,9 +207,10 @@ function localPort() {
 }
 
 async function openWorkbench(withLocal) {
-  const url = withLocal
+  // 必须带 sharecode：平台升级后裸路径 403「链接不完整」，打开的是占位页而不是工作台。
+  const url = withShareCode(withLocal
     ? `${CLOUD_WORKBENCH_URL}?local=${encodeURIComponent(`http://127.0.0.1:${localPort()}`)}`
-    : CLOUD_WORKBENCH_URL;
+    : CLOUD_WORKBENCH_URL);
   try {
     await api("/api/open-url", {
       method: "POST",

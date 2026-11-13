@@ -21,4 +21,13 @@ window.__MT_CLOUD__ = {
   endpoint: "https://mytemple-cloud.app.workbuddy.host",
   oauthRelayBaseUrl: "https://www.workbuddy.cn/v2/as/genie-baas/oauth",
   publishableKey: "wbpk_G343AdQ6OFueHemYr3IGkx_sc9KxfodCjPrrmWiBJCwucmyPuwaGSV5",
+  /* 站点访问参数（WorkBuddy 站点平台的防爬口令，绑定 applicationId）。
+   *
+   * 2026-11-13 平台升级后，**任何页面不带这个参数一律 403「链接不完整」**，
+   * 裸域名不再是可用入口（浏览器只带 cookie 时除外 —— 首次必须由带参链接种下）。
+   * 所以：分享链接、桌面端「打开云端」、APK 启动地址都必须带上它。
+   * 实测同一 appId 反复重新发布，sharecode 不变；若某次发布后失效，
+   * 从发布结果返回的 shareLink 里取出新值，改这一处（云端）并同步
+   * public/modules/cloud-client.js 的同名常量。 */
+  shareCode: "XEPPD6GHYK",
 };

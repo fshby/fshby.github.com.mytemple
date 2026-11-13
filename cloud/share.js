@@ -13,13 +13,13 @@
  */
 // 引用解析 / 候选键来自单一实现源（shared/share-core.js → 本目录同名产物），
 // 与桌面端、工作台三处共用同一份规则，不再各写一份靠人工对齐。
-import { assetCandidates, HTML_DOC_EXT } from "./share-core.js?v=cloud-25";
+import { assetCandidates, HTML_DOC_EXT } from "./share-core.js?v=cloud-26";
 
 (function () {
   "use strict";
 
   var CFG = window.__MT_CLOUD__ || {};
-  var ASSET_V = "cloud-25";
+  var ASSET_V = "cloud-26";
   var ENDPOINT = String(CFG.endpoint || "").replace(/\/+$/, "");
   var REST = ENDPOINT + "/.cloud/database/rest/v1";
   var HDR = { apikey: CFG.publishableKey || "", "X-Wb-Webapp-Access-Key": CFG.publishableKey || "" };

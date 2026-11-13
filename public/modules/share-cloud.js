@@ -13,7 +13,7 @@
 //   2) **写操作必须读回**：`.select()` 返回空数组 = 被 RLS 拦下，不能当成功（历史踩过的坑）。
 //
 // 分享快照是独立副本：之后再改文档不会自动更新，再点一次分享即刷新。
-import { cloudClient, cloudReady, stripCloudUnsafeHtml, CLOUD_WORKBENCH_URL, cloudEndpoint } from "./cloud-client.js";
+import { cloudClient, cloudReady, stripCloudUnsafeHtml, CLOUD_WORKBENCH_URL, withShareCode, cloudEndpoint } from "./cloud-client.js";
 // 引用解析 / 候选键 / 各类上限**全部来自单一实现源**（shared/share-core.js → 本目录同名产物）。
 // 这几条规则以前桌面与云端各写一份、靠人工对齐，一天内炸了三次线上事故，见源文件注释。
 import {
@@ -79,10 +79,11 @@ export function newShareId() {
   return Array.from(b, (x) => x.toString(36).padStart(2, "0")).join("");
 }
 
-/** 分享页部署在云端工作台同源下（桌面端不带自己的域名）。 */
+/** 分享页部署在云端工作台同源下（桌面端不带自己的域名）。
+ *  必须带 sharecode：平台升级后裸路径 403「链接不完整」，访客没有站点 cookie。 */
 export function shareLink(id) {
   const base = String(CLOUD_WORKBENCH_URL || "").replace(/\/+$/, "");
-  return `${base}/${SHARE_PATH}?d=${id}`;
+  return withShareCode(`${base}/${SHARE_PATH}?d=${id}`);
 }
 
 export function shareReady() {

@@ -29,7 +29,8 @@
   </div>
   <script>
     // 正常情况下 WebView 直接加载云端工作台（server.url），本页只在未配置 server.url 时出现。
-    location.replace("https://mytemple-cloud.app.workbuddy.host/");
+    // 必须带 sharecode：平台升级后裸路径 403「链接不完整」（值同 cloud-config.js 的 shareCode）。
+    location.replace("https://mytemple-cloud.app.workbuddy.host/?sharecode=XEPPD6GHYK");
   </script>
 </body>
 </html>

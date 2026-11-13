@@ -64,7 +64,11 @@
     })();
 
     (function () {
+      // sharecode 必须带上：平台升级后裸路径 403「链接不完整」，探针与跳转都会落到占位页。
+      // 值同 cloud-config.js 的 shareCode（绑定 appId，重新发布不变）。
+      var SHARE_CODE = "XEPPD6GHYK";
       var SITE = "https://mytemple-cloud.app.workbuddy.host/";
+      var ENTRY = SITE + "?sharecode=" + SHARE_CODE;
       var btn = document.getElementById("retry");
       var status = document.getElementById("status");
       var timer = null;
@@ -74,7 +78,7 @@
         clearInterval(timer);
         status.textContent = "正在打开…";
         btn.disabled = true;
-        location.replace(SITE);
+        location.replace(ENTRY);
       }
 
       // 用 <img> 探测可达性：图片跨源加载不需要 CORS，失败/成功都能可靠判定。
@@ -93,7 +97,7 @@
           tries += 1;
           status.textContent = "第 " + tries + " 次重试未成功…";
         };
-        img.src = SITE + "icon.svg?probe=" + Date.now();
+        img.src = SITE + "icon.svg?sharecode=" + SHARE_CODE + "&probe=" + Date.now();
       }
 
       btn.addEventListener("click", function () {

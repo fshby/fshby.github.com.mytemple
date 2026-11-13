@@ -262,6 +262,8 @@ test("本机接口的解包与冲突语义（曾漏解包导致篇数恒为空�
 
 /* ══ 四、Android 客户端工程 ════════════════════════════════════ */
 
+/** 站点访问参数的事实源：云端公开配置（平台升级后裸路径一律 403，靠它放行）。 */
+const SHARE_CODE = (read("cloud/cloud-config.js").match(/shareCode:\s*"([^"]+)"/) || [])[1];
 const capCfg = JSON.parse(read("apk/capacitor.config.json"));
 const capCfgApk = read("apk/android/app/src/main/assets/capacitor.config.json");
 const variablesGradle = read("apk/android/variables.gradle");
@@ -269,9 +271,42 @@ const appGradle = read("apk/android/app/build.gradle");
 
 test("APK 以 server.url 远程加载云端工作台，Origin 天然等于白名单域名", () => {
   assert.equal(capCfg.webDir, "www");
-  assert.equal(capCfg.server.url, "https://mytemple-cloud.app.workbuddy.host/");
+  // 必须带 sharecode（平台升级后裸路径 403「链接不完整」）；Origin 不含 query，
+  // 因此数据面的跨源校验仍只看裸域名，这里两者都要钉住。
+  assert.equal(capCfg.server.url, "https://mytemple-cloud.app.workbuddy.host/?sharecode=" + SHARE_CODE);
+  assert.equal(
+    new URL(capCfg.server.url).origin,
+    "https://mytemple-cloud.app.workbuddy.host",
+    "Origin 不带 query，必须仍是白名单域名",
+  );
   assert.equal(capCfg.server.androidScheme, "https");
   assert.equal(capCfg.server.errorPath, "offline.html", "断网时由该页兜底，避免白屏");
+});
+
+test("站点访问参数 sharecode 全链路一致（平台升级后裸路径一律 403）", () => {
+  // 这个值散落在「云端配置 / 桌面端常量 / APK 三处入口 / og:image」——
+  // 任何一处漂移都会让对应入口打开平台占位页「链接不完整」，故逐处比对。
+  const grab = (file, re) => {
+    const m = read(file).match(re);
+    assert.ok(m, `${file} 缺少 sharecode`);
+    return m[1];
+  };
+  const values = {
+    "cloud/cloud-config.js": grab("cloud/cloud-config.js", /shareCode:\s*"([^"]+)"/),
+    "public/cloud-config.js": grab("public/cloud-config.js", /shareCode:\s*"([^"]+)"/),
+    "public/modules/cloud-client.js": grab("public/modules/cloud-client.js", /CLOUD_SHARE_CODE\s*=\s*"([^"]+)"/),
+    "cloud/share.html": grab("cloud/share.html", /og-cover\.png\?sharecode=([A-Za-z0-9]+)/),
+    "cloud/index.html": grab("cloud/index.html", /manifest\.webmanifest\?sharecode=([A-Za-z0-9]+)/),
+    "cloud/manifest.webmanifest": grab("cloud/manifest.webmanifest", /start_url":\s*"\/\?sharecode=([A-Za-z0-9]+)/),
+    "apk/www/index.html": grab("apk/www/index.html", /location\.replace\("[^"]*\?sharecode=([A-Za-z0-9]+)"/),
+    "apk/www/offline.html": grab("apk/www/offline.html", /SHARE_CODE\s*=\s*"([A-Za-z0-9]+)"/),
+  };
+  for (const [file, v] of Object.entries(values)) {
+    assert.equal(v, SHARE_CODE, `${file} 的 sharecode 与事实源不一致`);
+  }
+  // 分享链接生成侧：两处都必须带上参数，否则访客拿到的链接打不开
+  assert.match(read("cloud/app.js"), /sharecode=\$\{encodeURIComponent\(CFG\.shareCode\)\}/, "云端分享链接必须带 sharecode");
+  assert.match(read("public/modules/share-cloud.js"), /withShareCode\(/, "桌面端分享链接必须补 sharecode");
 });
 
 test("APK 绝不能自定义 server.hostname（会让数据面请求被本地资源拦截）", () => {

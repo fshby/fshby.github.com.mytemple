@@ -21,11 +21,13 @@
   <meta property="og:site_name" content="MyTemple 知识库" />
   <meta property="og:title" content="MyTemple 知识库 · 分享的笔记" />
   <meta property="og:description" content="有人用 MyTemple 知识库给你分享了一篇笔记，点开即可阅读。" />
-  <meta property="og:image" content="https://mytemple-cloud.app.workbuddy.host/og-cover.png" />
+  <!-- og:image 必须带 sharecode：抓取器不执行 JS、也没有 cookie，裸路径会被平台 403
+       「链接不完整」，卡片就没有配图（值同 cloud-config.js 的 shareCode）。 -->
+  <meta property="og:image" content="https://mytemple-cloud.app.workbuddy.host/og-cover.png?sharecode=XEPPD6GHYK" />
   <meta name="theme-color" content="#6b5f45" />
 
   <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="/share.css?v=cloud-25" />
+  <link rel="stylesheet" href="/share.css?v=cloud-26" />
 </head>
 <body>
   <!-- 顶部品牌条：进页第一眼就有来源感 -->
@@ -109,6 +111,6 @@
   </footer>
 
   <script src="/cloud-config.js"></script>
-  <script src="/share.js?v=cloud-25" type="module"></script>
+  <script src="/share.js?v=cloud-26" type="module"></script>
 </body>
 </html>

@@ -51,10 +51,14 @@ test("newShareId：9 字节 base36，长度与字符集稳定（与云端同算�
   });
 });
 
-test("shareLink：固定指向云端 share.html，带 d 参数", async () => {
+test("shareLink：固定指向云端 share.html，带 d 参数与站点访问参数", async () => {
   await withBrowserStubs(async () => {
     const { shareLink } = await import("../public/modules/share-cloud.js");
-    assert.equal(shareLink("abc123"), "https://mytemple-cloud.app.workbuddy.host/share.html?d=abc123");
+    // sharecode 不可省：平台升级后访客（无站点 cookie）裸路径会拿到 403 占位页
+    assert.equal(
+      shareLink("abc123"),
+      "https://mytemple-cloud.app.workbuddy.host/share.html?d=abc123&sharecode=XEPPD6GHYK",
+    );
   });
 });
 

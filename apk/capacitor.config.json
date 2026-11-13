@@ -3,7 +3,7 @@
   "appName": "知识库云端",
   "webDir": "www",
   "server": {
-    "url": "https://mytemple-cloud.app.workbuddy.host/",
+    "url": "https://mytemple-cloud.app.workbuddy.host/?sharecode=XEPPD6GHYK",
     "errorPath": "offline.html",
     "androidScheme": "https",
     "allowNavigation": [

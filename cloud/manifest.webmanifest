@@ -2,7 +2,7 @@
   "name": "知识库云端 · MyTemple",
   "short_name": "知识库云端",
   "description": "在手机上查看与检索你自己同步到云端的知识库",
-  "start_url": "/",
+  "start_url": "/?sharecode=XEPPD6GHYK",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
@@ -11,7 +11,7 @@
   "lang": "zh-CN",
   "icons": [
     {
-      "src": "/icon.svg",
+      "src": "/icon.svg?sharecode=XEPPD6GHYK",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"
