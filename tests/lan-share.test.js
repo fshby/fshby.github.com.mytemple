@@ -236,8 +236,8 @@ test("LAN: guest.html/guest.js 有编辑/预览双视图与完整预览管线", 
   assert.ok(js.includes("mermaidMeasurementDegenerate"), "必须有自测量塌缩检测");
   assert.ok(js.includes("rewriteMediaSrc"), "必须有图片/视频相对路径改写");
   assert.ok(js.includes("highlightCodeBlocks") && js.includes("highlight.min.js"), "必须有 hljs 代码高亮");
-  // 只读共享默认进预览（访客主要场景是阅读）
-  assert.ok(js.includes('state.readOnly ? "preview" : "edit"'), "只读共享应默认预览视图");
+  // 只读共享默认进预览（访客主要场景是阅读）；可编辑默认双栏/编辑
+  assert.match(js, /state\.readOnly[\s\S]{0,40}\?\s*"preview"/, "只读共享应默认预览视图");
 });
 
 test("LAN: guest.css 侧栏折叠在所有宽度生效（「目录不能隐藏」回归锁）", () => {
@@ -284,4 +284,63 @@ test("LAN: guest.js 图片 URL 追加 lan_token（含已带工作区前缀的引
   assert.match(fn, /lan_token=/, "改写后的 /source URL 必须追加 lan_token 查询参数");
   assert.match(fn, /withToken\(abs\)/, "已带 ws_ 前缀的引用也必须追加 token");
   assert.match(fn, /encodeURIComponent/, "token 必须经 URL 编码");
+});
+
+// ══ 2026-11-13：访客端补齐编辑能力（粘贴图片 / 双栏同步 / 基础工具 / 标题目录）══
+
+test("LAN: 访客页三档视图 + 工具栏 + 目录面板结构", () => {
+  const html = repoFile("public", "guest.html");
+  assert.ok(html.includes('id="splitViewBtn"'), "缺少双栏视图按钮");
+  assert.ok(html.includes('id="viewToggle"'), "缺少视图切换容器");
+  assert.ok(html.includes('id="mdToolbar"'), "缺少 Markdown 工具栏");
+  for (const cmd of ["h1", "bold", "italic", "quote", "ul", "ol", "link", "image", "table", "codeblock"]) {
+    assert.ok(html.includes(`data-cmd="${cmd}"`), `工具栏缺少命令 ${cmd}`);
+  }
+  assert.ok(html.includes('id="tocPanel"') && html.includes('id="tocList"'), "缺少标题目录面板");
+  assert.ok(html.includes('id="readerScroll"'), "阅读区滚动容器缺失（目录跳转与滚动同步依赖它）");
+  assert.ok(html.includes('id="imageInput"') && html.includes('accept="image/'), "缺少图片选择输入");
+});
+
+test("LAN: 访客端粘贴图片走 /api/lan/asset（不上主通道资产端点）", () => {
+  const js = repoFile("public", "guest.js");
+  assert.ok(js.includes("/api/lan/asset"), "粘贴上传必须走访客专用资产端点");
+  assert.ok(js.includes("clipboardImageFiles"), "缺少剪贴板图片提取");
+  assert.ok(js.includes("uploadAndInsertImages"), "缺少图片上传 → 插入 markdown 流程");
+  assert.ok(js.includes("workspaceId: state.currentWs"), "上传必须带工作区归属（决定 source/ 落点）");
+  assert.ok(js.includes("resolveWsForPath"), "打开文档必须按工作区根反查工作区 id");
+  // 编辑器内捕获 + 文档级兜底两条路径都要在
+  assert.ok(js.includes('els.editorHost.addEventListener("paste"'), "缺少编辑器内 paste 捕获");
+  assert.ok(/document\.addEventListener\("paste"/.test(js), "缺少文档级 paste 兜底");
+});
+
+test("LAN: 访客端双栏实时预览 + 滚动同步 + 目录跳转", () => {
+  const js = repoFile("public", "guest.js");
+  assert.ok(js.includes('"split"'), "必须支持 split 视图");
+  assert.ok(js.includes("schedulePreview"), "双栏必须输入防抖实时预览");
+  assert.ok(js.includes("wireScrollSync"), "双栏必须滚动同步");
+  assert.ok(js.includes("includeOutline: true"), "预览必须让 worker 返回大纲（目录与正文同一份 id）");
+  assert.ok(js.includes("renderToc"), "必须渲染标题目录");
+  assert.ok(js.includes("jumpToHeading"), "目录必须支持点击跳转");
+  assert.ok(js.includes("updateTocActive"), "目录必须随滚动高亮当前标题");
+  const css = repoFile("public", "guest.css");
+  assert.ok(css.includes('.panes[data-view="split"]'), "缺少双栏布局样式");
+  assert.ok(css.includes(".md-toolbar"), "缺少工具栏样式");
+  assert.ok(css.includes(".toc-panel"), "缺少目录面板样式");
+});
+
+test("LAN: 访客资产端点安全收紧（白名单 + 只读拦截 + 图片扩展名）", () => {
+  const handlers = repoFile("src-tauri", "src", "handlers.rs");
+  assert.ok(handlers.includes("async fn lan_upload_asset"), "缺少 lan_upload_asset handler");
+  const routerStart = handlers.indexOf("pub fn build_lan_router");
+  const routerBody = handlers.slice(routerStart, handlers.indexOf("pub fn build_native_router", routerStart));
+  assert.ok(routerBody.includes('"/api/lan/asset"'), "访客路由缺少 /api/lan/asset");
+  const writeIdx = handlers.indexOf("const LAN_WRITE_ROUTES");
+  const writeBody = handlers.slice(writeIdx, writeIdx + 400);
+  assert.ok(writeBody.includes('"/api/lan/asset"'), "只读模式必须拦截资产写入（LAN_WRITE_ROUTES）");
+  const fnIdx = handlers.indexOf("async fn lan_upload_asset");
+  const fn = handlers.slice(fnIdx, handlers.indexOf("upload_asset(State(state), Json(gated))", fnIdx));
+  assert.ok(fn.includes("is_ws_allowed"), "资产上传必须校验共享工作区白名单");
+  assert.ok(fn.includes("IMAGE_EXT"), "资产上传必须限制图片扩展名（禁止写任意文件）");
+  assert.ok(fn.includes("LAN_ASSET_MAX_BYTES") || handlers.includes("DefaultBodyLimit::max(LAN_ASSET_MAX_BYTES)"),
+    "资产端点必须有体量上限");
 });

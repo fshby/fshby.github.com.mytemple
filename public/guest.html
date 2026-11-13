@@ -8,8 +8,8 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'">
   <title>MyTemple Knowledge · 局域网共享</title>
   <link rel="icon" href="/favicon.ico">
-  <link rel="stylesheet" href="/styles.css?v=20261113-bc9fc1c0">
-  <link rel="stylesheet" href="/guest.css?v=20261113-bc9fc1c0">
+  <link rel="stylesheet" href="/styles.css?v=20261113-0163d42f">
+  <link rel="stylesheet" href="/guest.css?v=20261113-0163d42f">
 </head>
 <body>
   <!-- PIN 配对门（未持有 token 时唯一可见界面） -->
@@ -29,7 +29,7 @@
     </div>
   </div>
 
-  <!-- 访客主界面：左树 + 右（编辑/预览双视图，与桌面端一致） -->
+  <!-- 访客主界面：左树 + 右（编辑 / 双栏 / 预览，与桌面端一致） -->
   <div id="app" class="app hidden">
     <header class="topbar">
       <button id="sidebarToggle" class="tb-btn" type="button" aria-label="切换目录栏">☰</button>
@@ -37,8 +37,10 @@
       <span id="roBadge" class="ro-badge hidden">只读</span>
       <div id="viewToggle" class="view-toggle" role="tablist" aria-label="视图切换">
         <button id="editViewBtn" class="vt-btn active" type="button" role="tab" aria-selected="true">编辑</button>
+        <button id="splitViewBtn" class="vt-btn" type="button" role="tab" aria-selected="false">双栏</button>
         <button id="previewViewBtn" class="vt-btn" type="button" role="tab" aria-selected="false">预览</button>
       </div>
+      <button id="tocToggle" class="tb-btn" type="button" aria-pressed="true" title="显示/隐藏标题目录">目录</button>
       <span class="tb-spacer"></span>
       <input id="searchInput" class="search-input" type="search" placeholder="搜索文档…" aria-label="搜索">
       <button id="newDocBtn" class="tb-btn primary" type="button">新建</button>
@@ -51,9 +53,43 @@
         <div id="tree" class="tree"></div>
       </aside>
       <main class="editor-wrap">
-        <div id="editorHost" class="editor-host"></div>
-        <div id="readerHost" class="reader-host hidden">
-          <div id="markdownView" class="markdown-body"></div>
+        <!-- Markdown 编辑工具栏（与桌面端基础工具对齐：标题/强调/列表/引用/
+             代码/链接/图片/表格/分隔线）；预览模式下整体隐藏 -->
+        <div id="mdToolbar" class="md-toolbar" role="toolbar" aria-label="Markdown 编辑工具">
+          <button type="button" class="mt-btn" data-cmd="h1" title="一级标题">H1</button>
+          <button type="button" class="mt-btn" data-cmd="h2" title="二级标题">H2</button>
+          <button type="button" class="mt-btn" data-cmd="h3" title="三级标题">H3</button>
+          <span class="mt-sep"></span>
+          <button type="button" class="mt-btn" data-cmd="bold" title="粗体（Ctrl+B）"><b>B</b></button>
+          <button type="button" class="mt-btn" data-cmd="italic" title="斜体（Ctrl+I）"><i>I</i></button>
+          <button type="button" class="mt-btn" data-cmd="strike" title="删除线"><s>S</s></button>
+          <button type="button" class="mt-btn" data-cmd="code" title="行内代码">`&nbsp;`</button>
+          <span class="mt-sep"></span>
+          <button type="button" class="mt-btn" data-cmd="quote" title="引用">❝</button>
+          <button type="button" class="mt-btn" data-cmd="ul" title="无序列表">•</button>
+          <button type="button" class="mt-btn" data-cmd="ol" title="有序列表">1.</button>
+          <button type="button" class="mt-btn" data-cmd="task" title="任务列表">☑</button>
+          <span class="mt-sep"></span>
+          <button type="button" class="mt-btn" data-cmd="link" title="链接">🔗</button>
+          <button type="button" class="mt-btn" data-cmd="image" title="插入图片（也可直接 Ctrl+V 粘贴截图）">🖼</button>
+          <button type="button" class="mt-btn" data-cmd="table" title="表格">▦</button>
+          <button type="button" class="mt-btn" data-cmd="codeblock" title="代码块">&lt;/&gt;</button>
+          <button type="button" class="mt-btn" data-cmd="hr" title="分隔线">—</button>
+        </div>
+        <div id="panes" class="panes" data-view="edit">
+          <div id="editorHost" class="pane pane-editor"></div>
+          <div id="readerHost" class="pane pane-reader hidden">
+            <aside id="tocPanel" class="toc-panel">
+              <div class="toc-head">
+                <span>本文件目录</span>
+                <button id="tocClose" class="toc-close" type="button" aria-label="收起目录">×</button>
+              </div>
+              <nav id="tocList" class="toc-list" aria-label="标题目录"></nav>
+            </aside>
+            <div id="readerScroll" class="reader-scroll">
+              <div id="markdownView" class="markdown-body"></div>
+            </div>
+          </div>
         </div>
         <div id="conflictBar" class="conflict-bar hidden">
           <span>文档已被其他人修改，直接保存会覆盖对方内容。</span>
@@ -63,8 +99,9 @@
         <div id="toast" class="toast hidden"></div>
       </main>
     </div>
+    <input id="imageInput" type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/bmp" multiple class="hidden">
   </div>
 
-  <script type="module" src="/guest.js?v=20261113-bc9fc1c0"></script>
+  <script type="module" src="/guest.js?v=20261113-0163d42f"></script>
 </body>
 </html>

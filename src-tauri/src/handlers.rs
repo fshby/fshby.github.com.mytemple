@@ -210,6 +210,7 @@ const LAN_WRITE_ROUTES: &[(&str, &str)] = &[
     ("POST", "/api/save"),
     ("POST", "/api/create-doc"),
     ("POST", "/api/create-folder"),
+    ("POST", "/api/lan/asset"),
 ];
 
 /// 访客鉴权中间件。三层闸门，顺序敏感：
@@ -620,6 +621,63 @@ async fn lan_create_folder(
         .into_response()
 }
 
+/// 访客图片体量上限：32MB（桌面端 /api/asset 为 50MB；访客通道收紧）
+const LAN_ASSET_MAX_BYTES: usize = 32 * 1024 * 1024;
+
+/// POST /api/lan/asset（访客粘贴图片 → 落盘到共享工作区的 source/ 目录）
+///
+/// 复用主通道 upload_asset（同名去重、文件名净化、markdown 片段生成完全一致），
+/// 只在入口收紧三条：
+///   ① 工作区归属必须在共享白名单内（未指定则落默认工作区，同样校验）；
+///   ② 只接受图片扩展名 —— 访客不能借这个端点往工作区写任意文件；
+///   ③ 只读共享时由 lan_guard 直接 403（本端点登记在 LAN_WRITE_ROUTES）。
+/// 返回平铺 JSON（upload_asset 原样）：{ok, path:"source/xxx.png", markdown:"![](…)"}。
+async fn lan_upload_asset(
+    State(state): State<Arc<ServerState>>,
+    Json(req): Json<UploadAssetRequest>,
+) -> Response {
+    let ws_id = match req.workspace_id.as_deref().filter(|s| !s.is_empty()) {
+        Some(id) => id.to_string(),
+        None => state.app.get_default_workspace_id().await,
+    };
+    if ws_id.is_empty() || !state.app.lan.is_ws_allowed(&ws_id).await {
+        return json_err(StatusCode::NOT_FOUND, "not found".to_string());
+    }
+    // 扩展名闸门：name 缺失时退回 dataUrl 的 mime 推断（粘贴截图常带 image/png）
+    let ext = req
+        .name
+        .as_deref()
+        .and_then(|n| std::path::Path::new(n).extension().and_then(|e| e.to_str()))
+        .map(|s| s.to_ascii_lowercase())
+        .unwrap_or_else(|| match req.data_url.as_deref().unwrap_or("") {
+            u if u.starts_with("data:image/png") => "png".to_string(),
+            u if u.starts_with("data:image/jpeg") => "jpg".to_string(),
+            u if u.starts_with("data:image/gif") => "gif".to_string(),
+            u if u.starts_with("data:image/webp") => "webp".to_string(),
+            u if u.starts_with("data:image/bmp") => "bmp".to_string(),
+            u if u.starts_with("data:image/svg") => "svg".to_string(),
+            _ => String::new(),
+        });
+    const IMAGE_EXT: &[&str] = &["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "avif"];
+    if !IMAGE_EXT.contains(&ext.as_str()) {
+        return json_err(
+            StatusCode::BAD_REQUEST,
+            "仅支持图片文件（png/jpg/gif/webp/bmp/svg）".to_string(),
+        );
+    }
+    // 未显式给 name 时补一个干净文件名，避免 upload_asset 落成 asset.bin
+    let mut req = req;
+    if req.name.as_deref().map_or(true, |n| n.trim().is_empty()) {
+        let ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0);
+        req.name = Some(format!("paste_{}.{}", ms, ext));
+    }
+    let gated = UploadAssetRequest { workspace_id: Some(ws_id), ..req };
+    upload_asset(State(state), Json(gated)).await.into_response()
+}
+
 #[derive(Deserialize)]
 struct LanSharedWsRequest {
     /// 空数组 = 共享全部
@@ -711,6 +769,11 @@ pub fn build_lan_router(
         .route("/api/save", post(lan_save))
         .route("/api/create-doc", post(lan_create_doc))
         .route("/api/create-folder", post(lan_create_folder))
+        // 访客粘贴图片 → 共享工作区 source/（只读模式下 lan_guard 403）
+        .route(
+            "/api/lan/asset",
+            post(lan_upload_asset).layer(DefaultBodyLimit::max(LAN_ASSET_MAX_BYTES)),
+        )
         // 静态白名单 + 访客页
         .fallback(get(move |req| lan_fallback(public_root.clone(), req)))
         .layer(axum::middleware::from_fn_with_state(lan, lan_guard))

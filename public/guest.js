@@ -8,7 +8,7 @@
 //       自测量塌缩防护）→ hljs 代码高亮 → 图片/视频经 /source/<wsId>/… 资产端点。
 // 所有请求带 X-Lan-Token 头；无任何 Tauri / 云端依赖、无任何外链。
 
-import { createMarkdownEditor } from "/editor-core.js?v=20261113-bc9fc1c0";
+import { createMarkdownEditor } from "/editor-core.js?v=20261113-0163d42f";
 
 const TOKEN_KEY = "mt-lan-token";
 // 第三方库缓存戳：与桌面端同源自托管（public/vendor），戳由 npm run stamp 统一维护
@@ -29,7 +29,16 @@ const els = {
   tree: document.getElementById("tree"),
   docTitle: document.getElementById("docTitle"),
   editViewBtn: document.getElementById("editViewBtn"),
+  splitViewBtn: document.getElementById("splitViewBtn"),
   previewViewBtn: document.getElementById("previewViewBtn"),
+  tocToggle: document.getElementById("tocToggle"),
+  tocPanel: document.getElementById("tocPanel"),
+  tocList: document.getElementById("tocList"),
+  tocClose: document.getElementById("tocClose"),
+  mdToolbar: document.getElementById("mdToolbar"),
+  panes: document.getElementById("panes"),
+  readerScroll: document.getElementById("readerScroll"),
+  imageInput: document.getElementById("imageInput"),
   searchInput: document.getElementById("searchInput"),
   newDocBtn: document.getElementById("newDocBtn"),
   saveBtn: document.getElementById("saveBtn"),
@@ -52,8 +61,13 @@ const state = {
   baseHash: "",
   editor: null,
   seq: 0,
-  view: "edit",       // "edit" | "preview"
+  view: "edit",       // "edit" | "split" | "preview"
+  lastEditView: "edit",
   previewSeq: 0,      // 预览渲染竞态守卫
+  outline: [],        // worker 返回的标题目录 [{id,title,level}]
+  tocOpen: true,
+  scrollWired: false,
+  scrollLock: false,
 };
 
 // ── API 基础层 ──────────────────────────────────────────────
@@ -145,29 +159,63 @@ els.gateForm.addEventListener("submit", async (e) => {
   }
 });
 
-// ── 视图切换（编辑 / 预览） ─────────────────────────────────
+// ── 视图切换（编辑 / 双栏 / 预览） ─────────────────────────
+//
+// 双栏 = 编辑与预览同行实时联动（桌面端工作台形态）；左编辑右预览，
+// 窄屏自动改为上下堆叠（CSS）。只读共享一律预览。
 
-function setView(mode) {
-  if (mode !== "edit" && mode !== "preview") return;
+function setView(mode, { persist = true } = {}) {
+  if (mode !== "edit" && mode !== "split" && mode !== "preview") return;
+  if (state.readOnly && mode !== "preview") mode = "preview";
   state.view = mode;
+  if (mode !== "preview") state.lastEditView = mode;
+  const isEdit = mode === "edit";
+  const isSplit = mode === "split";
   const isPreview = mode === "preview";
-  els.editViewBtn.classList.toggle("active", !isPreview);
+  els.editViewBtn.classList.toggle("active", isEdit);
+  els.splitViewBtn.classList.toggle("active", isSplit);
   els.previewViewBtn.classList.toggle("active", isPreview);
-  els.editViewBtn.setAttribute("aria-selected", String(!isPreview));
+  els.editViewBtn.setAttribute("aria-selected", String(isEdit));
+  els.splitViewBtn.setAttribute("aria-selected", String(isSplit));
   els.previewViewBtn.setAttribute("aria-selected", String(isPreview));
+  if (els.panes) els.panes.dataset.view = mode;
+  // 编辑区：纯预览才隐藏；阅读区：纯编辑才隐藏（双栏两者都在）
   els.editorHost.classList.toggle("hidden", isPreview);
-  els.readerHost.classList.toggle("hidden", !isPreview);
-  if (isPreview) renderPreview();
+  els.readerHost.classList.toggle("hidden", isEdit);
+  // 工具栏只在有编辑区时出现
+  els.mdToolbar?.classList.toggle("hidden", isPreview);
+  if (persist) {
+    try { localStorage.setItem("guestView", mode); } catch (_) {}
+  }
+  if (isSplit) wireScrollSync();
+  if (!isEdit) renderPreview();
 }
 
 els.editViewBtn.addEventListener("click", () => setView("edit"));
+els.splitViewBtn.addEventListener("click", () => setView("split"));
 els.previewViewBtn.addEventListener("click", () => setView("preview"));
 
+// 目录开关
+function setTocOpen(open, { persist = true } = {}) {
+  state.tocOpen = Boolean(open);
+  els.tocPanel?.classList.toggle("hidden", !state.tocOpen);
+  els.readerHost?.classList.toggle("no-toc", !state.tocOpen);
+  els.tocToggle?.classList.toggle("active", state.tocOpen);
+  els.tocToggle?.setAttribute("aria-pressed", String(state.tocOpen));
+  if (persist) {
+    try { localStorage.setItem("guestToc", state.tocOpen ? "1" : "0"); } catch (_) {}
+  }
+  if (state.tocOpen) updateTocActive();
+}
+
+els.tocToggle?.addEventListener("click", () => setTocOpen(!state.tocOpen));
+els.tocClose?.addEventListener("click", () => setTocOpen(false));
+
 document.addEventListener("keydown", (e) => {
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "p") {
-    // Ctrl+P 与桌面端习惯一致：切到预览
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "p") {
+    // Ctrl+P 与桌面端习惯一致：预览 ↔ 上一个编辑视图
     e.preventDefault();
-    setView("preview");
+    setView(state.view === "preview" ? state.lastEditView : "preview");
   }
 });
 
@@ -285,21 +333,37 @@ async function openDoc(docPath, wsId) {
     }
     state.currentPath = doc.path || docPath;
     state.baseHash = doc.contentSha256 || "";
-    // 打开时定位工作区：优先点击来源，其次按路径推断（搜索结果没有 ws 字段）
-    if (wsId) state.currentWs = wsId;
+    // 打开时定位工作区：点击来源 > 按路径前缀解析（搜索结果无 ws 字段）> 沿用当前
+    state.currentWs = wsId || resolveWsForPath(state.currentPath) || state.currentWs;
     els.docTitle.textContent = doc.title || state.currentPath;
     ensureEditor();
     state.editor.value = doc.content;
     hideConflict();
-    if (state.view === "preview") renderPreview();
+    if (state.view !== "edit") renderPreview();
   } catch (err) {
     if (err.message !== "需要访问口令") toast(`打开文档失败：${err.message}`);
   }
 }
 
+// 文档路径 → 工作区 id（按各工作区 root 前缀反查）。图片资产端点必须先知道
+// 工作区，否则 /source/<ws>/… 的改写会指向错误工作区导致 404。
+function resolveWsForPath(p) {
+  const norm = String(p || "").replace(/\\/g, "/").toLowerCase();
+  if (!norm) return "";
+  for (const ws of state.workspaces) {
+    const root = String(ws.root || "").replace(/\\/g, "/").toLowerCase().replace(/\/+$/, "");
+    if (root && (norm === root || norm.startsWith(root + "/"))) return ws.id;
+  }
+  return "";
+}
+
 function ensureEditor() {
   if (state.editor) return;
   state.editor = createMarkdownEditor(els.editorHost, "");
+  // 双栏实时预览：输入防抖后重渲染（长文档拉长防抖，避免打断输入）
+  state.editor.addEventListener("input", () => schedulePreview());
+  wireScrollSync();
+  wireEditorPaste();
 }
 
 function hideConflict() {
@@ -348,6 +412,13 @@ document.addEventListener("keydown", (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
     e.preventDefault();
     saveDoc();
+    return;
+  }
+  // 常用强调快捷键与桌面端一致（仅在有编辑区时生效）
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && state.view !== "preview") {
+    const k = e.key.toLowerCase();
+    if (k === "b") { e.preventDefault(); runToolbarCmd("bold"); }
+    else if (k === "i") { e.preventDefault(); runToolbarCmd("italic"); }
   }
 });
 
@@ -372,6 +443,358 @@ els.newDocBtn.addEventListener("click", async () => {
     if (err.message !== "需要访问口令") toast(`创建失败：${err.message}`);
   }
 });
+
+// ══ 编辑能力：工具栏 / 粘贴图片 / 双栏实时预览 / 标题目录 ════════════════
+
+function editorCtx() {
+  if (state.readOnly) { toast("当前为只读共享，无法编辑"); return null; }
+  if (!state.currentPath) { toast("请先打开一个文档"); return null; }
+  ensureEditor();
+  return state.editor;
+}
+
+let previewTimer = 0;
+// 双栏/预览下输入防抖重渲染；长文档拉长间隔，避免每次击键都走一遍完整管线
+function schedulePreview(immediate = false) {
+  if (state.view === "edit") return;
+  clearTimeout(previewTimer);
+  const len = state.editor ? state.editor.value.length : 0;
+  const delay = immediate ? 0 : len > 200000 ? 1200 : len > 60000 ? 700 : 420;
+  previewTimer = setTimeout(() => { renderPreview(); }, delay);
+}
+
+function insertTextAtCursor(text, { prefixNewline = true } = {}) {
+  const ed = editorCtx();
+  if (!ed) return;
+  ed.focus();
+  const v = ed.value;
+  const start = ed.selectionStart;
+  const end = ed.selectionEnd;
+  const lineStart = v.lastIndexOf("\n", Math.max(0, start - 1)) + 1;
+  const needNl = prefixNewline && v.slice(lineStart, start).trim() !== "";
+  const insert = (needNl ? "\n" : "") + text;
+  ed.setRangeText(insert, start, end, "end");
+  ed.focus();
+  schedulePreview(true);
+}
+
+function wrapInline(prefix, suffix = prefix, placeholder = "文本") {
+  const ed = editorCtx();
+  if (!ed) return;
+  ed.focus();
+  const start = ed.selectionStart;
+  const end = ed.selectionEnd;
+  const inner = ed.value.slice(start, end) || placeholder;
+  ed.setRangeText(prefix + inner + suffix, start, end, "end");
+  ed.setSelectionRange(start + prefix.length, start + prefix.length + inner.length);
+  ed.focus();
+  schedulePreview(true);
+}
+
+// 行级命令：多行同时处理，已有标记则移除（toggle 语义，与桌面端一致）
+function transformSelectedLines(fn) {
+  const ed = editorCtx();
+  if (!ed) return;
+  ed.focus();
+  const v = ed.value;
+  const selStart = ed.selectionStart;
+  const selEnd = ed.selectionEnd;
+  const lineStart = v.lastIndexOf("\n", Math.max(0, selStart - 1)) + 1;
+  let lineEnd = v.indexOf("\n", selEnd);
+  if (lineEnd === -1) lineEnd = v.length;
+  const block = v.slice(lineStart, lineEnd);
+  const next = fn(block.split("\n")).join("\n");
+  if (next === block) return;
+  ed.setRangeText(next, lineStart, lineEnd, "end");
+  const clampPos = (p) => lineStart + Math.min(Math.max(0, p - lineStart), next.length);
+  ed.setSelectionRange(clampPos(selStart), clampPos(selEnd));
+  ed.focus();
+  schedulePreview(true);
+}
+
+const HEADING_RE = /^\s*#{1,6}\s+/;
+
+function toggleHeading(level) {
+  const mark = "#".repeat(level) + " ";
+  transformSelectedLines((lines) => {
+    const has = lines.every((l) => !l.trim() || l.startsWith(mark));
+    return lines.map((l) => {
+      if (!l.trim()) return l;
+      const bare = l.replace(HEADING_RE, "");
+      return has ? bare : mark + bare;
+    });
+  });
+}
+
+function toggleLinePrefix(prefix) {
+  transformSelectedLines((lines) => {
+    const has = lines.every((l) => !l.trim() || l.startsWith(prefix));
+    return lines.map((l) => {
+      if (!l.trim()) return l;
+      return has ? l.slice(prefix.length) : prefix + l;
+    });
+  });
+}
+
+const OL_RE = /^\s*\d+\.\s+/;
+function toggleOrderedList() {
+  transformSelectedLines((lines) => {
+    const filled = lines.filter((l) => l.trim());
+    const has = filled.length > 0 && filled.every((l) => OL_RE.test(l));
+    let n = 0;
+    return lines.map((l) => {
+      if (!l.trim()) return l;
+      if (has) return l.replace(OL_RE, "");
+      n += 1;
+      return `${n}. ${l}`;
+    });
+  });
+}
+
+function runToolbarCmd(cmd) {
+  switch (cmd) {
+    case "h1": return toggleHeading(1);
+    case "h2": return toggleHeading(2);
+    case "h3": return toggleHeading(3);
+    case "bold": return wrapInline("**", "**", "加粗文字");
+    case "italic": return wrapInline("*", "*", "斜体文字");
+    case "strike": return wrapInline("~~", "~~", "删除线");
+    case "code": return wrapInline("`", "`", "code");
+    case "quote": return toggleLinePrefix("> ");
+    case "ul": return toggleLinePrefix("- ");
+    case "ol": return toggleOrderedList();
+    case "task": return toggleLinePrefix("- [ ] ");
+    case "link": {
+      const ed = editorCtx();
+      if (!ed) return;
+      ed.focus();
+      const start = ed.selectionStart;
+      const end = ed.selectionEnd;
+      const text = ed.value.slice(start, end) || "链接文字";
+      const md = `[${text}](https://)`;
+      ed.setRangeText(md, start, end, "end");
+      const urlStart = start + text.length + 3;
+      ed.setSelectionRange(urlStart, urlStart + 8);
+      ed.focus();
+      return schedulePreview(true);
+    }
+    case "image": return els.imageInput?.click();
+    case "table":
+      return insertTextAtCursor("| 列 1 | 列 2 |\n| --- | --- |\n| 内容 | 内容 |\n");
+    case "codeblock": {
+      const ed = editorCtx();
+      if (!ed) return;
+      const start = ed.selectionStart;
+      const end = ed.selectionEnd;
+      const inner = ed.value.slice(start, end) || "";
+      const block = "```\n" + inner + (inner && !inner.endsWith("\n") ? "\n" : "") + "```\n";
+      ed.setRangeText(block, start, end, "end");
+      if (!inner) ed.setSelectionRange(start + 4, start + 4);
+      ed.focus();
+      return schedulePreview(true);
+    }
+    case "hr": return insertTextAtCursor("\n---\n");
+    default: return undefined;
+  }
+}
+
+els.mdToolbar?.querySelectorAll("[data-cmd]").forEach((btn) => {
+  // mousedown 阻止默认：点工具栏时编辑器保持焦点与选区（否则选区丢失、命令落空）
+  btn.addEventListener("mousedown", (e) => e.preventDefault());
+  btn.addEventListener("click", () => runToolbarCmd(btn.dataset.cmd));
+});
+
+// ── 粘贴 / 选择图片 → /api/lan/asset → 插入 markdown ──
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(String(fr.result || ""));
+    fr.onerror = () => reject(new Error("读取图片失败"));
+    fr.readAsDataURL(file);
+  });
+}
+
+function clipboardImageFiles(cd) {
+  if (!cd) return [];
+  const out = [];
+  if (cd.items) {
+    for (const item of Array.from(cd.items)) {
+      if (item.kind === "file" && String(item.type || "").startsWith("image/")) {
+        const f = item.getAsFile();
+        if (f) out.push(f);
+      }
+    }
+  }
+  if (!out.length && cd.files) {
+    for (const f of Array.from(cd.files)) {
+      if (String(f.type || "").startsWith("image/")) out.push(f);
+    }
+  }
+  return out;
+}
+
+function pickImageExt(mime, fileName) {
+  const m = String(mime || "");
+  if (m.includes("jpeg")) return "jpg";
+  if (m.includes("png")) return "png";
+  if (m.includes("gif")) return "gif";
+  if (m.includes("webp")) return "webp";
+  if (m.includes("bmp")) return "bmp";
+  const fromName = String(fileName || "").split(".").pop();
+  return fromName && /^[a-z0-9]{2,5}$/i.test(fromName) ? fromName.toLowerCase() : "png";
+}
+
+async function uploadAndInsertImages(files) {
+  if (!files || !files.length) return;
+  if (state.readOnly) { toast("当前为只读共享，无法插入图片"); return; }
+  if (!state.currentPath) { toast("请先打开一个文档"); return; }
+  for (const file of files) {
+    try {
+      toast("正在上传图片…");
+      const dataUrl = await fileToDataUrl(file);
+      const ext = pickImageExt(file.type, file.name);
+      const name = `paste_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.${ext}`;
+      // 走访客专用资产端点（桌面主通道的资产接口不对访客开放）；工作区归属决定
+      // 落盘目录与后面 /source/<wsId>/… 的读取路径。
+      const r = await api("POST", "/api/lan/asset", {
+        dataUrl,
+        name,
+        workspaceId: state.currentWs || undefined,
+      });
+      if (!r || !r.ok || !r.path) throw new Error((r && r.error) || "上传失败");
+      const md = r.markdown || `![](${r.path})`;
+      insertTextAtCursor(md + "\n");
+      toast("图片已插入");
+    } catch (err) {
+      if (err.message !== "需要访问口令") toast(`图片上传失败：${err.message}`);
+    }
+  }
+}
+
+function wireEditorPaste() {
+  if (state.pasteWired) return;
+  state.pasteWired = true;
+  // 编辑器内：capture 抢在 CM6 原生 paste 之前，图片一律走上传（文本粘贴不干预）
+  els.editorHost.addEventListener("paste", (e) => {
+    if (state.readOnly) return;
+    const files = clipboardImageFiles(e.clipboardData);
+    if (!files.length) return;
+    e.preventDefault();
+    e.stopPropagation();
+    uploadAndInsertImages(files);
+  }, true);
+  // 兜底：焦点不在编辑器（刚点完工具栏、或点了预览区）时，整页 paste 也接管图片
+  document.addEventListener("paste", (e) => {
+    if (state.readOnly || !state.currentPath) return;
+    const tag = (e.target && e.target.tagName) || "";
+    if (tag === "INPUT" || tag === "TEXTAREA") return;
+    const files = clipboardImageFiles(e.clipboardData);
+    if (!files.length) return;
+    e.preventDefault();
+    uploadAndInsertImages(files);
+  });
+}
+
+els.imageInput?.addEventListener("change", () => {
+  const files = Array.from(els.imageInput.files || []);
+  els.imageInput.value = "";
+  uploadAndInsertImages(files);
+});
+
+// ── 双栏滚动同步（按比例，双向；带互斥锁防抖） ──
+function wireScrollSync() {
+  if (state.scrollWired || !state.editor || !els.readerScroll) return;
+  state.scrollWired = true;
+  const ed = state.editor;
+  const reader = els.readerScroll;
+  const ratioTo = (srcTop, srcMax, dstMax) => (srcMax > 2 && dstMax > 2 ? (srcTop / srcMax) * dstMax : null);
+  ed.addEventListener("scroll", () => {
+    if (state.view !== "split" || state.scrollLock) return;
+    const target = ratioTo(ed.scrollTop, ed.scrollHeight - ed.clientHeight, reader.scrollHeight - reader.clientHeight);
+    if (target === null || Math.abs(reader.scrollTop - target) < 8) return;
+    state.scrollLock = true;
+    reader.scrollTop = target;
+    setTimeout(() => { state.scrollLock = false; }, 90);
+  });
+  reader.addEventListener("scroll", () => {
+    if (state.view !== "split" || state.scrollLock) return;
+    const target = ratioTo(reader.scrollTop, reader.scrollHeight - reader.clientHeight, ed.scrollHeight - ed.clientHeight);
+    if (target === null || Math.abs(ed.scrollTop - target) < 8) return;
+    state.scrollLock = true;
+    ed.scrollTop = target;
+    setTimeout(() => { state.scrollLock = false; }, 90);
+  });
+}
+
+// ── 标题目录（worker outline → 列表；点击跳转 + 滚动高亮） ──
+let tocSpyTimer = 0;
+function scheduleTocSpy() {
+  clearTimeout(tocSpyTimer);
+  tocSpyTimer = setTimeout(updateTocActive, 100);
+}
+
+function renderToc(outline) {
+  const list = els.tocList;
+  if (!list) return;
+  const items = (Array.isArray(outline) ? outline : []).filter((h) => h && h.id && h.title);
+  state.outline = items;
+  list.textContent = "";
+  if (!items.length) {
+    const empty = document.createElement("div");
+    empty.className = "toc-empty";
+    empty.textContent = state.currentPath ? "本文档没有标题" : "打开文档后显示目录";
+    list.appendChild(empty);
+    return;
+  }
+  for (const h of items) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = `toc-item lv${Math.min(Math.max(h.level || 1, 1), 6)}`;
+    b.textContent = h.title;
+    b.title = h.title;
+    b.dataset.id = h.id;
+    b.addEventListener("click", () => jumpToHeading(h.id));
+    list.appendChild(b);
+  }
+  updateTocActive();
+}
+
+function jumpToHeading(id) {
+  const el = els.markdownView.querySelector(`[id="${String(id).replace(/["\\]/g, "\\$&")}"]`);
+  if (!el || !els.readerScroll) return;
+  const top = el.getBoundingClientRect().top - els.readerScroll.getBoundingClientRect().top + els.readerScroll.scrollTop - 8;
+  els.readerScroll.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+  setActiveTocItem(id);
+}
+
+function updateTocActive() {
+  if (!state.outline.length || !els.readerScroll) return;
+  const threshold = els.readerScroll.getBoundingClientRect().top + 24;
+  let activeId = state.outline[0].id;
+  for (const h of state.outline) {
+    const el = els.markdownView.querySelector(`[id="${String(h.id).replace(/["\\]/g, "\\$&")}"]`);
+    if (!el) continue;
+    if (el.getBoundingClientRect().top <= threshold) activeId = h.id;
+    else break;
+  }
+  setActiveTocItem(activeId);
+}
+
+function setActiveTocItem(id) {
+  if (!els.tocList) return;
+  let active = null;
+  els.tocList.querySelectorAll(".toc-item").forEach((b) => {
+    const on = b.dataset.id === id;
+    b.classList.toggle("active", on);
+    if (on) active = b;
+  });
+  if (active && typeof active.scrollIntoView === "function") {
+    active.scrollIntoView({ block: "nearest" });
+  }
+}
+
+// 目录高亮的滚动监听独立于编辑区：只读访客没有编辑器也要能跟随滚动高亮
+els.readerScroll?.addEventListener("scroll", scheduleTocSpy);
 
 // ── 搜索 ────────────────────────────────────────────────────
 
@@ -463,7 +886,7 @@ function workerRenderMarkdown(source) {
       if (d.error) reject(new Error(String(d.error)));
       else resolve(d);
     });
-    worker.postMessage({ seq, searchTerm: "", includeHtml: true, includeOutline: false, source });
+    worker.postMessage({ seq, searchTerm: "", includeHtml: true, includeOutline: true, source });
   });
 }
 
@@ -842,15 +1265,18 @@ async function renderPreview() {
   const source = state.editor ? state.editor.value : "";
   if (!source) {
     container.innerHTML = `<div class="tree-empty" style="padding:32px 0;text-align:center;color:var(--muted)">打开左侧文档开始阅读</div>`;
+    renderToc([]);
     return;
   }
   const seq = ++state.previewSeq;
   container.innerHTML = `<div class="chart-placeholder">正在渲染…</div>`;
   let html = "";
+  let outline = [];
   try {
     const d = await workerRenderMarkdown(source);
     if (seq !== state.previewSeq) return;
     html = d.html || "";
+    outline = Array.isArray(d.outline) ? d.outline : [];
   } catch (err) {
     if (seq !== state.previewSeq) return;
     const msg = String((err && err.message) || err).replace(/[<>&]/g, "");
@@ -862,6 +1288,8 @@ async function renderPreview() {
   rewriteMediaSrc(container, state.currentWs);
   // Excalidraw 占位
   decorateExcalidrawHint(container);
+  // 标题目录（worker 与正文同源生成 id，点击即滚动到对应标题）
+  renderToc(outline);
   // 公式 / 图表 / 代码高亮（与桌面端同一顺序）
   renderMathInPreview(container);
   renderMermaidInPreview(container);
@@ -879,8 +1307,22 @@ async function initApp() {
   els.roBanner.classList.toggle("hidden", !state.readOnly);
   els.saveBtn.disabled = state.readOnly;
   els.newDocBtn.disabled = state.readOnly;
-  // 只读共享默认进预览（访客主要场景是阅读）；可编辑默认进编辑
-  setView(state.readOnly ? "preview" : "edit");
+  // 只读共享：只能预览（编辑/双栏按钮禁用，避免写出必失败的假入口）
+  els.editViewBtn.disabled = state.readOnly;
+  els.splitViewBtn.disabled = state.readOnly;
+  els.imageInput?.toggleAttribute("disabled", state.readOnly);
+  // 目录开关按上次选择恢复（默认开）
+  let tocSaved = null;
+  try { tocSaved = localStorage.getItem("guestToc"); } catch (_) {}
+  setTocOpen(tocSaved === null ? true : tocSaved === "1", { persist: false });
+  // 视图恢复：只读 → 预览；可编辑 → 上次选择，未选择时宽屏默认双栏、窄屏编辑
+  let savedView = null;
+  try { savedView = localStorage.getItem("guestView"); } catch (_) {}
+  const fallback = window.innerWidth >= 1000 ? "split" : "edit";
+  const initialView = state.readOnly
+    ? "preview"
+    : (savedView === "edit" || savedView === "split" || savedView === "preview" ? savedView : fallback);
+  setView(initialView, { persist: false });
   try {
     const data = await api("GET", "/api/workspaces");
     state.workspaces = (data && data.visible && data.visible.length ? data.visible : data.workspaces) || [];
