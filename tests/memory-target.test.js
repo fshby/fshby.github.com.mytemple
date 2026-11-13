@@ -21,14 +21,22 @@ const repoFile = (...p) => {
 
 test("MemoryTarget: Rust 实现 SetMemoryUsageTargetLevel 且遍历全部 webview 窗口", () => {
   const lib = repoFile("src-tauri", "src", "lib.rs");
-  const fnIdx = lib.indexOf("pub fn set_memory_usage_target");
-  assert.ok(fnIdx > 0, "lib.rs 缺少 set_memory_usage_target");
+  const fnIdx = lib.indexOf("pub fn apply_memory_target_to_window");
+  assert.ok(fnIdx > 0, "lib.rs 缺少 apply_memory_target_to_window");
+  // 覆盖「单窗口应用 + 全窗口遍历」两个函数（接口调用在单窗口函数里）
   const fn = lib.slice(fnIdx, lib.indexOf("// ── 系统托盘", fnIdx));
   assert.match(fn, /SetMemoryUsageTargetLevel/, "必须调用 SetMemoryUsageTargetLevel");
   assert.match(fn, /COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW/, "必须支持 LOW");
   assert.match(fn, /COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL/, "必须支持关闭时恢复 NORMAL");
-  assert.match(fn, /webview_windows\(\)/, "必须遍历全部 webview 窗口（主窗口+截图/录屏共享 GPU 进程）");
   assert.match(fn, /cast::<ICoreWebView2_19>/, "必须经 ICoreWebView2_19 接口");
+  assert.match(fn, /pub fn set_memory_usage_target/, "缺少全窗口入口 set_memory_usage_target");
+  assert.match(fn, /webview_windows\(\)/, "必须遍历全部 webview 窗口（主窗口+截图/录屏共享 GPU 进程）");
+  // 截图/录屏窗口按需重建时要继承当前状态
+  const cap = repoFile("src-tauri", "src", "global_capture.rs");
+  assert.ok(
+    (cap.match(/apply_memory_target_to_window/g) || []).length >= 4,
+    "截图/录屏窗口 4 处创建点都必须继承低显存状态",
+  );
 });
 
 test("MemoryTarget: 新端点三处同步（handlers.rs + IPC_ROUTE_MAP + tauri 命令）", () => {
