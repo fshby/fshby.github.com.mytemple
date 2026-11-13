@@ -16,7 +16,9 @@ import assert from "node:assert/strict";
 import { readFileSync, existsSync, statSync } from "node:fs";
 
 const ROOT = new URL("../", import.meta.url);
-const read = (rel) => readFileSync(new URL(rel, ROOT), "utf8");
+// autocrlf=true 下 git 检出（rebase/checkout）会把 cloud/ 工作区文件写成 CRLF（blob 仍是 LF）。
+// 测试里大量提取正则按 LF 写，读取时统一归一化，避免检出状态不同导致假失败。
+const read = (rel) => readFileSync(new URL(rel, ROOT), "utf8").replace(/\r\n/g, "\n");
 
 const cloudHtml = read("cloud/index.html");
 const cloudApp = read("cloud/app.js");

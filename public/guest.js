@@ -8,7 +8,7 @@
 //       自测量塌缩防护）→ hljs 代码高亮 → 图片/视频经 /source/<wsId>/… 资产端点。
 // 所有请求带 X-Lan-Token 头；无任何 Tauri / 云端依赖、无任何外链。
 
-import { createMarkdownEditor } from "/editor-core.js?v=20261112-1413eb61";
+import { createMarkdownEditor } from "/editor-core.js?v=20261113-7a7b96d8";
 
 const TOKEN_KEY = "mt-lan-token";
 // 第三方库缓存戳：与桌面端同源自托管（public/vendor），戳由 npm run stamp 统一维护
@@ -485,12 +485,17 @@ function workerRenderMarkdown(source) {
 // ── 图片 / 视频相对路径 → /source/<wsId>/…（访客资产端点只认这种格式） ──
 function rewriteMediaSrc(container, wsId) {
   if (!container || !wsId) return;
+  // <img>/<video> 发不了 X-Lan-Token 头：URL 上追加 ?lan_token=（服务端 lan_guard
+  // 同时接受头字段与查询参数）。token 缺失时保持原样，让服务端 401 暴露问题。
+  const t = token();
+  const withToken = (url) => (t ? url + (url.includes("?") ? "&" : "?") + "lan_token=" + encodeURIComponent(t) : url);
   container.querySelectorAll("img, video").forEach((el) => {
     const src = el.getAttribute("src") || "";
     if (!src || /^(data:|blob:|https?:)/i.test(src)) return;
-    // 已带工作区前缀（/source/ws_xxx/…）的保持原样；Rust 端白名单闸门会校验
+    // 已带工作区前缀（/source/ws_xxx/…）的改为绝对路径并追加 token；Rust 端白名单闸门会校验
     if (/^\/?source\/ws_[A-Za-z0-9_-]+\//.test(src)) {
-      if (src.startsWith("source/")) el.setAttribute("src", "/" + src);
+      const abs = src.startsWith("source/") ? "/" + src : src;
+      el.setAttribute("src", withToken(abs));
       return;
     }
     let rel = String(src).trim();
@@ -498,7 +503,7 @@ function rewriteMediaSrc(container, wsId) {
     // 文档里最常见的「source/xxx.webp」形式 → 工作区 source 目录
     if (rel.startsWith("source/")) rel = rel.slice("source/".length);
     if (!rel) return;
-    el.setAttribute("src", `/source/${wsId}/${rel}`);
+    el.setAttribute("src", withToken(`/source/${wsId}/${rel}`));
   });
 }
 

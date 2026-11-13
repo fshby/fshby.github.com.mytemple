@@ -12357,6 +12357,12 @@ body[data-theme="image"] {
     position: relative;
     z-index: 1;
   }
+  /* 阅读目录（has-outline 220px 列）在场时，卡片只包文档列：卡片是 inset 铺满整个
+     面板的，目录列背景是半透明 + blur，卡片边框与渐变会从目录文字背后穿过，
+     视觉上「目录文字与背景板不对应」（v2.3.11 实测反馈）。左偏移 = 220px 列 + 22px。 */
+  .app-shell:not(.immersive) #readerPanel.reader-panel.has-outline::before {
+    inset: 14px 22px 14px 242px;
+  }
 
   /* 4) 侧栏触缘浮出：只在桌面宽度 + 折叠态 + 非沉浸下生效。
          纯 CSS 状态机（:has 热区/侧栏 hover）—— 零 JS 监听、零定时器、零常驻 GPU 层；
@@ -12387,15 +12393,19 @@ body[data-theme="image"] {
     background: var(--panel);
     border-right: 1px solid var(--ws-accent-line);
     box-shadow: 14px 0 40px color-mix(in srgb, var(--text) 16%, transparent);
-    transition: transform 0.18s var(--ease-standard), opacity 0.18s var(--ease-standard);
+    /* 收起瞬间绝不带 transition：收起 = 布局重排（grid 变列）+ 侧栏转 fixed，
+       若再叠加全屏级 transform/opacity 动画，实测会把合成器打进整窗白屏
+       （v2.3.11 用户实测 Ctrl+Q 收起白屏、再按展开即恢复）。过渡只保留在
+       下方滑出态（hover 动画不伴随布局重排，无此风险）。 */
   }
   /* 指针在热区上 → 滑出；滑出后侧栏盖住热区，靠 :hover 保持；
-     指针移出侧栏右缘或离开窗口 → 两个 :has 都不成立 → 自动收回。 */
+     指针移出侧栏右缘或离开窗口 → 两个 :has 都不成立 → 收回（无过渡，瞬时）。 */
   .app-shell.sidebar-collapsed:not(.immersive):has(.sidebar-peek-zone:hover) .sidebar,
   .app-shell.sidebar-collapsed:not(.immersive):has(.sidebar:hover) .sidebar {
     transform: translateX(0);
     opacity: 1;
     pointer-events: auto;
+    transition: transform 0.18s var(--ease-standard), opacity 0.18s var(--ease-standard);
   }
 }
 

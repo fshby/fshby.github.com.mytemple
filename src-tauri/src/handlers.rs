@@ -234,15 +234,27 @@ pub async fn lan_guard(
     }
     let is_static = path == "/"
         || crate::lan::LAN_STATIC_ALLOW.iter().any(|f| path == format!("/{f}"));
-    if path == "/api/lan/verify" || is_static {
+    // 预览管线的公共静态资产：自托管第三方库与渲染 worker，不含任何用户数据，
+    // 免 token 放行。<img> / new Worker / importScripts / srcdoc 内 <link> 都带不了
+    // 自定义请求头，不豁免它们访客预览会整体 401（worker 加载失败 → 渲染超时）。
+    let is_public_asset = path == "/markdown-worker.js" || path.starts_with("/vendor/");
+    if path == "/api/lan/verify" || is_static || is_public_asset {
         return next.run(req).await;
     }
+    // 文档图片走 <img src="/source/…">：浏览器发不了 X-Lan-Token 头，允许以
+    // ?lan_token=… 查询参数携带（guest.js 在改写图片 URL 时追加）。头字段优先。
     let token = req
         .headers()
         .get("x-lan-token")
         .and_then(|v| v.to_str().ok())
-        .unwrap_or("")
-        .to_string();
+        .map(str::to_string)
+        .or_else(|| {
+            req.uri().query().and_then(|q| {
+                q.split('&')
+                    .find_map(|kv| kv.strip_prefix("lan_token=").map(str::to_string))
+            })
+        })
+        .unwrap_or_default();
     if !lan.check_token(&token).await {
         log::warn!("[lan] 拒绝无 token 访客请求 | path={} | ua={:?}", path, req.headers().get(header::USER_AGENT));
         return (

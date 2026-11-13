@@ -253,3 +253,35 @@ test("LAN: guest.css 侧栏折叠在所有宽度生效（「目录不能隐藏�
   assert.ok(css.includes("var(--accent"), "配色必须使用主应用 accent token");
   assert.ok(css.includes("var(--bg"), "背景必须使用主应用 bg token");
 });
+
+
+// ── v2.3.11 实测反馈回归锁：访客 <img>/Worker 带不了自定义请求头 ──
+test("LAN: lan_guard 豁免公共静态资产（vendor/ + markdown-worker）", () => {
+  const src = repoFile("src-tauri", "src", "handlers.rs");
+  const g = src.indexOf("pub async fn lan_guard");
+  const guard = src.slice(g, src.indexOf("async fn lan_fallback", g) > 0 ? src.indexOf("/// 访客静态资源", g) : g + 4000);
+  assert.match(guard, /markdown-worker\.js/, "lan_guard 必须豁免 markdown-worker.js（Worker 脚本请求带不了 token 头，401 会让预览整体渲染超时）");
+  assert.match(guard, /starts_with\("\/vendor\/"\)/, "lan_guard 必须豁免 /vendor/ 子树（KaTeX/Mermaid/hljs 全在里面）");
+  // 豁免仅限这两类公共资产：guest 入口白名单与 /api/ 仍受 token 保护
+  assert.ok(!/is_public_asset = .*\bsource\b/.test(guard), "/source 绝不能进免鉴权名单（会向任意局域网设备泄漏共享工作区文件）");
+});
+test("LAN: lan_guard 接受 ?lan_token= 查询参数（img 标签发不了自定义头）", () => {
+  const src = repoFile("src-tauri", "src", "handlers.rs");
+  const g = src.indexOf("pub async fn lan_guard");
+  const guard = src.slice(g, g + 4000);
+  assert.match(guard, /lan_token=/, "必须支持 lan_token 查询参数");
+  assert.match(guard, /x-lan-token/, "头字段必须保留且优先");
+  // 查询参数分支必须在头字段之后（or_else），头字段优先
+  const headerIdx = guard.indexOf("x-lan-token");
+  const queryIdx = guard.indexOf('strip_prefix("lan_token=') ;
+  assert.ok(headerIdx >= 0 && headerIdx < queryIdx, "头字段优先于查询参数");
+});
+test("LAN: guest.js 图片 URL 追加 lan_token（含已带工作区前缀的引用）", () => {
+  const js = repoFile("public", "guest.js");
+  const fnIdx = js.indexOf("function rewriteMediaSrc");
+  assert.ok(fnIdx > 0, "缺少 rewriteMediaSrc");
+  const fn = js.slice(fnIdx, js.indexOf("}", js.indexOf("/source/${wsId}")) + 1);
+  assert.match(fn, /lan_token=/, "改写后的 /source URL 必须追加 lan_token 查询参数");
+  assert.match(fn, /withToken\(abs\)/, "已带 ws_ 前缀的引用也必须追加 token");
+  assert.match(fn, /encodeURIComponent/, "token 必须经 URL 编码");
+});
