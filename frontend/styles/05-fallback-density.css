@@ -1472,7 +1472,7 @@ body[data-theme="image"] {
   .app-shell:not(.immersive) #readerPanel.reader-panel::before {
     content: "";
     position: absolute;
-    inset: 14px 22px;
+    inset: 22px;
     border-radius: 18px;
     /* 纸面 surface-1 实底：旧渐变 alpha 0.047 且 58% 全透明，肉眼等于没有背景板 */
     background:
@@ -1491,15 +1491,16 @@ body[data-theme="image"] {
      面板的，目录列背景是半透明 + blur，卡片边框与渐变会从目录文字背后穿过，
      视觉上「目录文字与背景板不对应」（v2.3.11 实测反馈）。左偏移 = 220px 列 + 22px。 */
   .app-shell:not(.immersive) #readerPanel.reader-panel.has-outline::before {
-    inset: 14px 22px 14px 242px;
+    inset: 22px 22px 22px 242px;
   }
-  /* 滚动区必须与卡片重合：markdownView 原本占满 grid 行（顶到面板边缘），滚动时
-     文字会穿过卡片上下边缘之外的条带——「阅读模式文字超出背景板」（v2.3.13 实测反馈）。
-     margin 与卡片 inset 对齐（has-outline 时卡片左缘 = 列2 起点 + 22px，md 在列2 内，
-     margin-left 22 恰好重合），滚动条与文字全程都在纸卡内。 */
+  /* 滚动区上下 margin 22 与卡片 inset 对齐（v2.3.13「文字超出背景板」修复）；
+     水平 auto 居中——固定左 22px 会让正文贴卡左缘、右侧余量全空（v2.3.14 实测）。
+     卡片相对内容列左右对称缩进，列内居中即卡内居中。 */
   .app-shell:not(.immersive) #readerPanel.reader-panel > #markdownView.markdown-body {
     height: auto;
-    margin: 14px 22px;
+    margin: 22px auto;
+    /* 上限相对内容列而非卡内宽（卡窄 44px）：钳 100px = 44 + 左右 28px 呼吸边距 */
+    width: min(860px, calc(100% - 100px));
   }
 
   /* 4) 侧栏触缘浮出：只在桌面宽度 + 折叠态 + 非沉浸下生效。
