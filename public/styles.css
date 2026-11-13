@@ -12372,6 +12372,15 @@ body[data-theme="image"] {
   /* 4) 侧栏触缘浮出：只在桌面宽度 + 折叠态 + 非沉浸下生效。
          纯 CSS 状态机（:has 热区/侧栏 hover）—— 零 JS 监听、零定时器、零常驻 GPU 层；
          热区 10px，浮层用 transform/opacity 过渡，不设 will-change。 */
+  /* ⚠️ 收起态把 .sidebar 转成 position:fixed（脱离网格流），app-shell 的 grid
+     自动布局会把 sidebar-resizer 顶进第 1 列、workspace 顶进第 2 列（8px→0），
+     第 3 列 minmax(0,1fr) 空置 —— 整个编辑区宽度归零，窗口只剩背景
+     （v2.3.12 用户实测 Ctrl+Q 后「整体界面被隐藏」，实测收起态 readerPanel 宽 0）。
+     三列显式钉死，与元素是否在流内无关；fixed 定位元素会忽略 grid-column，无副作用。
+     移动端（max-width:860px）不转 fixed，靠下方已有显式 grid-column 规则，不受影响。 */
+  .sidebar { grid-column: 1; }
+  .sidebar-resizer { grid-column: 2; }
+  .workspace { grid-column: 3; }
   .sidebar-peek-zone {
     display: none;
   }
