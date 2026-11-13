@@ -8,7 +8,7 @@
 //       自测量塌缩防护）→ hljs 代码高亮 → 图片/视频经 /source/<wsId>/… 资产端点。
 // 所有请求带 X-Lan-Token 头；无任何 Tauri / 云端依赖、无任何外链。
 
-import { createMarkdownEditor } from "/editor-core.js?v=20261113-5ac8970f";
+import { createMarkdownEditor } from "/editor-core.js?v=20261113-2a29346c";
 
 const TOKEN_KEY = "mt-lan-token";
 // 第三方库缓存戳：与桌面端同源自托管（public/vendor），戳由 npm run stamp 统一维护
@@ -407,6 +407,51 @@ els.conflictMine.addEventListener("click", () => {
 els.conflictTheirs.addEventListener("click", () => {
   hideConflict();
   openDoc(state.currentPath); // 重新加载磁盘最新版本
+});
+
+// ── 预览区代码块「复制」按钮 ──
+// markdown-worker 输出的 .code-copy 与桌面端同源，桌面端在 app.js 委托处理；
+// 访客页此前没有挂接 → 点击无反应。且访客页走明文 HTTP（192.168.x.x），
+// 非安全上下文里 navigator.clipboard 为 undefined，必须 execCommand 兜底。
+function legacyCopyText(text) {
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.top = "-9999px";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    ta.setSelectionRange(0, ta.value.length);
+    const ok = document.execCommand("copy");
+    ta.remove();
+    return ok;
+  } catch (_err) {
+    return false;
+  }
+}
+function copyTextToClipboard(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    // 安全上下文（桌面 WebView / localhost）：优先异步剪贴板 API，失败退回 execCommand
+    return navigator.clipboard.writeText(text)
+      .then(() => true)
+      .catch(() => legacyCopyText(text));
+  }
+  return Promise.resolve(legacyCopyText(text));
+}
+els.markdownView.addEventListener("click", (event) => {
+  const copyBtn = event.target.closest(".code-copy");
+  if (!copyBtn) return;
+  const code = copyBtn.closest(".code-block")?.querySelector("code")?.innerText || "";
+  if (!code) return;
+  copyTextToClipboard(code).then((ok) => {
+    if (!ok) { toast("复制失败，请手动选择代码复制"); return; }
+    const label = copyBtn.dataset.label || (copyBtn.dataset.label = copyBtn.textContent);
+    copyBtn.textContent = "已复制";
+    setTimeout(() => { copyBtn.textContent = label; }, 1500);
+    toast("代码已复制");
+  });
 });
 
 document.addEventListener("keydown", (e) => {

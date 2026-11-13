@@ -407,3 +407,17 @@ test("LAN: 访客页点击编辑行 → 预览跳转对应标题", () => {
   assert.ok(js.includes("state.scrollLock = true"), "跳转期间必须挂起比例同步防抖动");
   assert.ok(js.includes("lastJumpedHeadingId"), "同一节内移动光标不得反复跳转");
 });
+
+test("LAN: 访客页预览区代码块复制按钮（非安全上下文兜底）", () => {
+  const js = repoFile("public", "guest.js");
+  // markdown-worker 输出 .code-copy（与桌面端同源），桌面端由 app.js 委托，
+  // 访客端必须自己挂接，否则按钮点击无反应（v2.3.12 前实测不生效）
+  assert.ok(/markdownView\.addEventListener\("click"[\s\S]*?\.code-copy/.test(js),
+    "markdownView 上必须有 .code-copy 点击委托");
+  assert.ok(js.includes("closest(\".code-block\")?.querySelector(\"code\")"), "复制内容取自同块 code 文本");
+  // 访客页走明文 HTTP（192.168.x.x），navigator.clipboard 为 undefined → 必须 execCommand 兜底
+  assert.ok(js.includes("window.isSecureContext"), "剪贴板 API 必须先判安全上下文");
+  assert.ok(js.includes("legacyCopyText") && js.includes('document.execCommand("copy")'),
+    "非安全上下文必须退回 execCommand 复制");
+  assert.ok(js.includes("复制失败，请手动选择代码复制"), "复制失败必须有可见反馈");
+});
