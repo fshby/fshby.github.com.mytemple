@@ -24,7 +24,7 @@
         <a href="index.html#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.3.11</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.3.12</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -40,6 +40,7 @@
         <div class="changelog-toc reveal">
           <h3>版本索引</h3>
           <ul>
+            <li><a href="#v2.3.12">v2.3.12</a> — 低显存模式真正生效（GPU 进程 691→352MB）、预览去常驻合成层、最小化不再白抖</li>
             <li><a href="#v2.3.11">v2.3.11</a> — 白屏根因闭环（内容级强制提交）、Mermaid 塌缩防护、LAN 访客页对齐桌面端</li>
             <li><a href="#v2.3.10">v2.3.10</a> — 合成层自愈：DOM 健康但画面不绘制时强制重绘 + 常显「显示修复」按钮</li>
             <li><a href="#v2.3.9">v2.3.9</a> — 启动护栏：启动期异常不再静默白屏 + 主界面 watchdog</li>
@@ -121,6 +122,43 @@
             <li><a href="#v1.8.93">v1.8.93</a> — 界面与体验升级 + 性能优化</li>
           </ul>
         </div>
+
+                <article class="doc-section reveal" id="v2.3.12">
+          <h3>v2.3.12 · 低显存模式真正生效（GPU / 内存优化）</h3>
+<p>上一版把白屏与渲染问题收口之后，这一版专门处理资源占用：用户实测 GPU 进程 686 MB、渲染进程 465 MB，而设置里的「低显存模式」勾着却几乎没有可感知效果。本版把开关接到了真正控制缓存的运行时入口，并顺手削掉两处隐性浪费。</p>
+
+          <h4>① 为什么旧开关「没效果」</h4>
+          <ul>
+            <li>旧实现只删 CSS 毛玻璃（backdrop-filter）与大范围阴影。这些只是合成层的<b>样式成本</b>，而 GPU 进程里占大头的是<b>解码图片缓存、光栅 tile 缓存、GPU 纹理 / 命令缓存</b>——由 WebView2 运行时自己管理，改 CSS 根本碰不到。</li>
+            <li>所以开关勾上后，任务管理器里的数字基本不动，用户自然感觉「没用」。</li>
+          </ul>
+
+          <h4>② 接上 WebView2 官方内存目标（MemoryUsageTargetLevel）</h4>
+          <ul>
+            <li>低显存模式现在直接调用 <code>ICoreWebView2_19::MemoryUsageTargetLevel</code>，对全部 webview 窗口下发 <b>LOW</b>；关闭开关时恢复 <b>NORMAL</b>（缓存与滚动性能回到满配）。这是 WebView2 官方为降低内存占用提供的入口，运行时会主动瘦身上述三类缓存。</li>
+            <li><b>同实例 A/B 实测</b>（打开大文档后按进程树统计工作集）：LOW 状态下 GPU 进程 90 秒内 <b>691 → 482 → 352 MB</b> 持续回落；NORMAL 状态稳定在 <b>475~571 MB</b> 不再下降。稳态 GPU 低约 <b>20~25%</b>，整棵进程树低约 10~15%——文档里图片越多，收益越大。</li>
+            <li>开关实时生效，无需重启；启动时自动同步上次的记忆状态（手动关过的用户也不会被偷偷打开）。截图 / 录屏窗口按需重建时同样继承当前状态。</li>
+          </ul>
+
+          <h4>③ 预览区不再常驻合成层</h4>
+          <ul>
+            <li>预览滚动容器原有一条常驻的 <code>will-change: scroll-position</code>，让整篇预览长期保留光栅缓存——长文档就是几十 MB 级。低显存模式下改为按需合成，排版、滚动同步与源码行号对齐逻辑一个没动。</li>
+          </ul>
+
+          <h4>④ 最小化时不再「白抖」</h4>
+          <ul>
+            <li>v2.3.11 的每 45 秒周期自愈（防虚拟显示器翻转导致的白屏）在窗口最小化时仍然执行——而这时的整窗重排重绘对 DWM 毫无意义，纯属白耗 GPU 与内存。现在最小化期间自动跳过，最大化 / 前台恢复后照常兜底（用户主动点「显示修复」不受影响）。</li>
+          </ul>
+
+          <h4>验证</h4>
+          <ul>
+            <li>自动化测试 <b>331/331</b> 通过（新增 5 条低显存接线回归锁：LOW/NORMAL 接口、端点三处同步、前端开关与启动同步、最小化跳过、CSS 回退）。</li>
+            <li>Rust 编译检查无新增告警；新构建实机启动后端点返回 applied=3（主窗口 + 截图 + 录屏）。</li>
+            <li>性能预算其余 7 项不变；输入 P95 在后台程序多时会被 CPU 争用推高，改动前后同值（环境因素，非本版回归）。</li>
+          </ul>
+
+          <p class="doc-meta">升级后无需迁移任何文档或配置。如果关闭低显存模式，毛玻璃、阴影与完整缓存都会恢复；低显存模式是默认开启。</p>
+</article>
 
                 <article class="doc-section reveal" id="v2.3.11">
           <h3>v2.3.11 · 白屏根因闭环 + 图表塌缩防护 + LAN 访客页对齐</h3>

@@ -1,7 +1,7 @@
 {
-    "version":  "2.3.11",
+    "version":  "2.3.12",
     "downloadUrl":  "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
-    "latestReleaseNotes":  "白屏根因闭环：自愈升级为内容级强制提交；Mermaid 塌缩防护；LAN 访客页对齐桌面端（预览/图片/折叠/观感）",
-    "releaseNotes":  "v2.3.11 release. See changelog for details.",
-    "releaseDate":  "2026-11-12"
+    "latestReleaseNotes":  "低显存模式真正生效：接上 WebView2 内存目标（GPU 进程 691→352MB 持续回落），预览去常驻合成层，最小化不再白抖",
+    "releaseNotes":  "v2.3.12 release. See changelog for details.",
+    "releaseDate":  "2026-11-13"
 }
