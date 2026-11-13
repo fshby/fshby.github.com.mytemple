@@ -1,7 +1,7 @@
 {
-    "version":  "2.3.13",
+    "version":  "2.3.14",
     "downloadUrl":  "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
-    "latestReleaseNotes":  "局域网共享访客端体验大补齐：手机粘贴即上传图片、编辑/双栏/预览三档视图、15 项编辑工具栏、标题目录、预览区删图、代码块复制、快捷键对齐与双击 Shift 全局搜索；同时修复阅读模式文字跑出文档纸卡、Ctrl+Q 收起侧栏后编辑区归零、保存后跳回文档开头",
-    "releaseNotes":  "v2.3.13 release. See changelog for details.",
+    "latestReleaseNotes":  "云端分享链接修复（平台升级 sharecode 适配，桌面端生成链接直接可开）+ 阅读模式排版优化（宽表格不再撑破横向溢出、文档纸卡真正可见）",
+    "releaseNotes":  "v2.3.14 release. See changelog for details.",
     "releaseDate":  "2026-11-13"
 }
