@@ -8,7 +8,7 @@
 //       自测量塌缩防护）→ hljs 代码高亮 → 图片/视频经 /source/<wsId>/… 资产端点。
 // 所有请求带 X-Lan-Token 头；无任何 Tauri / 云端依赖、无任何外链。
 
-import { createMarkdownEditor } from "/editor-core.js?v=20261113-6c9324e4";
+import { createMarkdownEditor } from "/editor-core.js?v=20261113-8ae92fa6";
 
 const TOKEN_KEY = "mt-lan-token";
 // 第三方库缓存戳：与桌面端同源自托管（public/vendor），戳由 npm run stamp 统一维护
@@ -823,6 +823,10 @@ async function uploadAndInsertImages(files) {
       if (err.message !== "需要访问口令") toast(`图片上传失败：${err.message}`);
     }
   }
+  // 引用已插入但必须存盘，预览/刷新才能加载图片；手机上保存按钮曾被挤出
+  // 视口导致引用丢失，这里上传完成后自动保存一次（saveDoc 自带并发互斥与
+  // 冲突条兜底，多张图只在循环结束后保存一次）。
+  await saveDoc();
 }
 
 function wireEditorPaste() {
