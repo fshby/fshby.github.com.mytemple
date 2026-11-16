@@ -50,8 +50,10 @@ desktop.ini
 # 本会话/临时清理区
 .workbuddy/
 _to_delete/
-# 本地回归校验脚本与截图（真浏览器验证用，不入库）
-.verify/
+# 本地回归校验脚本与截图（真浏览器验证用，默认不入库）；
+# 例外：线上探针 share-guard.yml（CI）也要跑同一份，故单独入库保持单一事实源
+.verify/*
+!.verify/share-anon-rest-check.mjs
 
 # 一次性脚本残留（历史遗留，勿再入库）
 *.b64
