@@ -1,5 +1,5 @@
-import { createMarkdownEditor } from "/editor-core.js?v=20261121-9ac4e85a";
-import { mathCacheKey, katexCacheGet, katexCachePut, fillMathElement, mathNearViewport, mathDeferredObserver, flushDeferredMath } from "./modules/math-perf.js?v=20261121-9ac4e85a";
+import { createMarkdownEditor } from "/editor-core.js?v=20261121-b2f131c7";
+import { mathCacheKey, katexCacheGet, katexCachePut, fillMathElement, mathNearViewport, mathDeferredObserver, flushDeferredMath } from "./modules/math-perf.js?v=20261121-b2f131c7";
 import { getPaperBackgroundUrl } from "./modules/paper-texture.js";
 import { escapeHtml, displayName, displayRelativePath, splitPathRef, joinPathRef, parentPathRef, compactName, splitWorkspaceRef, plainText, headingId } from "./modules/path-utils.js";
 import { extractOutline, addCnEnSpaces } from "./modules/editor-utils.js";
@@ -57,8 +57,8 @@ const LARGE_PREVIEW_BYTES = 100 * 1024;
 const LARGE_PREVIEW_DELAY = 700;
 const CHUNKED_RENDER_BYTES = 500 * 1024;
 const CHUNK_RENDER_SLICE_BYTES = 150 * 1024;
-const GRAPH_WORKER_URL = "/graph-worker.js?v=20261121-9ac4e85a";
-const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20261121-9ac4e85a&assets=/vendor/";
+const GRAPH_WORKER_URL = "/graph-worker.js?v=20261121-b2f131c7";
+const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20261121-b2f131c7&assets=/vendor/";
 // Markdown 渲染缓存版本戳：解析器或 CSS 规则升级时递增，确保旧缓存不被复用。
 // 2026-08-29 v1.8.102：安装包 resources 包含 public/ 前端静态文件、端口回滚；修正其他电脑安装后 404 白屏。
 const MARKDOWN_RENDER_VERSION = "20260829-v18102-install-static-bundle-port-scan";
@@ -2107,10 +2107,8 @@ function buildDocumentPrintHtml() {
 }
 
 /**
- * 将 Mermaid 渲染出的 <svg> 节点 + 用户文档里的本地 <img> 统一转换为 data URL，
- * 再把 KaTeX 的外部 CSS 依赖就地展开为 inline style。
- * 这样导出 iframe about:blank 无需任何外网、无需加载第三方字体/CSS，
- * 就能完整显示：公式、Mermaid 图表、本地引用图片。
+ * 将 Mermaid <svg> 与本地 <img> 转 data URL；KaTeX 样式由 PRINT_STYLES 内联。
+ * 导出 iframe 无需外网即可完整显示公式、图表与本地图片。
  */
 async function materializePrintArtifacts(container) {
   if (!container) return;
@@ -2310,12 +2308,19 @@ async function materializePrintArtifacts(container) {
   }));
 }
 
-/**
- * 新的 PDF 主 HTML 生成入口：先构建 → 离屏渲染 Mermaid + KaTeX → 内联图表与图片 →
- * 再返回最终纯字符串 HTML（不再有任何对外部 CSS/JS/字体/网络的依赖）。
- */
+// 导出时加载官方 KaTeX 样式（字体内联），失败则用自带子集兜底。
+async function ensurePrintKatexCss() {
+  if (currentPrintKatexCss) return;
+  try {
+    const { loadPrintKatexCss } = await import("./modules/print-katex.js");
+    currentPrintKatexCss = await loadPrintKatexCss();
+  } catch (_err) { /* 兜底 */ }
+}
+
+/** PDF 主 HTML：渲染图表/公式 + 内联图片，返回纯字符串。 */
 async function buildDocumentPrintHtmlRendered() {
   const html = buildDocumentPrintHtml();
+  await ensurePrintKatexCss();
   const host = document.createElement("div");
   host.setAttribute("aria-hidden", "true");
   host.style.cssText = "position:fixed;left:-99999px;top:-99999px;width:900px;height:auto;background:#fff;visibility:visible;pointer-events:none;z-index:-1;";
@@ -2454,9 +2459,8 @@ function customAlert(message, options = {}) {
   });
 }
 
-// KaTeX 打印样式：把 KaTeX 0.16 常用样式最小集合直接注入到打印 iframe，
-// 避免 iframe about:blank 访问不到远程 CDN CSS 导致公式全部渲染出来却"糊成一团或错位"。
-// 同时包含必要的 .katex-display / .katex / .mord / .mbin / .mfrac 等关键布局。
+// 官方完整样式由 print-katex 模块导出时填入；手写子集兜底。
+let currentPrintKatexCss = null;
 const KATEX_PRINT_CSS = `
 .katex-display{display:block;margin:1em 0;text-align:center;white-space:nowrap;overflow-x:auto;overflow-y:hidden}
 .katex{font:italic 1.21em "KaTeX_Main","Times New Roman",Times,serif;line-height:1.2;text-indent:0}
@@ -2708,6 +2712,7 @@ async function settleHtmlInlineFrames(container) {
 }
 
 async function buildExportableHtml({ withBrandFooter = true } = {}) {
+  await ensurePrintKatexCss();
   // 高品质离线 HTML 导出：
   //  - strip frontmatter（读者视角不需要写作者元数据）
   //  - 用 renderMarkdown 产出渲染后 body（含 KaTeX math-block / Mermaid chart-block / Excalidraw chart-block / MATH inline 占位）
@@ -2770,8 +2775,7 @@ async function buildExportableHtml({ withBrandFooter = true } = {}) {
 html,body{margin:0;padding:0;background:#fff;color:#1f2937;font-family:"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;}
 body{padding:32px 16px 64px 16px;}
 .print-article{max-width:900px;margin:0 auto;background:#fff;}
-${PRINT_STYLES}
-${KATEX_PRINT_CSS}
+${currentPrintKatexCss ? PRINT_STYLES.replace(KATEX_PRINT_CSS, currentPrintKatexCss) : PRINT_STYLES}
 /* 图片内联打印边距（inlinePrintImages 会把 img src 改为 data URL，但显示样式要用当前 markdown-body 视觉） */
 .print-body img{max-width:100%;height:auto;display:block;margin:16px auto;border-radius:6px;}
 /* html-inline iframe 导出样式：运行时已将实际高度写入内联 style，这里只做容器去裁剪 + 视觉 */
@@ -3153,7 +3157,8 @@ async function exportCurrentDocToPdf() {
 
   // 组装完整 HTML（含 PRINT_STYLES），直接写入隐藏 iframe 调 print。
   // 不再额外另存 HTML——用户点"导出 PDF"就是要 PDF。
-  const fullHtml = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>${PRINT_STYLES}</style></head><body>${html}</body></html>`;
+  const pdfStyles = currentPrintKatexCss ? PRINT_STYLES.replace(KATEX_PRINT_CSS, currentPrintKatexCss) : PRINT_STYLES;
+  const fullHtml = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>${pdfStyles}</style></head><body>${html}</body></html>`;
 
   // 通过隐藏 iframe 打印：iframe 来源为 about:blank，浏览器打印页眉页脚不会显示本机地址与端口。
   const iframe = document.createElement("iframe");
@@ -8272,11 +8277,11 @@ function loadKatexAsync() {
     const link = document.createElement("link");
     link.rel = "stylesheet";
     // 同源自托管：katex.min.css 以相对路径引用 fonts/*.woff2，字体已一并镜像到 public/vendor/katex/。
-    link.href = "/vendor/katex/katex.min.css?v=20261121-9ac4e85a";
+    link.href = "/vendor/katex/katex.min.css?v=20261121-b2f131c7";
     document.head.appendChild(link);
     // 再加载 JS
     const script = document.createElement("script");
-    script.src = "/vendor/katex/katex.min.js?v=20261121-9ac4e85a";
+    script.src = "/vendor/katex/katex.min.js?v=20261121-b2f131c7";
     script.onload = () => resolve(window.katex);
     script.onerror = () => {
       _katexLoadingPromise = null;
@@ -8452,7 +8457,7 @@ function loadMermaidAsync() {
     // 同源自托管：与云端共用 public/vendor/mermaid/mermaid.min.js（npm 固定 11.12.2）。
     // 原先指向 cdn.jsdelivr.net，国内常见线路 TLS 握手被重置，所有 Mermaid 图表会
     // 一起降级成「库加载失败」。query 缓存破坏沿用桌面端统一戳，由 npm run stamp 维护。
-    script.src = "/vendor/mermaid/mermaid.min.js?v=20261121-9ac4e85a";
+    script.src = "/vendor/mermaid/mermaid.min.js?v=20261121-b2f131c7";
     script.onload = () => resolve(window.mermaid);
     script.onerror = () => {
       _mermaidLoadingPromise = null;
