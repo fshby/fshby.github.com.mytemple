@@ -24,7 +24,7 @@
         <a href="index.html#downloads">版本下载</a>
       </nav>
       <div class="nav-actions">
-        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.3.15</a>
+        <a class="button button-primary button-small" href="https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe" download>下载 v2.3.16</a>
       </div>
       <button class="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" data-menu-toggle><span></span><span></span></button>
     </header>
@@ -40,6 +40,7 @@
         <div class="changelog-toc reveal">
           <h3>版本索引</h3>
           <ul>
+            <li><a href="#v2.3.16">v2.3.16</a> — 公式渲染性能优化（KaTeX 结果缓存复用 + 视口外等高延后 + 密集文档合成层降级，功能不变）</li>
             <li><a href="#v2.3.15">v2.3.15</a> — 阅读模式版心居中与顶部留白（左右对称、行文流畅）+ 局域网手机端保存按钮可见（顶栏两行）+ 粘贴图片自动保存</li>
             <li><a href="#v2.3.14">v2.3.14</a> — 云端分享链接修复（平台升级 sharecode 适配）+ 阅读模式排版优化（宽表格不再撑破横向、文档纸卡可见）</li>
             <li><a href="#v2.3.13">v2.3.13</a> — 局域网共享访客端体验大补齐（粘贴图片 / 双栏实时预览 / 编辑工具栏 / 标题目录 / 删图 / 代码块复制 / 快捷键）+ 阅读模式文字超出纸卡、侧栏收起后编辑区归零两处修复</li>
@@ -125,6 +126,36 @@
             <li><a href="#v1.8.93">v1.8.93</a> — 界面与体验升级 + 性能优化</li>
           </ul>
         </div>
+
+                <article class="doc-section reveal" id="v2.3.16">
+          <h3>v2.3.16 · 公式渲染性能：重建 149.6ms → 31.1ms</h3>
+<p>数学公式多的文档，边输入边看预览时每次按键都要把整篇公式重新排版一遍——这次把这条开销按「缓存复用 + 视口外延后 + 合成层降级」三层收口，公式内容、复制打印、行号同步与错误提示全部保持原样。</p>
+
+          <h4>① KaTeX 结果缓存复用</h4>
+          <ul>
+            <li>按「公式源码 + 行内/块级」缓存渲染后的 HTML、实测高度与错误态（400 条 LRU），命中后直接复用，不再重复调用 KaTeX 排版；新公式仍走原渲染路径。</li>
+            <li>字体异步加载完成后刷新一次实测高度，保证后续延后占位的高度准确。</li>
+          </ul>
+
+          <h4>② 视口外块级公式等高延后</h4>
+          <ul>
+            <li>屏幕外的块级公式先用上次实测高度占位，滚动到附近（提前 400px）再补回完整 KaTeX；行号同步依赖的 offsetTop 不变。</li>
+            <li>行内公式、导出 PDF 的离屏画布、沉浸编辑块保持即时完整渲染；复制与打印前强制补齐，剪贴板和纸面内容不缺公式。</li>
+          </ul>
+
+          <h4>③ 公式密集文档按需降级合成层</h4>
+          <ul>
+            <li>单文档 16 个以上公式时自动关闭预览毛玻璃与滚动常驻缓存，切回普通文档自动恢复；低显存模式本来就关，叠加无副作用。</li>
+          </ul>
+
+          <h4>验证</h4>
+          <ul>
+            <li>真浏览器同条件对比：60 个公式全量重建 <b>149.6ms → 31.1ms</b>，预览 DOM 节点 <b>12600 → 1629</b>，53 个视口外公式延后，占位高度误差 &lt;1.5px。</li>
+            <li>自动化测试 <b>354/354</b>；新回归 12/12（滚动补齐、复制补齐、行内公式、错误提示一致、零 JS 错误）；体验层 17/17、性能预算 9/9、访客页 44/44 + 9/9、启动护栏 22/22、渲染自愈 7/7、第三方库 18/18。</li>
+          </ul>
+
+          <p class="doc-meta">纯渲染层优化，编辑、保存、导入导出、云同步与局域网共享的协议和行为完全不变；无需迁移文档或配置。</p>
+        </article>
 
                 <article class="doc-section reveal" id="v2.3.15">
           <h3>v2.3.15 · 阅读模式版心居中 + 局域网手机端保存修复</h3>

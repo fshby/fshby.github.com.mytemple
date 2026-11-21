@@ -1,7 +1,7 @@
 {
-    "version":  "2.3.15",
+    "version":  "2.3.16",
     "downloadUrl":  "https://mytemple.fshby.cc/downloads/MyTempleKnowledge_Setup.exe",
-    "latestReleaseNotes":  "阅读模式版心居中与顶部留白 + 局域网手机端保存按钮修复与粘贴图片自动保存",
-    "releaseNotes":  "v2.3.15 release. See changelog for details.",
-    "releaseDate":  "2026-11-13"
+    "latestReleaseNotes":  "公式渲染性能优化：KaTeX 结果缓存复用 + 视口外等高延后 + 密集文档合成层降级（功能不变）",
+    "releaseNotes":  "v2.3.16 release. See changelog for details.",
+    "releaseDate":  "2026-11-21"
 }
