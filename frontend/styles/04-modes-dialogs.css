@@ -136,6 +136,13 @@ body.low-gpu-mode #graphCanvas {
 body.low-gpu-mode #preview {
   will-change: auto !important;
 }
+/* 公式密集文档（KaTeX 节点可达数万）同样退回按需合成：预览模糊层会让每帧
+   先模糊再合成整篇，与公式数量相乘；关闭后行号同步、复制、打印完全不变。 */
+body.math-dense #preview {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  will-change: auto !important;
+}
 /* 低显存模式禁用持续动画：咖啡蒸汽 */
 body.low-gpu-mode .coffee-steam span {
   animation: none !important;

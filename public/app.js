@@ -1,4 +1,5 @@
-import { createMarkdownEditor } from "/editor-core.js?v=20261113-8ae92fa6";
+import { createMarkdownEditor } from "/editor-core.js?v=20261121-e065848a";
+import { mathCacheKey, katexCacheGet, katexCachePut, fillMathElement, mathNearViewport, mathDeferredObserver, flushDeferredMath } from "./modules/math-perf.js?v=20261121-e065848a";
 import { getPaperBackgroundUrl } from "./modules/paper-texture.js";
 import { escapeHtml, displayName, displayRelativePath, splitPathRef, joinPathRef, parentPathRef, compactName, splitWorkspaceRef, plainText, headingId } from "./modules/path-utils.js";
 import { extractOutline, addCnEnSpaces } from "./modules/editor-utils.js";
@@ -56,8 +57,8 @@ const LARGE_PREVIEW_BYTES = 100 * 1024;
 const LARGE_PREVIEW_DELAY = 700;
 const CHUNKED_RENDER_BYTES = 500 * 1024;
 const CHUNK_RENDER_SLICE_BYTES = 150 * 1024;
-const GRAPH_WORKER_URL = "/graph-worker.js?v=20261113-8ae92fa6";
-const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20261113-8ae92fa6&assets=/vendor/";
+const GRAPH_WORKER_URL = "/graph-worker.js?v=20261121-e065848a";
+const MARKDOWN_WORKER_URL = "/markdown-worker.js?v=20261121-e065848a&assets=/vendor/";
 // Markdown 渲染缓存版本戳：解析器或 CSS 规则升级时递增，确保旧缓存不被复用。
 // 2026-08-29 v1.8.102：安装包 resources 包含 public/ 前端静态文件、端口回滚；修正其他电脑安装后 404 白屏。
 const MARKDOWN_RENDER_VERSION = "20260829-v18102-install-static-bundle-port-scan";
@@ -3682,6 +3683,8 @@ function requestMarkdownRender({ source = "", searchTerm = "", includeHtml = tru
 }
 
 async function renderReaderContent(source, options = {}) {
+  // 公式密集标记每次渲染重算：从密集文档切到普通文档要恢复预览毛玻璃
+  document.body.classList.remove("math-dense");
   const content = String(source || "");
   const searchTerm = options.searchTerm || "";
   const byteLen = contentByteLength(content);
@@ -8266,11 +8269,11 @@ function loadKatexAsync() {
     const link = document.createElement("link");
     link.rel = "stylesheet";
     // 同源自托管：katex.min.css 以相对路径引用 fonts/*.woff2，字体已一并镜像到 public/vendor/katex/。
-    link.href = "/vendor/katex/katex.min.css?v=20261113-8ae92fa6";
+    link.href = "/vendor/katex/katex.min.css?v=20261121-e065848a";
     document.head.appendChild(link);
     // 再加载 JS
     const script = document.createElement("script");
-    script.src = "/vendor/katex/katex.min.js?v=20261113-8ae92fa6";
+    script.src = "/vendor/katex/katex.min.js?v=20261121-e065848a";
     script.onload = () => resolve(window.katex);
     script.onerror = () => {
       _katexLoadingPromise = null;
@@ -8301,29 +8304,67 @@ async function renderMathInPreview(container) {
   const seq = (_mathRenderSeqs.get(container) || 0) + 1;
   _mathRenderSeqs.set(container, seq);
   const stale = () => _mathRenderSeqs.get(container) !== seq;
+  // 只有主阅读/预览容器做延迟：导出 PDF 的离屏 stage 与沉浸块必须立即完整渲染。
+  const allowDefer = container === els.preview || container === els.markdownView;
+  if (allowDefer && mathElements.length >= 16) document.body.classList.add("math-dense");
+  const io = allowDefer && typeof IntersectionObserver !== "undefined" ? mathDeferredObserver(container) : null;
+  if (io) {
+    // 同一容器重建：先把上一版尚未入视口的公式补齐，再丢弃旧观察项，避免它们永久空白。
+    flushDeferredMath(container);
+    io.disconnect();
+  }
+  const pending = [];
+  mathElements.forEach((el) => {
+    const math = el.getAttribute("data-math") || "";
+    const isBlock = el.classList.contains("math-block");
+    const cached = katexCacheGet(math, isBlock);
+    if (cached) {
+      if (isBlock && cached.height > 0 && io && !mathNearViewport(el)) {
+        // 等高占位：行号同步依赖真实 offsetTop，占位高度就是上次实测的渲染高度。
+        el.innerHTML = "";
+        // border-box 让 minHeight 等于实测的 border-box 高度，不受站点 box-sizing 影响
+        el.style.boxSizing = "border-box";
+        el.style.minHeight = cached.height + "px";
+        el.setAttribute("data-math-deferred", "1");
+        io.observe(el);
+        window.__mathPerfStats.deferred++;
+      } else {
+        fillMathElement(el, cached);
+        // 元素尚未入文档导致没记到高度的，补齐后量一次，后续重建即可延迟。
+        if (cached.height <= 0 && el.isConnected) {
+          const h = el.getBoundingClientRect().height;
+          if (h > 0) katexCachePut(math, isBlock, cached.html, h, cached.error);
+        }
+      }
+      return;
+    }
+    pending.push({ el, math, isBlock });
+  });
+  if (!pending.length) return;
   try {
     const katex = await loadKatexAsync();
     if (stale()) return;
     if (!katex) throw new Error("KaTeX 库不可用");
-    mathElements.forEach((el) => {
-      const math = el.getAttribute("data-math") || "";
-      const isBlock = el.classList.contains("math-block");
+    pending.forEach(({ el, math, isBlock }) => {
       try {
         katex.render(math, el, {
           throwOnError: false,
           displayMode: isBlock,
           errorColor: "#ef4444",
         });
+        window.__mathPerfStats.rendered++;
+        const height = el.isConnected ? el.getBoundingClientRect().height : 0;
+        katexCachePut(math, isBlock, el.innerHTML, height);
       } catch (err) {
         el.textContent = math;
         el.style.color = "#ef4444";
+        katexCachePut(math, isBlock, el.innerHTML, 0, true);
       }
     });
   } catch (err) {
     if (stale()) return;
     // KaTeX 加载失败，降级显示原始 LaTeX 源码
-    mathElements.forEach((el) => {
-      const math = el.getAttribute("data-math") || "";
+    pending.forEach(({ el, math }) => {
       el.textContent = math;
       el.style.fontFamily = "monospace";
       el.style.color = "#94a3b8";
@@ -8404,7 +8445,7 @@ function loadMermaidAsync() {
     // 同源自托管：与云端共用 public/vendor/mermaid/mermaid.min.js（npm 固定 11.12.2）。
     // 原先指向 cdn.jsdelivr.net，国内常见线路 TLS 握手被重置，所有 Mermaid 图表会
     // 一起降级成「库加载失败」。query 缓存破坏沿用桌面端统一戳，由 npm run stamp 维护。
-    script.src = "/vendor/mermaid/mermaid.min.js?v=20261113-8ae92fa6";
+    script.src = "/vendor/mermaid/mermaid.min.js?v=20261121-e065848a";
     script.onload = () => resolve(window.mermaid);
     script.onerror = () => {
       _mermaidLoadingPromise = null;
@@ -8927,6 +8968,7 @@ function renderExcalidrawThumb(data, canvasId) {
 // 保留滚动位置：innerHTML 重建会重置 scrollTop，导致表格操作等增量编辑后预览跳至文档尾部。
 let _previewSwapScheduled = false;
 function swapPreviewHtml(html) {
+  document.body.classList.remove("math-dense");
   const preview = els.preview;
   if (!preview) return;
   const savedScroll = preview.scrollTop;
