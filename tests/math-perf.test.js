@@ -69,6 +69,21 @@ test("错误公式的红色提示随缓存复用一并保留", () => {
   assert.match(body, /katexCachePut\(math, isBlock, el\.innerHTML, 0, true\)/, "渲染异常须标记为错误态");
 });
 
+test("五端 KaTeX 只输出视觉 HTML，公式语义由 aria-label 承载", () => {
+  const files = ["../public/app.js", "../public/guest.js", "../cloud/app.js", "../cloud/share.js"];
+  let calls = 0;
+  for (const f of files) {
+    const src = readFileSync(new URL(f, import.meta.url), "utf8");
+    for (const m of src.matchAll(/katex\.render\(/g)) {
+      calls++;
+      const chunk = src.slice(m.index, m.index + 600);
+      assert.match(chunk, /output:\s*["']html["']/, `${f} 的 KaTeX 渲染必须关闭隐藏 MathML 副本`);
+      assert.match(chunk, /aria-label/, `${f} 必须以 aria-label 保留公式无障碍语义`);
+    }
+  }
+  assert.equal(calls, 5, "桌面导出/预览、访客页、云端主站与分享页共 5 处渲染入口");
+});
+
 test("公式密集文档按需关闭预览常驻合成层，普通文档不受影响", () => {
   assert.match(body, /mathElements\.length >= 16\) document\.body\.classList\.add\("math-dense"\)/,
     "仅公式密集时降级，普通文档保持原有毛玻璃");

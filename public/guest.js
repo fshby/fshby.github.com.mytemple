@@ -8,7 +8,7 @@
 //       自测量塌缩防护）→ hljs 代码高亮 → 图片/视频经 /source/<wsId>/… 资产端点。
 // 所有请求带 X-Lan-Token 头；无任何 Tauri / 云端依赖、无任何外链。
 
-import { createMarkdownEditor } from "/editor-core.js?v=20261121-e065848a";
+import { createMarkdownEditor } from "/editor-core.js?v=20261121-9ac4e85a";
 
 const TOKEN_KEY = "mt-lan-token";
 // 第三方库缓存戳：与桌面端同源自托管（public/vendor），戳由 npm run stamp 统一维护
@@ -1267,7 +1267,9 @@ async function renderMathInPreview(container) {
       const math = el.getAttribute("data-math") || "";
       const isBlock = el.classList.contains("math-block");
       try {
-        katex.render(math, el, { throwOnError: false, displayMode: isBlock, errorColor: "#ef4444" });
+        katex.render(math, el, { throwOnError: false, displayMode: isBlock, output: "html", errorColor: "#ef4444" });
+        const kx = el.querySelector(".katex");
+        if (kx) { kx.setAttribute("role", "math"); kx.setAttribute("aria-label", math); }
       } catch (err) {
         el.textContent = math;
         el.style.color = "#ef4444";

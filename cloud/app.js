@@ -28,7 +28,7 @@ import {
   parseShareTtl,
   expiresAtFromTtl,
   utf8Bytes,
-} from "./share-core.js?v=cloud-26";
+} from "./share-core.js?v=cloud-27";
 /* 文档类白名单（**两端逐字同源**：public/modules/cloud-client.js 顶部有一份完全相同的
  * 拷贝，tests/three-way-sync.test.js 逐字比对，防两端算出不同的可同步集合）。
  *
@@ -139,7 +139,7 @@ function describeCloudWriteError(err) {
 }
 
 /* 静态资源版本戳：改动 cloud/ 下被页面引用的任何文件时，与 index.html 的三件套一起递增。 */
-const ASSET_V = "cloud-26";
+const ASSET_V = "cloud-27";
 
 /* 第三方库一律同源自托管，见 scripts/vendor-cloud.mjs。
  * 绝不改回第三方 CDN —— 见该脚本头部注释：cdn.jsdelivr.net 在部分网络下 TLS 会被重置，
@@ -1534,8 +1534,11 @@ async function decorateContent(root) {
           katex.render(src, node, {
             throwOnError: false,
             displayMode: node.classList.contains("math-block"),
+            output: "html",
             errorColor: "#ef4444",
           });
+          const kx = node.querySelector(".katex");
+          if (kx) { kx.setAttribute("role", "math"); kx.setAttribute("aria-label", src); }
         } catch (_) { node.textContent = src; }
       });
     }
